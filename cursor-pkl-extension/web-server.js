@@ -8,7 +8,6 @@ const ExportService = require('./export-service');
 const AppleScriptService = require('./applescript-service');
 const PrivacyService = require('./privacy-service');
 const ProcedurePatternService = require('./procedure-patterns');
-const PostMortemService = require('./post-mortem-service');
 
 const app = express();
 const port = 3000;
@@ -19,7 +18,6 @@ const dataStorage = new DataStorage();
 const exportService = new ExportService();
 const privacyService = new PrivacyService();
 const procedureService = new ProcedurePatternService();
-const postMortemService = new PostMortemService(dataStorage);
 
 // Connect data storage to real monitor
 realMonitor.dataStorage = dataStorage;
@@ -492,10 +490,6 @@ app.get('/privacy-analysis', (req, res) => {
   res.sendFile(path.join(__dirname, 'components/privacy-analysis/privacy-analysis.html'));
 });
 
-// Serve post-mortem analysis view
-app.get('/post-mortem', (req, res) => {
-  res.sendFile(path.join(__dirname, 'components/post-mortem/post-mortem.html'));
-});
 
 // ============================================================================
 // PROCEDURAL PATTERN API ENDPOINTS
@@ -690,206 +684,12 @@ app.get('/api/procedures/history', async (req, res) => {
        }
      });
 
-// ============================================================================
-// POST-MORTEM ANALYSIS API ENDPOINTS
-// ============================================================================
 
-// Get all post-mortems
-app.get('/api/post-mortems', async (req, res) => {
-  try {
-    const postMortems = await postMortemService.loadPostMortems();
-    
-    res.json({
-      success: true,
-      postMortems: postMortems.map(pm => ({
-        id: pm.id,
-        timestamp: pm.timestamp,
-        resourceInfo: pm.resourceInfo,
-        suspectedCause: pm.suspectedCause.primary,
-        status: pm.status,
-        recoveryOptionsCount: pm.recoveryOptions.length,
-        archivedVersionsCount: pm.archivedVersions.length
-      })),
-      totalCount: postMortems.length
-    });
-  } catch (error) {
-    console.error('Error getting post-mortems:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
 
-// Get specific post-mortem details
-app.get('/api/post-mortem/:id', async (req, res) => {
-  try {
-    const postMortems = await postMortemService.loadPostMortems();
-    const postMortem = postMortems.find(pm => pm.id === req.params.id);
-    
-    if (!postMortem) {
-      return res.status(404).json({ success: false, error: 'Post-mortem not found' });
-    }
-    
-    res.json({
-      success: true,
-      postMortem
-    });
-  } catch (error) {
-    console.error('Error getting post-mortem:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
 
-// Create new post-mortem for missing resource
-app.post('/api/post-mortem/create', async (req, res) => {
-  try {
-    const { filePath, lastSeen, size, checksum, url } = req.body;
-    
-    if (!filePath) {
-      return res.status(400).json({ success: false, error: 'File path is required' });
-    }
-    
-    const resourceInfo = {
-      filePath,
-      lastSeen: lastSeen || new Date().toISOString(),
-      size,
-      checksum,
-      url
-    };
-    
-    const postMortem = await postMortemService.createPostMortem(resourceInfo);
-    
-    res.json({
-      success: true,
-      postMortemId: postMortem.id,
-      message: 'Post-mortem created successfully',
-      suspectedCause: postMortem.suspectedCause.primary,
-      recoveryOptions: postMortem.recoveryOptions.length
-    });
-  } catch (error) {
-    console.error('Error creating post-mortem:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
 
-// Export post-mortem as PDF report
-app.post('/api/post-mortem/:id/export-pdf', async (req, res) => {
-  try {
-    const postMortemId = req.params.id;
-    const reportData = await postMortemService.exportPostMortemPDF(postMortemId);
-    
-    // Generate filename
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const filename = `post-mortem-${postMortemId}-${timestamp}.json`;
-    
-    // For now, export as JSON (would be PDF in full implementation)
-    const exportPath = path.join(__dirname, 'exports', filename);
-    const fs = require('fs');
-    const exportDir = path.join(__dirname, 'exports');
-    
-    if (!fs.existsSync(exportDir)) {
-      fs.mkdirSync(exportDir, { recursive: true });
-    }
-    
-    fs.writeFileSync(exportPath, JSON.stringify(reportData, null, 2));
-    
-    res.json({
-      success: true,
-      filename,
-      reportData,
-      downloadUrl: `/api/export/download/${filename}`
-    });
-  } catch (error) {
-    console.error('Error exporting post-mortem PDF:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
 
-// Update post-mortem status or add notes
-app.put('/api/post-mortem/:id', async (req, res) => {
-  try {
-    const postMortemId = req.params.id;
-    const { status, notes } = req.body;
-    
-    const postMortems = await postMortemService.loadPostMortems();
-    const postMortem = postMortems.find(pm => pm.id === postMortemId);
-    
-    if (!postMortem) {
-      return res.status(404).json({ success: false, error: 'Post-mortem not found' });
-    }
-    
-    // Update fields
-    if (status) postMortem.status = status;
-    if (notes) postMortem.notes.push({
-      timestamp: new Date().toISOString(),
-      content: notes
-    });
-    postMortem.updatedAt = new Date().toISOString();
-    
-    // Save updated post-mortem
-    await postMortemService.savePostMortem(postMortem);
-    
-    res.json({
-      success: true,
-      message: 'Post-mortem updated successfully',
-      postMortem
-    });
-  } catch (error) {
-    console.error('Error updating post-mortem:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
 
-// Check for missing files and create post-mortems automatically
-app.post('/api/post-mortem/scan-missing', async (req, res) => {
-  try {
-    const sessions = await dataStorage.loadSessions();
-    const uniqueFiles = [...new Set(sessions.map(s => s.currentFile).filter(Boolean))];
-    
-    const missingFiles = [];
-    const fs = require('fs');
-    
-    for (const filePath of uniqueFiles) {
-      try {
-        await fs.promises.access(filePath);
-      } catch (error) {
-        if (error.code === 'ENOENT') {
-          missingFiles.push(filePath);
-        }
-      }
-    }
-    
-    const createdPostMortems = [];
-    
-    for (const filePath of missingFiles) {
-      // Check if post-mortem already exists
-      const existingPostMortems = await postMortemService.loadPostMortems();
-      const exists = existingPostMortems.some(pm => pm.resourceInfo.filePath === filePath);
-      
-      if (!exists) {
-        const lastSession = sessions
-          .filter(s => s.currentFile === filePath)
-          .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))[0];
-        
-        const postMortem = await postMortemService.createPostMortem({
-          filePath,
-          lastSeen: lastSession ? lastSession.timestamp : new Date().toISOString()
-        });
-        
-        createdPostMortems.push(postMortem.id);
-      }
-    }
-    
-    res.json({
-      success: true,
-      scannedFiles: uniqueFiles.length,
-      missingFiles: missingFiles.length,
-      newPostMortems: createdPostMortems.length,
-      createdIds: createdPostMortems
-    });
-  } catch (error) {
-    console.error('Error scanning for missing files:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
 
 // Serve static assets
 app.use('/assets', express.static(path.join(__dirname, 'assets')));
