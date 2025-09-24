@@ -371,16 +371,6 @@ class Dashboard {
       default: return '?';
     }
   }
-          <div class="session-stat">
-            <span>${session.codeDeltas?.length || 0} code deltas</span>
-          </div>
-          <div class="session-stat">
-            <span>${session.fileChanges?.length || 0} file changes</span>
-          </div>
-        </div>
-      </div>
-    `;
-  }
 
   renderNotebooksView() {
     const container = document.getElementById('sessions-list');

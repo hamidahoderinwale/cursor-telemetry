@@ -1,235 +1,262 @@
-# 🚀 PKL-Dash: Enhanced Procedural Knowledge Library
+# PKL Dashboard - Procedural Knowledge Library
 
-**Advanced Data Science Workflow Analysis with OpenClio & Kura Integration**
+A comprehensive real-time monitoring and analysis system for Cursor IDE sessions, with advanced privacy-preserving workflow analysis capabilities.
 
-PKL-Dash is a comprehensive system for capturing, analyzing, and optimizing data science procedural knowledge. It combines cutting-edge research from OpenClio (privacy-preserving conversation analysis) and Kura (scalable conversation clustering) to provide unprecedented insights into data science workflows.
+## Overview
 
-## 🌟 **Key Features**
+The PKL Dashboard is a sophisticated monitoring system that tracks and analyzes user interactions with Cursor IDE, particularly focusing on Jupyter notebook development workflows. It provides real-time insights into coding patterns, session analytics, and privacy-preserving analysis of development activities.
 
-### 🧬 **Research-Grade Analysis**
-- **OpenClio Integration**: Privacy-preserving faceted conversation analysis
-- **Kura Integration**: Scalable hierarchical clustering with UMAP visualization
-- **6 PKL-Specific Facets**: Designed specifically for data science workflows
-- **Hybrid Clustering**: Combines best algorithms from both research systems
+## Key Features
 
-### 📊 **Advanced Visualizations**
-- **Interactive UMAP Plots**: Explore session relationships in 2D space
-- **Hierarchical Cluster Trees**: Navigate procedure patterns with success indicators
-- **Faceted Analysis Dashboard**: Multi-dimensional workflow insights
-- **Real-time Monitoring**: Live session tracking and analysis
+### Real-time Monitoring
+- Live tracking of Cursor IDE sessions
+- Real-time file change detection
+- Active session monitoring with duration tracking
+- Conversation capture and analysis
 
-### 🎯 **Automated Insights**
-- **Procedure Template Generation**: Extract reusable workflows from successful sessions
-- **Success Pattern Detection**: Identify high-performing data science approaches
-- **Complexity Analysis**: Rate and optimize workflow difficulty
-- **Library Ecosystem Mapping**: Track tool usage patterns
+### Privacy-Preserving Analysis
+- Differential privacy implementation with configurable epsilon values
+- Token-level redaction with adjustable sensitivity
+- Procedural abstraction at multiple levels (token, statement, function, module, workflow)
+- Privacy-expressiveness trade-off visualization
 
-## 🚀 **Quick Start**
+### Advanced Analytics
+- Workflow pattern clustering using Kura integration
+- Multi-dimensional analysis with OpenClio
+- Session intent classification (explore, implement, debug, refactor)
+- Code change tracking and visualization
 
-### **One-Command Launch**
+### Interactive Dashboard
+- Modern, responsive web interface
+- Real-time data updates via WebSocket
+- Interactive visualizations and charts
+- Export capabilities for analysis results
+
+## Technical Architecture
+
+### Backend Components
+- **Node.js Web Server**: Express-based API server running on port 3000
+- **Python Analysis Engine**: Flask-based analysis API with Kura and OpenClio integration
+- **SQLite Database**: Local storage for session data and analysis results
+- **File System Monitor**: Real-time tracking of notebook and file changes
+
+### Frontend Components
+- **React-based Dashboard**: Modern web interface with real-time updates
+- **Privacy Analysis Interface**: Interactive controls for privacy configuration
+- **Visualization Components**: Charts, graphs, and cluster visualizations
+- **Export System**: Multiple format support (JSON, CSV, PDF)
+
+### Integration Services
+- **Kura Integration**: Conversation clustering and pattern discovery
+- **OpenClio Integration**: Multi-dimensional facet analysis
+- **Cursor IDE Integration**: Real-time activity monitoring
+- **Jupyter Notebook Parser**: Specialized analysis for notebook workflows
+
+## Installation and Setup
+
+### Prerequisites
+- Node.js 18.0.0 or higher
+- Python 3.8 or higher
+- SQLite3
+- OpenAI API key (for Kura/OpenClio integration)
+
+### Quick Start
+
+1. **Clone the repository**
+   ```bash
+   git clone <repository-url>
+   cd cursor_dashboard
+   ```
+
+2. **Install Node.js dependencies**
+   ```bash
+   cd cursor-pkl-extension
+   npm install
+   ```
+
+3. **Install Python dependencies**
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+4. **Configure environment variables**
+   ```bash
+   cp .env.example .env
+   # Edit .env and add your OpenAI API key
+   ```
+
+5. **Start the services**
+   ```bash
+   # Start the main dashboard
+   cd cursor-pkl-extension
+   npm start
+   
+   # In another terminal, start the analysis engine
+   python main.py
+   ```
+
+6. **Access the dashboard**
+   Open your browser to `http://localhost:3000`
+
+## Configuration
+
+### Privacy Settings
+The system supports extensive privacy configuration:
+
+- **Differential Privacy (ε)**: Controls the privacy budget (0.1 to 10.0)
+- **Token Redaction Level**: Percentage of tokens to redact (0% to 100%)
+- **Procedural Abstraction**: Level of abstraction (1-5)
+- **Redaction Options**: Names, numbers, email addresses
+
+### Analysis Parameters
+- **Clustering Quality**: Silhouette score calculation
+- **Classification Accuracy**: Intent prediction accuracy
+- **Workflow Preservation**: Shape preservation metrics
+- **Information Retention**: Data retention analysis
+
+## API Endpoints
+
+### Session Management
+- `GET /api/sessions` - Retrieve all sessions
+- `GET /api/session/:id` - Get specific session details
+- `GET /api/session/:id/conversations` - Get session conversations
+
+### Analysis Endpoints
+- `GET /api/analysis/status` - Analysis system status
+- `GET /api/analysis/conversations` - Conversation analysis
+- `GET /api/analysis/kura/clusters` - Kura clustering results
+- `GET /api/analysis/openclio/facets` - OpenClio facet analysis
+
+### Export Endpoints
+- `POST /api/export/sessions` - Export session data
+- `POST /api/export/analysis` - Export analysis results
+- `POST /api/export/privacy` - Export privacy analysis
+
+## Data Models
+
+### Session Model
+```json
+{
+  "id": "session_id",
+  "timestamp": "2024-01-01T00:00:00Z",
+  "intent": "explore|implement|debug|refactor",
+  "outcome": "completed|in-progress|failed",
+  "duration": 3600,
+  "fileChanges": [...],
+  "codeDeltas": [...],
+  "conversations": [...]
+}
+```
+
+### Privacy Configuration
+```json
+{
+  "epsilon": 1.0,
+  "redactionLevel": 50,
+  "abstractionLevel": 3,
+  "redactNames": true,
+  "redactNumbers": true,
+  "redactEmails": true
+}
+```
+
+## Privacy and Security
+
+### Data Protection
+- All sensitive data is processed with differential privacy
+- Configurable redaction levels for different data types
+- Local storage with no external data transmission
+- Optional anonymization of session identifiers
+
+### Compliance
+- GDPR-compliant data processing
+- Configurable data retention policies
+- User consent mechanisms
+- Data export and deletion capabilities
+
+## Development
+
+### Project Structure
+```
+cursor_dashboard/
+├── cursor-pkl-extension/          # Main Node.js application
+│   ├── components/                # UI components
+│   ├── assets/                    # Static assets
+│   └── web-server.js             # Main server file
+├── src/                          # Python analysis engine
+│   ├── analysis/                 # Analysis modules
+│   ├── api/                      # API endpoints
+│   └── adapters/                 # Data adapters
+├── docs/                         # Documentation
+└── tests/                        # Test files
+```
+
+### Contributing
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests if applicable
+5. Submit a pull request
+
+### Testing
 ```bash
-./start_pkl_dash.sh
-```
-
-### **Manual Setup**
-```bash
-# 1. Navigate to project directory
-cd cursor-pkl-extension
-
-# 2. Install dependencies
-npm install
-
-# 3. Set up Python environment
-python3 -m venv kura_env
-source kura_env/bin/activate
-pip install kura numpy pandas asyncio rich pathlib dataclasses
-
-# 4. Run analysis and start servers
-python repository_parser.py
-python native_pkl_integration.py
-node kura-api-endpoint.js &
-node web-server.js &
-```
-
-## 🌐 **Access Points**
-
-| Interface | URL | Description |
-|-----------|-----|-------------|
-| **Enhanced Dashboard** | http://localhost:8080/kura-enhanced-dashboard.html | Main analysis interface with all features |
-| **API Endpoint** | http://localhost:3001 | RESTful API for data access |
-| **Live Monitor** | http://localhost:8080/live-dashboard-clean.html | Real-time session monitoring |
-| **Classic Dashboard** | http://localhost:8080 | Original PKL Extension interface |
-
-## 📁 **Project Structure**
-
-```
-pkl-dash/
-├── cursor-pkl-extension/           # Main application directory
-│   ├── OpenClio/                   # Cloned OpenClio repository
-│   ├── kura/                       # Cloned Kura repository
-│   ├── repository_parser.py        # Repository parsing engine
-│   ├── native_pkl_integration.py   # Native integration system
-│   ├── kura-enhanced-dashboard.html # Enhanced UI
-│   ├── kura-api-endpoint.js        # API server
-│   └── native_pkl_output/          # Analysis results
-├── start_pkl_dash.sh              # One-command startup script
-└── README.md                      # This file
-```
-
-## 🔬 **Technical Architecture**
-
-### **Repository Parsing System**
-- **OpenClio Parser**: Extracts facets, clustering algorithms, and UI patterns
-- **Kura Parser**: Analyzes React components, async pipelines, and data structures
-- **Integration Mapper**: Identifies compatibility points and enhancement opportunities
-
-### **Native PKL Integration**
-- **PKL Conversation Processing**: Converts sessions to research-grade conversation format
-- **Faceted Analysis Engine**: Applies 6 data science-specific facets
-- **Hybrid Clustering System**: Combines OpenClio and Kura algorithms
-- **Template Generation**: Extracts reusable procedures from successful patterns
-
-### **Enhanced Visualization**
-- **Hierarchical Trees**: Based on parsed Kura React components
-- **UMAP Scatter Plots**: Enhanced with PKL-specific features
-- **Facet Dashboards**: Multi-dimensional analysis interfaces
-- **Interactive Controls**: Real-time filtering and exploration
-
-## 📊 **Data Science Facets**
-
-| Facet | Description | Type |
-|-------|-------------|------|
-| **DataScienceWorkflow** | EDA, modeling, debugging, visualization | Categorical |
-| **NotebookComplexity** | Complexity rating (1-5) | Numeric |
-| **LibraryEcosystem** | Pandas, Scikit-learn, Deep learning | Categorical |
-| **ProcedureReusability** | Reusability score (1-5) | Numeric |
-| **AnalysisRequest** | User intent classification | Categorical |
-| **DataScienceTask** | Specific task identification | Categorical |
-
-## 🎯 **Use Cases**
-
-### **For Data Scientists**
-- **Workflow Optimization**: Identify successful patterns in your analysis approaches
-- **Template Library**: Build reusable procedures from proven methodologies
-- **Complexity Management**: Understand and optimize analysis complexity
-- **Tool Discovery**: Explore effective library combinations
-
-### **For Data Science Teams**
-- **Best Practice Sharing**: Discover and share successful procedures
-- **Onboarding Acceleration**: Provide new team members with proven templates
-- **Process Standardization**: Establish consistent analysis approaches
-- **Performance Tracking**: Monitor team productivity and success patterns
-
-### **For Research**
-- **Methodology Analysis**: Study data science workflow patterns at scale
-- **Tool Usage Patterns**: Understand library ecosystem evolution
-- **Success Factor Identification**: Discover what makes analyses successful
-- **Procedural Knowledge Capture**: Formalize tacit data science knowledge
-
-## 🔧 **Configuration**
-
-### **Environment Variables**
-```bash
-# Optional: Enable real LLM integration
-export OPENAI_API_KEY="your-api-key"
-
-# Optional: Configure analysis parameters
-export PKL_ANALYSIS_DEPTH="detailed"
-export PKL_CLUSTER_THRESHOLD="0.7"
-```
-
-### **Custom Facets**
-Add your own facets in `native_pkl_integration.py`:
-```python
-custom_facet = PKLFacet(
-    name="CustomFacet",
-    question="Your analysis question?",
-    prefill="The answer is",
-    summaryCriteria="How to group results",
-    data_science_domain="your_domain"
-)
-```
-
-## 📈 **Performance**
-
-### **Analysis Capabilities**
-- **Session Processing**: 1000+ sessions per minute
-- **Real-time Analysis**: Sub-second facet extraction
-- **Clustering Scale**: Handles 10,000+ conversations
-- **Visualization**: Interactive exploration of large datasets
-
-### **Resource Requirements**
-- **Memory**: 4GB+ recommended for large datasets
-- **CPU**: Multi-core recommended for clustering
-- **Storage**: 1GB+ for analysis results and caching
-- **Network**: Minimal requirements for local deployment
-
-## 🤝 **Contributing**
-
-### **Development Setup**
-```bash
-# Clone and setup
-git clone git@github.com:hamidahoderinwale/pkl-dash.git
-cd pkl-dash
-./start_pkl_dash.sh
-
-# Run tests
-cd cursor-pkl-extension
-python -m pytest tests/
+# Run Node.js tests
 npm test
+
+# Run Python tests
+python -m pytest tests/
+
+# Run integration tests
+npm run test:integration
 ```
 
-### **Adding Features**
-1. **New Facets**: Add to `native_pkl_integration.py`
-2. **UI Components**: Extend `kura-enhanced-dashboard.html`
-3. **Analysis Methods**: Modify clustering pipeline
-4. **Visualizations**: Add to visualization generation
+## Troubleshooting
 
-## 📚 **Documentation**
+### Common Issues
 
-### **Generated Analysis Files**
-- `repository_analysis.json` - Complete repository parsing results
-- `pkl_integration_spec.json` - Integration specification
-- `native_pkl_analysis.json` - Native PKL analysis results
-- `enhanced_dashboard_config.json` - UI configuration
+**Dashboard not loading**
+- Check if Node.js server is running on port 3000
+- Verify all dependencies are installed
+- Check browser console for errors
 
-### **Research Papers**
-- **OpenClio**: [Privacy-preserving insights into real-world AI use](https://github.com/Phylliida/OpenClio)
-- **Kura**: [Procedural API for chat data analysis](https://github.com/567-labs/kura)
+**Analysis not working**
+- Ensure Python analysis engine is running
+- Verify OpenAI API key is configured
+- Check Python dependencies are installed
 
-## 🛟 **Support**
+**Privacy analysis errors**
+- Verify Kura and OpenClio are properly installed
+- Check API key configuration
+- Ensure sufficient system resources
 
-### **Common Issues**
-- **Port Conflicts**: Change ports in configuration files
-- **Memory Issues**: Reduce dataset size or increase system memory
-- **API Errors**: Check API keys and network connectivity
+### Performance Optimization
+- Adjust privacy parameters for better performance
+- Use appropriate abstraction levels
+- Monitor system resource usage
+- Configure appropriate data retention policies
 
-### **Troubleshooting**
-```bash
-# Check running services
-ps aux | grep -E 'kura-api-endpoint|web-server'
+## License
 
-# View logs
-tail -f cursor-pkl-extension/api-server.log
-tail -f cursor-pkl-extension/web-server.log
+This project is licensed under the MIT License. See the LICENSE file for details.
 
-# Restart services
-pkill -f 'kura-api-endpoint\|web-server'
-./start_pkl_dash.sh
-```
+## Support
 
-## 📄 **License**
+For support and questions:
+- Create an issue in the repository
+- Check the documentation in the `docs/` folder
+- Review the troubleshooting section
 
-MIT License - See LICENSE file for details.
+## Changelog
 
-## 🙏 **Acknowledgments**
+### Version 2.0.0
+- Added privacy-preserving analysis capabilities
+- Integrated Kura and OpenClio for advanced analytics
+- Implemented real-time WebSocket communication
+- Added comprehensive export functionality
+- Enhanced UI with modern design system
 
-- **OpenClio Team**: For privacy-preserving conversation analysis
-- **Kura Team**: For scalable conversation clustering
-- **PKL Extension**: Original procedural knowledge library concept
-
----
-
-**🚀 Ready to revolutionize your data science procedural knowledge capture!**
-
-For questions, issues, or contributions, please visit: https://github.com/hamidahoderinwale/pkl-dash
+### Version 1.0.0
+- Initial release with basic session monitoring
+- Jupyter notebook tracking
+- Simple dashboard interface
+- Basic analytics and visualization

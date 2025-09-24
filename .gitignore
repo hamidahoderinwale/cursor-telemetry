@@ -144,3 +144,7 @@ test-results/
 # Archive and legacy files
 archive/
 legacy/
+
+# Documentation files (except main README)
+*.md
+!README.md
