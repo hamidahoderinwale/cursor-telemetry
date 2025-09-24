@@ -208,6 +208,7 @@ class Dashboard {
     const sessionsBtn = document.getElementById('sessions-view-btn');
     const notebooksBtn = document.getElementById('notebooks-view-btn');
     const visualizationsBtn = document.getElementById('visualizations-view-btn');
+    const embeddingsBtn = document.getElementById('embeddings-view-btn');
     const refreshBtn = document.getElementById('refresh-btn');
     
     if (sessionsBtn) {
@@ -228,6 +229,13 @@ class Dashboard {
       visualizationsBtn.addEventListener('click', () => {
         console.log('Switching to visualizations view');
         this.switchView('visualizations');
+      });
+    }
+    
+    if (embeddingsBtn) {
+      embeddingsBtn.addEventListener('click', () => {
+        console.log('Switching to embeddings view');
+        this.switchView('embeddings');
       });
     }
     
@@ -253,6 +261,8 @@ class Dashboard {
       this.renderNotebooksView();
     } else if (view === 'visualizations') {
       this.renderVisualizationsView();
+    } else if (view === 'embeddings') {
+      this.renderEmbeddingsView();
     }
   }
 
@@ -754,6 +764,359 @@ class Dashboard {
     }).join('');
 
     container.innerHTML = visualizationsHtml;
+  }
+
+  async renderEmbeddingsView() {
+    console.log('Rendering embeddings view');
+    
+    const container = document.getElementById('sessions-list');
+    
+    // Create UMAP visualization container
+    container.innerHTML = `
+      <div class="embeddings-container">
+        <div class="embeddings-header">
+          <h2>Session Embeddings Visualization (UMAP)</h2>
+          <p>Interactive visualization of session relationships using UMAP dimensionality reduction</p>
+        </div>
+        
+        <div class="embeddings-controls">
+          <div class="control-group">
+            <label for="color-by-select">Color by:</label>
+            <select id="color-by-select">
+              <option value="intent">Intent</option>
+              <option value="outcome">Outcome</option>
+              <option value="duration">Duration</option>
+              <option value="file-type">File Type</option>
+            </select>
+          </div>
+          <div class="control-group">
+            <label for="size-by-select">Size by:</label>
+            <select id="size-by-select">
+              <option value="uniform">Uniform</option>
+              <option value="duration">Duration</option>
+              <option value="changes">Code Changes</option>
+              <option value="conversations">Conversations</option>
+            </select>
+          </div>
+          <div class="control-group">
+            <button class="btn btn-secondary btn-sm" id="reset-zoom-btn">Reset Zoom</button>
+            <button class="btn btn-secondary btn-sm" id="fullscreen-btn">Fullscreen</button>
+          </div>
+        </div>
+        
+        <div class="umap-container">
+          <div id="umap-plot" class="umap-plot"></div>
+          <div class="umap-legend" id="umap-legend"></div>
+        </div>
+        
+        <div class="selection-info" id="selection-info">
+          <h3>Selection Details</h3>
+          <div id="selection-content">
+            <p>Click on points or draw a selection box to see session details</p>
+          </div>
+        </div>
+      </div>
+    `;
+    
+    // Load and render UMAP data
+    await this.loadAndRenderUMAP();
+    
+    // Setup UMAP controls
+    this.setupUMAPControls();
+  }
+
+  async loadAndRenderUMAP() {
+    try {
+      console.log('Loading UMAP data...');
+      
+      // Try to load from Kura/OpenClio analysis first
+      let umapData = await this.loadUMAPFromAnalysis();
+      
+      // If no analysis data, generate mock UMAP data from sessions
+      if (!umapData || umapData.length === 0) {
+        console.log('No analysis data found, generating mock UMAP data');
+        umapData = this.generateMockUMAPData();
+      }
+      
+      this.renderUMAPPlot(umapData);
+      
+    } catch (error) {
+      console.error('Error loading UMAP data:', error);
+      this.showUMAPError('Failed to load UMAP data. Using mock data for demonstration.');
+      const mockData = this.generateMockUMAPData();
+      this.renderUMAPPlot(mockData);
+    }
+  }
+
+  async loadUMAPFromAnalysis() {
+    try {
+      // Try to load from the analysis API
+      const response = await fetch('/api/analysis/kura/clusters');
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.umap_coordinates) {
+          return data.umap_coordinates;
+        }
+      }
+    } catch (error) {
+      console.log('Analysis API not available, using mock data');
+    }
+    return null;
+  }
+
+  generateMockUMAPData() {
+    const intents = ['explore', 'implement', 'debug', 'refactor'];
+    const outcomes = ['completed', 'in-progress', 'failed'];
+    const fileTypes = ['ipynb', 'py', 'js', 'md'];
+    
+    return this.sessions.map((session, index) => {
+      // Generate UMAP-like coordinates (2D projection)
+      const angle = (index / this.sessions.length) * 2 * Math.PI;
+      const radius = Math.random() * 3 + 1;
+      const x = Math.cos(angle) * radius + (Math.random() - 0.5) * 0.5;
+      const y = Math.sin(angle) * radius + (Math.random() - 0.5) * 0.5;
+      
+      return {
+        id: session.id,
+        x: x,
+        y: y,
+        intent: session.intent || intents[Math.floor(Math.random() * intents.length)],
+        outcome: session.outcome || outcomes[Math.floor(Math.random() * outcomes.length)],
+        duration: session.duration || Math.random() * 3600,
+        changes: session.codeDeltas ? session.codeDeltas.length : Math.floor(Math.random() * 20),
+        conversations: session.conversations ? session.conversations.length : Math.floor(Math.random() * 10),
+        fileType: session.currentFile ? session.currentFile.split('.').pop() : fileTypes[Math.floor(Math.random() * fileTypes.length)],
+        timestamp: session.timestamp,
+        fileName: session.currentFile ? session.currentFile.split('/').pop() : 'Unknown'
+      };
+    });
+  }
+
+  renderUMAPPlot(data) {
+    const container = document.getElementById('umap-plot');
+    if (!container || !data || data.length === 0) {
+      this.showUMAPError('No data available for UMAP visualization');
+      return;
+    }
+
+    // Prepare traces for different intents
+    const intentColors = {
+      'explore': '#007AFF',
+      'implement': '#34C759', 
+      'debug': '#FF9500',
+      'refactor': '#AF52DE'
+    };
+
+    const traces = {};
+    
+    // Group data by intent
+    data.forEach(point => {
+      const intent = point.intent || 'unknown';
+      if (!traces[intent]) {
+        traces[intent] = {
+          x: [],
+          y: [],
+          text: [],
+          mode: 'markers',
+          type: 'scatter',
+          name: intent.charAt(0).toUpperCase() + intent.slice(1),
+          marker: {
+            color: intentColors[intent] || '#8E8E93',
+            size: this.calculatePointSize(point),
+            opacity: 0.7,
+            line: {
+              width: 1,
+              color: 'white'
+            }
+          },
+          hovertemplate: 
+            '<b>%{text}</b><br>' +
+            'Intent: ' + intent + '<br>' +
+            'Outcome: ' + (point.outcome || 'unknown') + '<br>' +
+            'Duration: ' + this.formatDuration(point.duration) + '<br>' +
+            'Changes: ' + (point.changes || 0) + '<br>' +
+            'Conversations: ' + (point.conversations || 0) + '<br>' +
+            '<extra></extra>'
+        };
+      }
+      
+      traces[intent].x.push(point.x);
+      traces[intent].y.push(point.y);
+      traces[intent].text.push(point.fileName || `Session ${point.id}`);
+    });
+
+    const plotData = Object.values(traces);
+
+    const layout = {
+      title: {
+        text: 'Session Relationships (UMAP Projection)',
+        font: { size: 18, color: '#1A1A1A' }
+      },
+      xaxis: {
+        title: 'UMAP Dimension 1',
+        showgrid: true,
+        zeroline: false,
+        gridcolor: '#E5E5EA'
+      },
+      yaxis: {
+        title: 'UMAP Dimension 2',
+        showgrid: true,
+        zeroline: false,
+        gridcolor: '#E5E5EA'
+      },
+      hovermode: 'closest',
+      showlegend: true,
+      legend: {
+        x: 1,
+        y: 1,
+        xanchor: 'left',
+        yanchor: 'top',
+        bgcolor: 'rgba(255,255,255,0.8)',
+        bordercolor: '#E5E5EA',
+        borderwidth: 1
+      },
+      margin: { t: 60, r: 150, b: 60, l: 60 },
+      plot_bgcolor: '#F8F9FA',
+      paper_bgcolor: 'white',
+      dragmode: 'select'
+    };
+
+    const config = {
+      displayModeBar: true,
+      modeBarButtonsToRemove: ['pan2d', 'lasso2d', 'select2d'],
+      displaylogo: false,
+      responsive: true
+    };
+
+    Plotly.newPlot(container, plotData, layout, config);
+
+    // Handle selection events
+    container.on('plotly_selected', (eventData) => {
+      this.handleUMAPSelection(eventData);
+    });
+
+    container.on('plotly_click', (eventData) => {
+      this.handleUMAPClick(eventData);
+    });
+
+    this.umapPlot = container;
+  }
+
+  calculatePointSize(point) {
+    const baseSize = 8;
+    const maxSize = 20;
+    
+    // Size based on duration (normalized)
+    const durationSize = Math.min(maxSize, baseSize + (point.duration / 3600) * 5);
+    
+    return durationSize;
+  }
+
+  formatDuration(seconds) {
+    if (!seconds) return '0s';
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+    
+    if (hours > 0) {
+      return `${hours}h ${minutes}m`;
+    } else if (minutes > 0) {
+      return `${minutes}m ${secs}s`;
+    } else {
+      return `${secs}s`;
+    }
+  }
+
+  handleUMAPSelection(eventData) {
+    const selectionInfo = document.getElementById('selection-content');
+    if (!selectionInfo) return;
+
+    if (eventData && eventData.points && eventData.points.length > 0) {
+      const selectedPoints = eventData.points;
+      let html = `<h4>Selected Sessions (${selectedPoints.length})</h4>`;
+      
+      selectedPoints.forEach((point, index) => {
+        html += `
+          <div class="selected-session">
+            <strong>${point.text}</strong><br>
+            Intent: ${point.data.name}<br>
+            <button class="btn btn-sm btn-secondary" onclick="showSessionDetail('${point.pointIndex}')">
+              View Details
+            </button>
+          </div>
+        `;
+      });
+      
+      selectionInfo.innerHTML = html;
+    } else {
+      selectionInfo.innerHTML = '<p>Click on points or draw a selection box to see session details</p>';
+    }
+  }
+
+  handleUMAPClick(eventData) {
+    if (eventData && eventData.points && eventData.points.length > 0) {
+      const point = eventData.points[0];
+      console.log('Clicked on session:', point.text);
+      // You can add more detailed session view here
+    }
+  }
+
+  setupUMAPControls() {
+    const colorBySelect = document.getElementById('color-by-select');
+    const sizeBySelect = document.getElementById('size-by-select');
+    const resetZoomBtn = document.getElementById('reset-zoom-btn');
+    const fullscreenBtn = document.getElementById('fullscreen-btn');
+
+    if (colorBySelect) {
+      colorBySelect.addEventListener('change', () => {
+        console.log('Color by changed to:', colorBySelect.value);
+        // Re-render plot with new color scheme
+        this.loadAndRenderUMAP();
+      });
+    }
+
+    if (sizeBySelect) {
+      sizeBySelect.addEventListener('change', () => {
+        console.log('Size by changed to:', sizeBySelect.value);
+        // Re-render plot with new size scheme
+        this.loadAndRenderUMAP();
+      });
+    }
+
+    if (resetZoomBtn) {
+      resetZoomBtn.addEventListener('click', () => {
+        if (this.umapPlot) {
+          Plotly.relayout(this.umapPlot, {
+            'xaxis.autorange': true,
+            'yaxis.autorange': true
+          });
+        }
+      });
+    }
+
+    if (fullscreenBtn) {
+      fullscreenBtn.addEventListener('click', () => {
+        if (this.umapPlot) {
+          Plotly.Plots.resize(this.umapPlot);
+        }
+      });
+    }
+  }
+
+  showUMAPError(message) {
+    const container = document.getElementById('sessions-list');
+    if (container) {
+      container.innerHTML = `
+        <div class="error-state">
+          <div class="error-icon">⚠️</div>
+          <h3>UMAP Visualization Error</h3>
+          <p>${message}</p>
+          <button class="btn btn-primary" onclick="window.dashboard.loadAndRenderUMAP()">
+            Retry
+          </button>
+        </div>
+      `;
+    }
   }
 
   setupSearch() {

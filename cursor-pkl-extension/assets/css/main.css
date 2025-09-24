@@ -1427,6 +1427,133 @@ body {
   margin-top: var(--space-3);
 }
 
+/* UMAP Embeddings Visualization */
+.embeddings-container {
+  background: var(--background-primary);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--border-color);
+}
+
+.embeddings-header {
+  margin-bottom: var(--space-6);
+  text-align: center;
+}
+
+.embeddings-header h2 {
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--text-primary);
+  margin-bottom: var(--space-2);
+}
+
+.embeddings-header p {
+  font-size: var(--font-size-base);
+  color: var(--text-secondary);
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.embeddings-controls {
+  display: flex;
+  gap: var(--space-6);
+  margin-bottom: var(--space-6);
+  padding: var(--space-4);
+  background: var(--background-secondary);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+}
+
+.control-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 150px;
+}
+
+.control-group label {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-primary);
+}
+
+.control-group select {
+  background: var(--background-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.control-group select:focus {
+  outline: none;
+  border-color: var(--intent-explore);
+  box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.1);
+}
+
+.umap-container {
+  position: relative;
+  background: var(--background-secondary);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  margin-bottom: var(--space-6);
+  min-height: 600px;
+}
+
+.umap-plot {
+  width: 100%;
+  height: 600px;
+  border-radius: var(--radius-md);
+}
+
+.umap-legend {
+  position: absolute;
+  top: var(--space-4);
+  right: var(--space-4);
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: var(--radius-sm);
+  padding: var(--space-3);
+  border: 1px solid var(--border-color);
+  backdrop-filter: blur(10px);
+}
+
+.selection-info {
+  background: var(--background-secondary);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  border: 1px solid var(--border-color);
+}
+
+.selection-info h3 {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+  margin-bottom: var(--space-3);
+}
+
+.selected-session {
+  background: var(--background-primary);
+  border-radius: var(--radius-sm);
+  padding: var(--space-3);
+  margin-bottom: var(--space-2);
+  border: 1px solid var(--border-color);
+}
+
+.selected-session strong {
+  color: var(--text-primary);
+  font-weight: var(--font-weight-semibold);
+}
+
+.selected-session button {
+  margin-top: var(--space-2);
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
   .container {
@@ -1469,5 +1596,23 @@ body {
   .empty-state-actions {
     flex-direction: column;
     align-items: center;
+  }
+  
+  .embeddings-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .control-group {
+    min-width: auto;
+  }
+  
+  .umap-plot {
+    height: 400px;
+  }
+  
+  .umap-legend {
+    position: static;
+    margin-top: var(--space-4);
   }
 }
