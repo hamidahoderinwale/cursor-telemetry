@@ -245,6 +245,14 @@ class Dashboard {
         this.refreshData();
       });
     }
+
+    // Process notebooks button
+    const processNotebooksBtn = document.getElementById('process-notebooks-btn');
+    if (processNotebooksBtn) {
+      processNotebooksBtn.addEventListener('click', async () => {
+        await this.processExistingNotebooks();
+      });
+    }
   }
 
   switchView(view) {
@@ -500,6 +508,110 @@ class Dashboard {
     await this.loadData();
     this.render();
     this.renderCharts();
+  }
+
+  async processExistingNotebooks() {
+    try {
+      console.log('Processing existing notebooks...');
+      
+      // Show loading state
+      const processBtn = document.getElementById('process-notebooks-btn');
+      if (processBtn) {
+        processBtn.disabled = true;
+        processBtn.textContent = 'Processing...';
+      }
+
+      const response = await fetch('/api/process-existing-notebooks', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+
+      const result = await response.json();
+      
+      if (result.success) {
+        console.log('Notebooks processed successfully:', result);
+        
+        // Show success message
+        this.showNotification(`Processed ${result.sessionsCreated} sessions with ${result.totalCodeDeltas} code deltas`, 'success');
+        
+        // Refresh the data
+        await this.refreshData();
+      } else {
+        console.error('Failed to process notebooks:', result.error);
+        this.showNotification('Failed to process notebooks: ' + result.error, 'error');
+      }
+    } catch (error) {
+      console.error('Error processing notebooks:', error);
+      this.showNotification('Error processing notebooks: ' + error.message, 'error');
+    } finally {
+      // Reset button state
+      const processBtn = document.getElementById('process-notebooks-btn');
+      if (processBtn) {
+        processBtn.disabled = false;
+        processBtn.innerHTML = `
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+            <polyline points="14,2 14,8 20,8"></polyline>
+            <line x1="16" y1="13" x2="8" y2="13"></line>
+            <line x1="16" y1="17" x2="8" y2="17"></line>
+            <polyline points="10,9 9,9 8,9"></polyline>
+          </svg>
+          Process Notebooks
+        `;
+      }
+    }
+  }
+
+  showNotification(message, type = 'info') {
+    // Create notification element
+    const notification = document.createElement('div');
+    notification.className = `notification notification-${type}`;
+    notification.textContent = message;
+    
+    // Style the notification
+    notification.style.cssText = `
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      padding: 12px 20px;
+      border-radius: 6px;
+      color: white;
+      font-weight: 500;
+      z-index: 1000;
+      max-width: 400px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      transform: translateX(100%);
+      transition: transform 0.3s ease;
+    `;
+    
+    // Set background color based on type
+    if (type === 'success') {
+      notification.style.backgroundColor = '#10B981';
+    } else if (type === 'error') {
+      notification.style.backgroundColor = '#EF4444';
+    } else {
+      notification.style.backgroundColor = '#3B82F6';
+    }
+    
+    // Add to page
+    document.body.appendChild(notification);
+    
+    // Animate in
+    setTimeout(() => {
+      notification.style.transform = 'translateX(0)';
+    }, 100);
+    
+    // Remove after 5 seconds
+    setTimeout(() => {
+      notification.style.transform = 'translateX(100%)';
+      setTimeout(() => {
+        if (notification.parentNode) {
+          notification.parentNode.removeChild(notification);
+        }
+      }, 300);
+    }, 5000);
   }
 
   renderCharts() {

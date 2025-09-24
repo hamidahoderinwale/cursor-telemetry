@@ -240,6 +240,28 @@ app.get('/api/sessions/live-durations', (req, res) => {
   }
 });
 
+// Process existing notebooks to populate initial data
+app.post('/api/process-existing-notebooks', async (req, res) => {
+  try {
+    console.log('Processing existing notebooks...');
+    await realMonitor.processExistingNotebooks();
+    
+    const activeSessions = realMonitor.getActiveSessions();
+    const totalCodeDeltas = Array.from(activeSessions.values())
+      .reduce((total, session) => total + (session.codeDeltas?.length || 0), 0);
+    
+    res.json({
+      success: true,
+      message: 'Existing notebooks processed successfully',
+      sessionsCreated: activeSessions.size,
+      totalCodeDeltas: totalCodeDeltas
+    });
+  } catch (error) {
+    console.error('Error processing existing notebooks:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Get visualizations from a notebook session
 app.get('/api/session/:id/visualizations', async (req, res) => {
   try {

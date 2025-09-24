@@ -67,6 +67,9 @@ class RealMonitor {
     // Load existing sessions from storage
     await this.loadExistingSessions();
 
+    // Process existing notebook files to populate initial data
+    await this.processExistingNotebooks();
+
     // Monitor Cursor database for conversation changes
     if (this.cursorDbPath) {
       this.monitorCursorDatabase();
@@ -100,6 +103,43 @@ class RealMonitor {
       }
     } catch (error) {
       console.error('Error loading existing sessions:', error);
+    }
+  }
+
+  async processExistingNotebooks() {
+    try {
+      console.log('Processing existing notebook files...');
+      
+      // Find all notebook files in the project
+      const notebookDirs = [
+        path.join(__dirname, 'generated-notebooks'),
+        path.join(__dirname, 'generated_notebooks'),
+        path.join(__dirname, '..', 'generated-notebooks'),
+        path.join(__dirname, '..', 'generated_notebooks')
+      ];
+
+      for (const dir of notebookDirs) {
+        if (fs.existsSync(dir)) {
+          const files = fs.readdirSync(dir);
+          const notebookFiles = files.filter(file => file.endsWith('.ipynb'));
+          
+          console.log(`Found ${notebookFiles.length} notebook files in ${dir}`);
+          
+          for (const file of notebookFiles) {
+            const filePath = path.join(dir, file);
+            try {
+              console.log(`Processing existing notebook: ${filePath}`);
+              await this.handleNotebookChange(filePath);
+            } catch (error) {
+              console.error(`Error processing notebook ${filePath}:`, error);
+            }
+          }
+        }
+      }
+      
+      console.log('Finished processing existing notebooks');
+    } catch (error) {
+      console.error('Error processing existing notebooks:', error);
     }
   }
 
@@ -141,11 +181,18 @@ class RealMonitor {
       path.join(process.env.HOME || '', 'Documents'),
       path.join(process.env.HOME || '', 'Projects'),
       path.join(process.env.HOME || '', 'Code'),
-      path.join(process.env.HOME || '', 'updated_notebooks_for_cursor')
+      path.join(process.env.HOME || '', 'updated_notebooks_for_cursor'),
+      // Add current project directory
+      path.join(__dirname, '..'),
+      path.join(__dirname, '.'),
+      // Add specific directories with notebook files
+      path.join(__dirname, 'generated-notebooks'),
+      path.join(__dirname, 'generated_notebooks')
     ];
 
     commonDirs.forEach(dir => {
       if (fs.existsSync(dir)) {
+        console.log(`Monitoring directory: ${dir}`);
         this.monitorDirectory(dir);
       }
     });
@@ -391,7 +438,11 @@ class RealMonitor {
   async saveSessionToStorage(session) {
     try {
       if (this.dataStorage) {
+        console.log('Saving session to storage:', session.id, 'with', session.codeDeltas?.length || 0, 'code deltas');
         await this.dataStorage.saveSession(session);
+        console.log('Session saved successfully');
+      } else {
+        console.warn('No data storage available for session:', session.id);
       }
     } catch (error) {
       console.error('Error saving session to storage:', error);
@@ -401,7 +452,12 @@ class RealMonitor {
   extractCodeDeltas(notebookData, sessionId) {
     const deltas = [];
     
-    if (!notebookData.cells) return deltas;
+    if (!notebookData.cells) {
+      console.log('No cells found in notebook data');
+      return deltas;
+    }
+
+    console.log(`Extracting code deltas from ${notebookData.cells.length} cells`);
 
     notebookData.cells.forEach((cell, index) => {
       if (cell.cell_type === 'code' && cell.source) {
@@ -411,7 +467,7 @@ class RealMonitor {
           // Detect if this looks like a suggestion (common patterns)
           const isSuggestion = this.detectSuggestionPattern(content);
           
-          deltas.push({
+          const delta = {
             id: 'delta-' + Date.now() + '-' + index,
             sessionId: sessionId,
             timestamp: new Date().toISOString(),
@@ -425,11 +481,15 @@ class RealMonitor {
             executionCount: cell.execution_count || null,
             isSuggestion: isSuggestion,
             suggestionStatus: isSuggestion ? 'accepted' : 'unknown' // Could be enhanced with more detection
-          });
+          };
+          
+          deltas.push(delta);
+          console.log(`Extracted code delta: ${delta.changeType} (${delta.lineCount} lines) from cell ${index}`);
         }
       }
     });
 
+    console.log(`Total code deltas extracted: ${deltas.length}`);
     return deltas;
   }
 
