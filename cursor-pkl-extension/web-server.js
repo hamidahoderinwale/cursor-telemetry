@@ -262,6 +262,33 @@ app.post('/api/process-existing-notebooks', async (req, res) => {
   }
 });
 
+// Test intent classification for a specific session
+app.post('/api/session/:id/classify-intent', async (req, res) => {
+  try {
+    const sessionId = req.params.id;
+    const session = realMonitor.getSession(sessionId) || await dataStorage.getSession(sessionId);
+    
+    if (!session) {
+      return res.status(404).json({ success: false, error: 'Session not found' });
+    }
+    
+    console.log('Testing intent classification for session:', sessionId);
+    
+    // Perform advanced classification
+    const classificationResult = await realMonitor.advancedClassify(session);
+    
+    res.json({
+      success: true,
+      sessionId: sessionId,
+      classification: classificationResult,
+      clioAvailable: realMonitor.clioService.isClioAvailable()
+    });
+  } catch (error) {
+    console.error('Error classifying intent:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Get visualizations from a notebook session
 app.get('/api/session/:id/visualizations', async (req, res) => {
   try {

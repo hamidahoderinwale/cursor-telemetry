@@ -2,7 +2,8 @@ const fs = require('fs');
 const path = require('path');
 const chokidar = require('chokidar');
 const { exec } = require('child_process');
-// const NotebookSemanticClassifier = require('./notebook-semantic-classifier'); // Removed during cleanup
+const ASTIntentClassifier = require('./ast-intent-classifier');
+const ClioIntentService = require('./clio-intent-service');
 
 /**
  * Real-time monitor for Cursor IDE activity
@@ -16,7 +17,10 @@ class RealMonitor {
     this.isMonitoring = false;
     this.lastConversationId = null;
     this.lastSessionId = null;
-    // this.semanticClassifier = new NotebookSemanticClassifier(); // Removed during cleanup
+    
+    // Initialize intent classification services
+    this.astClassifier = new ASTIntentClassifier();
+    this.clioService = new ClioIntentService();
   }
 
   findCursorDatabase() {
@@ -406,8 +410,8 @@ class RealMonitor {
       const executionStates = this.getExecutionStates(notebookData);
       session.executionStates = executionStates;
 
-      // Perform simple intent classification (simplified version)
-      const semanticAnalysis = this.simpleClassify(session);
+      // Perform advanced intent classification using AST and Clio
+      const semanticAnalysis = await this.advancedClassify(session);
       session.semanticAnalysis = semanticAnalysis;
       session.intent = semanticAnalysis.primary_intent;
       session.confidence = semanticAnalysis.confidence;
@@ -676,8 +680,58 @@ class RealMonitor {
     return null;
   }
 
+  async advancedClassify(session) {
+    try {
+      console.log('Performing advanced intent classification for session:', session.id);
+      
+      // Get conversations for this session if available
+      const conversations = await this.getSessionConversations(session.id);
+      
+      // Use hybrid classification (AST + Clio)
+      const classificationResults = await this.clioService.hybridClassifyIntent(
+        session, 
+        conversations, 
+        this.astClassifier
+      );
+      
+      if (classificationResults && classificationResults.hybrid) {
+        console.log('Advanced classification result:', {
+          intent: classificationResults.hybrid.primary_intent,
+          confidence: classificationResults.hybrid.confidence,
+          sources: Object.keys(classificationResults.hybrid.evidence || {})
+        });
+        return classificationResults.hybrid;
+      }
+      
+      // Fallback to AST-only classification
+      console.log('Falling back to AST-only classification');
+      const codeContent = session.codeDeltas?.map(d => d.afterContent).join('\n') || '';
+      return this.astClassifier.classifyIntent(codeContent, session.currentFile);
+      
+    } catch (error) {
+      console.error('Error in advanced classification:', error);
+      
+      // Fallback to simple classification
+      console.log('Falling back to simple classification');
+      return this.simpleClassify(session);
+    }
+  }
+
+  async getSessionConversations(sessionId) {
+    try {
+      if (this.dataStorage) {
+        // Try to get conversations from data storage
+        const conversations = await this.dataStorage.getConversationsForSession(sessionId);
+        return conversations || [];
+      }
+    } catch (error) {
+      console.error('Error getting session conversations:', error);
+    }
+    return [];
+  }
+
   simpleClassify(session) {
-    // Simple intent classification based on code patterns and file names
+    // Fallback simple intent classification based on code patterns and file names
     let intent = 'data_exploration';
     let confidence = 0.5;
 
@@ -705,10 +759,10 @@ class RealMonitor {
     return {
       primary_intent: intent,
       confidence: confidence,
-      evidence: { code_patterns: true },
+      evidence: { code_patterns: true, fallback: true },
       signal_weights: { cell_analysis: 0.4, prompt_analysis: 0.2 },
       confidence_breakdown: { signal_agreement: 1, evidence_strength: confidence },
-      all_evidences: [{ intent, confidence, weight: 1.0 }],
+      all_evidences: [{ intent, confidence, weight: 1.0, source: 'fallback' }],
       intent_scores: { [intent]: { total_score: confidence, evidence_count: 1 } }
     };
   }

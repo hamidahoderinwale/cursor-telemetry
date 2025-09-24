@@ -157,6 +157,23 @@ class DataStorage {
     }
   }
 
+  async getConversationsForSession(sessionId) {
+    try {
+      if (!fs.existsSync(this.conversationsFile)) {
+        return [];
+      }
+      
+      const data = fs.readFileSync(this.conversationsFile, 'utf8');
+      const allConversations = JSON.parse(data);
+      
+      // Filter conversations for this session
+      return allConversations.filter(conv => conv.sessionId === sessionId);
+    } catch (error) {
+      console.error('Error getting conversations for session:', error);
+      return [];
+    }
+  }
+
   // Conversation management
   async saveConversation(conversation) {
     try {

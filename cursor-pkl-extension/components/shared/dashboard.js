@@ -253,6 +253,14 @@ class Dashboard {
         await this.processExistingNotebooks();
       });
     }
+
+    // Test intent classification button
+    const testIntentBtn = document.getElementById('test-intent-btn');
+    if (testIntentBtn) {
+      testIntentBtn.addEventListener('click', async () => {
+        await this.testIntentClassification();
+      });
+    }
   }
 
   switchView(view) {
@@ -612,6 +620,158 @@ class Dashboard {
         }
       }, 300);
     }, 5000);
+  }
+
+  async testIntentClassification() {
+    try {
+      console.log('Testing intent classification...');
+      
+      // Show loading state
+      const testBtn = document.getElementById('test-intent-btn');
+      if (testBtn) {
+        testBtn.disabled = true;
+        testBtn.textContent = 'Testing...';
+      }
+
+      // Get the first session for testing
+      if (this.sessions.length === 0) {
+        this.showNotification('No sessions available for testing', 'error');
+        return;
+      }
+
+      const testSession = this.sessions[0];
+      console.log('Testing intent classification for session:', testSession.id);
+
+      const response = await fetch(`/api/session/${testSession.id}/classify-intent`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+
+      const result = await response.json();
+      
+      if (result.success) {
+        console.log('Intent classification result:', result);
+        
+        const classification = result.classification;
+        const clioStatus = result.clioAvailable ? 'Available' : 'Not Available';
+        
+        // Show detailed results
+        this.showIntentClassificationResults(classification, clioStatus);
+        
+        this.showNotification(`Intent classified as: ${classification.primary_intent} (${(classification.confidence * 100).toFixed(1)}% confidence)`, 'success');
+      } else {
+        console.error('Failed to classify intent:', result.error);
+        this.showNotification('Failed to classify intent: ' + result.error, 'error');
+      }
+    } catch (error) {
+      console.error('Error testing intent classification:', error);
+      this.showNotification('Error testing intent classification: ' + error.message, 'error');
+    } finally {
+      // Reset button state
+      const testBtn = document.getElementById('test-intent-btn');
+      if (testBtn) {
+        testBtn.disabled = false;
+        testBtn.innerHTML = `
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 12l2 2 4-4"></path>
+            <path d="M21 12c-1 0-3-1-3-3s2-3 3-3 3 1 3 3-2 3-3 3"></path>
+            <path d="M3 12c1 0 3-1 3-3s-2-3-3-3-3 1-3 3 2 3 3 3"></path>
+            <path d="M13 12h3a2 2 0 0 1 2 2v1"></path>
+            <path d="M13 12H9a2 2 0 0 0-2 2v1"></path>
+          </svg>
+          Test Intent Classification
+        `;
+      }
+    }
+  }
+
+  showIntentClassificationResults(classification, clioStatus) {
+    // Create modal for detailed results
+    const modal = document.createElement('div');
+    modal.className = 'intent-classification-modal';
+    modal.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 2000;
+    `;
+
+    const modalContent = document.createElement('div');
+    modalContent.style.cssText = `
+      background: white;
+      border-radius: 8px;
+      padding: 24px;
+      max-width: 600px;
+      max-height: 80vh;
+      overflow-y: auto;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+    `;
+
+    modalContent.innerHTML = `
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h2 style="margin: 0; color: #1f2937;">Intent Classification Results</h2>
+        <button onclick="this.closest('.intent-classification-modal').remove()" style="background: none; border: none; font-size: 24px; cursor: pointer;">&times;</button>
+      </div>
+      
+      <div style="margin-bottom: 20px;">
+        <h3 style="color: #374151; margin-bottom: 10px;">Primary Intent</h3>
+        <div style="background: #f3f4f6; padding: 12px; border-radius: 6px; margin-bottom: 10px;">
+          <strong>${classification.primary_intent}</strong> (${(classification.confidence * 100).toFixed(1)}% confidence)
+        </div>
+      </div>
+
+      <div style="margin-bottom: 20px;">
+        <h3 style="color: #374151; margin-bottom: 10px;">Analysis Sources</h3>
+        <div style="background: #f3f4f6; padding: 12px; border-radius: 6px;">
+          <div>Clio Status: <strong>${clioStatus}</strong></div>
+          <div>Evidence: ${Object.keys(classification.evidence || {}).join(', ')}</div>
+        </div>
+      </div>
+
+      <div style="margin-bottom: 20px;">
+        <h3 style="color: #374151; margin-bottom: 10px;">All Evidences</h3>
+        <div style="max-height: 200px; overflow-y: auto;">
+          ${(classification.all_evidences || []).map(evidence => `
+            <div style="background: #f9fafb; padding: 8px; border-radius: 4px; margin-bottom: 8px; border-left: 3px solid #3b82f6;">
+              <strong>${evidence.intent}</strong> (${(evidence.confidence * 100).toFixed(1)}%) - Source: ${evidence.source || 'unknown'}
+            </div>
+          `).join('')}
+        </div>
+      </div>
+
+      <div style="margin-bottom: 20px;">
+        <h3 style="color: #374151; margin-bottom: 10px;">Intent Scores</h3>
+        <div style="max-height: 200px; overflow-y: auto;">
+          ${Object.entries(classification.intent_scores || {}).map(([intent, data]) => `
+            <div style="background: #f9fafb; padding: 8px; border-radius: 4px; margin-bottom: 8px;">
+              <strong>${intent}</strong>: ${(data.total_score * 100).toFixed(1)}% (${data.evidence_count} evidences)
+            </div>
+          `).join('')}
+        </div>
+      </div>
+
+      <div style="text-align: right;">
+        <button onclick="this.closest('.intent-classification-modal').remove()" style="background: #3b82f6; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">Close</button>
+      </div>
+    `;
+
+    modal.appendChild(modalContent);
+    document.body.appendChild(modal);
+
+    // Close on background click
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) {
+        modal.remove();
+      }
+    });
   }
 
   renderCharts() {
