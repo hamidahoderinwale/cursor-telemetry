@@ -120,6 +120,42 @@ class CellStageClassifier {
     }
 
     /**
+     * Initialize AST patterns for code analysis
+     */
+    initializeASTPatterns() {
+        return {
+            'data_analysis': {
+                keywords: ['pandas', 'numpy', 'dataframe', 'series', 'read_csv', 'read_json'],
+                weight: 1.0
+            },
+            'visualization': {
+                keywords: ['matplotlib', 'seaborn', 'plotly', 'plot', 'chart', 'graph', 'visualize'],
+                weight: 0.9
+            },
+            'machine_learning': {
+                keywords: ['sklearn', 'tensorflow', 'keras', 'pytorch', 'model', 'fit', 'predict'],
+                weight: 0.8
+            },
+            'statistical_analysis': {
+                keywords: ['scipy', 'stats', 'correlation', 'regression', 'anova', 't_test'],
+                weight: 0.7
+            },
+            'data_preprocessing': {
+                keywords: ['clean', 'preprocess', 'transform', 'normalize', 'scale', 'encode'],
+                weight: 0.6
+            }
+        };
+    }
+
+    /**
+     * Check if AST analysis is available
+     */
+    checkASTAvailability() {
+        // For now, always return true since we're using regex-based analysis
+        return true;
+    }
+
+    /**
      * Initialize Clio facets for enhanced analysis
      */
     initializeClioFacets() {

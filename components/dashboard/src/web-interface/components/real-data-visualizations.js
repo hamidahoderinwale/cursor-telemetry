@@ -785,7 +785,10 @@ class RealDataVisualizations {
                 };
             }).sort((a, b) => b.count - a.count),
             totalCells: distribution.totalCells,
-            sessionBreakdowns: distribution.sessionBreakdowns
+            sessionBreakdowns: distribution.sessionBreakdowns,
+            insights: distribution.globalInsights || [],
+            complexity: distribution.complexityMetrics || null,
+            facets: distribution.facetAnalysis || null
         };
     }
 
@@ -947,6 +950,113 @@ class RealDataVisualizations {
                 .attr('fill', 'var(--text-primary)')
                 .text(`${stage.name} (${stage.count})`);
         });
+
+        // Add enhanced insights section
+        const insightsContainer = document.createElement('div');
+        insightsContainer.className = 'intent-insights';
+        insightsContainer.style.cssText = `
+            margin-top: 20px;
+            padding: 15px;
+            background: var(--background-secondary);
+            border-radius: 8px;
+            border-left: 4px solid var(--primary-color);
+        `;
+        
+        const insightsTitle = document.createElement('h4');
+        insightsTitle.textContent = 'Enhanced Analysis Insights';
+        insightsTitle.style.cssText = `
+            margin: 0 0 10px 0;
+            color: var(--text-primary);
+            font-size: 14px;
+            font-weight: 600;
+        `;
+        insightsContainer.appendChild(insightsTitle);
+        
+        const insightsList = document.createElement('ul');
+        insightsList.style.cssText = `
+            margin: 0;
+            padding-left: 20px;
+            color: var(--text-secondary);
+            font-size: 13px;
+        `;
+        
+        // Add basic insights
+        if (intentEntries.length > 0) {
+            const topIntent = intentEntries[0];
+            insightsList.innerHTML += `<li>Most common stage: <strong>${topIntent.name}</strong> (${topIntent.count} cells)</li>`;
+        }
+        
+        if (intentEntries.length > 1) {
+            insightsList.innerHTML += `<li>Workflow diversity: ${intentEntries.length} different stages</li>`;
+        }
+        
+        insightsList.innerHTML += `<li>Total cells analyzed: <strong>${stageDistribution.totalCells}</strong></li>`;
+        
+        // Add complexity insights
+        if (stageDistribution.complexity) {
+            const complexity = stageDistribution.complexity;
+            insightsList.innerHTML += `<li>Average complexity: <strong>${complexity.average.toFixed(1)}</strong> (max: ${complexity.max}, min: ${complexity.min})</li>`;
+        }
+        
+        // Add facet insights
+        if (stageDistribution.facets && stageDistribution.facets.dominantFacet) {
+            insightsList.innerHTML += `<li>Dominant analysis focus: <strong>${stageDistribution.facets.dominantFacet}</strong></li>`;
+        }
+        
+        // Add holistic insights
+        if (stageDistribution.insights && stageDistribution.insights.length > 0) {
+            insightsList.innerHTML += `<li>Quality insights: ${stageDistribution.insights.length} recommendations</li>`;
+        }
+        
+        insightsContainer.appendChild(insightsList);
+        
+        // Add detailed insights if available
+        if (stageDistribution.insights && stageDistribution.insights.length > 0) {
+            const detailedInsights = document.createElement('div');
+            detailedInsights.className = 'detailed-insights';
+            detailedInsights.style.cssText = `
+                margin-top: 15px;
+                padding: 10px;
+                background: var(--background-primary);
+                border-radius: 6px;
+                border: 1px solid var(--border-color);
+            `;
+            
+            const detailedTitle = document.createElement('h5');
+            detailedTitle.textContent = 'Detailed Insights';
+            detailedTitle.style.cssText = `
+                margin: 0 0 8px 0;
+                color: var(--text-primary);
+                font-size: 12px;
+                font-weight: 600;
+            `;
+            detailedInsights.appendChild(detailedTitle);
+            
+            const detailedList = document.createElement('ul');
+            detailedList.style.cssText = `
+                margin: 0;
+                padding-left: 15px;
+                color: var(--text-secondary);
+                font-size: 11px;
+            `;
+            
+            stageDistribution.insights.forEach(insight => {
+                const severityColor = insight.severity === 'warning' ? 'var(--warning-color)' : 
+                                    insight.severity === 'success' ? 'var(--success-color)' : 
+                                    'var(--info-color)';
+                
+                detailedList.innerHTML += `
+                    <li style="color: ${severityColor};">
+                        <strong>${insight.type}:</strong> ${insight.message}
+                    </li>
+                `;
+            });
+            
+            detailedInsights.appendChild(detailedList);
+            insightsContainer.appendChild(detailedInsights);
+        }
+        
+        chartContainer.appendChild(insightsContainer);
 
         console.log('Enhanced cell stage distribution rendered with', intentEntries.length, 'stages');
     }
