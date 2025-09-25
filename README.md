@@ -49,6 +49,15 @@ Real-time monitoring and analysis system for Cursor IDE sessions with privacy-pr
 - **Project Organization**: Automatic categorization and grouping of sessions based on file paths
 - **Embeddings Visualization**: Radial layout visualization of high-dimensional intent facets with interactive tooltips
 
+### CSS Architecture
+
+- **Component-Based Structure**: Modular CSS organization with separate files for each component
+- **CSS Variables System**: Comprehensive design system using CSS custom properties for colors, typography, spacing, and transitions
+- **Grayscale Theme**: Professional grayscale color palette with consistent contrast ratios and accessibility
+- **Typography**: Funnel Sans font family with consistent sizing and weight scales
+- **Responsive Design**: Mobile-first approach with flexible grid layouts and adaptive components
+- **Performance**: Optimized CSS loading with preload hints and minimal render-blocking resources
+
 ## Installation
 
 ### Prerequisites
@@ -172,10 +181,13 @@ node src/web-interface/web-server.js
 
 ### CSS Refactoring and Repository Cleanup
 
-- **Consolidated CSS Architecture**: Refactored CSS into component-based structure with consistent design system
+- **Consolidated CSS Architecture**: Refactored CSS into component-based structure with consistent design system using CSS variables
+- **Grayscale Design System**: Implemented comprehensive grayscale color palette with CSS custom properties for consistent theming
+- **Component-Based CSS**: Organized styles into modular components (header, navigation, session-cards, visualizations, etc.)
 - **Removed Duplicate Files**: Cleaned up repository by removing unused CSS files and consolidating styles
-- **Fixed JavaScript Syntax Errors**: Resolved class structure issues and duplicate method definitions
+- **Fixed JavaScript Syntax Errors**: Resolved class structure issues and duplicate method definitions in dashboard.js
 - **Updated File References**: Corrected CSS and JavaScript file paths in HTML templates
+- **Button Styling**: Standardized button styles with hover effects and proper color variables
 
 ### Enhanced Intent Classification System
 
