@@ -208,12 +208,13 @@
 
 .session-title {
   font-family: var(--font-family-base);
-  font-size: var(--font-size-lg);
-  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
   color: var(--text-primary);
   margin: 0;
   flex: 1;
   text-transform: capitalize;
+  letter-spacing: 0.5px;
 }
 
 .session-badges {
@@ -224,12 +225,13 @@
 }
 
 .session-status {
-  padding: var(--space-1) var(--space-2);
+  padding: var(--space-2) var(--space-3);
   border-radius: 0;
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-medium);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 1px;
+  border: 1px solid currentColor;
 }
 
 .session-status.success {
@@ -249,12 +251,13 @@
 }
 
 .confidence-badge {
-  padding: var(--space-1) var(--space-2);
+  padding: var(--space-2) var(--space-3);
   background: var(--primary-color-bg);
   color: var(--primary-color);
   border-radius: 0;
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-medium);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+  border: 1px solid var(--primary-color);
 }
 
 .session-info,
@@ -269,25 +272,27 @@
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-base);
   color: var(--text-secondary);
-  padding: var(--space-1) 0;
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--background-tertiary);
 }
 
 .info-icon {
-  font-size: var(--font-size-sm);
-  min-width: 80px;
+  font-size: var(--font-size-base);
+  min-width: 100px;
   text-align: left;
-  font-weight: var(--font-weight-medium);
+  font-weight: var(--font-weight-bold);
   color: var(--text-primary);
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 1px;
 }
 
 .info-text {
   flex: 1;
-  font-weight: var(--font-weight-normal);
+  font-weight: var(--font-weight-medium);
   color: var(--text-primary);
+  font-size: var(--font-size-base);
 }
 
 .session-actions {

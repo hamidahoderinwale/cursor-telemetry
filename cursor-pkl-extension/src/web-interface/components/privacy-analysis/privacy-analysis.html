@@ -7,132 +7,98 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <link rel="icon" type="image/x-icon" href="/favicon.ico">
     <link rel="stylesheet" href="/assets/css/variables.css">
-    <link rel="stylesheet" href="/assets/css/main-refactored.css">
+    <link rel="stylesheet" href="/assets/css/main.css">
+    <link rel="stylesheet" href="/assets/css/components/privacy-analysis.css">
     <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
-    <style>
-        .privacy-dashboard {
-            padding: 20px;
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-        
-        .privacy-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 30px;
-            padding-bottom: 20px;
-            border-bottom: 2px solid #e5e7eb;
-        }
-        
-        .privacy-controls {
-            display: flex;
-            gap: 10px;
-            align-items: center;
-        }
-        
-        .privacy-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
-            margin-bottom: 30px;
-        }
-        
-        .privacy-card {
-            background: white;
-            border-radius: 8px;
-            padding: 20px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        
-        .privacy-metrics {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
-            margin-bottom: 30px;
-        }
-        
-        .metric-card {
-            background: #f8fafc;
-            border: 1px solid #e2e8f0;
-            border-radius: 6px;
-            padding: 15px;
-            text-align: center;
-        }
-        
-        .metric-value {
-            font-size: 24px;
-            font-weight: bold;
-            color: #1e40af;
-        }
-        
-        .metric-label {
-            font-size: 14px;
-            color: #64748b;
-            margin-top: 5px;
-        }
-    </style>
 </head>
 <body>
-    <div class="privacy-dashboard">
-        <div class="privacy-header">
-            <div>
-                <h1>Privacy Analysis Dashboard</h1>
-                <p>Analyze privacy implications and data transformations in your coding sessions</p>
-            </div>
-            <div class="privacy-controls">
-                <button class="btn btn-secondary" onclick="window.location.href='/'">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M19 12H5M12 19l-7-7 7-7"></path>
-                    </svg>
-                    Back to Main
-                </button>
-                <button class="btn btn-primary" id="analyze-btn">Run Analysis</button>
-                <button class="btn btn-secondary" id="export-btn">Export Report</button>
-            </div>
-        </div>
-
-        <div class="privacy-metrics">
-            <div class="metric-card">
-                <div class="metric-value" id="total-sessions">0</div>
-                <div class="metric-label">Total Sessions</div>
-            </div>
-            <div class="metric-card">
-                <div class="metric-value" id="privacy-violations">0</div>
-                <div class="metric-label">Privacy Violations</div>
-            </div>
-            <div class="metric-card">
-                <div class="metric-value" id="redaction-rate">0%</div>
-                <div class="metric-label">Redaction Rate</div>
-            </div>
-            <div class="metric-card">
-                <div class="metric-value" id="expression-score">0.0</div>
-                <div class="metric-label">Expression Score</div>
-            </div>
-        </div>
-
-        <div class="privacy-grid">
-            <div class="privacy-card">
-                <h3>Privacy Configuration</h3>
-                <div id="privacy-config">
-                    <p>Loading privacy configuration...</p>
+    <div class="dashboard">
+        <!-- Header -->
+        <header class="header">
+            <div class="container">
+                <div class="header-content">
+                    <div class="header-info">
+                        <h1 class="header-title">Privacy Analysis Dashboard</h1>
+                        <p class="header-subtitle">Analyze privacy implications and data transformations in your coding sessions</p>
+                    </div>
+                    <div class="header-actions">
+                        <button class="btn btn-secondary" onclick="window.location.href='/'">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M19 12H5M12 19l-7-7 7-7"></path>
+                            </svg>
+                            Back to Main
+                        </button>
+                        <button class="btn btn-primary" id="analyze-btn">Run Analysis</button>
+                        <button class="btn btn-secondary" id="export-btn">Export Report</button>
+                    </div>
                 </div>
             </div>
-            
-            <div class="privacy-card">
-                <h3>Transformation Summary</h3>
-                <div id="transformation-summary">
-                    <p>No analysis performed yet. Click "Run Analysis" to begin.</p>
-                </div>
-            </div>
-        </div>
+        </header>
 
-        <div class="privacy-card">
-            <h3>Privacy Analysis Results</h3>
-            <div id="privacy-results">
-                <p>Run an analysis to see detailed privacy insights and recommendations.</p>
+        <!-- Main Content -->
+        <main class="main-content">
+            <div class="container">
+
+                <!-- Privacy Metrics -->
+                <section class="metrics-section">
+                    <div class="metrics-grid">
+                        <div class="metric-card">
+                            <div class="metric-value" id="total-sessions">0</div>
+                            <div class="metric-label">Total Sessions</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value" id="privacy-violations">0</div>
+                            <div class="metric-label">Privacy Violations</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value" id="redaction-rate">0%</div>
+                            <div class="metric-label">Redaction Rate</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value" id="expression-score">0.0</div>
+                            <div class="metric-label">Expression Score</div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Privacy Configuration and Summary -->
+                <section class="privacy-grid">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Privacy Configuration</h3>
+                        </div>
+                        <div class="card-body">
+                            <div id="privacy-config">
+                                <p>Loading privacy configuration...</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Transformation Summary</h3>
+                        </div>
+                        <div class="card-body">
+                            <div id="transformation-summary">
+                                <p>No analysis performed yet. Click "Run Analysis" to begin.</p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Privacy Analysis Results -->
+                <section class="card">
+                    <div class="card-header">
+                        <h3>Privacy Analysis Results</h3>
+                    </div>
+                    <div class="card-body">
+                        <div id="privacy-results">
+                            <p>Run an analysis to see detailed privacy insights and recommendations.</p>
+                        </div>
+                    </div>
+                </section>
             </div>
-        </div>
+        </main>
     </div>
 
     <script>

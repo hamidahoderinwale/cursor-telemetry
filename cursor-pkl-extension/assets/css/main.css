@@ -74,13 +74,15 @@
 }
 
 .btn-secondary {
-  background: var(--secondary-color);
-  color: var(--text-inverse);
-  border-color: var(--secondary-color);
+  background: var(--background-secondary);
+  color: var(--text-primary);
+  border-color: var(--border-color);
 }
 
 .btn-secondary:hover {
-  background: var(--secondary-color-dark);
+  background: var(--background-hover);
+  color: var(--text-primary);
+  border-color: var(--border-hover);
 }
 
 .btn-success {
@@ -245,16 +247,7 @@
   font-size: var(--font-size-sm);
 }
 
-.info-icon {
-  background: var(--background-tertiary);
-  color: var(--text-secondary);
-  padding: var(--space-1) var(--space-2);
-  border-radius: var(--radius-sm);
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-medium);
-  min-width: 60px;
-  text-align: center;
-}
+/* info-icon styles moved to session-cards.css for better specificity */
 
 .info-text {
   color: var(--text-primary);

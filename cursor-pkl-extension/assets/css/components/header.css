@@ -21,17 +21,19 @@
 
 .header-title {
   font-family: var(--font-family-base);
-  font-size: var(--font-size-2xl);
-  font-weight: var(--font-weight-bold);
+  font-size: var(--font-size-3xl);
+  font-weight: var(--font-weight-extrabold);
   color: var(--text-primary);
   margin: 0;
+  letter-spacing: 1px;
 }
 
 .header-subtitle {
   font-family: var(--font-family-base);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-base);
   color: var(--text-secondary);
-  margin-top: var(--space-1);
+  margin-top: var(--space-2);
+  font-weight: var(--font-weight-medium);
 }
 
 .header-actions {

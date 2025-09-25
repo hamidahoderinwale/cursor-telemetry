@@ -36,9 +36,9 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
 
   const getOutcomeIcon = () => {
     switch (session.outcome) {
-      case 'success': return '✅';
-      case 'stuck': return '✖';
-      case 'in-progress': return '…';
+      case 'success': return 'Success';
+      case 'stuck': return 'Stuck';
+      case 'in-progress': return 'In Progress';
       default: return '';
     }
   };

@@ -910,7 +910,7 @@ async def main():
         with open(sessions_file, 'w') as f:
             json.dump(sample_sessions, f, indent=2)
         
-        print(f"📝 Created sample sessions file: {sessions_file}")
+        print(f"Created sample sessions file: {sessions_file}")
     
     # Load sessions
     with open(sessions_file, 'r') as f:

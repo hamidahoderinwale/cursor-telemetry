@@ -1,5 +1,52 @@
 /* Privacy Analysis Dashboard Component Styles */
 
+/* Privacy Dashboard Layout */
+.privacy-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.metrics-section {
+  margin-bottom: var(--space-4);
+}
+
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--space-4);
+}
+
+.metric-card {
+  background: var(--background-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 0;
+  padding: var(--space-4);
+  text-align: center;
+  transition: var(--transition-fast);
+}
+
+.metric-card:hover {
+  box-shadow: var(--shadow-sm);
+  transform: translateY(-1px);
+}
+
+.metric-value {
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--primary-color);
+  margin-bottom: var(--space-1);
+}
+
+.metric-label {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  font-weight: var(--font-weight-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
 /* Global page styling to ensure Funnel Sans and grayscale */
 html,
 body {

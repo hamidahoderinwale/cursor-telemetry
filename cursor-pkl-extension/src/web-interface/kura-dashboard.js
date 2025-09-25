@@ -8,10 +8,15 @@ class KuraDashboard {
         this.sessions = [];
         this.clusters = [];
         this.umapData = [];
+        this.projects = [];
         this.selectedSessions = new Set();
         this.currentColorBy = 'intent';
         this.clusterTree = null;
         this.umapPlot = null;
+        this.currentView = 'clusters'; // 'clusters' or 'projects'
+        this.currentPage = 1;
+        this.itemsPerPage = 10;
+        this.selectedProject = null;
         
         // Load configuration from localStorage or use defaults
         this.config = this.loadConfiguration();
@@ -173,79 +178,224 @@ class KuraDashboard {
     }
 
     initializeEventListeners() {
-        // Header controls
-        document.getElementById('refresh-btn').addEventListener('click', () => this.loadData());
-        document.getElementById('export-btn').addEventListener('click', () => this.exportData());
-        document.getElementById('search-btn').addEventListener('click', () => this.performSearch());
-        document.getElementById('global-search').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') this.performSearch();
-        });
+        try {
+            // Header controls
+            const refreshBtn = document.getElementById('refresh-btn');
+            const exportBtn = document.getElementById('export-btn');
+            const searchBtn = document.getElementById('search-btn');
+            const globalSearch = document.getElementById('global-search');
 
-        // Cluster tree controls
-        document.getElementById('expand-all-btn').addEventListener('click', () => this.expandAllClusters());
-        document.getElementById('collapse-all-btn').addEventListener('click', () => this.collapseAllClusters());
+            if (refreshBtn) {
+                refreshBtn.addEventListener('click', () => this.loadData());
+            } else {
+                console.warn('Refresh button not found');
+            }
 
-        // UMAP controls
-        document.getElementById('color-by-select').addEventListener('change', (e) => {
-            this.currentColorBy = e.target.value;
-            this.updateUMAPColors();
-        });
-        document.getElementById('reset-zoom-btn').addEventListener('click', () => this.resetUMAPZoom());
-        document.getElementById('fullscreen-btn').addEventListener('click', () => this.toggleFullscreen());
+            if (exportBtn) {
+                exportBtn.addEventListener('click', () => this.exportData());
+            } else {
+                console.warn('Export button not found');
+            }
 
-        // Pattern insights
-        document.getElementById('insight-type-select').addEventListener('change', (e) => {
-            this.updatePatternInsights(e.target.value);
-        });
+            if (searchBtn) {
+                searchBtn.addEventListener('click', () => this.performSearch());
+            } else {
+                console.warn('Search button not found');
+            }
 
-        // Configuration controls
-        document.getElementById('cluster-count').addEventListener('input', (e) => {
-            this.updateConfiguration('clusterCount', parseInt(e.target.value));
-            document.getElementById('cluster-count-value').textContent = e.target.value;
-        });
-        
-        document.getElementById('umap-n-neighbors').addEventListener('input', (e) => {
-            this.updateConfiguration('umapNeighbors', parseInt(e.target.value));
-            document.getElementById('umap-n-neighbors-value').textContent = e.target.value;
-        });
-        
-        document.getElementById('umap-min-dist').addEventListener('input', (e) => {
-            this.updateConfiguration('umapMinDist', parseFloat(e.target.value));
-            document.getElementById('umap-min-dist-value').textContent = e.target.value;
-        });
-        
-        document.getElementById('clustering-method').addEventListener('change', (e) => {
-            this.updateConfiguration('clusteringMethod', e.target.value);
-        });
-        
-        document.getElementById('recompute-clusters-btn').addEventListener('click', () => this.recomputeClusters());
+            if (globalSearch) {
+                globalSearch.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') this.performSearch();
+                });
+            } else {
+                console.warn('Global search input not found');
+            }
+        } catch (error) {
+            console.error('Error initializing header event listeners:', error);
+        }
 
-        // Quick actions
-        document.getElementById('generate-notebook-btn').addEventListener('click', () => this.generateAnalysisNotebook());
-        document.getElementById('export-cluster-btn').addEventListener('click', () => this.exportSelectedCluster());
-        document.getElementById('create-procedure-btn').addEventListener('click', () => this.showProcedureModal());
-        document.getElementById('share-insights-btn').addEventListener('click', () => this.shareInsights());
-        document.getElementById('analyze-patterns-btn').addEventListener('click', () => this.analyzePatterns());
-        document.getElementById('export-umap-btn').addEventListener('click', () => this.exportUMAPData());
-        document.getElementById('info-btn').addEventListener('click', () => this.showInfoModal());
+        try {
+            // Cluster tree controls
+            const expandAllBtn = document.getElementById('expand-all-btn');
+            const collapseAllBtn = document.getElementById('collapse-all-btn');
 
-        // Session details
-        document.getElementById('close-details-btn').addEventListener('click', () => this.closeSessionDetails());
+            if (expandAllBtn) {
+                expandAllBtn.addEventListener('click', () => this.expandAllClusters());
+            }
 
-        // Keyboard shortcuts
-        document.addEventListener('keydown', (e) => this.handleKeyboardShortcuts(e));
+            if (collapseAllBtn) {
+                collapseAllBtn.addEventListener('click', () => this.collapseAllClusters());
+            }
+
+            // UMAP controls
+            const colorBySelect = document.getElementById('color-by-select');
+            const resetZoomBtn = document.getElementById('reset-zoom-btn');
+            const fullscreenBtn = document.getElementById('fullscreen-btn');
+
+            if (colorBySelect) {
+                colorBySelect.addEventListener('change', (e) => {
+                    this.currentColorBy = e.target.value;
+                    this.updateUMAPColors();
+                });
+            }
+
+            if (resetZoomBtn) {
+                resetZoomBtn.addEventListener('click', () => this.resetUMAPZoom());
+            }
+
+            if (fullscreenBtn) {
+                fullscreenBtn.addEventListener('click', () => this.toggleFullscreen());
+            }
+
+            // Pattern insights
+            const insightTypeSelect = document.getElementById('insight-type-select');
+            if (insightTypeSelect) {
+                insightTypeSelect.addEventListener('change', (e) => {
+                    this.updatePatternInsights(e.target.value);
+                });
+            }
+        } catch (error) {
+            console.error('Error initializing visualization event listeners:', error);
+        }
+
+        try {
+            // Configuration controls
+            const clusterCountSlider = document.getElementById('cluster-count');
+            const umapNeighborsSlider = document.getElementById('umap-n-neighbors');
+            const umapMinDistSlider = document.getElementById('umap-min-dist');
+            const clusteringMethodSelect = document.getElementById('clustering-method');
+            const recomputeBtn = document.getElementById('recompute-clusters-btn');
+
+            if (clusterCountSlider) {
+                clusterCountSlider.addEventListener('input', (e) => {
+                    this.updateConfiguration('clusterCount', parseInt(e.target.value));
+                    const valueDisplay = document.getElementById('cluster-count-value');
+                    if (valueDisplay) {
+                        valueDisplay.textContent = e.target.value;
+                    }
+                });
+            }
+
+            if (umapNeighborsSlider) {
+                umapNeighborsSlider.addEventListener('input', (e) => {
+                    this.updateConfiguration('umapNeighbors', parseInt(e.target.value));
+                    const valueDisplay = document.getElementById('umap-n-neighbors-value');
+                    if (valueDisplay) {
+                        valueDisplay.textContent = e.target.value;
+                    }
+                });
+            }
+
+            if (umapMinDistSlider) {
+                umapMinDistSlider.addEventListener('input', (e) => {
+                    this.updateConfiguration('umapMinDist', parseFloat(e.target.value));
+                    const valueDisplay = document.getElementById('umap-min-dist-value');
+                    if (valueDisplay) {
+                        valueDisplay.textContent = e.target.value;
+                    }
+                });
+            }
+
+            if (clusteringMethodSelect) {
+                clusteringMethodSelect.addEventListener('change', (e) => {
+                    this.updateConfiguration('clusteringMethod', e.target.value);
+                });
+            }
+
+            if (recomputeBtn) {
+                recomputeBtn.addEventListener('click', () => this.recomputeClusters());
+            }
+        } catch (error) {
+            console.error('Error initializing configuration event listeners:', error);
+        }
+
+        try {
+            // Quick actions
+            const generateNotebookBtn = document.getElementById('generate-notebook-btn');
+            const exportClusterBtn = document.getElementById('export-cluster-btn');
+            const createProcedureBtn = document.getElementById('create-procedure-btn');
+            const shareInsightsBtn = document.getElementById('share-insights-btn');
+            const analyzePatternsBtn = document.getElementById('analyze-patterns-btn');
+            const exportUmapBtn = document.getElementById('export-umap-btn');
+            const infoBtn = document.getElementById('info-btn');
+            const closeDetailsBtn = document.getElementById('close-details-btn');
+
+            if (generateNotebookBtn) {
+                generateNotebookBtn.addEventListener('click', () => this.generateAnalysisNotebook());
+            }
+
+            if (exportClusterBtn) {
+                exportClusterBtn.addEventListener('click', () => this.exportSelectedCluster());
+            }
+
+            if (createProcedureBtn) {
+                createProcedureBtn.addEventListener('click', () => this.showProcedureModal());
+            }
+
+            if (shareInsightsBtn) {
+                shareInsightsBtn.addEventListener('click', () => this.shareInsights());
+            }
+
+            if (analyzePatternsBtn) {
+                analyzePatternsBtn.addEventListener('click', () => this.analyzePatterns());
+            }
+
+            if (exportUmapBtn) {
+                exportUmapBtn.addEventListener('click', () => this.exportUMAPData());
+            }
+
+            if (infoBtn) {
+                infoBtn.addEventListener('click', () => this.showInfoModal());
+            }
+
+            if (closeDetailsBtn) {
+                closeDetailsBtn.addEventListener('click', () => this.closeSessionDetails());
+            }
+
+            // View toggle event listeners
+            const clustersViewBtn = document.getElementById('clusters-view-btn');
+            const projectsViewBtn = document.getElementById('projects-view-btn');
+
+            if (clustersViewBtn) {
+                clustersViewBtn.addEventListener('click', () => this.switchView('clusters'));
+            }
+            if (projectsViewBtn) {
+                projectsViewBtn.addEventListener('click', () => this.switchView('projects'));
+            }
+
+            // Pagination event listeners
+            const prevPageBtn = document.getElementById('prev-page-btn');
+            const nextPageBtn = document.getElementById('next-page-btn');
+
+            if (prevPageBtn) {
+                prevPageBtn.addEventListener('click', () => this.previousPage());
+            }
+            if (nextPageBtn) {
+                nextPageBtn.addEventListener('click', () => this.nextPage());
+            }
+
+            // Keyboard shortcuts
+            document.addEventListener('keydown', (e) => this.handleKeyboardShortcuts(e));
+        } catch (error) {
+            console.error('Error initializing event listeners:', error);
+        }
     }
 
     async loadData() {
         this.showLoading(true);
         
         try {
+            console.log('Loading session data...');
+            
             // First try to load real sessions data
             const sessionsResponse = await fetch('/api/sessions');
             let sessionsData = { sessions: [] };
             
             if (sessionsResponse.ok) {
                 sessionsData = await sessionsResponse.json();
+                console.log(`Loaded ${sessionsData.sessions?.length || 0} sessions from API`);
+            } else {
+                console.warn('Failed to load sessions from API:', sessionsResponse.status);
             }
             
             // Load PKL sessions and run Kura analysis
@@ -261,23 +411,28 @@ class KuraDashboard {
             });
 
             if (!response.ok) {
-                throw new Error('Failed to load Kura analysis');
+                throw new Error(`Failed to load Kura analysis: ${response.status} ${response.statusText}`);
             }
 
             const data = await response.json();
+            console.log('Kura analysis response:', data);
             
             if (data.success) {
                 this.sessions = this.validateAndSanitizeSessions(data.sessions || []);
                 this.clusters = data.clusters || [];
                 this.umapData = data.umap_coordinates || [];
                 
+                console.log(`Processed ${this.sessions.length} sessions, ${this.clusters.length} clusters, ${this.umapData.length} UMAP points`);
+                
                 // If we have real sessions but no clusters, create basic clusters
                 if (this.sessions.length > 0 && this.clusters.length === 0) {
+                    console.log('Creating basic clusters...');
                     this.clusters = this.createBasicClusters();
                 }
                 
                 // If we have sessions but no UMAP data, create basic coordinates
                 if (this.sessions.length > 0 && this.umapData.length === 0) {
+                    console.log('Creating basic UMAP data...');
                     this.umapData = this.createBasicUMAPData();
                 }
                 
@@ -286,6 +441,14 @@ class KuraDashboard {
                 this.updateStatistics();
                 this.updatePatternInsights('success_patterns');
                 this.updateStatusBar();
+                
+                // Load projects data
+                await this.loadProjects();
+                
+                // Show empty state if no sessions
+                if (this.sessions.length === 0) {
+                    this.showEmptyState();
+                }
             } else {
                 throw new Error(data.error || 'Unknown error');
             }
@@ -353,10 +516,20 @@ class KuraDashboard {
 
     renderClusterTree() {
         const container = document.getElementById('cluster-tree');
-        container.innerHTML = '';
+        if (!container) return;
 
-        // Create hierarchical structure
-        const hierarchicalClusters = this.buildHierarchy();
+        // Apply pagination
+        const startIndex = (this.currentPage - 1) * this.itemsPerPage;
+        const endIndex = startIndex + this.itemsPerPage;
+        const paginatedClusters = this.clusters.slice(startIndex, endIndex);
+
+        if (paginatedClusters.length === 0) {
+            container.innerHTML = '<div class="empty-state"><p>No clusters found</p></div>';
+            return;
+        }
+
+        // Create hierarchical structure for paginated clusters
+        const hierarchicalClusters = this.buildHierarchy(paginatedClusters);
         
         // Render tree
         const treeHtml = this.renderClusterNode(hierarchicalClusters, 0);
@@ -735,10 +908,12 @@ class KuraDashboard {
         return neighbors;
     }
 
-    buildHierarchy() {
+    buildHierarchy(clusters = null) {
         // Build hierarchical cluster structure from real data
         const intentGroups = {};
-        this.sessions.forEach(session => {
+        const sessionsToUse = clusters ? clusters.flatMap(c => c.sessions || []) : this.sessions;
+        
+        sessionsToUse.forEach(session => {
             const intent = session.intent || 'unknown';
             if (!intentGroups[intent]) {
                 intentGroups[intent] = [];
@@ -1428,9 +1603,17 @@ class KuraDashboard {
 
     showSessionDetails(sessionId) {
         const session = this.sessions.find(s => s.id === sessionId);
-        if (!session) return;
+        if (!session) {
+            console.warn(`Session ${sessionId} not found`);
+            return;
+        }
 
         const container = document.getElementById('session-details');
+        if (!container) {
+            console.warn('Session details container not found');
+            return;
+        }
+
         container.innerHTML = `
             <div class="session-card">
                 <div class="session-header">
@@ -1440,39 +1623,292 @@ class KuraDashboard {
                 <div class="session-meta">
                     <div class="meta-item">
                         <div class="meta-label">Intent</div>
-                        <div class="meta-value">${session.intent}</div>
+                        <div class="meta-value">${session.intent || 'Unknown'}</div>
                     </div>
                     <div class="meta-item">
                         <div class="meta-label">Outcome</div>
-                        <div class="meta-value">${session.outcome}</div>
+                        <div class="meta-value">${session.outcome || 'In Progress'}</div>
                     </div>
                     <div class="meta-item">
                         <div class="meta-label">File</div>
-                        <div class="meta-value">${session.currentFile}</div>
+                        <div class="meta-value">${session.currentFile || 'Unknown'}</div>
                     </div>
                     <div class="meta-item">
                         <div class="meta-label">Confidence</div>
-                        <div class="meta-value">${(session.confidence * 100).toFixed(1)}%</div>
+                        <div class="meta-value">${session.confidence ? (session.confidence * 100).toFixed(1) + '%' : 'N/A'}</div>
                     </div>
                 </div>
                 <div class="session-content">
                     ${session.summary || 'No summary available'}
                 </div>
+                ${session.codeDeltas && session.codeDeltas.length > 0 ? `
+                <div class="session-meta">
+                    <div class="meta-item">
+                        <div class="meta-label">Code Changes</div>
+                        <div class="meta-value">${session.codeDeltas.length} changes</div>
+                    </div>
+                    <div class="meta-item">
+                        <div class="meta-label">File Changes</div>
+                        <div class="meta-value">${session.fileChanges ? session.fileChanges.length : 0} files</div>
+                    </div>
+                </div>
+                ` : ''}
             </div>
         `;
     }
 
     showSelectionInfo(points) {
         const container = document.getElementById('selection-content');
+        if (!container) {
+            console.warn('Selection content container not found');
+            return;
+        }
+
+        if (!points || points.length === 0) {
+            container.innerHTML = '<p>No sessions selected</p>';
+            return;
+        }
+
         container.innerHTML = `
             <p><strong>${points.length} sessions selected</strong></p>
             <ul>
-                ${points.slice(0, this.config.visualization.maxDisplayItems).map(point => `
-                    <li>${point.id} (${point.data.name || 'Unknown'})</li>
-                `).join('')}
-                ${points.length > this.config.visualization.maxDisplayItems ? `<li>... and ${points.length - this.config.visualization.maxDisplayItems} more</li>` : ''}
+                <div id="selection-preview">
+                    ${points.slice(0, this.config.visualization.maxDisplayItems).map(point => `
+                        <li>${point.id} (${point.data.name || 'Unknown'})</li>
+                    `).join('')}
+                </div>
+                <div id="selection-full" style="display: none;">
+                    ${points.map(point => `
+                        <li>${point.id} (${point.data.name || 'Unknown'})</li>
+                    `).join('')}
+                </div>
+                ${points.length > this.config.visualization.maxDisplayItems ? `
+                    <li class="expandable-link" onclick="toggleSelectionItems()" style="cursor: pointer; color: var(--primary-color); text-decoration: underline;">
+                        ... and ${points.length - this.config.visualization.maxDisplayItems} more
+                    </li>
+                ` : ''}
             </ul>
         `;
+    }
+
+    showEmptyState() {
+        const sessionDetailsContainer = document.getElementById('session-details');
+        const selectionContainer = document.getElementById('selection-content');
+        
+        if (sessionDetailsContainer) {
+            sessionDetailsContainer.innerHTML = `
+                <div class="empty-state">
+                    <p>No sessions available</p>
+                    <p>Click "Refresh Data" to load sessions</p>
+                </div>
+            `;
+        }
+        
+        if (selectionContainer) {
+            selectionContainer.innerHTML = '<p>No sessions selected</p>';
+        }
+    }
+
+    // View switching methods
+    async switchView(viewType) {
+        this.currentView = viewType;
+        this.currentPage = 1;
+        
+        // Update button states
+        const clustersBtn = document.getElementById('clusters-view-btn');
+        const projectsBtn = document.getElementById('projects-view-btn');
+        
+        if (clustersBtn && projectsBtn) {
+            clustersBtn.classList.toggle('active', viewType === 'clusters');
+            projectsBtn.classList.toggle('active', viewType === 'projects');
+        }
+        
+        // Show/hide appropriate containers
+        const clusterTree = document.getElementById('cluster-tree');
+        const projectsTree = document.getElementById('projects-tree');
+        
+        if (clusterTree && projectsTree) {
+            if (viewType === 'clusters') {
+                clusterTree.style.display = 'block';
+                projectsTree.style.display = 'none';
+                this.renderClusterTree();
+            } else {
+                clusterTree.style.display = 'none';
+                projectsTree.style.display = 'block';
+                this.renderProjectsTree();
+            }
+        }
+        
+        this.updatePagination();
+    }
+
+    // Project management methods
+    async loadProjects() {
+        try {
+            const response = await fetch('/api/projects');
+            if (response.ok) {
+                const data = await response.json();
+                if (data.success) {
+                    this.projects = data.projects || [];
+                    console.log(`Loaded ${this.projects.length} projects`);
+                }
+            }
+        } catch (error) {
+            console.error('Error loading projects:', error);
+            this.projects = [];
+        }
+    }
+
+    renderProjectsTree() {
+        const container = document.getElementById('projects-list');
+        if (!container) return;
+
+        if (this.projects.length === 0) {
+            container.innerHTML = '<div class="empty-state"><p>No projects found</p></div>';
+            return;
+        }
+
+        const startIndex = (this.currentPage - 1) * this.itemsPerPage;
+        const endIndex = startIndex + this.itemsPerPage;
+        const paginatedProjects = this.projects.slice(startIndex, endIndex);
+
+        container.innerHTML = paginatedProjects.map(project => `
+            <div class="project-node" data-project-id="${project.id}">
+                <div class="project-header">
+                    <span class="project-name">${project.name}</span>
+                    <span class="project-count">${project.sessions.length}</span>
+                </div>
+                <div class="project-stats">
+                    ${project.category} • ${Math.round(project.stats.totalDuration / 3600)}h total
+                </div>
+            </div>
+        `).join('');
+
+        // Add event listeners
+        container.querySelectorAll('.project-node').forEach(node => {
+            node.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const projectId = node.dataset.projectId;
+                this.selectProject(projectId);
+            });
+        });
+    }
+
+    async selectProject(projectId) {
+        this.selectedProject = projectId;
+        
+        // Update selection
+        document.querySelectorAll('.project-node').forEach(node => {
+            node.classList.toggle('selected', node.dataset.projectId === projectId);
+        });
+
+        try {
+            // Load project sessions
+            const response = await fetch(`/api/projects/${projectId}/sessions`);
+            if (response.ok) {
+                const data = await response.json();
+                if (data.success) {
+                    // Filter UMAP data to show only project sessions
+                    const projectSessionIds = new Set(data.sessions.map(s => s.id));
+                    this.filterUMAPByProject(projectSessionIds);
+                    
+                    // Update statistics
+                    this.updateProjectStatistics(data.sessions);
+                }
+            }
+        } catch (error) {
+            console.error('Error loading project sessions:', error);
+        }
+    }
+
+    filterUMAPByProject(sessionIds) {
+        // Update UMAP plot to highlight project sessions
+        if (this.umapPlot) {
+            const filteredData = this.umapData.filter(point => sessionIds.has(point.id));
+            this.renderUMAPPlot(filteredData);
+        }
+    }
+
+    updateProjectStatistics(sessions) {
+        const container = document.getElementById('cluster-stats-content');
+        if (!container) return;
+
+        const totalDuration = sessions.reduce((sum, s) => sum + (s.duration || 0), 0);
+        const intentCounts = {};
+        const outcomeCounts = {};
+
+        sessions.forEach(session => {
+            intentCounts[session.intent] = (intentCounts[session.intent] || 0) + 1;
+            outcomeCounts[session.outcome] = (outcomeCounts[session.outcome] || 0) + 1;
+        });
+
+        container.innerHTML = `
+            <div class="stat-item">
+                <div class="stat-label">Sessions</div>
+                <div class="stat-value">${sessions.length}</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-label">Duration</div>
+                <div class="stat-value">${Math.round(totalDuration / 3600)}h</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-label">Top Intent</div>
+                <div class="stat-value">${Object.keys(intentCounts).reduce((a, b) => intentCounts[a] > intentCounts[b] ? a : b, 'unknown')}</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-label">Success Rate</div>
+                <div class="stat-value">${Math.round((outcomeCounts.successful || 0) / sessions.length * 100)}%</div>
+            </div>
+        `;
+    }
+
+    // Pagination methods
+    previousPage() {
+        if (this.currentPage > 1) {
+            this.currentPage--;
+            this.updateCurrentView();
+            this.updatePagination();
+        }
+    }
+
+    nextPage() {
+        const totalPages = Math.ceil(this.getTotalItems() / this.itemsPerPage);
+        if (this.currentPage < totalPages) {
+            this.currentPage++;
+            this.updateCurrentView();
+            this.updatePagination();
+        }
+    }
+
+    updateCurrentView() {
+        if (this.currentView === 'clusters') {
+            this.renderClusterTree();
+        } else {
+            this.renderProjectsTree();
+        }
+    }
+
+    updatePagination() {
+        const totalItems = this.getTotalItems();
+        const totalPages = Math.ceil(totalItems / this.itemsPerPage);
+        
+        const prevBtn = document.getElementById('prev-page-btn');
+        const nextBtn = document.getElementById('next-page-btn');
+        const pageInfo = document.getElementById('page-info');
+        
+        if (prevBtn) {
+            prevBtn.disabled = this.currentPage <= 1;
+        }
+        if (nextBtn) {
+            nextBtn.disabled = this.currentPage >= totalPages;
+        }
+        if (pageInfo) {
+            pageInfo.textContent = `Page ${this.currentPage} of ${totalPages}`;
+        }
+    }
+
+    getTotalItems() {
+        return this.currentView === 'clusters' ? this.clusters.length : this.projects.length;
     }
 
     // Modal Functions
@@ -1716,33 +2152,48 @@ class KuraDashboard {
     }
 
     analyzePatterns() {
-        const patterns = this.identifyPatterns();
-        const insights = this.generateInsights(patterns);
-        
-        // Update pattern insights display
-        const insightsContainer = document.getElementById('pattern-insights');
-        insightsContainer.innerHTML = `
-            <div class="insight-section">
-                <h4>Pattern Analysis Results</h4>
-                <div class="insight-metrics">
-                    <div class="insight-metric">
-                        <div class="insight-metric-label">Success Patterns</div>
-                        <div class="insight-metric-value">${patterns.successPatterns.length}</div>
+        try {
+            const patterns = this.identifyPatterns();
+            const insights = this.generatePatternInsights(patterns);
+            
+            // Update pattern insights display
+            const insightsContainer = document.getElementById('pattern-insights');
+            if (insightsContainer) {
+                insightsContainer.innerHTML = `
+                    <div class="insight-section">
+                        <h4>Pattern Analysis Results</h4>
+                        <div class="insight-metrics">
+                            <div class="insight-metric">
+                                <div class="insight-metric-label">Success Patterns</div>
+                                <div class="insight-metric-value">${patterns?.successPatterns?.length || 0}</div>
+                            </div>
+                            <div class="insight-metric">
+                                <div class="insight-metric-label">Efficiency Patterns</div>
+                                <div class="insight-metric-value">${patterns?.efficiencyPatterns?.length || 0}</div>
+                            </div>
+                            <div class="insight-metric">
+                                <div class="insight-metric-label">Risk Patterns</div>
+                                <div class="insight-metric-value">${patterns?.riskPatterns?.length || 0}</div>
+                            </div>
+                        </div>
+                        <div class="insight-list">
+                            ${insights.map(insight => `<li>${insight}</li>`).join('')}
+                        </div>
                     </div>
-                    <div class="insight-metric">
-                        <div class="insight-metric-label">Efficiency Patterns</div>
-                        <div class="insight-metric-value">${patterns.efficiencyPatterns.length}</div>
+                `;
+            }
+        } catch (error) {
+            console.error('Error in analyzePatterns:', error);
+            const insightsContainer = document.getElementById('pattern-insights');
+            if (insightsContainer) {
+                insightsContainer.innerHTML = `
+                    <div class="insight-section">
+                        <h4>Pattern Analysis Error</h4>
+                        <p>Unable to analyze patterns at this time. Please try again later.</p>
                     </div>
-                    <div class="insight-metric">
-                        <div class="insight-metric-label">Risk Patterns</div>
-                        <div class="insight-metric-value">${patterns.riskPatterns.length}</div>
-                    </div>
-                </div>
-                <div class="insight-list">
-                    ${insights.map(insight => `<li>${insight}</li>`).join('')}
-                </div>
-            </div>
-        `;
+                `;
+            }
+        }
     }
 
     exportUMAPData() {
@@ -1836,17 +2287,22 @@ class KuraDashboard {
             riskPatterns: []
         };
         
-        // Analyze success patterns
-        const successfulSessions = this.sessions.filter(s => s.outcome === 'success');
-        if (successfulSessions.length > 0) {
-            patterns.successPatterns = this.analyzeSuccessPatterns(successfulSessions);
+        try {
+            // Analyze success patterns
+            const successfulSessions = this.sessions.filter(s => s.outcome === 'success');
+            if (successfulSessions.length > 0) {
+                patterns.successPatterns = this.analyzeSuccessPatterns(successfulSessions) || [];
+            }
+            
+            // Analyze efficiency patterns
+            patterns.efficiencyPatterns = this.analyzeEfficiencyPatterns() || [];
+            
+            // Analyze risk patterns
+            patterns.riskPatterns = this.analyzeRiskPatterns() || [];
+        } catch (error) {
+            console.error('Error analyzing patterns:', error);
+            // Return empty patterns object on error
         }
-        
-        // Analyze efficiency patterns
-        patterns.efficiencyPatterns = this.analyzeEfficiencyPatterns();
-        
-        // Analyze risk patterns
-        patterns.riskPatterns = this.analyzeRiskPatterns();
         
         return patterns;
     }
@@ -1908,19 +2364,24 @@ class KuraDashboard {
         return patterns;
     }
 
-    generateInsights(patterns) {
+    generatePatternInsights(patterns) {
         const insights = [];
         
-        patterns.successPatterns.forEach(pattern => {
-            insights.push(`✅ ${pattern.description} (${pattern.count} sessions)`);
+        // Add null checks and fallbacks
+        const successPatterns = patterns?.successPatterns || [];
+        const efficiencyPatterns = patterns?.efficiencyPatterns || [];
+        const riskPatterns = patterns?.riskPatterns || [];
+        
+        successPatterns.forEach(pattern => {
+            insights.push(`Success: ${pattern.description} (${pattern.count} sessions)`);
         });
         
-        patterns.efficiencyPatterns.forEach(pattern => {
-            insights.push(`⚡ ${pattern.description} (${(pattern.efficiency * 100).toFixed(1)}% of sessions)`);
+        efficiencyPatterns.forEach(pattern => {
+            insights.push(`Efficiency: ${pattern.description} (${(pattern.efficiency * 100).toFixed(1)}% of sessions)`);
         });
         
-        patterns.riskPatterns.forEach(pattern => {
-            insights.push(`⚠️ ${pattern.description} (${(pattern.riskLevel * 100).toFixed(1)}% risk)`);
+        riskPatterns.forEach(pattern => {
+            insights.push(`Risk: ${pattern.description} (${(pattern.riskLevel * 100).toFixed(1)}% risk)`);
         });
         
         return insights;
@@ -2011,7 +2472,48 @@ class KuraDashboard {
 
 // Global functions for modal handling
 function closeModal(modalId) {
-    document.getElementById(modalId).classList.remove('active');
+    const modal = document.getElementById(modalId);
+    if (modal) {
+        modal.classList.remove('active');
+        modal.classList.add('hidden');
+        modal.style.display = 'none';
+    }
+}
+
+function openModal(modalId) {
+    const modal = document.getElementById(modalId);
+    if (modal) {
+        modal.classList.remove('hidden');
+        modal.classList.add('active');
+        modal.style.display = 'flex';
+    }
+}
+
+// Enhanced modal functionality
+function initializeModalHandlers() {
+    // ESC key to close modals
+    document.addEventListener('keydown', function(event) {
+        if (event.key === 'Escape') {
+            const activeModal = document.querySelector('.modal.active');
+            if (activeModal) {
+                closeModal(activeModal.id);
+            }
+        }
+    });
+
+    // Click outside modal to close
+    document.addEventListener('click', function(event) {
+        if (event.target.classList.contains('modal')) {
+            closeModal(event.target.id);
+        }
+    });
+
+    // Prevent modal content clicks from closing modal
+    document.addEventListener('click', function(event) {
+        if (event.target.closest('.modal-content')) {
+            event.stopPropagation();
+        }
+    });
 }
 
 function generateNotebook() {
@@ -2024,7 +2526,30 @@ function createProcedure() {
     closeModal('procedure-modal');
 }
 
+function toggleSelectionItems() {
+    const preview = document.getElementById('selection-preview');
+    const full = document.getElementById('selection-full');
+    const expandLink = document.querySelector('.expandable-link');
+    
+    if (preview && full && expandLink) {
+        if (full.style.display === 'none') {
+            // Show full list
+            preview.style.display = 'none';
+            full.style.display = 'block';
+            expandLink.textContent = 'Show less';
+        } else {
+            // Show preview
+            preview.style.display = 'block';
+            full.style.display = 'none';
+            const totalItems = full.children.length;
+            const maxDisplay = window.kuraDashboard?.config?.visualization?.maxDisplayItems || 5;
+            expandLink.textContent = `... and ${totalItems - maxDisplay} more`;
+        }
+    }
+}
+
 // Initialize dashboard
 function initializeKuraDashboard() {
     window.kuraDashboard = new KuraDashboard();
+    initializeModalHandlers();
 }

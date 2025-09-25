@@ -249,10 +249,28 @@ class DataStorage {
       }
       
       const data = fs.readFileSync(this.fileChangesFile, 'utf8');
+      
+      // Check if file is empty or just whitespace
+      if (!data.trim()) {
+        return [];
+      }
+      
       return JSON.parse(data);
     } catch (error) {
       console.error('Error loading file changes:', error);
-      return [];
+      
+      // If JSON parsing fails, try to recover by reading a backup or creating empty array
+      try {
+        // Try to read the file in smaller chunks to identify the issue
+        const stats = fs.statSync(this.fileChangesFile);
+        console.log(`File size: ${stats.size} bytes`);
+        
+        // For now, return empty array to prevent crashes
+        return [];
+      } catch (recoveryError) {
+        console.error('Recovery failed:', recoveryError);
+        return [];
+      }
     }
   }
 

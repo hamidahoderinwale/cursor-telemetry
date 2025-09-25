@@ -21,7 +21,7 @@ export const ErrorState: React.FC<ErrorStateProps> = ({
   return (
     <div className="error-state">
       <div className="error-content">
-        {showIcon && <div className="error-icon">⚠</div>}
+        {showIcon && <div className="error-icon">Error</div>}
         <h3>{title}</h3>
         <p className="error-message">{error}</p>
         <div className="error-actions">

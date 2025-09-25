@@ -34,19 +34,19 @@ class RepositoryParser:
 
     def parse_repositories(self) -> Dict[str, Any]:
         """Parse both repositories and extract key information"""
-        print("🔍 Parsing OpenClio and Kura repositories...")
+        print("Parsing OpenClio and Kura repositories...")
         
         # Parse OpenClio
         if self.openclio_dir.exists():
             self.parsed_data['openclio'] = self._parse_openclio()
         else:
-            print("❌ OpenClio directory not found")
+            print("OpenClio directory not found")
         
         # Parse Kura
         if self.kura_dir.exists():
             self.parsed_data['kura'] = self._parse_kura()
         else:
-            print("❌ Kura directory not found")
+            print("Kura directory not found")
         
         # Extract integration points
         self._identify_integration_points()

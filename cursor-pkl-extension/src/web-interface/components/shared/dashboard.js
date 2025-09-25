@@ -26,6 +26,9 @@ class LiveDashboard {
         // Load initial data
         await this.loadSessions();
         
+        // Set default view to sessions
+        this.switchView('sessions');
+        
         // Set up auto-refresh every 30 seconds (fallback)
         this.startAutoRefresh();
         
@@ -202,16 +205,16 @@ class LiveDashboard {
                 <div class="session-details">
                     <div class="session-info">
                         <div class="info-item">
-                            <span class="info-icon">📄</span>
+                            <span class="info-icon">File:</span>
                             <span class="info-text">${session.currentFile ? session.currentFile.split('/').pop() : 'Unknown File'}</span>
                         </div>
                         <div class="info-item">
-                            <span class="info-icon">🕒</span>
+                            <span class="info-icon">Time:</span>
                             <span class="info-text">${new Date(session.timestamp).toLocaleString()}</span>
                         </div>
                         ${session.duration ? `
                         <div class="info-item">
-                            <span class="info-icon">⏱️</span>
+                            <span class="info-icon">Duration:</span>
                             <span class="info-text">${this.formatDuration(session.duration)}</span>
                         </div>
                         ` : ''}
@@ -264,12 +267,29 @@ class LiveDashboard {
             s.outcome === 'ERROR'
         ).length;
 
+        // Calculate additional statistics
+        const totalChanges = this.sessions.reduce((sum, session) => {
+            return sum + (session.codeDeltas ? session.codeDeltas.length : 0);
+        }, 0);
+
+        const totalConversations = this.sessions.reduce((sum, session) => {
+            return sum + (session.conversations ? session.conversations.length : 0);
+        }, 0);
+
+        const sessionsWithDuration = this.sessions.filter(s => s.duration && s.duration > 0);
+        const avgDuration = sessionsWithDuration.length > 0 
+            ? sessionsWithDuration.reduce((sum, s) => sum + s.duration, 0) / sessionsWithDuration.length
+            : 0;
+
         // Update statistics display if elements exist
         const statsElements = {
             'total-sessions': totalSessions,
             'active-sessions': activeSessions,
             'completed-sessions': completedSessions,
-            'failed-sessions': failedSessions
+            'failed-sessions': failedSessions,
+            'total-changes': totalChanges,
+            'total-conversations': totalConversations,
+            'avg-duration': avgDuration > 0 ? this.formatDuration(avgDuration) : '-'
         };
 
         Object.entries(statsElements).forEach(([id, value]) => {
@@ -279,7 +299,7 @@ class LiveDashboard {
             }
         });
 
-        console.log(`Statistics updated: ${totalSessions} total, ${activeSessions} active, ${completedSessions} completed, ${failedSessions} failed`);
+        console.log(`Statistics updated: ${totalSessions} total, ${activeSessions} active, ${completedSessions} completed, ${failedSessions} failed, ${totalChanges} changes, ${totalConversations} conversations`);
     }
 
     async viewSession(sessionId) {
@@ -413,12 +433,39 @@ Session Details:
                     <div class="detail-section">
                         <h3>Code Changes (${session.codeDeltas.length})</h3>
                         <div class="code-deltas">
-                            ${session.codeDeltas.slice(0, 5).map(delta => `
-                                <div class="code-delta">
-                                    <strong>${delta.type}:</strong> ${delta.content.substring(0, 100)}${delta.content.length > 100 ? '...' : ''}
-                                </div>
-                            `).join('')}
-                            ${session.codeDeltas.length > 5 ? `<p>... and ${session.codeDeltas.length - 5} more changes</p>` : ''}
+                            <div id="code-deltas-preview">
+                                ${session.codeDeltas.slice(0, 5).map(delta => {
+                                    const changeType = delta.afterContent && delta.beforeContent ? 'Modified' : 
+                                                     delta.afterContent ? 'Added' : 
+                                                     delta.beforeContent ? 'Removed' : 'Unknown';
+                                    const content = delta.afterContent || delta.beforeContent || 'No content';
+                                    const preview = content.length > 100 ? content.substring(0, 100) + '...' : content;
+                                    return `
+                                        <div class="code-delta">
+                                            <strong>${changeType}:</strong> ${preview}
+                                        </div>
+                                    `;
+                                }).join('')}
+                            </div>
+                            <div id="code-deltas-full" style="display: none;">
+                                ${session.codeDeltas.map(delta => {
+                                    const changeType = delta.afterContent && delta.beforeContent ? 'Modified' : 
+                                                     delta.afterContent ? 'Added' : 
+                                                     delta.beforeContent ? 'Removed' : 'Unknown';
+                                    const content = delta.afterContent || delta.beforeContent || 'No content';
+                                    const preview = content.length > 100 ? content.substring(0, 100) + '...' : content;
+                                    return `
+                                        <div class="code-delta">
+                                            <strong>${changeType}:</strong> ${preview}
+                                        </div>
+                                    `;
+                                }).join('')}
+                            </div>
+                            ${session.codeDeltas.length > 5 ? `
+                                <p class="expandable-link" onclick="toggleCodeDeltas('${session.id}')" style="cursor: pointer; color: var(--primary-color); text-decoration: underline;">
+                                    ... and ${session.codeDeltas.length - 5} more changes
+                                </p>
+                            ` : ''}
                         </div>
                     </div>
                     ` : ''}
@@ -434,6 +481,26 @@ Session Details:
         if (modal) {
             modal.classList.remove('show-block');
             modal.classList.add('hidden');
+        }
+    }
+
+    toggleCodeDeltas(sessionId) {
+        const preview = document.getElementById('code-deltas-preview');
+        const full = document.getElementById('code-deltas-full');
+        const expandLink = document.querySelector('.expandable-link');
+        
+        if (preview && full && expandLink) {
+            if (full.style.display === 'none') {
+                // Show full list
+                preview.style.display = 'none';
+                full.style.display = 'block';
+                expandLink.textContent = 'Show less';
+            } else {
+                // Show preview
+                preview.style.display = 'block';
+                full.style.display = 'none';
+                expandLink.textContent = expandLink.textContent.replace('Show less', '... and ' + (full.children.length - 5) + ' more changes');
+            }
         }
     }
 
@@ -639,6 +706,12 @@ document.addEventListener('DOMContentLoaded', function() {
               '• Click on sessions to view details\n' +
               '• Use the Enhanced View for advanced analytics\n' +
               '• Sessions are automatically tracked when you work with .ipynb files');
+    };
+    
+    window.toggleCodeDeltas = function(sessionId) {
+        if (window.dashboard) {
+            window.dashboard.toggleCodeDeltas(sessionId);
+        }
     };
 });
 

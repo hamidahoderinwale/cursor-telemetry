@@ -9,7 +9,7 @@
     <script src="https://d3js.org/d3.v7.min.js"></script>
     <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
     <link rel="stylesheet" href="/assets/css/variables.css">
-    <link rel="stylesheet" href="/assets/css/main-refactored.css">
+    <link rel="stylesheet" href="/assets/css/main.css">
     <link rel="stylesheet" href="/kura-dashboard.css">
 </head>
 <body>
@@ -48,19 +48,36 @@
             <!-- Left Panel: Hierarchical Cluster Tree -->
             <div class="left-panel">
                 <div class="panel-header">
-                    <h2>Hierarchical Clusters</h2>
+                    <div class="view-toggle">
+                        <button id="clusters-view-btn" class="btn btn-sm active">Clusters</button>
+                        <button id="projects-view-btn" class="btn btn-sm">Projects</button>
+                    </div>
                     <div class="cluster-controls">
                         <button id="expand-all-btn" class="btn btn-sm">Expand All</button>
                         <button id="collapse-all-btn" class="btn btn-sm">Collapse All</button>
                     </div>
                 </div>
+                
+                <!-- Cluster Tree -->
                 <div class="cluster-tree-container">
                     <div id="cluster-tree" class="cluster-tree"></div>
                 </div>
                 
-                <!-- Cluster Statistics -->
+                <!-- Projects Tree -->
+                <div id="projects-tree" class="projects-tree-container" style="display: none;">
+                    <div id="projects-list" class="projects-list"></div>
+                </div>
+                
+                <!-- Pagination Controls -->
+                <div class="pagination-controls">
+                    <button id="prev-page-btn" class="btn btn-sm" disabled>Previous</button>
+                    <span id="page-info">Page 1 of 1</span>
+                    <button id="next-page-btn" class="btn btn-sm" disabled>Next</button>
+                </div>
+                
+                <!-- Statistics -->
                 <div class="cluster-stats">
-                    <h3>Cluster Statistics</h3>
+                    <h3>Statistics</h3>
                     <div id="cluster-stats-content"></div>
                 </div>
             </div>
@@ -348,11 +365,28 @@
     </div>
 
     <!-- Scripts -->
-    <script src="/kura-dashboard.js"></script>
+    <script src="/src/web-interface/kura-dashboard.js?v=2"></script>
     <script>
         // Initialize enhanced dashboard
         document.addEventListener('DOMContentLoaded', function() {
-            initializeKuraDashboard();
+            try {
+                // Initialize the dashboard
+                window.kuraDashboard = new KuraDashboard();
+                console.log('Kura Dashboard initialized successfully');
+            } catch (error) {
+                console.error('Failed to initialize Kura Dashboard:', error);
+                // Show error message to user
+                document.body.innerHTML = `
+                    <div style="padding: 2rem; text-align: center; font-family: Arial, sans-serif;">
+                        <h1>Dashboard Loading Error</h1>
+                        <p>Failed to load the Kura Dashboard. Please check the console for details.</p>
+                        <p>Error: ${error.message}</p>
+                        <button onclick="location.reload()" style="padding: 0.5rem 1rem; margin-top: 1rem;">
+                            Reload Page
+                        </button>
+                    </div>
+                `;
+            }
         });
     </script>
 </body>

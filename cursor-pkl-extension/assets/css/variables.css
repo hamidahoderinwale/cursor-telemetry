@@ -1,68 +1,68 @@
 @import url('https://fonts.googleapis.com/css2?family=Funnel+Sans:wght@300;400;500;600;700;800&display=swap');
 
 :root {
-  /* Grayscale Color Palette */
-  --primary-color: #2D2D2D;
-  --primary-hover: #1A1A1A;
-  --primary-color-dark: #1A1A1A;
-  --secondary-color: #4A4A4A;
-  --secondary-hover: #333333;
-  --secondary-color-dark: #333333;
-  --accent-color: #666666;
-  --accent-hover: #555555;
-  --danger-color: #808080;
-  --danger-hover: #6B6B6B;
-  --warning-color: #999999;
-  --warning-hover: #878787;
-  --success-color: #4A4A4A;
-  --info-color: #666666;
+  /* High-Contrast Color Palette */
+  --primary-color: #000000;
+  --primary-hover: #333333;
+  --primary-color-dark: #000000;
+  --secondary-color: #333333;
+  --secondary-hover: #555555;
+  --secondary-color-dark: #222222;
+  --accent-color: #555555;
+  --accent-hover: #777777;
+  --danger-color: #CC0000;
+  --danger-hover: #AA0000;
+  --warning-color: #CC6600;
+  --warning-hover: #AA5500;
+  --success-color: #006600;
+  --info-color: #0066CC;
   
-  /* Grayscale Neutral Colors */
+  /* High-Contrast Neutral Colors */
   --background-primary: #FFFFFF;
-  --background-secondary: #F5F5F5;
-  --background-tertiary: #EEEEEE;
-  --background-hover: #E0E0E0;
-  --background-modal: rgba(0, 0, 0, 0.4);
+  --background-secondary: #F8F8F8;
+  --background-tertiary: #F0F0F0;
+  --background-hover: #E8E8E8;
+  --background-modal: rgba(0, 0, 0, 0.6);
   
-  --text-primary: #1A1A1A;
-  --text-secondary: #666666;
-  --text-tertiary: #999999;
+  --text-primary: #000000;
+  --text-secondary: #333333;
+  --text-tertiary: #666666;
   --text-inverse: #FFFFFF;
   
   --border-color: #CCCCCC;
-  --border-hover: #B3B3B3;
+  --border-hover: #999999;
   --border-focus: var(--primary-color);
   
-  /* Grayscale Status Colors */
-  --status-success: #4A4A4A;
-  --status-warning: #666666;
-  --status-error: #808080;
-  --status-info: #2D2D2D;
-  --status-pending: #999999;
-  --status-success-bg: #F0F0F0;
-  --status-warning-bg: #EEEEEE;
-  --status-error-bg: #EDEDED;
+  /* High-Contrast Status Colors */
+  --status-success: #006600;
+  --status-warning: #CC6600;
+  --status-error: #CC0000;
+  --status-info: #0066CC;
+  --status-pending: #666666;
+  --status-success-bg: #E8F5E8;
+  --status-warning-bg: #FFF4E6;
+  --status-error-bg: #FFE6E6;
   
-  /* Grayscale Intent Colors */
-  --intent-explore: #2D2D2D;
-  --intent-explore-hover: #1A1A1A;
-  --intent-implement: #4A4A4A;
+  /* High-Contrast Intent Colors */
+  --intent-explore: #000000;
+  --intent-explore-hover: #333333;
+  --intent-implement: #333333;
   --intent-debug: #666666;
   --intent-unknown: #999999;
-  --primary-color-bg: #F0F0F0;
+  --primary-color-bg: #F8F8F8;
   
   /* Typography - Funnel Sans */
   --font-family-base: 'Funnel Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-family-primary: 'Funnel Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-family-mono: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', monospace;
   
-  --font-size-xs: 0.75rem;
-  --font-size-sm: 0.875rem;
-  --font-size-base: 1rem;
-  --font-size-lg: 1.125rem;
-  --font-size-xl: 1.25rem;
-  --font-size-2xl: 1.5rem;
-  --font-size-3xl: 1.875rem;
+  --font-size-xs: 0.8rem;
+  --font-size-sm: 1rem;
+  --font-size-base: 1.1rem;
+  --font-size-lg: 1.3rem;
+  --font-size-xl: 1.5rem;
+  --font-size-2xl: 1.8rem;
+  --font-size-3xl: 2.2rem;
   
   --font-weight-light: 300;
   --font-weight-normal: 400;
@@ -76,17 +76,17 @@
   --line-height-relaxed: 1.75;
   
   /* Spacing */
-  --space-1: 0.25rem;
-  --space-2: 0.5rem;
-  --space-3: 0.75rem;
-  --space-4: 1rem;
-  --space-5: 1.25rem;
-  --space-6: 1.5rem;
-  --space-8: 2rem;
-  --space-10: 2.5rem;
-  --space-12: 3rem;
-  --space-16: 4rem;
-  --space-20: 5rem;
+  --space-1: 0.3rem;
+  --space-2: 0.6rem;
+  --space-3: 0.9rem;
+  --space-4: 1.2rem;
+  --space-5: 1.5rem;
+  --space-6: 1.8rem;
+  --space-8: 2.4rem;
+  --space-10: 3rem;
+  --space-12: 3.6rem;
+  --space-16: 4.8rem;
+  --space-20: 6rem;
   
   /* Border Radius - Sharp Edges Only */
   --radius-xs: 0;

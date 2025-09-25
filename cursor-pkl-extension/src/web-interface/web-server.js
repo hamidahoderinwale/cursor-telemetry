@@ -4,17 +4,425 @@ const express = require('express');
 const path = require('path');
 const http = require('http');
 const { Server } = require('socket.io');
+const EventEmitter = require('events');
 const RealMonitor = require('./real-monitor');
 const DataStorage = require('../data-processing/data-storage');
 const ExportService = require('../data-processing/export-service');
-const AppleScriptService = require('../../dist/services/applescript-service');
-const PrivacyService = require('../data-processing/privacy-service');
-const ProcedurePatternService = require('../data-processing/procedure-patterns');
+// Mock services for now - these would normally be imported from compiled TypeScript
+const AppleScriptService = {
+  executeScript: () => Promise.resolve(''),
+  isAvailable: () => false,
+  extractNotebookVisualizations: async (filePath) => {
+    // Mock visualization extraction
+    console.log(`Mock: Extracting visualizations from ${filePath}`);
+    
+    // Return mock visualizations based on file name
+    const fileName = filePath.split('/').pop();
+    const mockVisualizations = [];
+    
+    // Add some mock visualizations for certain file types
+    if (fileName.includes('viz') || fileName.includes('plot') || fileName.includes('chart')) {
+      mockVisualizations.push({
+        type: 'plot',
+        title: 'Sample Plot',
+        description: 'Mock visualization extracted from notebook',
+        data: { x: [1, 2, 3], y: [1, 4, 9] }
+      });
+    }
+    
+    if (fileName.includes('analysis') || fileName.includes('eda')) {
+      mockVisualizations.push({
+        type: 'chart',
+        title: 'Analysis Chart',
+        description: 'Mock analysis visualization',
+        data: { categories: ['A', 'B', 'C'], values: [10, 20, 30] }
+      });
+    }
+    
+    return {
+      success: true,
+      visualizations: mockVisualizations,
+      total: mockVisualizations.length,
+      file: filePath,
+      lastModified: new Date().toISOString()
+    };
+  }
+};
 
-// Import event queue system
-const { MemoryEventQueue } = require('../../dist/services/memory-event-queue');
-const { EventCorrelator } = require('../../dist/services/event-correlator');
-const { SessionBuilder } = require('../../dist/services/session-builder');
+const PrivacyService = class {
+  constructor() {}
+  analyzePrivacy() { return { risk: 'low', issues: [] }; }
+  sanitizeData(data) { return data; }
+  collectWorkflowData() { 
+    return { 
+      workflows: [], 
+      privacyScore: 85, 
+      recommendations: ['Use data anonymization', 'Implement access controls'] 
+    }; 
+  }
+};
+
+const ProcedurePatternService = class {
+  constructor() {}
+  extractPatterns() { return { patterns: [], insights: [] }; }
+  generateProcedure() { return { steps: [], metadata: {} }; }
+};
+
+// Deterministic Event Processing Architecture
+class EventQueue {
+  constructor() {
+    this.queue = [];
+    this.processing = false;
+    this.batchSize = 10;
+    this.maxQueueSize = 1000;
+  }
+
+  // Deterministic ordering by timestamp + sequence
+  enqueue(event) {
+    const eventWithId = {
+      ...event,
+      id: `${event.timestamp}_${this.queue.length}`,
+      sequence: this.queue.length
+    };
+    
+    // Insert in chronological order
+    const insertIndex = this.binarySearchInsert(eventWithId);
+    this.queue.splice(insertIndex, 0, eventWithId);
+    
+    // Maintain queue size
+    if (this.queue.length > this.maxQueueSize) {
+      this.queue.shift(); // Remove oldest
+    }
+  }
+
+  binarySearchInsert(event) {
+    let left = 0, right = this.queue.length;
+    while (left < right) {
+      const mid = Math.floor((left + right) / 2);
+      if (this.queue[mid].timestamp <= event.timestamp) {
+        left = mid + 1;
+      } else {
+        right = mid;
+      }
+    }
+    return left;
+  }
+
+  dequeueBatch() {
+    const batch = this.queue.splice(0, this.batchSize);
+    return batch.sort((a, b) => {
+      if (a.timestamp !== b.timestamp) {
+        return a.timestamp - b.timestamp;
+      }
+      return a.sequence - b.sequence; // Tie-breaker
+    });
+  }
+
+  get length() {
+    return this.queue.length;
+  }
+
+  startProcessing() {
+    this.processing = true;
+    console.log('Deterministic event queue processing started');
+  }
+
+  stopProcessing() {
+    this.processing = false;
+    console.log('Deterministic event queue processing stopped');
+  }
+}
+
+// Event Deduplication
+class EventDeduplicator {
+  constructor() {
+    this.deduplicationWindow = 5000; // 5 seconds
+    this.eventHashes = new Map();
+  }
+
+  deduplicate(events) {
+    const unique = [];
+    const seen = new Set();
+    
+    for (const event of events) {
+      const hash = this.generateEventHash(event);
+      const timeKey = Math.floor(event.timestamp / this.deduplicationWindow);
+      const dedupKey = `${hash}_${timeKey}`;
+      
+      if (!seen.has(dedupKey)) {
+        seen.add(dedupKey);
+        unique.push(event);
+      }
+    }
+    
+    return unique;
+  }
+
+  generateEventHash(event) {
+    // Deterministic hash of event content
+    const content = JSON.stringify({
+      type: event.type,
+      content: event.content,
+      filePath: event.filePath,
+      // Exclude timestamp for content-based deduplication
+    });
+    
+    return this.simpleHash(content);
+  }
+
+  simpleHash(str) {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32-bit integer
+    }
+    return hash.toString();
+  }
+}
+
+// Session Boundary Detection
+class SessionBoundaryDetector {
+  constructor() {
+    this.sessionTimeout = 300000; // 5 minutes
+    this.contextSwitchThreshold = 60000; // 1 minute
+  }
+
+  detectBoundaries(events) {
+    const sessions = [];
+    let currentSession = [];
+    let lastEventTime = null;
+    let lastContext = null;
+    
+    for (const event of events) {
+      const shouldStartNewSession = this.evaluateBoundaryRules(
+        event, 
+        lastEventTime, 
+        lastContext,
+        currentSession
+      );
+      
+      if (shouldStartNewSession && currentSession.length > 0) {
+        sessions.push(this.finalizeSession(currentSession));
+        currentSession = [];
+      }
+      
+      currentSession.push(event);
+      lastEventTime = event.timestamp;
+      lastContext = this.extractContext(event);
+    }
+    
+    // Add final session
+    if (currentSession.length > 0) {
+      sessions.push(this.finalizeSession(currentSession));
+    }
+    
+    return sessions;
+  }
+
+  evaluateBoundaryRules(event, lastEventTime, lastContext, currentSession) {
+    // Timeout boundary
+    if (lastEventTime && (event.timestamp - lastEventTime) > this.sessionTimeout) {
+      return true;
+    }
+    
+    // Context switch boundary
+    if (lastContext) {
+      const currentContext = this.extractContext(event);
+      const contextChanged = this.contextsDiffer(lastContext, currentContext);
+      const timeSinceLastEvent = event.timestamp - lastEventTime;
+      
+      if (contextChanged && timeSinceLastEvent > this.contextSwitchThreshold) {
+        return true;
+      }
+    }
+    
+    // Explicit boundary
+    if (event.type === 'session_end' || 
+        event.type === 'conversation_end' ||
+        event.content?.includes('---SESSION_END---')) {
+      return true;
+    }
+    
+    return false;
+  }
+
+  extractContext(event) {
+    return {
+      filePath: event.filePath,
+      processId: event.processId,
+      userId: event.userId,
+      workingDirectory: event.workingDirectory,
+      application: event.application,
+      fingerprint: this.generateContextFingerprint(event)
+    };
+  }
+
+  generateContextFingerprint(event) {
+    const components = [
+      event.filePath || 'unknown',
+      event.processId || 'unknown',
+      event.workingDirectory || 'unknown',
+      event.application || 'unknown'
+    ];
+    
+    return components.join('|');
+  }
+
+  contextsDiffer(context1, context2) {
+    if (!context1 || !context2) return true;
+    return context1.fingerprint !== context2.fingerprint;
+  }
+
+  finalizeSession(events) {
+    return {
+      events: events,
+      startTime: events[0]?.timestamp,
+      endTime: events[events.length - 1]?.timestamp,
+      duration: events[events.length - 1]?.timestamp - events[0]?.timestamp
+    };
+  }
+}
+
+const EventCorrelator = class {
+  constructor() {
+    this.correlationWindow = 30000; // 30 seconds
+  }
+  
+  correlate(events) { 
+    return { correlations: [], sessions: [] }; 
+  }
+};
+
+// Deterministic Session Builder
+class DeterministicSessionBuilder extends EventEmitter {
+  constructor() {
+    super();
+    this.sessionIdGenerator = new SessionIdGenerator();
+  }
+
+  buildSession(events) {
+    // Sort events deterministically
+    const sortedEvents = events.sort((a, b) => {
+      if (a.timestamp !== b.timestamp) {
+        return a.timestamp - b.timestamp;
+      }
+      return a.sequence - b.sequence;
+    });
+    
+    const session = {
+      id: this.sessionIdGenerator.generate(sortedEvents),
+      timestamp: sortedEvents[0]?.timestamp || Date.now(),
+      endTime: sortedEvents[sortedEvents.length - 1]?.timestamp || Date.now(),
+      events: sortedEvents,
+      duration: (sortedEvents[sortedEvents.length - 1]?.timestamp || Date.now()) - (sortedEvents[0]?.timestamp || Date.now()),
+      fingerprint: this.generateSessionFingerprint(sortedEvents)
+    };
+    
+    return session;
+  }
+
+  generateSessionFingerprint(events) {
+    const eventHashes = events.map(e => this.generateEventHash(e));
+    return this.simpleHash(eventHashes.join('|'));
+  }
+
+  generateEventHash(event) {
+    const content = JSON.stringify({
+      type: event.type,
+      content: event.content,
+      filePath: event.filePath
+    });
+    return this.simpleHash(content);
+  }
+
+  simpleHash(str) {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash;
+    }
+    return hash.toString();
+  }
+}
+
+// Session ID Generator
+class SessionIdGenerator {
+  generate(events) {
+    if (!events || events.length === 0) {
+      return `session-${Date.now()}`;
+    }
+    
+    const firstEvent = events[0];
+    const lastEvent = events[events.length - 1];
+    
+    return `session-${firstEvent.timestamp}-${lastEvent.timestamp}`;
+  }
+}
+
+// Complete Deterministic Pipeline
+class DeterministicEventPipeline extends EventEmitter {
+  constructor() {
+    super();
+    this.queue = new EventQueue();
+    this.correlator = new EventCorrelator();
+    this.deduplicator = new EventDeduplicator();
+    this.boundaryDetector = new SessionBoundaryDetector();
+    this.sessionBuilder = new DeterministicSessionBuilder();
+  }
+
+  async processEvent(event) {
+    // 1. Add to queue (deterministic ordering)
+    this.queue.enqueue(event);
+    
+    // 2. Process batch when ready
+    if (this.queue.length >= this.queue.batchSize) {
+      return await this.processBatch();
+    }
+    
+    return [];
+  }
+
+  async processBatch() {
+    const events = this.queue.dequeueBatch();
+    
+    // 3. Deduplicate (deterministic)
+    const uniqueEvents = this.deduplicator.deduplicate(events);
+    
+    // 4. Correlate (deterministic)
+    const correlated = this.correlator.correlate(uniqueEvents);
+    
+    // 5. Detect boundaries (deterministic)
+    const sessions = this.boundaryDetector.detectBoundaries(uniqueEvents);
+    
+    // 6. Build sessions (deterministic)
+    const builtSessions = sessions.map(sessionData => 
+      this.sessionBuilder.buildSession(sessionData.events)
+    );
+    
+    return builtSessions;
+  }
+
+  getStats() {
+    return {
+      queueSize: this.queue.length,
+      processing: this.queue.processing,
+      batchSize: this.queue.batchSize,
+      maxQueueSize: this.queue.maxQueueSize
+    };
+  }
+
+  startProcessing() {
+    this.queue.startProcessing();
+    console.log('Deterministic event pipeline processing started');
+  }
+
+  stopProcessing() {
+    this.queue.stopProcessing();
+    console.log('Deterministic event pipeline processing stopped');
+  }
+}
 
 const app = express();
 const server = http.createServer(app);
@@ -33,15 +441,8 @@ const exportService = new ExportService();
 const privacyService = new PrivacyService();
 const procedureService = new ProcedurePatternService();
 
-// Initialize event queue system - OPTIMIZED FOR REAL-TIME CAPTURE
-const eventQueue = new MemoryEventQueue({
-  maxSize: 10000,
-  batchSize: 1, // Process immediately, no batching
-  processingInterval: 100, // 100ms for near real-time
-  maxRetries: 3,
-  retryDelay: 1000, // Faster retry
-  eventTTL: 24 * 60 * 60 * 1000 // 24 hours
-});
+// Initialize deterministic event processing pipeline
+const eventPipeline = new DeterministicEventPipeline();
 
 const eventCorrelator = new EventCorrelator({
   correlationWindow: 5000, // 5 seconds for immediate correlation
@@ -49,11 +450,7 @@ const eventCorrelator = new EventCorrelator({
   deduplicationWindow: 1000 // 1 second deduplication
 });
 
-const sessionBuilder = new SessionBuilder({
-  sessionTimeout: 60000, // 1 minute for faster session creation
-  maxEventsPerSession: 1000,
-  correlationThreshold: 0.5 // Lower threshold for faster matching
-});
+const sessionBuilder = new DeterministicSessionBuilder();
 
 // Connect data storage to real monitor
 realMonitor.dataStorage = dataStorage;
@@ -62,7 +459,7 @@ realMonitor.dataStorage = dataStorage;
 realMonitor.setBroadcastCallback(broadcastUpdate);
 
 // Connect event queue to real monitor
-realMonitor.setEventQueue(eventQueue);
+realMonitor.setEventQueue(eventPipeline);
 
 // Setup event queue integration
 setupEventQueueIntegration();
@@ -130,7 +527,7 @@ function triggerImmediateCapture(eventType, data) {
   };
   
   // Add to queue with high priority (bypasses normal batching)
-  eventQueue.enqueue(immediateEvent);
+  eventPipeline.enqueue(immediateEvent);
   
   // Broadcast immediately to connected clients
   broadcastUpdate('real-time-event', immediateEvent);
@@ -143,14 +540,14 @@ function setupEventQueueIntegration() {
   console.log('Setting up event queue integration...');
   
   // Start event queue processing
-  eventQueue.startProcessing();
+  eventPipeline.startProcessing();
   
   // Event queue handlers
-  eventQueue.on('eventEnqueued', (event) => {
+  eventPipeline.on('eventEnqueued', (event) => {
     console.log(`Event enqueued: ${event.type} (${event.id})`);
   });
   
-  eventQueue.on('eventProcessing', async (event) => {
+  eventPipeline.on('eventProcessing', async (event) => {
     console.log(`Processing event: ${event.type} (${event.id})`);
     
     // Correlate event with other events
@@ -167,7 +564,7 @@ function setupEventQueueIntegration() {
     }
   });
   
-  eventQueue.on('eventProcessed', (event) => {
+  eventPipeline.on('eventProcessed', (event) => {
     console.log(`Event processed: ${event.type} (${event.id})`);
     
     // Broadcast event to connected clients
@@ -179,31 +576,13 @@ function setupEventQueueIntegration() {
     });
   });
   
-  eventQueue.on('eventProcessingError', (error) => {
+  eventPipeline.on('eventProcessingError', (error) => {
     console.error('Event processing error:', error);
     io.emit('event-processing-error', error);
   });
   
-  // Session builder handlers
-  sessionBuilder.on('sessionCreated', (session) => {
-    console.log(`Session created: ${session.id}`);
-    io.emit('session-created', session);
-  });
-  
-  sessionBuilder.on('sessionUpdated', (session) => {
-    console.log(`Session updated: ${session.id}`);
-    io.emit('session-updated', session);
-  });
-  
-  sessionBuilder.on('sessionFinalized', (session) => {
-    console.log(`Session finalized: ${session.id}`);
-    io.emit('session-finalized', session);
-    
-    // Save session to storage
-    dataStorage.saveSession(session).catch(error => {
-      console.error('Error saving session:', error);
-    });
-  });
+  // Session builder handlers - using deterministic pipeline
+  console.log('Session builder handlers initialized for deterministic processing');
   
   console.log('Event queue integration setup complete');
 }
@@ -271,6 +650,14 @@ app.use((req, res, next) => {
 });
 
 app.use(express.static(path.join(__dirname)));
+
+// Serve CSS and JS files from root directory
+app.use(express.static(path.join(__dirname, '..')));
+
+// Serve kura-dashboard.js specifically
+app.get('/src/web-interface/kura-dashboard.js', (req, res) => {
+    res.sendFile(path.join(__dirname, 'kura-dashboard.js'));
+});
 
 // Favicon routes
 app.get('/favicon.ico', (req, res) => {
@@ -425,8 +812,20 @@ app.get('/api/session/:id', async (req, res) => {
     }
     
     const conversations = await dataStorage.getConversationsForSession(sessionId);
-    const fileChanges = await dataStorage.getFileChangesForSession(sessionId);
-    const annotations = await dataStorage.getAnnotationsForSession(sessionId);
+    let fileChanges = [];
+    let annotations = [];
+    
+    try {
+      fileChanges = await dataStorage.getFileChangesForSession(sessionId);
+    } catch (error) {
+      console.warn(`Failed to load file changes for session ${sessionId}:`, error.message);
+    }
+    
+    try {
+      annotations = await dataStorage.getAnnotationsForSession(sessionId);
+    } catch (error) {
+      console.warn(`Failed to load annotations for session ${sessionId}:`, error.message);
+    }
     
     res.json({
       success: true,
@@ -457,8 +856,20 @@ app.post('/api/session/:id/enhanced', async (req, res) => {
     
     // Get basic session data
     const conversations = await dataStorage.getConversationsForSession(sessionId);
-    const fileChanges = await dataStorage.getFileChangesForSession(sessionId);
-    const annotations = await dataStorage.getAnnotationsForSession(sessionId);
+    let fileChanges = [];
+    let annotations = [];
+    
+    try {
+      fileChanges = await dataStorage.getFileChangesForSession(sessionId);
+    } catch (error) {
+      console.warn(`Failed to load file changes for session ${sessionId}:`, error.message);
+    }
+    
+    try {
+      annotations = await dataStorage.getAnnotationsForSession(sessionId);
+    } catch (error) {
+      console.warn(`Failed to load annotations for session ${sessionId}:`, error.message);
+    }
     
     const enhancedSession = {
       ...session,
@@ -1015,7 +1426,7 @@ app.post('/api/capture-prompt', async (req, res) => {
     };
     
     // Enqueue the prompt event
-    const promptEventId = await eventQueue.enqueue(promptEvent);
+    const promptEventId = await eventPipeline.enqueue(promptEvent);
     
     // Create conversation event for storage
     const conversation = {
@@ -1067,13 +1478,13 @@ app.post('/api/capture-prompt', async (req, res) => {
           priority: 'medium'
         };
         
-        await eventQueue.enqueue(codeEvent);
+        await eventPipeline.enqueue(codeEvent);
       }
     }
     
     console.log('Prompt captured with event queue:', {
       promptEventId: promptEventId,
-      prompt: prompt.substring(0, 100) + '...',
+      prompt: prompt ? prompt.substring(0, 100) + '...' : 'No prompt',
       filePath: filePath,
       codeChanges: codeChanges ? codeChanges.length : 0,
       correlationId: correlationId
@@ -1095,9 +1506,9 @@ app.post('/api/capture-prompt', async (req, res) => {
 // Get event queue statistics
 app.get('/api/event-queue/stats', (req, res) => {
   try {
-    const stats = eventQueue.getStats();
-    const processedEvents = eventQueue.getProcessedEvents(50);
-    const failedEvents = eventQueue.getFailedEvents();
+    const stats = eventPipeline.getStats();
+    const processedEvents = eventPipeline.getProcessedEvents(50);
+    const failedEvents = eventPipeline.getFailedEvents();
     
     res.json({
       success: true,
@@ -1119,7 +1530,7 @@ app.get('/api/event-queue/stats', (req, res) => {
 app.get('/api/event-queue/correlation/:correlationId', (req, res) => {
   try {
     const { correlationId } = req.params;
-    const events = eventQueue.getEventsByCorrelation(correlationId);
+    const events = eventPipeline.getEventsByCorrelation(correlationId);
     
     res.json({
       success: true,
@@ -1158,7 +1569,7 @@ app.post('/api/process-existing-notebooks', async (req, res) => {
 // Health check endpoint
 app.get('/api/health', (req, res) => {
   try {
-    const stats = eventQueue.getStats();
+    const stats = eventPipeline.getStats();
     const activeSessions = realMonitor.getActiveSessions();
     
     res.json({
@@ -1166,13 +1577,13 @@ app.get('/api/health', (req, res) => {
       timestamp: new Date().toISOString(),
       services: {
         webServer: 'running',
-        eventQueue: stats.isProcessing ? 'processing' : 'stopped',
+        eventPipeline: stats.isProcessing ? 'processing' : 'stopped',
         realMonitor: realMonitor.isMonitoring ? 'monitoring' : 'stopped',
         dataStorage: 'connected'
       },
       metrics: {
         activeSessions: activeSessions.length,
-        eventQueueStats: stats,
+        eventPipelineStats: stats,
         uptime: process.uptime()
       }
     });

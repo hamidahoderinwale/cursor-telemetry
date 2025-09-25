@@ -281,7 +281,7 @@ class DeepPKLIntegration:
                 kura_results = await self._run_kura_pipeline(conversations)
                 results.update(kura_results)
             except Exception as e:
-                self.console.print(f"[red]❌ Kura analysis failed: {e}[/red]")
+                self.console.print(f"[red]Kura analysis failed: {e}[/red]")
                 results['kura_error'] = str(e)
         
         # Run OpenClio analysis if available
@@ -290,7 +290,7 @@ class DeepPKLIntegration:
                 openclio_results = await self._run_openclio_pipeline(conversations)
                 results.update(openclio_results)
             except Exception as e:
-                self.console.print(f"[red]❌ OpenClio analysis failed: {e}[/red]")
+                self.console.print(f"[red]OpenClio analysis failed: {e}[/red]")
                 results['openclio_error'] = str(e)
         
         # Generate enhanced dashboard data
