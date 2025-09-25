@@ -1,0 +1,33 @@
+{
+  "name": "cursor-companion",
+  "version": "1.0.0",
+  "description": "Companion service for Cursor Activity Logger - file watcher, diff engine, and MCP server",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "test": "node --test src/**/*.test.js"
+  },
+  "dependencies": {
+    "chokidar": "^3.5.3",
+    "clipboardy": "^4.0.0",
+    "cors": "^2.8.5",
+    "diff": "^5.1.0",
+    "express": "^4.18.2",
+    "node-cron": "^3.0.3",
+    "node-fetch": "^3.3.2",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  },
+  "keywords": [
+    "cursor",
+    "telemetry",
+    "file-watcher",
+    "mcp",
+    "privacy"
+  ],
+  "author": "Cursor Activity Logger",
+  "license": "MIT"
+}

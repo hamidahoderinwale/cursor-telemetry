@@ -1,0 +1,32 @@
+{
+  "root_dir": "/Users/hamidaho/Desktop/cursor_dashboard/cursor-activity-logger/public",
+  "ignore": [
+    "node_modules/**",
+    "**/node_modules/**",
+    "dist/**",
+    "build/**",
+    ".git/**",
+    ".cursor/**",
+    "**/package-lock.json",
+    "**/yarn.lock",
+    "**/.DS_Store",
+    "**/Thumbs.db",
+    "**/*.log",
+    "**/coverage/**",
+    "**/tmp/**",
+    "**/temp/**",
+    "**/venv/**",
+    "**/env/**",
+    "**/.env*",
+    "**/logs/**",
+    "**/*.cache",
+    "**/.cache/**",
+    "**/spa.log",
+    "**/companion.log"
+  ],
+  "diff_threshold": 12,
+  "enable_clipboard": true,
+  "enable_preload": false,
+  "strict_auth": false,
+  "polling_interval": 2000
+}

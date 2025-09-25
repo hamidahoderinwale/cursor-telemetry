@@ -1,0 +1,5 @@
+This is a test file to trigger the file watcher.
+Modified content to test file watching.
+This is a much longer change that should definitely exceed the 12 character diff threshold and trigger the file watcher to detect this change and create an entry in the queue.
+
+FINAL TEST: This should appear in the dashboard now!

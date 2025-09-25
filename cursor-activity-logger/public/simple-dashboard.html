@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cursor Activity Dashboard - Simple</title>
+    <link rel="stylesheet" href="dashboard.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎯 Cursor Activity Dashboard</h1>
+            
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-number" id="totalSessions">0</div>
+                    <div class="stat-label">Sessions</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="totalEntries">0</div>
+                    <div class="stat-label">Entries</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="totalEvents">0</div>
+                    <div class="stat-label">Events</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="totalCodeChanges">0</div>
+                    <div class="stat-label">Code Changes</div>
+                </div>
+            </div>
+
+            <div class="controls">
+                <div class="control-group">
+                    <button class="btn btn-primary" onclick="refreshData()">🔄 Refresh</button>
+                    <button class="btn btn-secondary" onclick="debugDatabase()">🐛 Debug</button>
+                    <button class="btn btn-secondary" onclick="debugPromptData()">💬 Debug Prompts</button>
+                    <button class="btn btn-secondary" onclick="testCompanion()">🔗 Test</button>
+                </div>
+                <div class="control-group">
+                    <button class="btn btn-secondary" onclick="exportCSV()">📊 CSV</button>
+                    <button class="btn btn-secondary" onclick="exportJSON()">📄 JSON</button>
+                    <button class="btn btn-secondary" onclick="exportMarkdown()">📝 MD</button>
+                </div>
+                <div class="control-group status-group">
+                    <span class="status-indicator" id="connectionStatus"></span>
+                    <span id="connectionText">Connecting...</span>
+                </div>
+            </div>
+
+            <div class="filters">
+                <button class="filter-btn active" onclick="setFilter('all')">All</button>
+                <button class="filter-btn" onclick="setFilter('filewatcher')">File Changes</button>
+                <button class="filter-btn" onclick="setFilter('clipboard')">Clipboard</button>
+                <button class="filter-btn" onclick="setFilter('dom')">DOM</button>
+                <button class="filter-btn" onclick="setFilter('mcp')">MCP</button>
+                <button class="filter-btn" onclick="setFilter('events')">Events</button>
+            </div>
+        </div>
+
+        <div class="dashboard">
+            <div id="activityFeed">
+                <div class="loading">Loading activity data...</div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/dexie@latest/dist/dexie.js"></script>
+    <script src="https://unpkg.com/minisearch@latest/dist/umd/index.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>

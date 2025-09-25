@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "Companion": {
+      "command": "node",
+      "args": ["src/mcp-handler.js"],
+      "cwd": "/Users/hamidaho/Desktop/cursor_dashboard/cursor-activity-logger/companion",
+      "env": {
+        "PORT": "43917"
+      }
+    }
+  }
+}

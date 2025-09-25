@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Connection Test</title>
+</head>
+<body>
+    <h1>Companion Connection Test</h1>
+    <div id="status">Testing...</div>
+    <div id="data"></div>
+    
+    <script>
+        async function testConnection() {
+            const statusDiv = document.getElementById('status');
+            const dataDiv = document.getElementById('data');
+            
+            try {
+                // Test health endpoint
+                const healthResponse = await fetch('http://127.0.0.1:43917/health');
+                const healthData = await healthResponse.json();
+                
+                statusDiv.innerHTML = `✅ Health: ${healthData.status} (${healthData.entries} entries, ${healthData.events} events)`;
+                
+                // Test queue endpoint
+                const queueResponse = await fetch('http://127.0.0.1:43917/queue?since=1970-01-01T00:00:00.000Z');
+                const queueData = await queueResponse.json();
+                
+                dataDiv.innerHTML = `
+                    <h3>Queue Data:</h3>
+                    <p>Entries: ${queueData.entries.length}</p>
+                    <p>Events: ${queueData.events.length}</p>
+                    <p>Cursor: ${queueData.cursor}</p>
+                    <h4>Latest Entry:</h4>
+                    <pre>${JSON.stringify(queueData.entries[queueData.entries.length - 1], null, 2)}</pre>
+                `;
+                
+            } catch (error) {
+                statusDiv.innerHTML = `❌ Error: ${error.message}`;
+                dataDiv.innerHTML = `<pre>${error.stack}</pre>`;
+            }
+        }
+        
+        testConnection();
+    </script>
+</body>
+</html>

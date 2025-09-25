@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Status Check</title>
+    <script src="https://unpkg.com/dexie@latest/dist/dexie.js"></script>
+</head>
+<body>
+    <h1>System Status Check</h1>
+    <div id="results"></div>
+    
+    <script>
+        async function checkStatus() {
+            const results = document.getElementById('results');
+            
+            try {
+                // Check companion health
+                const healthResponse = await fetch('http://127.0.0.1:43917/health');
+                const healthData = await healthResponse.json();
+                
+                results.innerHTML += `<h2>✅ Companion Service: ${healthData.status}</h2>`;
+                results.innerHTML += `<p>Entries: ${healthData.entries}, Events: ${healthData.events}</p>`;
+                
+                // Check queue data
+                const queueResponse = await fetch('http://127.0.0.1:43917/queue?since=1970-01-01T00:00:00.000Z');
+                const queueData = await queueResponse.json();
+                
+                results.innerHTML += `<h2>📥 Queue Data</h2>`;
+                results.innerHTML += `<p>Available entries: ${queueData.entries.length}</p>`;
+                results.innerHTML += `<p>Available events: ${queueData.events.length}</p>`;
+                
+                // Test database
+                const db = new Dexie('TestDB');
+                db.version(1).stores({
+                    entries: '++id, session_id, timestamp, source, file_path'
+                });
+                await db.open();
+                
+                // Add all companion entries to database
+                for (const entry of queueData.entries) {
+                    try {
+                        await db.entries.add(entry);
+                        results.innerHTML += `<p>✅ Added: ${entry.file_path}</p>`;
+                    } catch (error) {
+                        results.innerHTML += `<p>❌ Error: ${error.message}</p>`;
+                    }
+                }
+                
+                const totalEntries = await db.entries.count();
+                results.innerHTML += `<h2>📊 Database Status</h2>`;
+                results.innerHTML += `<p>Total entries in database: ${totalEntries}</p>`;
+                
+                // Show latest entries
+                const latestEntries = await db.entries.orderBy('timestamp').reverse().limit(5).toArray();
+                results.innerHTML += `<h2>📋 Latest Entries</h2>`;
+                latestEntries.forEach(entry => {
+                    results.innerHTML += `<div style="border: 1px solid #ccc; padding: 10px; margin: 5px;">
+                        <strong>${entry.file_path}</strong><br>
+                        <small>${entry.timestamp} - ${entry.source}</small><br>
+                        <code>${entry.notes}</code>
+                    </div>`;
+                });
+                
+            } catch (error) {
+                results.innerHTML += `<h2>❌ Error</h2><p>${error.message}</p>`;
+            }
+        }
+        
+        checkStatus();
+    </script>
+</body>
+</html>

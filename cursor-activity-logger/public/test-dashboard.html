@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Test</title>
+</head>
+<body>
+    <h1>Dashboard Test</h1>
+    <div id="test-results"></div>
+    
+    <script src="https://unpkg.com/dexie@latest/dist/dexie.js"></script>
+    <script src="https://unpkg.com/minisearch@latest/dist/umd/index.js"></script>
+    <script src="app.js"></script>
+    <script>
+        async function runTests() {
+            const results = document.getElementById('test-results');
+            results.innerHTML = '<p>Running tests...</p>';
+            
+            try {
+                // Test 1: Database connection
+                await db.open();
+                results.innerHTML += '<p>✅ Database connection: OK</p>';
+                
+                // Test 2: Create test session
+                const testSession = await createNewSession('Test Session');
+                results.innerHTML += '<p>✅ Create session: OK</p>';
+                
+                // Test 3: Create test entry
+                const testEntry = {
+                    session_id: testSession.id,
+                    timestamp: new Date().toISOString(),
+                    source: 'test',
+                    prompt: 'Test prompt',
+                    response: 'Test response',
+                    notes: 'Test notes',
+                    tags: ['test']
+                };
+                await db.entries.add(testEntry);
+                results.innerHTML += '<p>✅ Create entry: OK</p>';
+                
+                // Test 4: Read entries
+                const entries = await db.entries.toArray();
+                results.innerHTML += `<p>✅ Read entries: OK (${entries.length} entries)</p>`;
+                
+                // Test 5: Test render functions
+                const entryHtml = renderActivityItem(entries[0]);
+                results.innerHTML += '<p>✅ Render activity item: OK</p>';
+                
+                // Test 6: Test export functions
+                try {
+                    await exportCSV();
+                    results.innerHTML += '<p>✅ Export CSV: OK</p>';
+                } catch (e) {
+                    results.innerHTML += `<p>⚠️ Export CSV: ${e.message}</p>`;
+                }
+                
+                results.innerHTML += '<p><strong>All tests completed!</strong></p>';
+                
+            } catch (error) {
+                results.innerHTML += `<p>❌ Error: ${error.message}</p>`;
+                console.error('Test error:', error);
+            }
+        }
+        
+        // Run tests when page loads
+        document.addEventListener('DOMContentLoaded', runTests);
+    </script>
+</body>
+</html>
