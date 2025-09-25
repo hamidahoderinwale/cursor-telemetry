@@ -139,7 +139,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
               <div className="progress-bar">
                 <div 
                   className="progress-fill" 
-                  style={{ width: `${exportProgress}%` }}
+                  style={{ '--progress-width': `${exportProgress}%` } as React.CSSProperties}
                 />
               </div>
               <span className="progress-text">Exporting... {exportProgress}%</span>

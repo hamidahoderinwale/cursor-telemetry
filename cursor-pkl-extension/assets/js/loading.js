@@ -12,8 +12,17 @@ function checkStylesheetsLoaded() {
   console.log(`Stylesheet loaded: ${stylesheetsLoaded}/${totalStylesheets}`);
   
   if (stylesheetsLoaded >= totalStylesheets) {
-    document.body.classList.add('stylesheets-loaded');
-    hideLoadingOverlay();
+    // Wait for document.body to be available
+    if (document.body) {
+      document.body.classList.add('stylesheets-loaded');
+      hideLoadingOverlay();
+    } else {
+      // If body isn't ready yet, wait for DOMContentLoaded
+      document.addEventListener('DOMContentLoaded', function() {
+        document.body.classList.add('stylesheets-loaded');
+        hideLoadingOverlay();
+      });
+    }
   }
 }
 

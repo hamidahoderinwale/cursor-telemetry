@@ -1,0 +1,308 @@
+{
+  "extractionPatterns": {
+    "javascript": {
+      "functions": [
+        "function $NAME($$$PARAMS) {$$$}",
+        "const $NAME = ($$$PARAMS) => {$$$}",
+        "let $NAME = ($$$PARAMS) => {$$$}",
+        "var $NAME = ($$$PARAMS) => {$$$}",
+        "$NAME: function($$$PARAMS) {$$$}",
+        "$NAME($$$PARAMS) {$$$}",
+        "async function $NAME($$$PARAMS) {$$$}",
+        "async $NAME($$$PARAMS) => {$$$}",
+        "function* $NAME($$$PARAMS) {$$$}",
+        "async function* $NAME($$$PARAMS) {$$$}"
+      ],
+      "classes": [
+        "class $NAME {$$$}",
+        "class $NAME extends $PARENT {$$$}",
+        "export class $NAME {$$$}",
+        "export class $NAME extends $PARENT {$$$}"
+      ],
+      "modules": {
+        "imports": [
+          "import $NAME from $SOURCE",
+          "import { $NAME } from $SOURCE",
+          "import * as $NAME from $SOURCE",
+          "import $NAME, { $NAMED } from $SOURCE",
+          "import { $NAME as $ALIAS } from $SOURCE",
+          "import $NAME, * as $NAMESPACE from $SOURCE"
+        ],
+        "exports": [
+          "export $NAME",
+          "export default $NAME",
+          "export { $NAME }",
+          "export { $NAME as $ALIAS }",
+          "export * from $SOURCE",
+          "export { $NAME } from $SOURCE",
+          "module.exports = $NAME",
+          "module.exports.$NAME = $VALUE"
+        ]
+      },
+      "variables": [
+        "const $NAME = $VALUE",
+        "let $NAME = $VALUE",
+        "var $NAME = $VALUE",
+        "const { $NAME } = $VALUE",
+        "const [ $NAME ] = $VALUE",
+        "const { $NAME: $ALIAS } = $VALUE",
+        "const [ $NAME, ...$REST ] = $VALUE"
+      ],
+      "patterns": {
+        "dataScience": [
+          "import pandas as $ALIAS",
+          "import numpy as $ALIAS",
+          "import matplotlib.pyplot as $ALIAS",
+          "import seaborn as $ALIAS",
+          "import plotly as $ALIAS",
+          "import sklearn from $SOURCE",
+          "from sklearn import $NAME",
+          "df.$METHOD()",
+          "plt.$METHOD()",
+          "sns.$METHOD()"
+        ],
+        "async": [
+          "async function $NAME($$$PARAMS) {$$$}",
+          "async $NAME($$$PARAMS) => {$$$}",
+          "await $EXPR",
+          "Promise.$METHOD($$$PARAMS)",
+          "async/await"
+        ],
+        "testing": [
+          "describe($NAME, () => {$$$})",
+          "it($NAME, () => {$$$})",
+          "test($NAME, () => {$$$})",
+          "expect($EXPR).$METHOD($VALUE)",
+          "beforeEach(() => {$$$})",
+          "afterEach(() => {$$$})"
+        ]
+      }
+    },
+    "typescript": {
+      "functions": [
+        "function $NAME($$$PARAMS): $RETURN {$$$}",
+        "const $NAME = ($$$PARAMS): $RETURN => {$$$}",
+        "let $NAME = ($$$PARAMS): $RETURN => {$$$}",
+        "var $NAME = ($$$PARAMS): $RETURN => {$$$}",
+        "$NAME($$$PARAMS): $RETURN {$$$}",
+        "async function $NAME($$$PARAMS): Promise<$RETURN> {$$$}",
+        "async $NAME($$$PARAMS): Promise<$RETURN> => {$$$}"
+      ],
+      "classes": [
+        "class $NAME {$$$}",
+        "class $NAME extends $PARENT {$$$}",
+        "class $NAME implements $INTERFACE {$$$}",
+        "export class $NAME {$$$}",
+        "export class $NAME extends $PARENT {$$$}",
+        "export class $NAME implements $INTERFACE {$$$}"
+      ],
+      "interfaces": [
+        "interface $NAME {$$$}",
+        "export interface $NAME {$$$}",
+        "interface $NAME extends $PARENT {$$$}"
+      ],
+      "types": [
+        "type $NAME = $VALUE",
+        "export type $NAME = $VALUE"
+      ],
+      "modules": {
+        "imports": [
+          "import $NAME from $SOURCE",
+          "import { $NAME } from $SOURCE",
+          "import * as $NAME from $SOURCE",
+          "import $NAME, { $NAMED } from $SOURCE",
+          "import { $NAME as $ALIAS } from $SOURCE",
+          "import type { $NAME } from $SOURCE",
+          "import type $NAME from $SOURCE"
+        ],
+        "exports": [
+          "export $NAME",
+          "export default $NAME",
+          "export { $NAME }",
+          "export { $NAME as $ALIAS }",
+          "export * from $SOURCE",
+          "export { $NAME } from $SOURCE",
+          "export type { $NAME } from $SOURCE"
+        ]
+      }
+    },
+    "python": {
+      "functions": [
+        "def $NAME($$$PARAMS):$$$",
+        "async def $NAME($$$PARAMS):$$$",
+        "lambda $PARAMS: $EXPR"
+      ],
+      "classes": [
+        "class $NAME:$$$",
+        "class $NAME($PARENT):$$$",
+        "class $NAME($PARENT1, $PARENT2):$$$"
+      ],
+      "modules": {
+        "imports": [
+          "import $NAME",
+          "import $NAME as $ALIAS",
+          "from $MODULE import $NAME",
+          "from $MODULE import $NAME as $ALIAS",
+          "from $MODULE import $NAME, $NAME2",
+          "from $MODULE import *"
+        ],
+        "exports": [
+          "__all__ = [$NAME]"
+        ]
+      },
+      "variables": [
+        "$NAME = $VALUE",
+        "$NAME, $NAME2 = $VALUE",
+        "$NAME: $TYPE = $VALUE"
+      ],
+      "patterns": {
+        "dataScience": [
+          "import pandas as $ALIAS",
+          "import numpy as $ALIAS",
+          "import matplotlib.pyplot as $ALIAS",
+          "import seaborn as $ALIAS",
+          "import plotly as $ALIAS",
+          "from sklearn import $NAME",
+          "df.$METHOD()",
+          "plt.$METHOD()",
+          "sns.$METHOD()",
+          "pd.$METHOD()",
+          "np.$METHOD()"
+        ],
+        "async": [
+          "async def $NAME($$$PARAMS):$$$",
+          "await $EXPR",
+          "asyncio.$METHOD($$$PARAMS)"
+        ],
+        "testing": [
+          "def test_$NAME():$$$",
+          "class Test$NAME:$$$",
+          "assert $EXPR",
+          "pytest.$METHOD($$$PARAMS)",
+          "unittest.$METHOD($$$PARAMS)"
+        ]
+      }
+    }
+  },
+  "analysisConfig": {
+    "enableCaching": true,
+    "cacheSize": 1000,
+    "enableLearning": true,
+    "maxHistorySize": 100,
+    "supportedLanguages": [
+      "JavaScript",
+      "TypeScript",
+      "Python",
+      "Java",
+      "C",
+      "C++",
+      "Go",
+      "Rust",
+      "PHP",
+      "Ruby"
+    ]
+  },
+  "extractionRules": {
+    "functionExtraction": {
+      "includeAnonymous": true,
+      "includeArrowFunctions": true,
+      "includeAsyncFunctions": true,
+      "includeGenerators": true,
+      "includeMethods": true,
+      "extractParameters": true,
+      "extractBody": true,
+      "extractReturnType": true
+    },
+    "classExtraction": {
+      "includeAbstract": true,
+      "includeInterfaces": true,
+      "includeInheritance": true,
+      "extractMethods": true,
+      "extractProperties": true,
+      "extractConstructors": true
+    },
+    "moduleExtraction": {
+      "includeImports": true,
+      "includeExports": true,
+      "includeReExports": true,
+      "includeNamespaceImports": true,
+      "includeDefaultImports": true,
+      "includeNamedImports": true
+    },
+    "variableExtraction": {
+      "includeConstants": true,
+      "includeLetVariables": true,
+      "includeVarVariables": true,
+      "includeDestructured": true,
+      "includeTypedVariables": true
+    }
+  },
+  "patternMatching": {
+    "dataScience": {
+      "libraries": [
+        "pandas", "numpy", "matplotlib", "seaborn", "plotly", 
+        "sklearn", "scipy", "statsmodels", "tensorflow", "torch"
+      ],
+      "patterns": [
+        "df.$METHOD()",
+        "plt.$METHOD()",
+        "sns.$METHOD()",
+        "pd.$METHOD()",
+        "np.$METHOD()",
+        "model.$METHOD()",
+        "data.$METHOD()"
+      ]
+    },
+    "webDevelopment": {
+      "frameworks": [
+        "react", "vue", "angular", "express", "fastapi", "django"
+      ],
+      "patterns": [
+        "useState($VALUE)",
+        "useEffect($$$PARAMS)",
+        "router.$METHOD($$$PARAMS)",
+        "app.$METHOD($$$PARAMS)"
+      ]
+    },
+    "testing": {
+      "frameworks": [
+        "jest", "mocha", "pytest", "unittest", "jasmine"
+      ],
+      "patterns": [
+        "describe($NAME, () => {$$$})",
+        "it($NAME, () => {$$$})",
+        "test($NAME, () => {$$$})",
+        "expect($EXPR).$METHOD($VALUE)"
+      ]
+    }
+  },
+  "transformationRules": {
+    "codeStyle": {
+      "arrowFunctions": {
+        "pattern": "function $NAME($$$PARAMS) { return $EXPR; }",
+        "replacement": "const $NAME = ($$$PARAMS) => $EXPR"
+      },
+      "constDeclarations": {
+        "pattern": "var $NAME = $VALUE",
+        "replacement": "const $NAME = $VALUE"
+      }
+    },
+    "optimization": {
+      "removeUnusedImports": {
+        "pattern": "import $NAME from $SOURCE",
+        "action": "removeIfUnused"
+      },
+      "consolidateImports": {
+        "pattern": "import $NAME from $SOURCE",
+        "action": "consolidate"
+      }
+    }
+  },
+  "metadata": {
+    "version": "1.0.0",
+    "created": "2024-01-01T00:00:00Z",
+    "description": "AST-Grep configuration for module and function extraction",
+    "author": "PKL Extension Team",
+    "lastUpdated": "2024-01-01T00:00:00Z"
+  }
+}

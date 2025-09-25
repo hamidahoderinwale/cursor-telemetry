@@ -23,12 +23,10 @@
     "noUnusedParameters": false
   },
   "include": [
-    "app/services/**/*"
+    "app/**/*"
   ],
   "exclude": [
     "node_modules",
-    "dist",
-    "app/renderer/**/*",
-    "app/main/**/*"
+    "dist"
   ]
 }

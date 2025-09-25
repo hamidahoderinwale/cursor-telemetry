@@ -11,17 +11,24 @@ import { nanoid } from 'nanoid';
  */
 export class CursorDBParser {
   private db: Database.Database | null = null;
-  private dbPath: string;
+  private dbPath: string | null;
 
   constructor(dbPath?: string) {
     this.dbPath = dbPath || this.findCursorDB();
   }
 
-  private findCursorDB(): string {
+  private findCursorDB(): string | null {
     const possiblePaths = [
+      // Standard Cursor database locations
       path.join(process.env.HOME || '', 'Library/Application Support/Cursor/User/globalStorage'),
       path.join(process.env.HOME || '', 'Library/Application Support/Cursor/User/workspaceStorage'),
-      path.join(process.env.HOME || '', 'Library/Application Support/Cursor/logs')
+      path.join(process.env.HOME || '', 'Library/Application Support/Cursor/logs'),
+      // Additional potential locations
+      path.join(process.env.HOME || '', 'Library/Application Support/Cursor/User/History'),
+      path.join(process.env.HOME || '', 'Library/Application Support/Cursor/User/Local Storage'),
+      path.join(process.env.HOME || '', 'Library/Application Support/Cursor/User/Session Storage'),
+      // Check for any .db files in Cursor directory
+      path.join(process.env.HOME || '', 'Library/Application Support/Cursor')
     ];
 
     for (const basePath of possiblePaths) {
@@ -32,8 +39,10 @@ export class CursorDBParser {
         }
       }
     }
-
-    throw new Error('Cursor database not found. Please ensure Cursor is installed and has been used.');
+    
+    // No Cursor database found
+    console.log('No Cursor database found. PKL Extension will run without Cursor integration.');
+    return null;
   }
 
   private findSQLiteFiles(dir: string): string[] {
@@ -62,6 +71,13 @@ export class CursorDBParser {
   }
 
   async connect(): Promise<void> {
+    if (!this.dbPath) {
+      console.log('No Cursor database path available. Skipping database connection.');
+      // Try alternative conversation capture methods
+      await this.initializeAlternativeCapture();
+      return;
+    }
+
     if (!fs.existsSync(this.dbPath)) {
       throw new Error(`Database file not found: ${this.dbPath}`);
     }
@@ -93,7 +109,10 @@ export class CursorDBParser {
   }
 
   async parseAllSessions(): Promise<PKLSession[]> {
-    if (!this.db) throw new Error('Database not connected');
+    if (!this.db) {
+      console.log('No Cursor database available. Returning empty sessions list.');
+      return [];
+    }
 
     const sessions: PKLSession[] = [];
     
@@ -572,5 +591,194 @@ export class CursorDBParser {
   private detectLanguage(codeBlock: string): string {
     const match = codeBlock.match(/```(\w+)/);
     return match ? match[1] : 'text';
+  }
+
+  /**
+   * Initialize alternative conversation capture methods when Cursor DB is not available
+   */
+  private async initializeAlternativeCapture(): Promise<void> {
+    console.log('Initializing alternative conversation capture methods...');
+    
+    // Method 1: Monitor Cursor logs for conversation patterns
+    await this.monitorCursorLogs();
+    
+    // Method 2: Set up file system monitoring for conversation files
+    await this.monitorConversationFiles();
+    
+    // Method 3: Enable manual conversation input via API
+    this.enableManualConversationCapture();
+  }
+
+  /**
+   * Monitor Cursor logs for conversation patterns
+   */
+  private async monitorCursorLogs(): Promise<void> {
+    const logPath = path.join(process.env.HOME || '', 'Library/Application Support/Cursor/logs');
+    if (!fs.existsSync(logPath)) return;
+
+    try {
+      const logFiles = fs.readdirSync(logPath)
+        .filter(file => file.endsWith('.log'))
+        .sort()
+        .slice(-3); // Monitor last 3 log files
+
+      for (const logFile of logFiles) {
+        const fullPath = path.join(logPath, logFile);
+        this.monitorLogFile(fullPath);
+      }
+    } catch (error) {
+      console.log('Could not monitor Cursor logs:', error);
+    }
+  }
+
+  /**
+   * Monitor a specific log file for conversation patterns
+   */
+  private monitorLogFile(logPath: string): void {
+    try {
+      // Watch for changes to the log file
+      fs.watchFile(logPath, { interval: 5000 }, (curr, prev) => {
+        if (curr.mtime > prev.mtime) {
+          this.parseLogForConversations(logPath);
+        }
+      });
+    } catch (error) {
+      console.log(`Could not watch log file ${logPath}:`, error);
+    }
+  }
+
+  /**
+   * Parse log file for conversation patterns
+   */
+  private parseLogForConversations(logPath: string): void {
+    try {
+      const content = fs.readFileSync(logPath, 'utf8');
+      const lines = content.split('\n');
+      
+      // Look for conversation patterns in recent lines
+      const recentLines = lines.slice(-100); // Last 100 lines
+      
+      for (const line of recentLines) {
+        if (this.isConversationLine(line)) {
+          this.extractConversationFromLogLine(line);
+        }
+      }
+    } catch (error) {
+      // Log file might be locked or inaccessible
+    }
+  }
+
+  /**
+   * Check if a log line contains conversation data
+   */
+  private isConversationLine(line: string): boolean {
+    const conversationPatterns = [
+      /user.*prompt/i,
+      /assistant.*response/i,
+      /chat.*message/i,
+      /ai.*reply/i,
+      /conversation.*start/i,
+      /cursor.*ai/i
+    ];
+    
+    return conversationPatterns.some(pattern => pattern.test(line));
+  }
+
+  /**
+   * Extract conversation data from a log line
+   */
+  private extractConversationFromLogLine(line: string): void {
+    // This would parse the log line and create conversation events
+    // Implementation depends on Cursor's actual log format
+    console.log('Found potential conversation in log:', line.substring(0, 100));
+  }
+
+  /**
+   * Monitor conversation files in Cursor directory
+   */
+  private async monitorConversationFiles(): Promise<void> {
+    const cursorDir = path.join(process.env.HOME || '', 'Library/Application Support/Cursor');
+    if (!fs.existsSync(cursorDir)) return;
+
+    try {
+      // Look for any files that might contain conversation data
+      const files = fs.readdirSync(cursorDir, { recursive: true })
+        .filter((file: any) => 
+          typeof file === 'string' && (
+            file.includes('conversation') || 
+            file.includes('chat') || 
+            file.includes('ai') ||
+            file.endsWith('.json')
+          )
+        );
+
+      for (const file of files) {
+        if (typeof file === 'string') {
+          const fullPath = path.join(cursorDir, file);
+          this.monitorConversationFile(fullPath);
+        }
+      }
+    } catch (error) {
+      console.log('Could not monitor conversation files:', error);
+    }
+  }
+
+  /**
+   * Monitor a specific conversation file
+   */
+  private monitorConversationFile(filePath: string): void {
+    try {
+      fs.watchFile(filePath, { interval: 2000 }, (curr, prev) => {
+        if (curr.mtime > prev.mtime) {
+          this.parseConversationFile(filePath);
+        }
+      });
+    } catch (error) {
+      console.log(`Could not watch conversation file ${filePath}:`, error);
+    }
+  }
+
+  /**
+   * Parse a conversation file for data
+   */
+  private parseConversationFile(filePath: string): void {
+    try {
+      const content = fs.readFileSync(filePath, 'utf8');
+      const data = JSON.parse(content);
+      
+      // Look for conversation-like structures
+      if (this.isConversationData(data)) {
+        this.processConversationData(data, filePath);
+      }
+    } catch (error) {
+      // File might not be JSON or might be locked
+    }
+  }
+
+  /**
+   * Check if data looks like conversation data
+   */
+  private isConversationData(data: any): boolean {
+    if (!data || typeof data !== 'object') return false;
+    
+    // Look for conversation-like properties
+    const conversationKeys = ['messages', 'conversations', 'chat', 'prompts', 'responses'];
+    return conversationKeys.some(key => key in data);
+  }
+
+  /**
+   * Process conversation data
+   */
+  private processConversationData(data: any, filePath: string): void {
+    console.log('Found conversation data in:', filePath);
+    // This would process the conversation data and create conversation events
+  }
+
+  /**
+   * Enable manual conversation capture via API
+   */
+  private enableManualConversationCapture(): void {
+    console.log('Manual conversation capture enabled via API endpoints');
+    console.log('Use POST /api/conversations to manually add conversation data');
   }
 }

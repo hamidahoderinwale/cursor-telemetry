@@ -1,0 +1,122 @@
+/* Notebook Grid Component Styles */
+
+.notebooks-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: var(--space-4);
+}
+
+.notebook-card {
+  background: var(--background-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  transition: var(--transition-fast);
+  box-shadow: var(--shadow-sm);
+}
+
+.notebook-card:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+
+.notebook-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: var(--space-3);
+}
+
+.notebook-title {
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+  margin: 0;
+  flex: 1;
+  word-break: break-word;
+}
+
+.notebook-status {
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+
+.notebook-status.success {
+  background: var(--status-success-bg);
+  color: var(--status-success);
+}
+
+.notebook-status.in_progress {
+  background: var(--status-warning-bg);
+  color: var(--status-warning);
+}
+
+.notebook-status.stuck {
+  background: var(--status-error-bg);
+  color: var(--status-error);
+}
+
+.notebook-info {
+  margin-bottom: var(--space-4);
+}
+
+.notebook-info p {
+  margin: 0 0 var(--space-1) 0;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+
+.notebook-actions {
+  display: flex;
+  gap: var(--space-2);
+  justify-content: flex-end;
+}
+
+/* Responsive Notebook Grid */
+@media (max-width: 1200px) {
+  .notebooks-grid {
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .notebooks-grid {
+    grid-template-columns: 1fr;
+    gap: var(--space-3);
+  }
+  
+  .notebook-card {
+    padding: var(--space-3);
+  }
+  
+  .notebook-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-2);
+  }
+  
+  .notebook-actions {
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+  
+  .notebook-actions .btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 480px) {
+  .notebook-card {
+    padding: var(--space-2);
+  }
+  
+  .notebook-title {
+    font-size: var(--font-size-sm);
+  }
+}

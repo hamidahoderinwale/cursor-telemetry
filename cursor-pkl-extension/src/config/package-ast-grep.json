@@ -1,0 +1,58 @@
+{
+  "name": "pkl-extension-ast-grep",
+  "version": "1.0.0",
+  "description": "AST-Grep integration for PKL Extension - Direct AST parsing and pattern matching",
+  "main": "ast-grep-service.js",
+  "scripts": {
+    "test": "node test-ast-grep.js",
+    "test:service": "node ast-grep-service.js",
+    "test:integration": "node ast-grep-integration.js",
+    "start": "node ast-grep-service.js",
+    "dev": "nodemon ast-grep-service.js"
+  },
+  "keywords": [
+    "ast-grep",
+    "ast",
+    "parsing",
+    "pattern-matching",
+    "code-analysis",
+    "module-extraction",
+    "function-extraction",
+    "pkl-extension",
+    "cursor",
+    "data-science"
+  ],
+  "author": "PKL Extension Team",
+  "license": "MIT",
+  "dependencies": {
+    "@ast-grep/napi": "^0.12.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.0"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-org/pkl-extension.git",
+    "directory": "cursor-pkl-extension"
+  },
+  "bugs": {
+    "url": "https://github.com/your-org/pkl-extension/issues"
+  },
+  "homepage": "https://github.com/your-org/pkl-extension#readme",
+  "files": [
+    "ast-grep-service.js",
+    "ast-grep-integration.js",
+    "ast-grep-config.json",
+    "test-ast-grep.js",
+    "AST_GREP_README.md"
+  ],
+  "peerDependencies": {
+    "@ast-grep/napi": "^0.12.0"
+  },
+  "optionalDependencies": {
+    "@ast-grep/napi": "^0.12.0"
+  }
+}

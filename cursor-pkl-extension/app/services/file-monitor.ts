@@ -117,7 +117,7 @@ export class FileMonitor extends EventEmitter {
 
     this.bufferTimeout = setTimeout(() => {
       this.flushChangeBuffer();
-    }, 1000); // 1 second debounce
+    }, 200); // 200ms debounce for real-time capture
   }
 
   private flushChangeBuffer(): void {

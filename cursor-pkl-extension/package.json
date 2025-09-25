@@ -2,7 +2,7 @@
   "name": "cursor-pkl-extension",
   "version": "1.0.0",
   "description": "Cursor Procedural Knowledge Library Extension for macOS",
-  "main": "web-server.js",
+  "main": "dist/main/index.js",
   "author": "PKL Development Team",
   "license": "MIT",
   "private": true,
@@ -10,23 +10,42 @@
     "node": ">=18.0.0"
   },
   "scripts": {
-    "start": "node web-server.js",
-    "dev": "node web-server.js",
+    "start": "electron .",
+    "dev": "NODE_ENV=development electron .",
     "build": "tsc",
+    "build:electron": "tsc && electron-builder",
     "type-check": "tsc --noEmit",
+    "server": "node src/web-interface/web-server.js",
+    "web": "node src/web-interface/web-server.js",
+    "monitor": "node src/web-interface/real-monitor.js",
     "test": "node scripts/test-end-to-end.sh",
-    "quick-start": "node scripts/quick-start.sh"
+    "test:facets": "node src/testing/test-enhanced-facets.js",
+    "test:ast": "node src/testing/test-ast-enhanced-facets.js",
+    "test:toggle": "node src/testing/test-toggle-percentages.js",
+    "quick-start": "node scripts/quick-start.sh",
+    "full-start": "concurrently \"npm run server\" \"npm start\""
   },
   "dependencies": {
+    "@types/react": "^19.1.13",
+    "@types/react-dom": "^19.1.9",
+    "@types/react-virtualized": "^9.22.3",
     "better-sqlite3": "^12.2.0",
     "chokidar": "^3.5.3",
     "cors": "^2.8.5",
     "express": "^5.1.0",
-    "nanoid": "^5.0.4"
+    "ioredis": "^5.4.1",
+    "nanoid": "^5.0.4",
+    "node-fetch": "^3.3.2",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "react-virtualized": "^9.22.6",
+    "socket.io": "^4.8.1"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^20.10.4",
+    "electron": "^38.1.2",
+    "electron-builder": "^26.0.12",
     "typescript": "^5.3.2"
   }
 }

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { PKLSession, SearchFilters } from '../config/types';
+import { PKLSession, SearchFilters, ExportOptions } from '../config/types';
 import { SessionList } from './components/SessionList';
 import { SessionDetail } from './components/SessionDetail';
 import { SearchBar } from './components/SearchBar';
@@ -173,7 +173,29 @@ export const App: React.FC = () => {
 
   const handleExportSession = async (sessionId: string, format: 'json' | 'markdown' | 'csv') => {
     try {
-      const result = await window.electronAPI.exportSession(sessionId, { format, includeCode: true, includeMetadata: true });
+      const options: ExportOptions = {
+        format,
+        includeCode: true,
+        includeMetadata: true,
+        includeConversations: true,
+        includeFileChanges: true
+      };
+      const result = await window.electronAPI.exportSession(sessionId, options);
+      if (result.success) {
+        // Show success message or open file location
+        console.log('Export successful:', result.data?.path);
+      } else {
+        setError(result.error || 'Export failed');
+      }
+    } catch (err) {
+      setError('Export failed');
+    }
+  };
+
+  const handleExportSessionOptions = async (options: ExportOptions) => {
+    try {
+      // For now, export all sessions based on options
+      const result = await window.electronAPI.exportAll(options);
       if (result.success) {
         // Show success message or open file location
         console.log('Export successful:', result.data?.path);
@@ -306,7 +328,7 @@ export const App: React.FC = () => {
       <ExportModal
         isOpen={isExportModalOpen}
         onClose={() => setIsExportModalOpen(false)}
-        onExport={handleExportSession}
+        onExport={handleExportSessionOptions}
         onExportAll={handleExportAll}
         isExporting={isExporting}
         exportProgress={exportProgress}

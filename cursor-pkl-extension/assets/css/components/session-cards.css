@@ -1,0 +1,158 @@
+/* Session Cards Component Styles */
+
+.sessions-list {
+  background: var(--background-primary);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--border-color);
+  overflow: hidden;
+  min-height: 400px;
+}
+
+/* Session Cards */
+.session-card {
+  background: var(--background-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  margin-bottom: var(--space-4);
+  transition: var(--transition-fast);
+  box-shadow: var(--shadow-sm);
+}
+
+.session-card:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+
+.session-header {
+  margin-bottom: var(--space-3);
+}
+
+.session-title-section {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: var(--space-2);
+}
+
+.session-title {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+  margin: 0;
+  flex: 1;
+}
+
+.session-badges {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.session-status {
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.session-status.success {
+  background: var(--status-success-bg);
+  color: var(--status-success);
+}
+
+.session-status.in_progress {
+  background: var(--status-warning-bg);
+  color: var(--status-warning);
+}
+
+.session-status.stuck {
+  background: var(--status-error-bg);
+  color: var(--status-error);
+}
+
+.confidence-badge {
+  padding: var(--space-1) var(--space-2);
+  background: var(--primary-color-bg);
+  color: var(--primary-color);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+}
+
+.session-info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+.info-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+
+.info-icon {
+  font-size: var(--font-size-base);
+  width: 16px;
+  text-align: center;
+}
+
+.info-text {
+  flex: 1;
+}
+
+.session-actions {
+  display: flex;
+  gap: var(--space-2);
+  justify-content: flex-end;
+}
+
+.session-actions .btn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+/* Responsive Session Cards */
+@media (max-width: 768px) {
+  .session-card {
+    padding: var(--space-3);
+  }
+  
+  .session-title-section {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-2);
+  }
+  
+  .session-badges {
+    align-self: flex-end;
+  }
+  
+  .session-actions {
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+  
+  .session-actions .btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 480px) {
+  .session-card {
+    padding: var(--space-2);
+  }
+  
+  .session-title {
+    font-size: var(--font-size-sm);
+  }
+}

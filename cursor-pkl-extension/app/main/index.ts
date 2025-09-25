@@ -1,10 +1,18 @@
-import { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, dialog } from 'electron';
+import * as electron from 'electron';
+const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, dialog } = electron;
 import path from 'path';
 import { CONFIG } from '../config/constants';
-// import { SimpleSQLiteManager } from '../storage/simple-sqlite-manager';
+import { SimpleSQLiteManager } from '../storage/simple-sqlite-manager';
 import { JsonManager } from '../storage/json-manager';
+import { SessionDatabase } from '../storage/session-database';
 import { CursorDBParser } from '../services/cursor-db-parser';
+import { JupyterSessionParser } from '../services/jupyter-session-parser';
 import { FileMonitor } from '../services/file-monitor';
+import { ConversationTracker } from '../services/conversation-tracker';
+import { JsonDataStorage } from '../storage/json-data-storage';
+import { EventProcessor } from '../services/event-processor';
+import { EventCorrelator } from '../services/event-correlator';
+import { SessionBuilder } from '../services/session-builder';
 import { AppleScriptService } from '../services/applescript-service';
 import { PKLSession, SearchFilters, ExportOptions } from '../config/types';
 
@@ -13,24 +21,42 @@ import { PKLSession, SearchFilters, ExportOptions } from '../config/types';
  * Handles system tray, IPC communication, and data management
  */
 class PKLExtension {
-  private mainWindow: BrowserWindow | null = null;
-  private tray: Tray | null = null;
+  private mainWindow: electron.BrowserWindow | null = null;
+  private tray: electron.Tray | null = null;
   private sqliteManager: SimpleSQLiteManager;
   private jsonManager: JsonManager;
+  private sessionDatabase: SessionDatabase;
   private cursorParser: CursorDBParser;
+  private jupyterParser: JupyterSessionParser;
+  private conversationTracker: ConversationTracker;
+  private jsonStorage: JsonDataStorage;
   private fileMonitor: FileMonitor | null = null;
+  private eventProcessor: EventProcessor | null = null;
+  private eventCorrelator: EventCorrelator | null = null;
+  private sessionBuilder: SessionBuilder | null = null;
   private isQuitting = false;
   private updateInterval: NodeJS.Timeout | null = null;
 
   constructor() {
     this.sqliteManager = new SimpleSQLiteManager();
     this.jsonManager = new JsonManager();
+    this.sessionDatabase = new SessionDatabase();
     this.cursorParser = new CursorDBParser();
+    this.jupyterParser = new JupyterSessionParser();
+    this.conversationTracker = new ConversationTracker();
+    this.jsonStorage = new JsonDataStorage();
+    
+    // Initialize event processing system
+    this.eventCorrelator = new EventCorrelator();
+    this.sessionBuilder = new SessionBuilder();
   }
 
   async initialize(): Promise<void> {
     await this.setupDatabase();
+    await this.setupSessionDatabase();
+    await this.setupJupyterMonitoring();
     await this.setupFileMonitoring();
+    await this.setupEventProcessing();
     this.setupIPC();
     this.createTray();
     this.createWindow();
@@ -43,6 +69,50 @@ class PKLExtension {
       console.log('Connected to Cursor database');
     } catch (error) {
       console.error('Failed to connect to Cursor database:', error);
+    }
+  }
+
+  private async setupSessionDatabase(): Promise<void> {
+    try {
+      await this.sessionDatabase.initialize();
+      console.log('Session database initialized successfully');
+    } catch (error) {
+      console.error('Failed to initialize session database:', error);
+    }
+  }
+
+  private async setupJupyterMonitoring(): Promise<void> {
+    try {
+      // Set up callback for new Jupyter sessions
+        this.jupyterParser.onNewSessions(async (sessions) => {
+          console.log(`Captured ${sessions.length} new Jupyter sessions`);
+          
+          // Store in both SQLite and JSON storage for redundancy
+          await this.sessionDatabase.storeSessions(sessions);
+          for (const session of sessions) {
+            try {
+              await this.jsonStorage.saveSession(session);
+            } catch (error) {
+              console.error('Error saving session to JSON storage:', error);
+            }
+          }
+          
+          this.notifyMainWindow('sessions-updated', { sessions });
+        });
+
+      // Start monitoring for .ipynb files
+      this.jupyterParser.startMonitoring();
+
+      // Scan existing notebooks
+      const existingSessions = await this.jupyterParser.scanExistingNotebooks();
+      if (existingSessions.length > 0) {
+        console.log(`Found ${existingSessions.length} existing notebook sessions`);
+        await this.sessionDatabase.storeSessions(existingSessions);
+      }
+
+      console.log('Jupyter monitoring initialized successfully');
+    } catch (error) {
+      console.error('Failed to initialize Jupyter monitoring:', error);
     }
   }
 
@@ -63,6 +133,50 @@ class PKLExtension {
       console.log('File monitoring started');
     } catch (error) {
       console.error('Failed to start file monitoring:', error);
+    }
+  }
+
+  private async setupEventProcessing(): Promise<void> {
+    if (!this.eventCorrelator || !this.sessionBuilder) return;
+
+    try {
+      // Initialize event processor with file monitor
+      this.eventProcessor = new EventProcessor(
+        { 
+          useRedis: false,
+          correlationWindow: 30000,
+          sessionTimeout: 300000,
+          maxEventsPerSession: 1000
+        },
+        this.conversationTracker,
+        this.sessionDatabase,
+        this.jsonStorage,
+        this.fileMonitor!,
+        this.jupyterParser
+      );
+
+      // Set up event processor handlers
+      this.eventProcessor.on('sessionCreated', (session) => {
+        console.log(`Event processor created session: ${session.id}`);
+        // Notify renderer if window exists
+        if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+          this.mainWindow.webContents.send('session-created', session);
+        }
+      });
+
+      this.eventProcessor.on('sessionFinalized', (session) => {
+        console.log(`Event processor finalized session: ${session.id}`);
+        // Notify renderer if window exists
+        if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+          this.mainWindow.webContents.send('session-finalized', session);
+        }
+      });
+
+      // Start event processing
+      await this.eventProcessor.start();
+      console.log('Event processing system started');
+    } catch (error) {
+      console.error('Error setting up event processing:', error);
     }
   }
 
@@ -90,9 +204,19 @@ class PKLExtension {
           }
         }
 
-        // Fallback to local storage
-        const sessions = await this.sqliteManager.getSessions();
-        return { success: true, data: sessions };
+        // Fallback to session database and JSON storage
+        const sqliteSessions = await this.sessionDatabase.getAllSessions();
+        const jsonSessions = await this.jsonStorage.loadSessions();
+        
+        // Merge sessions from both sources, preferring SQLite for duplicates
+        const allSessions = [...sqliteSessions];
+        for (const jsonSession of jsonSessions) {
+          if (!allSessions.find(s => s.id === jsonSession.id)) {
+            allSessions.push(jsonSession);
+          }
+        }
+        
+        return { success: true, data: allSessions };
       } catch (error) {
         return { success: false, error: error instanceof Error ? error.message : String(error) };
       }
@@ -242,8 +366,168 @@ class PKLExtension {
     ipcMain.handle(CONFIG.IPC_CHANNELS.REFRESH_SESSIONS, async () => {
       try {
         await this.syncData();
-        const sessions = await this.sqliteManager.getSessions();
+        const sessions = await this.sessionDatabase.getAllSessions();
         return { success: true, data: sessions };
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    });
+
+    // Conversation tracker IPC
+    ipcMain.handle('conversation:start', async (_evt, triggerMessage: string, context: string) => {
+      const id = this.conversationTracker.startSession(triggerMessage, context);
+      return { success: true, data: { id } };
+    });
+
+    ipcMain.handle('conversation:add', async (_evt, userMessage: string, assistantResponse: string, filesReferenced: string[]) => {
+      this.conversationTracker.addInteraction(userMessage, assistantResponse, filesReferenced);
+      return { success: true };
+    });
+
+    ipcMain.handle('conversation:end', async () => {
+      const id = this.conversationTracker.endSession();
+      return { success: true, data: { id } };
+    });
+
+    // Enhanced JSON storage IPC handlers
+    ipcMain.handle('storage:get-stats', async () => {
+      try {
+        const stats = await this.jsonStorage.getStats();
+        return { success: true, data: stats };
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    });
+
+    ipcMain.handle('storage:search-sessions', async (_, query: string) => {
+      try {
+        const sessions = await this.jsonStorage.searchSessions(query);
+        return { success: true, data: sessions };
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    });
+
+    ipcMain.handle('storage:export-session', async (_, sessionId: string, format: 'json' | 'markdown' | 'csv') => {
+      try {
+        const result = await this.jsonStorage.exportSession(sessionId, format);
+        return result;
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    });
+
+    ipcMain.handle('storage:cleanup-old-data', async (_, daysToKeep: number = 30) => {
+      try {
+        const result = await this.jsonStorage.cleanupOldData(daysToKeep);
+        return result;
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    });
+
+    ipcMain.handle('storage:migrate-data', async () => {
+      try {
+        const result = await this.jsonStorage.migrateData();
+        return result;
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    });
+
+    ipcMain.handle('storage:get-data-size', async () => {
+      try {
+        const result = await this.jsonStorage.getDataSize();
+        return { success: true, data: result };
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    });
+
+    // Event processing operations
+    ipcMain.handle('events:enqueue-conversation', async (_, data) => {
+      try {
+        if (this.eventProcessor) {
+          const eventId = await this.eventProcessor.enqueueConversation(data);
+          return { success: true, data: { eventId } };
+        }
+        return { success: false, error: 'Event processor not available' };
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    });
+
+    ipcMain.handle('events:enqueue-prompt', async (_, data) => {
+      try {
+        if (this.eventProcessor) {
+          const eventId = await this.eventProcessor.enqueuePrompt(data);
+          return { success: true, data: { eventId } };
+        }
+        return { success: false, error: 'Event processor not available' };
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    });
+
+    ipcMain.handle('events:enqueue-response', async (_, data) => {
+      try {
+        if (this.eventProcessor) {
+          const eventId = await this.eventProcessor.enqueueResponse(data);
+          return { success: true, data: { eventId } };
+        }
+        return { success: false, error: 'Event processor not available' };
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    });
+
+    ipcMain.handle('events:get-stats', async () => {
+      try {
+        if (this.eventProcessor) {
+          const stats = this.eventProcessor.getStats();
+          return { success: true, data: stats };
+        }
+        return { success: false, error: 'Event processor not available' };
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    });
+
+    // Session database specific handlers
+    ipcMain.handle('get-session-statistics', async () => {
+      try {
+        const stats = await this.sessionDatabase.getSessionStatistics();
+        return { success: true, data: stats };
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    });
+
+    ipcMain.handle('get-database-stats', async () => {
+      try {
+        const stats = await this.sessionDatabase.getDatabaseStats();
+        return { success: true, data: stats };
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    });
+
+    ipcMain.handle('scan-notebooks', async () => {
+      try {
+        const sessions = await this.jupyterParser.scanExistingNotebooks();
+        if (sessions.length > 0) {
+          await this.sessionDatabase.storeSessions(sessions);
+        }
+        return { success: true, data: sessions };
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    });
+
+    ipcMain.handle('add-watch-directory', async (_, directory: string) => {
+      try {
+        this.jupyterParser.addWatchDirectory(directory);
+        return { success: true, data: { message: 'Directory added to watch list' } };
       } catch (error) {
         return { success: false, error: error instanceof Error ? error.message : String(error) };
       }
@@ -317,6 +601,12 @@ class PKLExtension {
     });
   }
 
+  private notifyMainWindow(channel: string, data: any): void {
+    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+      this.mainWindow.webContents.send(channel, data);
+    }
+  }
+
   private toggleWindow(): void {
     if (!this.mainWindow) return;
 
@@ -346,6 +636,15 @@ class PKLExtension {
   private async handleFileChanges(changes: any[]): Promise<void> {
     // Process file changes and update current session
     console.log(`Processing ${changes.length} file changes`);
+    
+    // Save file changes to JSON storage for enhanced persistence
+    for (const change of changes) {
+      try {
+        await this.jsonStorage.saveFileChange(change);
+      } catch (error) {
+        console.error('Error saving file change to JSON storage:', error);
+      }
+    }
     
     // Notify renderer about file changes
     if (this.mainWindow) {
@@ -520,29 +819,47 @@ ${session.annotations.map(ann => `- ${ann.content}`).join('\n')}
 }
 
 // Initialize the application
-const pklExtension = new PKLExtension();
+function initializeApp() {
+  const pklExtension = new PKLExtension();
 
-app.whenReady().then(async () => {
-  await pklExtension.initialize();
-});
+  app.whenReady().then(async () => {
+    await pklExtension.initialize();
+  });
 
-app.on('window-all-closed', () => {
-  // Keep the app running even when all windows are closed (tray app)
-});
+  app.on('window-all-closed', () => {
+    // Keep the app running even when all windows are closed (tray app)
+  });
 
-app.on('activate', () => {
-  // macOS specific: re-create window when dock icon is clicked
-});
+  app.on('activate', () => {
+    // macOS specific: re-create window when dock icon is clicked
+  });
 
-app.on('before-quit', async () => {
-  // Cleanup
-  if (pklExtension['fileMonitor']) {
-    await pklExtension['fileMonitor'].stopMonitoring();
-  }
-  if (pklExtension['updateInterval']) {
-    clearInterval(pklExtension['updateInterval']);
-  }
-  pklExtension['sqliteManager'].close();
-  pklExtension['jsonManager'].close();
-  await pklExtension['cursorParser'].close();
-});
+  app.on('before-quit', async () => {
+    // Cleanup
+    if (pklExtension['fileMonitor']) {
+      await pklExtension['fileMonitor'].stopMonitoring();
+    }
+    if (pklExtension['jupyterParser']) {
+      pklExtension['jupyterParser'].stopMonitoring();
+    }
+    if (pklExtension['eventProcessor']) {
+      await pklExtension['eventProcessor'].stop();
+    }
+    if (pklExtension['eventCorrelator']) {
+      pklExtension['eventCorrelator'].destroy();
+    }
+    if (pklExtension['sessionBuilder']) {
+      pklExtension['sessionBuilder'].cleanupOldContexts();
+    }
+    if (pklExtension['updateInterval']) {
+      clearInterval(pklExtension['updateInterval']);
+    }
+    pklExtension['sqliteManager'].close();
+    pklExtension['jsonManager'].close();
+    await pklExtension['sessionDatabase'].close();
+    await pklExtension['cursorParser'].close();
+  });
+}
+
+// Start the application
+initializeApp();
