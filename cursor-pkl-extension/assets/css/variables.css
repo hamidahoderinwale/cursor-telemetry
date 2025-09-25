@@ -2,14 +2,14 @@
 
 :root {
   /* High-Contrast Color Palette */
-  --primary-color: #000000;
-  --primary-hover: #333333;
-  --primary-color-dark: #000000;
-  --secondary-color: #333333;
-  --secondary-hover: #555555;
-  --secondary-color-dark: #222222;
-  --accent-color: #555555;
-  --accent-hover: #777777;
+  --primary-color: #2563eb;        /* Blue - more modern and accessible */
+  --primary-hover: #1d4ed8;
+  --primary-color-dark: #1e40af;
+  --secondary-color: #6b7280;      /* Gray - more modern */
+  --secondary-hover: #4b5563;
+  --secondary-color-dark: #374151;
+  --accent-color: #7c3aed;         /* Purple accent */
+  --accent-hover: #6d28d9;
   --danger-color: #CC0000;
   --danger-hover: #AA0000;
   --warning-color: #CC6600;

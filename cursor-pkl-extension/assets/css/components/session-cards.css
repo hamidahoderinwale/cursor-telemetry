@@ -1285,84 +1285,69 @@
 }
 
 .session-activity {
-  margin-bottom: var(--space-3);
-}
-
-.activity-bar {
-  width: 100%;
-  height: 4px;
-  background: var(--surface-secondary);
-  border-radius: var(--border-radius-sm);
-  overflow: hidden;
-  margin-bottom: var(--space-1);
-}
-
-.activity-fill {
-  height: 100%;
-  border-radius: var(--border-radius-sm);
-  transition: width 0.3s ease;
-}
-
-.activity-fill.activity-low {
-  background: var(--success-color);
-}
-
-.activity-fill.activity-medium {
-  background: var(--warning-color);
-}
-
-.activity-fill.activity-high {
-  background: var(--error-color);
-}
-
-.activity-label {
-  font-size: var(--font-size-xs);
-  color: var(--text-secondary);
-  text-align: center;
-  display: block;
+  display: none; /* Hide in compact view */
 }
 
 .session-meta {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  margin-bottom: var(--space-2);
+  gap: var(--space-2);
+  flex-shrink: 0;
   font-size: var(--font-size-xs);
   color: var(--text-tertiary);
 }
 
+.session-timestamp {
+  white-space: nowrap;
+}
+
 .last-activity {
-  color: var(--text-secondary);
+  display: none; /* Hide in compact view */
 }
 
 .session-summary {
-  font-size: var(--font-size-sm);
-  color: var(--text-secondary);
-  line-height: 1.4;
-  font-style: italic;
+  display: none; /* Hide in compact view */
 }
 
-/* Responsive adjustments */
+/* Compact session list styles */
+.sessions-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+/* Responsive adjustments for compact view */
 @media (max-width: 768px) {
-  .session-file-info {
+  .session-item {
     flex-direction: column;
     align-items: flex-start;
-    gap: var(--space-2);
-  }
-  
-  .session-stats {
-    align-self: stretch;
-    justify-content: space-around;
+    gap: var(--space-1);
+    min-height: auto;
+    padding: var(--space-2);
   }
   
   .session-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--space-2);
+    width: 100%;
+    justify-content: space-between;
   }
   
-  .session-status {
-    align-self: flex-end;
+  .session-file-info {
+    width: 100%;
+    justify-content: space-between;
+  }
+  
+  .session-stats {
+    gap: var(--space-1);
+  }
+  
+  .stat-item {
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+  }
+  
+  .stat-label {
+    font-size: 10px;
   }
 }
 
