@@ -418,37 +418,28 @@ class LiveDashboard {
                         <h3>Code Changes (${session.codeDeltas.length})</h3>
                         <div class="code-deltas">
                             <div id="code-deltas-preview">
-                                ${session.codeDeltas.slice(0, 5).map(delta => {
-                                    const changeType = delta.afterContent && delta.beforeContent ? 'Modified' : 
-                                                     delta.afterContent ? 'Added' : 
-                                                     delta.beforeContent ? 'Removed' : 'Unknown';
-                                    const content = delta.afterContent || delta.beforeContent || 'No content';
-                                    const preview = content.length > 100 ? content.substring(0, 100) + '...' : content;
-                                    return `
-                                        <div class="code-delta">
-                                            <strong>${changeType}:</strong> ${preview}
-                                        </div>
-                                    `;
-                                }).join('')}
+                                ${session.codeDeltas.slice(0, 5).map((delta, index) => this.formatCodeDelta(delta, index, true)).join('')}
                             </div>
                             <div id="code-deltas-full" style="display: none;">
-                                ${session.codeDeltas.map(delta => {
-                                    const changeType = delta.afterContent && delta.beforeContent ? 'Modified' : 
-                                                     delta.afterContent ? 'Added' : 
-                                                     delta.beforeContent ? 'Removed' : 'Unknown';
-                                    const content = delta.afterContent || delta.beforeContent || 'No content';
-                                    const preview = content.length > 100 ? content.substring(0, 100) + '...' : content;
-                                    return `
-                                        <div class="code-delta">
-                                            <strong>${changeType}:</strong> ${preview}
-                                        </div>
-                                    `;
-                                }).join('')}
+                                ${session.codeDeltas.map((delta, index) => this.formatCodeDelta(delta, index, false)).join('')}
                             </div>
                             ${session.codeDeltas.length > 5 ? `
                                 <p class="expandable-link" onclick="toggleCodeDeltas('${session.id}')" style="cursor: pointer; color: var(--primary-color); text-decoration: underline;">
                                     ... and ${session.codeDeltas.length - 5} more changes
                                 </p>
+                            ` : ''}
+                        </div>
+                    </div>
+                    ` : ''}
+                    ${session.fileChanges && session.fileChanges.length > 0 ? `
+                    <div class="detail-section">
+                        <h3>File Changes (${session.fileChanges.length})</h3>
+                        <div class="file-changes">
+                            ${session.fileChanges.slice(0, 3).map(change => this.formatFileChange(change)).join('')}
+                            ${session.fileChanges.length > 3 ? `
+                                <div class="more-changes">
+                                    <span class="more-indicator">... and ${session.fileChanges.length - 3} more file changes</span>
+                                </div>
                             ` : ''}
                         </div>
                     </div>
@@ -501,6 +492,171 @@ class LiveDashboard {
         } else {
             return `${secs}s`;
         }
+    }
+
+    formatCodeDelta(delta, index, isPreview = true) {
+        const changeType = delta.afterContent && delta.beforeContent ? 'Modified' : 
+                         delta.afterContent ? 'Added' : 
+                         delta.beforeContent ? 'Removed' : 'Unknown';
+        
+        const timestamp = new Date(delta.timestamp).toLocaleTimeString();
+        const filePath = delta.filePath && delta.filePath !== 'unknown' ? delta.filePath.split('/').pop() : 'Unknown File';
+        
+        // Get associated prompt if available
+        const associatedPrompt = this.getAssociatedPrompt(delta);
+        
+        // Format content with syntax highlighting
+        const content = delta.afterContent || delta.beforeContent || 'No content';
+        const formattedContent = this.formatCodeContent(content, isPreview);
+        
+        // Create diff display if both before and after content exist
+        const diffDisplay = delta.beforeContent && delta.afterContent ? 
+            this.createDiffDisplay(delta.beforeContent, delta.afterContent, isPreview) : 
+            formattedContent;
+        
+        return `
+            <div class="code-delta-item">
+                <div class="code-delta-header">
+                    <div class="code-delta-meta">
+                        <span class="change-type ${changeType.toLowerCase()}">${changeType}</span>
+                        <span class="file-path">${filePath}</span>
+                        <span class="timestamp">${timestamp}</span>
+                        ${delta.cellIndex ? `<span class="cell-index">Cell ${delta.cellIndex}</span>` : ''}
+                    </div>
+                </div>
+                ${associatedPrompt ? `
+                    <div class="associated-prompt">
+                        <div class="prompt-label">Associated Prompt:</div>
+                        <div class="prompt-content">${this.escapeHtml(associatedPrompt)}</div>
+                    </div>
+                ` : ''}
+                <div class="code-delta-content">
+                    ${diffDisplay}
+                </div>
+            </div>
+        `;
+    }
+
+    getAssociatedPrompt(delta) {
+        // Try to find associated prompt from linked events or session data
+        // This is a simplified version - you might want to enhance this based on your data structure
+        if (delta.linkedPrompt) {
+            return delta.linkedPrompt;
+        }
+        
+        // Look for prompts in the session that might be related
+        const session = this.sessions.find(s => s.id === delta.sessionId);
+        if (session && session.linkedEvents) {
+            const relatedEvent = session.linkedEvents.find(event => 
+                event.type === 'conversation' && 
+                Math.abs(new Date(event.timestamp) - new Date(delta.timestamp)) < 30000 // Within 30 seconds
+            );
+            if (relatedEvent && relatedEvent.content) {
+                return relatedEvent.content;
+            }
+        }
+        
+        return null;
+    }
+
+    formatCodeContent(content, isPreview = true) {
+        if (!content) return '<div class="no-content">No content</div>';
+        
+        const maxLength = isPreview ? 200 : 1000;
+        const displayContent = content.length > maxLength ? content.substring(0, maxLength) + '...' : content;
+        
+        // Basic syntax highlighting for common languages
+        const highlightedContent = this.highlightSyntax(displayContent);
+        
+        return `
+            <div class="code-content">
+                <pre><code>${highlightedContent}</code></pre>
+                ${content.length > maxLength ? `
+                    <div class="content-truncated">
+                        <span class="truncation-indicator">Content truncated (${content.length} chars total)</span>
+                    </div>
+                ` : ''}
+            </div>
+        `;
+    }
+
+    createDiffDisplay(beforeContent, afterContent, isPreview = true) {
+        const maxLength = isPreview ? 150 : 500;
+        
+        const beforeDisplay = beforeContent.length > maxLength ? beforeContent.substring(0, maxLength) + '...' : beforeContent;
+        const afterDisplay = afterContent.length > maxLength ? afterContent.substring(0, maxLength) + '...' : afterContent;
+        
+        return `
+            <div class="diff-display">
+                <div class="diff-section">
+                    <div class="diff-label removed">Before:</div>
+                    <pre class="diff-content removed"><code>${this.escapeHtml(beforeDisplay)}</code></pre>
+                </div>
+                <div class="diff-section">
+                    <div class="diff-label added">After:</div>
+                    <pre class="diff-content added"><code>${this.escapeHtml(afterDisplay)}</code></pre>
+                </div>
+            </div>
+        `;
+    }
+
+    highlightSyntax(code) {
+        // Basic syntax highlighting - you can enhance this with a proper syntax highlighter
+        return this.escapeHtml(code)
+            .replace(/\b(import|from|def|class|if|else|for|while|return|const|let|var|function)\b/g, '<span class="keyword">$1</span>')
+            .replace(/(["'])((?:\\.|(?!\1)[^\\])*?)\1/g, '<span class="string">$1$2$1</span>')
+            .replace(/\b(\d+\.?\d*)\b/g, '<span class="number">$1</span>')
+            .replace(/(\/\/.*$)/gm, '<span class="comment">$1</span>')
+            .replace(/(#.*$)/gm, '<span class="comment">$1</span>');
+    }
+
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    formatFileChange(change) {
+        const timestamp = new Date(change.timestamp).toLocaleTimeString();
+        const fileName = change.filePath ? change.filePath.split('/').pop() : 'Unknown File';
+        const changeType = change.changeType || 'modified';
+        
+        return `
+            <div class="file-change-item">
+                <div class="file-change-header">
+                    <div class="file-change-meta">
+                        <span class="change-type ${changeType.toLowerCase()}">${changeType}</span>
+                        <span class="file-name">${fileName}</span>
+                        <span class="timestamp">${timestamp}</span>
+                        ${change.gitHash ? `<span class="git-hash">${change.gitHash.substring(0, 8)}</span>` : ''}
+                    </div>
+                </div>
+                <div class="file-change-content">
+                    ${change.beforeSnippet && change.afterSnippet ? `
+                        <div class="file-diff">
+                            <div class="diff-section">
+                                <div class="diff-label removed">Before:</div>
+                                <pre class="diff-content removed"><code>${this.escapeHtml(change.beforeSnippet)}</code></pre>
+                            </div>
+                            <div class="diff-section">
+                                <div class="diff-label added">After:</div>
+                                <pre class="diff-content added"><code>${this.escapeHtml(change.afterSnippet)}</code></pre>
+                            </div>
+                        </div>
+                    ` : `
+                        <div class="file-snippet">
+                            <pre><code>${this.escapeHtml(change.afterSnippet || change.beforeSnippet || 'No content')}</code></pre>
+                        </div>
+                    `}
+                    ${change.lineRange ? `
+                        <div class="line-range">
+                            <span class="line-range-label">Lines:</span>
+                            <span class="line-range-value">${change.lineRange.start}-${change.lineRange.end}</span>
+                        </div>
+                    ` : ''}
+                </div>
+            </div>
+        `;
     }
 
     switchView(viewType) {
