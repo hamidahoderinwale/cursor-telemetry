@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clio & Kura Enhanced Dashboard</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    
+    <!-- Preload critical resources -->
+    <link rel="preload" href="assets/css/variables.css" as="style">
+    <link rel="preload" href="assets/css/main.css" as="style">
+    <link rel="preload" href="assets/js/loading.js" as="script">
+    
+    <!-- Loading utilities -->
+    <script src="assets/js/loading.js"></script>
+    
+    <!-- CSS -->
+    <link rel="stylesheet" href="assets/css/variables.css" onload="checkStylesheetsLoaded()">
+    <link rel="stylesheet" href="assets/css/main.css" onload="checkStylesheetsLoaded()">
+    <link rel="stylesheet" href="assets/css/components/modals.css" onload="checkStylesheetsLoaded()">
+    
+    <!-- External dependencies -->
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/plotly.js-dist@2.26.0/plotly.min.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    
+    <style>
+        .enhanced-dashboard {
+            min-height: 100vh;
+            background: var(--background-primary);
+            color: var(--text-primary);
+        }
+        
+        .enhanced-header {
+            background: var(--background-secondary);
+            border-bottom: 1px solid var(--border-color);
+            padding: var(--space-4) var(--space-6);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        
+        .enhanced-title {
+            font-size: var(--font-size-2xl);
+            font-weight: var(--font-weight-bold);
+            color: var(--text-primary);
+            margin: 0 0 var(--space-2) 0;
+        }
+        
+        .enhanced-subtitle {
+            font-size: var(--font-size-lg);
+            color: var(--text-secondary);
+            margin: 0;
+        }
+        
+        .enhanced-nav {
+            display: flex;
+            gap: var(--space-4);
+            margin-top: var(--space-4);
+        }
+        
+        .nav-btn {
+            padding: var(--space-2) var(--space-4);
+            background: var(--background-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: var(--border-radius);
+            color: var(--text-primary);
+            text-decoration: none;
+            font-weight: var(--font-weight-medium);
+            transition: all 0.2s ease;
+        }
+        
+        .nav-btn:hover {
+            background: var(--primary-color);
+            color: white;
+            transform: translateY(-1px);
+        }
+        
+        .enhanced-content {
+            padding: var(--space-6);
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        .loading-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: var(--space-8);
+            text-align: center;
+        }
+        
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid var(--border-color);
+            border-top: 4px solid var(--primary-color);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: var(--space-4);
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .error-state {
+            background: var(--error-color);
+            color: white;
+            padding: var(--space-4);
+            border-radius: var(--border-radius);
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="enhanced-dashboard">
+        <!-- Header -->
+        <div class="enhanced-header">
+            <h1 class="enhanced-title">Clio & Kura Enhanced Dashboard</h1>
+            <p class="enhanced-subtitle">Advanced workflow analysis with Clio facets and Kura embeddings</p>
+            
+            <div class="enhanced-nav">
+                <a href="/" class="nav-btn">← Back to Main Dashboard</a>
+                <a href="/dashboard/enhanced" class="nav-btn">Refresh View</a>
+            </div>
+        </div>
+        
+        <!-- Content -->
+        <div class="enhanced-content">
+            <div id="enhanced-container">
+                <div class="loading-state">
+                    <div class="loading-spinner"></div>
+                    <p>Loading enhanced Clio & Kura analysis...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Scripts -->
+    <script src="components/shared/dashboard.js"></script>
+    <script src="components/enhanced-project-session-view.js"></script>
+    <script src="components/real-data-visualizations.js"></script>
+    
+    <script>
+        // Initialize enhanced dashboard when DOM is loaded
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Enhanced dashboard loading...');
+            
+            // Initialize the main dashboard
+            window.dashboard = new LiveDashboard();
+            
+            // Load enhanced project session view
+            loadEnhancedView();
+        });
+        
+        async function loadEnhancedView() {
+            const container = document.getElementById('enhanced-container');
+            
+            try {
+                // Show loading state
+                container.innerHTML = `
+                    <div class="loading-state">
+                        <div class="loading-spinner"></div>
+                        <p>Analyzing workflows with Clio & Kura...</p>
+                    </div>
+                `;
+                
+                // Get both Kura and Clio analysis data
+                const [kuraResponse, clioResponse] = await Promise.allSettled([
+                    fetch('/api/sessions/analyze-with-kura'),
+                    fetch('/api/sessions/analyze-with-clio')
+                ]);
+                
+                // Initialize enhanced project session view
+                if (typeof EnhancedProjectSessionView !== 'undefined') {
+                    window.enhancedProjectSessionView = new EnhancedProjectSessionView(window.dashboard);
+                    window.enhancedProjectSessionView.initializeView();
+                    
+                    // Load data
+                    await window.enhancedProjectSessionView.loadData();
+                    
+                    // Render the enhanced view
+                    window.enhancedProjectSessionView.render();
+                    
+                    console.log('Enhanced view loaded successfully');
+                } else {
+                    throw new Error('EnhancedProjectSessionView not available');
+                }
+                
+            } catch (error) {
+                console.error('Error loading enhanced view:', error);
+                container.innerHTML = `
+                    <div class="error-state">
+                        <h3>Error Loading Enhanced View</h3>
+                        <p>Failed to load Clio & Kura analysis. Please try refreshing the page.</p>
+                        <p><small>Error: ${error.message}</small></p>
+                    </div>
+                `;
+            }
+        }
+        
+        // Global functions for enhanced view
+        window.switchView = function(viewType) {
+            if (window.dashboard) {
+                window.dashboard.switchView(viewType);
+            }
+        };
+        
+        window.viewSession = function(sessionId) {
+            if (window.dashboard) {
+                window.dashboard.viewSession(sessionId);
+            }
+        };
+        
+        window.returnToContext = function(sessionId) {
+            if (window.dashboard) {
+                window.dashboard.returnToContext(sessionId);
+            }
+        };
+    </script>
+</body>
+</html>

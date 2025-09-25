@@ -57,18 +57,353 @@
         }
         
         /* Privacy Analysis Modal Styles */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: var(--background-modal);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .modal.active {
+            display: flex;
+        }
+        
         .privacy-modal-content {
             max-width: 95vw;
             max-height: 95vh;
             width: 1200px;
             height: 800px;
             overflow-y: auto;
+            background: var(--background-primary);
+            border-radius: 8px;
+            box-shadow: var(--shadow-lg);
         }
         
         .privacy-modal-content .modal-body {
-            padding: 0;
+            padding: 1rem;
             height: calc(100% - 60px);
             overflow-y: auto;
+        }
+        
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .modal-header h3 {
+            margin: 0;
+            color: var(--text-primary);
+        }
+        
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            color: var(--text-secondary);
+            cursor: pointer;
+            padding: 0.5rem;
+        }
+        
+        .modal-close:hover {
+            color: var(--text-primary);
+        }
+        
+        /* Privacy Analysis Styles */
+        .privacy-analysis-container {
+            padding: 1rem;
+        }
+        
+        .privacy-controls-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin: 1rem 0;
+        }
+        
+        .config-item {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        
+        .config-label {
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+        
+        .config-input {
+            width: 100%;
+        }
+        
+        .privacy-metrics {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 1rem;
+            margin: 1rem 0;
+        }
+        
+        .metric-card {
+            background: var(--background-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1rem;
+            text-align: center;
+        }
+        
+        .metric-value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: var(--primary-color);
+            margin-bottom: 0.5rem;
+        }
+        
+        .metric-label {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+        
+        .privacy-actions {
+            display: flex;
+            gap: 1rem;
+            margin-top: 1rem;
+            justify-content: center;
+        }
+        
+        .btn {
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.2s ease;
+        }
+        
+        .btn-primary {
+            background: var(--primary-color);
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: var(--primary-hover);
+        }
+        
+        .btn-secondary {
+            background: var(--background-secondary);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+        }
+        
+        .btn-secondary:hover {
+            background: var(--background-tertiary);
+        }
+        
+        .btn-outline {
+            background: transparent;
+            color: var(--primary-color);
+            border: 1px solid var(--primary-color);
+        }
+        
+        .btn-outline:hover {
+            background: var(--primary-color);
+            color: white;
+        }
+        
+        /* Info Modal Styles */
+        .info-container {
+            padding: 1rem;
+        }
+        
+        .info-container h4 {
+            color: var(--text-primary);
+            margin: 1rem 0 0.5rem 0;
+            font-size: 1.1rem;
+        }
+        
+        .info-container h4:first-child {
+            margin-top: 0;
+        }
+        
+        .info-container p {
+            color: var(--text-secondary);
+            margin-bottom: 1rem;
+            line-height: 1.6;
+        }
+        
+        .info-container ul {
+            color: var(--text-secondary);
+            margin-bottom: 1rem;
+            padding-left: 1.5rem;
+        }
+        
+        .info-container li {
+            margin-bottom: 0.5rem;
+        }
+        
+        .shortcuts-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        
+        .shortcut-item {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        
+        .shortcut-item kbd {
+            background: var(--background-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 0.25rem 0.5rem;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 0.8rem;
+            color: var(--text-primary);
+            min-width: 80px;
+            text-align: center;
+        }
+        
+        .shortcut-item span {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+        
+        /* Session Modal Styles */
+        .session-detail-container {
+            padding: 1rem;
+        }
+        
+        .session-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .session-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+        
+        .session-status {
+            padding: 0.25rem 0.75rem;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        
+        .session-status.active {
+            background: var(--success-color);
+            color: white;
+        }
+        
+        .session-status.completed {
+            background: var(--info-color);
+            color: white;
+        }
+        
+        .session-tabs {
+            display: flex;
+            border-bottom: 1px solid var(--border-color);
+            margin-bottom: 1rem;
+        }
+        
+        .tab-btn {
+            padding: 0.5rem 1rem;
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: var(--text-secondary);
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s ease;
+        }
+        
+        .tab-btn.active {
+            color: var(--primary-color);
+            border-bottom-color: var(--primary-color);
+        }
+        
+        .tab-btn:hover {
+            color: var(--text-primary);
+        }
+        
+        .tab-panel {
+            display: none;
+        }
+        
+        .tab-panel.active {
+            display: block;
+        }
+        
+        .session-actions {
+            display: flex;
+            gap: 0.5rem;
+            margin-top: 1rem;
+            flex-wrap: wrap;
+        }
+        
+        .action-buttons {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+        
+        /* Loading and Error States */
+        .loading-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+            color: var(--text-secondary);
+        }
+        
+        .loading-spinner {
+            width: 32px;
+            height: 32px;
+            border: 3px solid var(--border-color);
+            border-top: 3px solid var(--primary-color);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 1rem;
+        }
+        
+        .error-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+            color: var(--danger-color);
+            background: var(--background-secondary);
+            border: 1px solid var(--danger-color);
+            border-radius: 8px;
+            margin: 1rem;
+        }
+        
+        .no-data {
+            text-align: center;
+            color: var(--text-secondary);
+            padding: 2rem;
+            font-style: italic;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
         
         .privacy-analysis-container {
@@ -251,7 +586,7 @@
                 <button class="view-btn" id="projects-sessions-view-btn" onclick="switchView('projects-sessions')">Projects & Sessions</button>
                 <button class="view-btn" id="notebooks-view-btn" onclick="switchView('notebooks')">Notebooks</button>
                 <button class="view-btn" id="visualizations-view-btn" onclick="switchView('visualizations')">Workflow Analysis</button>
-                <button class="view-btn" id="embeddings-view-btn" onclick="switchView('embeddings')">Clio & Kura</button>
+                <button class="view-btn" id="embeddings-view-btn" onclick="window.location.href='/dashboard/enhanced'">Clio & Kura</button>
                 <button class="view-btn" id="enhanced-view-btn-2" onclick="window.location.href='/dashboard/enhanced'">Enhanced View</button>
             </div>
 
@@ -284,8 +619,10 @@
                 <h3 id="session-detail-title">Session Details</h3>
                 <button class="modal-close" onclick="closeSessionModal()">&times;</button>
             </div>
-            <div class="modal-body" id="session-detail-body">
-                <!-- Session details will be loaded here -->
+            <div class="modal-body">
+                <div class="session-detail-container">
+                    <!-- Session details will be loaded here -->
+                </div>
             </div>
         </div>
     </div>
@@ -333,7 +670,52 @@
                         </div>
                     </div>
                     
-                    <button class="btn btn-primary" onclick="runPrivacyAnalysis()">Run Analysis</button>
+                    <div class="privacy-actions">
+                        <button class="btn btn-primary" onclick="runPrivacyAnalysis()">Run Analysis</button>
+                        <button class="btn btn-secondary" onclick="exportPrivacyReport()">Export Report</button>
+                        <button class="btn btn-outline" onclick="configurePrivacySettings()">Configure Settings</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Info Modal -->
+    <div class="modal" id="infoModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Dashboard Information</h3>
+                <button class="modal-close" onclick="closeInfoModal()">&times;</button>
+            </div>
+            <div class="modal-body" id="info-modal-body">
+                <div class="info-container">
+                    <h4>About This Dashboard</h4>
+                    <p>This is a real-time dashboard for monitoring coding sessions and development activities.</p>
+                    
+                    <h4>Features</h4>
+                    <ul>
+                        <li>Real-time session monitoring</li>
+                        <li>Privacy analysis and metrics</li>
+                        <li>Project and session management</li>
+                        <li>Data visualization and insights</li>
+                        <li>Export and integration capabilities</li>
+                    </ul>
+                    
+                    <h4>Keyboard Shortcuts</h4>
+                    <div class="shortcuts-list">
+                        <div class="shortcut-item">
+                            <kbd>Ctrl/Cmd + F</kbd>
+                            <span>Search sessions</span>
+                        </div>
+                        <div class="shortcut-item">
+                            <kbd>Ctrl/Cmd + R</kbd>
+                            <span>Refresh data</span>
+                        </div>
+                        <div class="shortcut-item">
+                            <kbd>Escape</kbd>
+                            <span>Close modals</span>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -439,21 +821,7 @@
             modal.classList.remove('active');
         }
 
-        function closePrivacyModal() {
-            const modal = document.getElementById('privacyModal');
-            modal.classList.remove('active');
-        }
-
-        function openPrivacyModal() {
-            const modal = document.getElementById('privacyModal');
-            modal.classList.add('active');
-        }
-
-        // Privacy analysis functions
-        function runPrivacyAnalysis() {
-            console.log('Running privacy analysis...');
-            // Implementation would go here
-        }
+        // Privacy modal functions are handled by dashboard.js
 
         // Global functions for HTML onclick handlers
         window.switchView = function(viewType) {

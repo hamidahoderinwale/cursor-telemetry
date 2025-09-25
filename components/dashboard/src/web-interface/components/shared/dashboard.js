@@ -1749,7 +1749,8 @@ class LiveDashboard {
                 this.renderVisualizations();
                 break;
             case 'embeddings':
-                this.renderEmbeddings();
+                // Redirect to enhanced view for Clio & Kura functionality
+                window.location.href = '/dashboard/enhanced';
                 break;
             default:
                 this.renderTimeline();
