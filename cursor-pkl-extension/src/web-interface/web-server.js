@@ -8,44 +8,109 @@ const EventEmitter = require('events');
 const RealMonitor = require('./real-monitor');
 const DataStorage = require('../data-processing/data-storage');
 const ExportService = require('../data-processing/export-service');
-// Mock services for now - these would normally be imported from compiled TypeScript
+// AppleScript service for macOS integration with Cursor IDE
 const AppleScriptService = {
-  executeScript: () => Promise.resolve(''),
-  isAvailable: () => false,
+  executeScript: (script) => {
+    return new Promise((resolve, reject) => {
+      const { exec } = require('child_process');
+      exec(`osascript -e '${script}'`, (error, stdout, stderr) => {
+        if (error) {
+          console.error('AppleScript error:', error);
+          reject(error);
+        } else {
+          resolve(stdout.trim());
+        }
+      });
+    });
+  },
+  
+  isAvailable: () => {
+    // Check if we're on macOS
+    return process.platform === 'darwin';
+  },
+  
+  restoreSessionContext: async ({ currentFile, cursorPosition, selectedText }) => {
+    try {
+      if (!currentFile) {
+        return { success: false, error: 'No file specified' };
+      }
+      
+      // Open file in Cursor IDE
+      const openScript = `tell application "Cursor" to open POSIX file "${currentFile}"`;
+      await AppleScriptService.executeScript(openScript);
+      
+      // Wait a moment for the file to open
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Set cursor position if provided
+      if (cursorPosition) {
+        const positionScript = `
+          tell application "Cursor"
+            activate
+            tell application "System Events"
+              key code 36 -- Enter key to ensure we're in the editor
+              delay 0.5
+              -- Navigate to position (this is a simplified approach)
+              repeat ${cursorPosition.line || 1} times
+                key code 125 -- Down arrow
+              end repeat
+              repeat ${cursorPosition.character || 0} times
+                key code 124 -- Right arrow
+              end repeat
+            end tell
+          end tell
+        `;
+        await AppleScriptService.executeScript(positionScript);
+      }
+      
+      return {
+        success: true,
+        method: 'AppleScript',
+        position: cursorPosition,
+        file: currentFile
+      };
+    } catch (error) {
+      console.error('Error restoring session context:', error);
+      return {
+        success: false,
+        error: error.message || 'Failed to restore context in Cursor IDE'
+      };
+    }
+  },
+  
+  openFileInCursor: async (filePath) => {
+    try {
+      const script = `tell application "Cursor" to open POSIX file "${filePath}"`;
+      await AppleScriptService.executeScript(script);
+      return true;
+    } catch (error) {
+      console.error('Error opening file in Cursor:', error);
+      return false;
+    }
+  },
+  
   extractNotebookVisualizations: async (filePath) => {
-    // Mock visualization extraction
-    console.log(`Mock: Extracting visualizations from ${filePath}`);
-    
-    // Return mock visualizations based on file name
-    const fileName = filePath.split('/').pop();
-    const mockVisualizations = [];
-    
-    // Add some mock visualizations for certain file types
-    if (fileName.includes('viz') || fileName.includes('plot') || fileName.includes('chart')) {
-      mockVisualizations.push({
-        type: 'plot',
-        title: 'Sample Plot',
-        description: 'Mock visualization extracted from notebook',
-        data: { x: [1, 2, 3], y: [1, 4, 9] }
-      });
+    try {
+      console.log(`Extracting visualizations from ${filePath}`);
+      
+      // For now, return empty visualizations
+      // This would normally parse the notebook file and extract visualization data
+      return {
+        success: true,
+        visualizations: [],
+        total: 0,
+        file: filePath,
+        lastModified: new Date().toISOString()
+      };
+    } catch (error) {
+      console.error('Error extracting visualizations:', error);
+      return {
+        success: false,
+        error: error.message,
+        visualizations: [],
+        total: 0
+      };
     }
-    
-    if (fileName.includes('analysis') || fileName.includes('eda')) {
-      mockVisualizations.push({
-        type: 'chart',
-        title: 'Analysis Chart',
-        description: 'Mock analysis visualization',
-        data: { categories: ['A', 'B', 'C'], values: [10, 20, 30] }
-      });
-    }
-    
-    return {
-      success: true,
-      visualizations: mockVisualizations,
-      total: mockVisualizations.length,
-      file: filePath,
-      lastModified: new Date().toISOString()
-    };
   }
 };
 

@@ -353,22 +353,6 @@ class LiveDashboard {
         }
     }
 
-    showSessionDetails(session) {
-        // Create a simple modal or alert with session details
-        const details = `
-Session Details:
-- ID: ${session.id}
-- Intent: ${session.intent || 'Unknown'}
-- Outcome: ${session.outcome || 'In Progress'}
-- File: ${session.currentFile || 'Unknown'}
-- Timestamp: ${new Date(session.timestamp).toLocaleString()}
-- Confidence: ${Math.round((session.confidence || 0) * 100)}%
-- Code Deltas: ${session.codeDeltas ? session.codeDeltas.length : 0}
-- File Changes: ${session.fileChanges ? session.fileChanges.length : 0}
-        `;
-        
-        alert(details);
-    }
 
     showLoading(show) {
         const loadingOverlay = document.getElementById('loadingOverlay');

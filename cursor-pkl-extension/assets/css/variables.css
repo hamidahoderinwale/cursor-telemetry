@@ -43,6 +43,26 @@
   --status-warning-bg: #FFF4E6;
   --status-error-bg: #FFE6E6;
   
+  /* Enhanced Button Colors with Proper Contrast */
+  --btn-primary-bg: #000000;
+  --btn-primary-text: #FFFFFF;
+  --btn-primary-hover: #333333;
+  --btn-secondary-bg: #F8F8F8;
+  --btn-secondary-text: #000000;
+  --btn-secondary-hover: #E8E8E8;
+  --btn-success-bg: #006600;
+  --btn-success-text: #FFFFFF;
+  --btn-success-hover: #004400;
+  --btn-info-bg: #0066CC;
+  --btn-info-text: #FFFFFF;
+  --btn-info-hover: #004499;
+  --btn-warning-bg: #CC6600;
+  --btn-warning-text: #FFFFFF;
+  --btn-warning-hover: #AA5500;
+  --btn-danger-bg: #CC0000;
+  --btn-danger-text: #FFFFFF;
+  --btn-danger-hover: #AA0000;
+  
   /* High-Contrast Intent Colors */
   --intent-explore: #000000;
   --intent-explore-hover: #333333;
@@ -108,6 +128,11 @@
   --transition-fast: 150ms ease-in-out;
   --transition-normal: 250ms ease-in-out;
   --transition-slow: 350ms ease-in-out;
+  
+  /* Enhanced Focus and Accessibility */
+  --focus-ring: 2px solid var(--primary-color);
+  --focus-ring-offset: 2px;
+  --focus-ring-radius: 4px;
   
   /* Z-Index */
   --z-dropdown: 1000;

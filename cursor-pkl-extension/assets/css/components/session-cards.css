@@ -40,12 +40,30 @@
   color: var(--text-inverse);
 }
 
-.session-intent-badge.explore { background: var(--intent-explore); }
-.session-intent-badge.implement { background: var(--intent-implement); }
-.session-intent-badge.debug { background: var(--intent-debug); }
-.session-intent-badge.refactor { background: var(--intent-refactor); }
-.session-intent-badge.data_exploration { background: var(--intent-data-exploration); }
-.session-intent-badge.unknown { background: var(--intent-unknown); }
+.session-intent-badge.explore { 
+  background: var(--intent-explore); 
+  color: var(--text-inverse);
+}
+.session-intent-badge.implement { 
+  background: var(--intent-implement); 
+  color: var(--text-inverse);
+}
+.session-intent-badge.debug { 
+  background: var(--intent-debug); 
+  color: var(--text-inverse);
+}
+.session-intent-badge.refactor { 
+  background: var(--intent-refactor); 
+  color: var(--text-inverse);
+}
+.session-intent-badge.data_exploration { 
+  background: var(--intent-data-exploration); 
+  color: var(--text-inverse);
+}
+.session-intent-badge.unknown { 
+  background: var(--intent-unknown); 
+  color: var(--text-inverse);
+}
 
 .session-status-indicator {
   display: flex;
@@ -235,19 +253,22 @@
 }
 
 .session-status.success {
-  background: var(--status-success-bg);
-  color: var(--status-success);
+  background: var(--btn-success-bg);
+  color: var(--btn-success-text);
+  border: 1px solid var(--btn-success-bg);
 }
 
 .session-status.in_progress,
 .session-status.IN_PROGRESS {
-  background: var(--status-warning-bg);
-  color: var(--status-warning);
+  background: var(--btn-warning-bg);
+  color: var(--btn-warning-text);
+  border: 1px solid var(--btn-warning-bg);
 }
 
 .session-status.stuck {
-  background: var(--status-error-bg);
-  color: var(--status-error);
+  background: var(--btn-danger-bg);
+  color: var(--btn-danger-text);
+  border: 1px solid var(--btn-danger-bg);
 }
 
 .confidence-badge {
@@ -439,41 +460,172 @@
 }
 
 .session-intent-badge.exploratory {
-  background: var(--status-info);
+  background: var(--btn-info-bg);
+  color: var(--btn-info-text);
 }
 
 .session-intent-badge.iterative {
-  background: var(--status-warning);
+  background: var(--btn-warning-bg);
+  color: var(--btn-warning-text);
 }
 
 .session-intent-badge.systematic {
-  background: var(--status-success);
+  background: var(--btn-success-bg);
+  color: var(--btn-success-text);
 }
 
 .session-intent-badge.experimental {
-  background: var(--status-error);
+  background: var(--btn-danger-bg);
+  color: var(--btn-danger-text);
 }
 
 .session-intent-badge.analytical {
-  background: var(--primary-color);
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
 }
 
 .session-intent-badge.creative {
   background: var(--accent-color);
+  color: var(--text-inverse);
 }
 
 .session-intent-badge.consumption {
   background: var(--text-tertiary);
+  color: var(--text-inverse);
 }
 
 .session-intent-badge.transformation {
   background: var(--text-secondary);
+  color: var(--text-inverse);
 }
 
 .session-intent-badge.analysis {
-  background: var(--status-info);
+  background: var(--btn-info-bg);
+  color: var(--btn-info-text);
 }
 
 .session-intent-badge.modeling {
-  background: var(--status-success);
+  background: var(--btn-success-bg);
+  color: var(--btn-success-text);
+}
+
+/* Conversation Display Styles */
+.conversation-section {
+  margin-top: var(--space-4);
+  border-top: 1px solid var(--border-color-light);
+  padding-top: var(--space-3);
+}
+
+.conversation-title {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+  margin: 0 0 var(--space-3) 0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.conversation-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  max-height: 400px;
+  overflow-y: auto;
+  padding: var(--space-2);
+  background: var(--background-tertiary);
+  border: 1px solid var(--border-color-light);
+  border-radius: var(--border-radius);
+}
+
+.conversation-item {
+  background: var(--background-primary);
+  border: 1px solid var(--border-color-light);
+  border-radius: var(--border-radius);
+  padding: var(--space-3);
+  transition: var(--transition-fast);
+}
+
+.conversation-item:hover {
+  border-color: var(--primary-color);
+  box-shadow: var(--shadow-sm);
+}
+
+.conversation-timestamp {
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  font-weight: var(--font-weight-medium);
+  margin-bottom: var(--space-2);
+  text-align: right;
+  font-style: italic;
+}
+
+.conversation-user,
+.conversation-assistant {
+  margin-bottom: var(--space-2);
+}
+
+.conversation-user:last-child,
+.conversation-assistant:last-child {
+  margin-bottom: 0;
+}
+
+.conversation-label {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  color: var(--text-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--border-radius);
+  display: inline-block;
+}
+
+.conversation-user .conversation-label {
+  background: var(--btn-info-bg);
+  color: var(--btn-info-text);
+}
+
+.conversation-assistant .conversation-label {
+  background: var(--btn-success-bg);
+  color: var(--btn-success-text);
+}
+
+.conversation-content {
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+  line-height: 1.5;
+  padding: var(--space-2);
+  background: var(--background-secondary);
+  border: 1px solid var(--border-color-light);
+  border-radius: var(--border-radius);
+  font-family: var(--font-family-mono);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.conversation-truncated {
+  color: var(--text-tertiary);
+  font-style: italic;
+  font-size: var(--font-size-xs);
+}
+
+/* Responsive conversation display */
+@media (max-width: 768px) {
+  .conversation-list {
+    max-height: 300px;
+    padding: var(--space-1);
+  }
+  
+  .conversation-item {
+    padding: var(--space-2);
+  }
+  
+  .conversation-content {
+    font-size: var(--font-size-xs);
+    padding: var(--space-1);
+    max-height: 150px;
+  }
 }

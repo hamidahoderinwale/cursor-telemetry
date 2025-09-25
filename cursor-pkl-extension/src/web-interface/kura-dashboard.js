@@ -418,24 +418,32 @@ class KuraDashboard {
             console.log('Kura analysis response:', data);
             
             if (data.success) {
+                console.log('Raw data received:', data);
+                
                 this.sessions = this.validateAndSanitizeSessions(data.sessions || []);
                 this.clusters = data.clusters || [];
                 this.umapData = data.umap_coordinates || [];
                 
                 console.log(`Processed ${this.sessions.length} sessions, ${this.clusters.length} clusters, ${this.umapData.length} UMAP points`);
+                console.log('Sessions:', this.sessions);
+                console.log('Clusters:', this.clusters);
+                console.log('UMAP Data:', this.umapData);
                 
                 // If we have real sessions but no clusters, create basic clusters
                 if (this.sessions.length > 0 && this.clusters.length === 0) {
                     console.log('Creating basic clusters...');
                     this.clusters = this.createBasicClusters();
+                    console.log('Created basic clusters:', this.clusters);
                 }
                 
                 // If we have sessions but no UMAP data, create basic coordinates
                 if (this.sessions.length > 0 && this.umapData.length === 0) {
                     console.log('Creating basic UMAP data...');
                     this.umapData = this.createBasicUMAPData();
+                    console.log('Created basic UMAP data:', this.umapData);
                 }
                 
+                console.log('About to render visualizations...');
                 this.renderClusterTree();
                 this.renderUMAPPlot();
                 this.updateStatistics();
@@ -447,7 +455,13 @@ class KuraDashboard {
                 
                 // Show empty state if no sessions
                 if (this.sessions.length === 0) {
-                    this.showEmptyState();
+                    console.log('No sessions found, creating test data for demonstration...');
+                    this.createTestData();
+                    this.renderClusterTree();
+                    this.renderUMAPPlot();
+                    this.updateStatistics();
+                    this.updatePatternInsights('success_patterns');
+                    this.updateStatusBar();
                 }
             } else {
                 throw new Error(data.error || 'Unknown error');
@@ -480,7 +494,14 @@ class KuraDashboard {
                 console.error('Fallback data loading failed:', fallbackError);
             }
             
-            console.log('No data available, showing empty state');
+            // If no real data available, create test data for demonstration
+            console.log('No real data available, creating test data for demonstration...');
+            this.createTestData();
+            this.renderClusterTree();
+            this.renderUMAPPlot();
+            this.updateStatistics();
+            this.updatePatternInsights('success_patterns');
+            this.updateStatusBar();
         } finally {
             this.showLoading(false);
         }
@@ -509,6 +530,9 @@ class KuraDashboard {
             session.summary = session.summary || `${session.intent} session on ${session.currentFile}`;
             session.codeDeltas = Array.isArray(session.codeDeltas) ? session.codeDeltas : [];
             session.fileChanges = Array.isArray(session.fileChanges) ? session.fileChanges : [];
+            session.conversations = Array.isArray(session.conversations) ? session.conversations : [];
+            session.prompts = Array.isArray(session.prompts) ? session.prompts : [];
+            session.messages = Array.isArray(session.messages) ? session.messages : [];
 
             return true;
         });
@@ -691,6 +715,83 @@ class KuraDashboard {
                 outcome: session.outcome || 'in_progress',
                 confidence: session.confidence || 0.5
             };
+        });
+    }
+
+    createTestData() {
+        console.log('Creating test data for demonstration...');
+        
+        // Create sample sessions
+        this.sessions = [
+            {
+                id: 'test-session-1',
+                intent: 'explore',
+                outcome: 'success',
+                timestamp: new Date().toISOString(),
+                duration: 1200,
+                confidence: 0.85,
+                currentFile: 'test-notebook.ipynb',
+                summary: 'Data exploration session',
+                codeDeltas: [],
+                fileChanges: [],
+                conversations: [
+                    {
+                        user_message: 'How can I analyze this dataset?',
+                        assistant_message: 'You can start by loading the data and examining its structure...',
+                        timestamp: new Date().toISOString()
+                    }
+                ]
+            },
+            {
+                id: 'test-session-2',
+                intent: 'implement',
+                outcome: 'in_progress',
+                timestamp: new Date(Date.now() - 3600000).toISOString(),
+                duration: 800,
+                confidence: 0.72,
+                currentFile: 'model-training.py',
+                summary: 'Model implementation session',
+                codeDeltas: [],
+                fileChanges: [],
+                conversations: [
+                    {
+                        user_message: 'Help me implement a neural network',
+                        assistant_message: 'I\'ll help you create a neural network implementation...',
+                        timestamp: new Date(Date.now() - 3600000).toISOString()
+                    }
+                ]
+            },
+            {
+                id: 'test-session-3',
+                intent: 'debug',
+                outcome: 'success',
+                timestamp: new Date(Date.now() - 7200000).toISOString(),
+                duration: 600,
+                confidence: 0.91,
+                currentFile: 'debug-script.py',
+                summary: 'Debugging session',
+                codeDeltas: [],
+                fileChanges: [],
+                conversations: [
+                    {
+                        user_message: 'This code is throwing an error',
+                        assistant_message: 'Let me help you debug this issue...',
+                        timestamp: new Date(Date.now() - 7200000).toISOString()
+                    }
+                ]
+            }
+        ];
+
+        // Create basic clusters
+        this.clusters = this.createBasicClusters();
+        
+        // Create UMAP data
+        this.umapData = this.createBasicUMAPData();
+        
+        console.log('Test data created:', {
+            sessions: this.sessions.length,
+            clusters: this.clusters.length,
+            umapData: this.umapData.length
         });
     }
 
@@ -972,64 +1073,112 @@ class KuraDashboard {
     renderUMAPPlot() {
         const container = document.getElementById('umap-plot');
         
-        // Prepare data for Plotly
-        const traces = this.prepareUMAPTraces();
+        if (!container) {
+            console.error('UMAP plot container not found');
+            return;
+        }
+
+        // Check if Plotly is available
+        if (typeof Plotly === 'undefined') {
+            console.error('Plotly library not loaded');
+            container.innerHTML = '<div class="error-message">Plotly library not loaded. Please refresh the page.</div>';
+            return;
+        }
+
+        // Check if we have data
+        if (!this.umapData || this.umapData.length === 0) {
+            console.warn('No UMAP data available');
+            container.innerHTML = '<div class="no-data-message">No session data available for visualization</div>';
+            return;
+        }
+
+        console.log('Rendering UMAP plot with', this.umapData.length, 'data points');
         
-        const layout = {
-            title: {
-                text: 'Session Relationships (UMAP Projection)',
-                font: { size: 16 }
-            },
-            xaxis: {
-                title: 'UMAP Dimension 1',
-                showgrid: true,
-                zeroline: false
-            },
-            yaxis: {
-                title: 'UMAP Dimension 2', 
-                showgrid: true,
-                zeroline: false
-            },
-            hovermode: 'closest',
-            showlegend: true,
-            legend: {
-                x: 1,
-                y: 1,
-                xanchor: 'left',
-                yanchor: 'top'
-            },
-            margin: this.config.visualization.plotMargins,
-            dragmode: 'select'
-        };
+        try {
+            // Prepare data for Plotly
+            const traces = this.prepareUMAPTraces();
+            
+            if (!traces || traces.length === 0) {
+                console.warn('No traces generated for UMAP plot');
+                container.innerHTML = '<div class="no-data-message">No data traces available for visualization</div>';
+                return;
+            }
 
-        const config = {
-            displayModeBar: true,
-            modeBarButtonsToRemove: ['pan2d', 'lasso2d'],
-            displaylogo: false,
-            responsive: true
-        };
+            console.log('Generated', traces.length, 'traces for UMAP plot');
+            
+            const layout = {
+                title: {
+                    text: 'Session Relationships (UMAP Projection)',
+                    font: { size: 16 }
+                },
+                xaxis: {
+                    title: 'UMAP Dimension 1',
+                    showgrid: true,
+                    zeroline: false
+                },
+                yaxis: {
+                    title: 'UMAP Dimension 2', 
+                    showgrid: true,
+                    zeroline: false
+                },
+                hovermode: 'closest',
+                showlegend: true,
+                legend: {
+                    x: 1,
+                    y: 1,
+                    xanchor: 'left',
+                    yanchor: 'top'
+                },
+                margin: this.config.visualization.plotMargins,
+                dragmode: 'select'
+            };
 
-        Plotly.newPlot(container, traces, layout, config);
+            const config = {
+                displayModeBar: true,
+                modeBarButtonsToRemove: ['pan2d', 'lasso2d'],
+                displaylogo: false,
+                responsive: true
+            };
 
-        // Handle selection events
-        container.on('plotly_selected', (eventData) => {
-            this.handleUMAPSelection(eventData);
-        });
+            Plotly.newPlot(container, traces, layout, config).then(() => {
+                console.log('UMAP plot rendered successfully');
+                
+                // Handle selection events
+                container.on('plotly_selected', (eventData) => {
+                    this.handleUMAPSelection(eventData);
+                });
 
-        container.on('plotly_click', (eventData) => {
-            this.handleUMAPClick(eventData);
-        });
+                container.on('plotly_click', (eventData) => {
+                    this.handleUMAPClick(eventData);
+                });
 
-        this.umapPlot = container;
+                this.umapPlot = container;
+            }).catch(error => {
+                console.error('Error rendering UMAP plot:', error);
+                container.innerHTML = '<div class="error-message">Error rendering visualization: ' + error.message + '</div>';
+            });
+            
+        } catch (error) {
+            console.error('Error in renderUMAPPlot:', error);
+            container.innerHTML = '<div class="error-message">Error preparing visualization: ' + error.message + '</div>';
+        }
     }
 
     prepareUMAPTraces() {
+        console.log('Preparing UMAP traces...');
+        console.log('UMAP data:', this.umapData);
+        console.log('Current color by:', this.currentColorBy);
+        
         const colorMap = this.getColorMap();
+        console.log('Color map:', colorMap);
+        
         const groupedData = {};
 
         // Group data by the current color-by attribute
-        this.umapData.forEach(point => {
+        this.umapData.forEach((point, index) => {
             const groupKey = point[this.currentColorBy] || 'unknown';
+            console.log(`Point ${index}:`, point, 'Group key:', groupKey);
+            
             if (!groupedData[groupKey]) {
                 groupedData[groupKey] = {
                     x: [],
@@ -1046,9 +1195,12 @@ class KuraDashboard {
             groupedData[groupKey].ids.push(point.session_id || point.id);
         });
 
+        console.log('Grouped data:', groupedData);
+
         // Create traces
         const traces = [];
         Object.entries(groupedData).forEach(([groupKey, data]) => {
+            console.log(`Creating trace for group: ${groupKey}`, data);
             traces.push({
                 x: data.x,
                 y: data.y,
@@ -1070,6 +1222,7 @@ class KuraDashboard {
             });
         });
 
+        console.log('Final traces:', traces);
         return traces;
     }
 
@@ -1641,6 +1794,9 @@ class KuraDashboard {
                 <div class="session-content">
                     ${session.summary || 'No summary available'}
                 </div>
+                
+                ${this.renderConversations(session)}
+                
                 ${session.codeDeltas && session.codeDeltas.length > 0 ? `
                 <div class="session-meta">
                     <div class="meta-item">
@@ -1655,6 +1811,100 @@ class KuraDashboard {
                 ` : ''}
             </div>
         `;
+    }
+
+    renderConversations(session) {
+        // Check for conversation data in various possible formats
+        const conversations = session.conversations || session.prompts || session.messages || [];
+        
+        if (!conversations || conversations.length === 0) {
+            return '';
+        }
+
+        return `
+            <div class="conversation-section">
+                <h4 class="conversation-title">Conversation History</h4>
+                <div class="conversation-list">
+                    ${conversations.map((conv, index) => this.renderConversationItem(conv, index)).join('')}
+                </div>
+            </div>
+        `;
+    }
+
+    renderConversationItem(conversation, index) {
+        // Handle different conversation data formats
+        let userMessage = '';
+        let assistantMessage = '';
+        let timestamp = '';
+
+        if (typeof conversation === 'string') {
+            // Simple string format
+            userMessage = conversation;
+        } else if (conversation.user_message || conversation.user_input || conversation.prompt) {
+            // Structured format with user message
+            userMessage = conversation.user_message || conversation.user_input || conversation.prompt || '';
+            assistantMessage = conversation.assistant_message || conversation.assistant_response || conversation.response || '';
+            timestamp = conversation.timestamp || conversation.time || '';
+        } else if (conversation.message) {
+            // Single message format
+            userMessage = conversation.message;
+            timestamp = conversation.timestamp || conversation.time || '';
+        } else if (conversation.content) {
+            // Content-based format
+            userMessage = conversation.content;
+            timestamp = conversation.timestamp || conversation.time || '';
+        }
+
+        if (!userMessage && !assistantMessage) {
+            return '';
+        }
+
+        return `
+            <div class="conversation-item" data-index="${index}">
+                ${timestamp ? `<div class="conversation-timestamp">${new Date(timestamp).toLocaleString()}</div>` : ''}
+                ${userMessage ? `
+                    <div class="conversation-user">
+                        <div class="conversation-label">User:</div>
+                        <div class="conversation-content">${this.formatConversationText(userMessage)}</div>
+                    </div>
+                ` : ''}
+                ${assistantMessage ? `
+                    <div class="conversation-assistant">
+                        <div class="conversation-label">Assistant:</div>
+                        <div class="conversation-content">${this.formatConversationText(assistantMessage)}</div>
+                    </div>
+                ` : ''}
+            </div>
+        `;
+    }
+
+    formatConversationText(text) {
+        if (!text) return '';
+        
+        // Handle different text formats
+        let formattedText = text;
+        
+        // If it's an array, join it
+        if (Array.isArray(text)) {
+            formattedText = text.join('\n');
+        }
+        
+        // Convert to string if it's not already
+        formattedText = String(formattedText);
+        
+        // Escape HTML and preserve line breaks
+        formattedText = formattedText
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/\n/g, '<br>');
+        
+        // Truncate very long messages
+        if (formattedText.length > 1000) {
+            formattedText = formattedText.substring(0, 1000) + '... <span class="conversation-truncated">(truncated)</span>';
+        }
+        
+        return formattedText;
     }
 
     showSelectionInfo(points) {

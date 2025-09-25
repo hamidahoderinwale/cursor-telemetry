@@ -192,9 +192,9 @@
 }
 
 .project-node.selected {
-    background: #007bff;
-    color: white;
-    border-left-color: #0056b3;
+    background: var(--btn-primary-bg);
+    color: var(--btn-primary-text);
+    border-left-color: var(--btn-primary-hover);
 }
 
 .project-header {
@@ -217,7 +217,7 @@
 
 .project-node.selected .project-count {
     background: rgba(255, 255, 255, 0.2);
-    color: white;
+    color: var(--text-inverse);
 }
 
 .project-stats {
@@ -247,9 +247,9 @@
 }
 
 .cluster-node.selected {
-    background: #007bff;
-    color: white;
-    border-left-color: #0056b3;
+    background: var(--btn-primary-bg);
+    color: var(--btn-primary-text);
+    border-left-color: var(--btn-primary-hover);
 }
 
 .cluster-toggle {
@@ -666,14 +666,15 @@
 }
 
 .btn-primary {
-    background: var(--primary-color);
-    color: var(--text-inverse);
-    border-color: var(--primary-color);
+    background: var(--btn-primary-bg);
+    color: var(--btn-primary-text);
+    border-color: var(--btn-primary-bg);
 }
 
 .btn-primary:hover {
-    background: var(--primary-hover);
-    border-color: var(--primary-hover);
+    background: var(--btn-primary-hover);
+    border-color: var(--btn-primary-hover);
+    color: var(--btn-primary-text);
 }
 
 .btn-secondary {
@@ -784,7 +785,7 @@
 
 .modal-close:hover {
     background: var(--status-danger, #dc3545);
-    color: white;
+    color: var(--text-inverse);
     transform: scale(1.1);
 }
 
@@ -927,7 +928,7 @@
 
 .loading-spinner {
     text-align: center;
-    color: white;
+    color: var(--text-inverse);
 }
 
 .spinner {

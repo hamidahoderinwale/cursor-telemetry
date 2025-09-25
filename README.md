@@ -179,6 +179,14 @@ node src/web-interface/web-server.js
 
 ## Recent Updates and Improvements
 
+### Latest Dashboard Fixes (September 2025)
+
+- **Session View Default**: Fixed dashboard to show Sessions View as the default instead of Notebook Grid
+- **Privacy Dashboard UI Consistency**: Updated privacy analysis dashboard to use consistent UI styling with the rest of the project
+- **Button Contrast Issues**: Resolved light text on dark background contrast problems across all button types
+- **Expandable Content**: Made "... and X more changes" text clickable to expand/collapse content in session details
+- **Improved User Experience**: Enhanced navigation and interaction patterns for better usability
+
 ### CSS Refactoring and Repository Cleanup
 
 - **Consolidated CSS Architecture**: Refactored CSS into component-based structure with consistent design system using CSS variables
