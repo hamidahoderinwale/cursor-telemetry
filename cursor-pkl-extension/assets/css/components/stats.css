@@ -7,7 +7,7 @@
   margin-bottom: var(--space-6);
   padding: var(--space-4);
   background: var(--background-primary);
-  border-radius: var(--radius-md);
+  border-radius: 0;
   box-shadow: var(--shadow-sm);
   border: 1px solid var(--border-color);
 }
@@ -19,6 +19,7 @@
 
 .stat-label {
   display: block;
+  font-family: var(--font-family-base);
   font-size: var(--font-size-xs);
   color: var(--text-secondary);
   text-transform: uppercase;
@@ -29,6 +30,7 @@
 
 .stat-value {
   display: block;
+  font-family: var(--font-family-base);
   font-size: var(--font-size-xl);
   font-weight: var(--font-weight-bold);
   color: var(--text-primary);

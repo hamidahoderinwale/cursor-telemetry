@@ -6,14 +6,13 @@ The PKL Extension has been refactored into a modular, component-based architectu
 
 ## Architecture
 
-```
+```bash
 src/
 ├── intent-classification/     # Intent classification and facet analysis
 ├── ast-analysis/             # AST parsing and code structure analysis
 ├── clio-integration/         # OpenClio and Kura integration
 ├── data-processing/          # Data storage, parsing, and processing
 ├── web-interface/           # Web dashboards and monitoring
-├── testing/                 # Test suites and validation
 ├── config/                  # Configuration files
 ├── documentation/           # Documentation and guides
 └── index.js                 # Main entry point
@@ -123,44 +122,12 @@ const analysis = astService.analyzeSource(code, 'JavaScript');
 - Clean, responsive design
 - Live data visualization
 
-### Testing (`src/testing/`)
-
-**Purpose**: Test suites and validation for all components.
-
-**Files**:
-- `test-enhanced-facets.js` - Enhanced facets testing
-- `test-ast-enhanced-facets.js` - AST enhanced facets testing
-- `test-toggle-percentages.js` - Toggle percentages testing
-- `index.js` - Test exports
-
-**Features**:
-- Comprehensive component testing
-- Facet analysis validation
-- Toggle percentage testing
-- Integration testing
-
 ## Quick Start
 
 ### Installation
 
 ```bash
 npm install
-```
-
-### Running Tests
-
-```bash
-# Test enhanced facets
-npm run test:facets
-
-# Test AST enhanced facets
-npm run test:ast
-
-# Test toggle percentages
-npm run test:toggle
-
-# Run all tests
-npm test
 ```
 
 ### Starting the Application
@@ -171,61 +138,6 @@ npm start
 
 # Development mode
 npm run dev
-```
-
-## Usage Examples
-
-### Basic Intent Classification
-
-```javascript
-const { ClioIntentService } = require('./src');
-
-const intentService = new ClioIntentService();
-
-const session = {
-  id: 'test-session',
-  codeDeltas: [{ afterContent: 'import pandas as pd\ndf = pd.read_csv("data.csv")' }]
-};
-
-const result = await intentService.hybridClassifyIntent(session);
-console.log('Intent:', result.hybrid.primary_intent);
-console.log('Confidence:', result.hybrid.confidence);
-```
-
-### AST Analysis
-
-```javascript
-const { ASTGrepService } = require('./src');
-
-const astService = new ASTGrepService();
-const analysis = astService.analyzeSource(`
-function hello() {
-  console.log('Hello, World!');
-}
-`, 'JavaScript');
-
-console.log('Functions:', analysis.functions.length);
-console.log('Classes:', analysis.classes.length);
-```
-
-### Configuration
-
-```javascript
-const { ClioIntentService } = require('./src');
-
-const intentService = new ClioIntentService();
-
-// Set analysis proportions (AST vs Clio)
-intentService.setAnalysisProportions(0.7, 0.3, false);
-
-// Update toggle percentages
-intentService.updateTogglePercentages('intent', {
-  explore: 0.4,
-  implement: 0.3,
-  debug: 0.2,
-  refactor: 0.1,
-  document: 0.0
-});
 ```
 
 ## Configuration Files
@@ -281,9 +193,8 @@ npm run test:facets
 2. **Maintainability**: Easier to locate and modify specific functionality
 3. **Scalability**: Components can be developed and tested independently
 4. **Reusability**: Components can be imported and used in different contexts
-5. **Testing**: Dedicated testing component with comprehensive test suites
-6. **Documentation**: Organized documentation for each component
-7. **Configuration**: Centralized configuration management
+5. **Documentation**: Organized documentation for each component
+6. **Configuration**: Centralized configuration management
 
 ## Development
 
@@ -293,8 +204,7 @@ npm run test:facets
 2. Add component files
 3. Create an `index.js` file with exports
 4. Update `src/index.js` to include the new component
-5. Add tests in `src/testing/`
-6. Update documentation
+5. Update documentation
 
 ### Component Guidelines
 

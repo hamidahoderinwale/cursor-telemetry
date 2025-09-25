@@ -13,8 +13,163 @@ class KuraDashboard {
         this.clusterTree = null;
         this.umapPlot = null;
         
+        // Load configuration from localStorage or use defaults
+        this.config = this.loadConfiguration();
+        
         this.initializeEventListeners();
+        this.initializeConfigurationUI();
         this.loadData();
+    }
+
+    // Configuration management
+    loadConfiguration() {
+        const defaultConfig = {
+            // Clustering parameters
+            clusterCount: 5,
+            clusteringMethod: 'intent-based',
+            
+            // UMAP parameters
+            umapNeighbors: 15,
+            umapMinDist: 0.1,
+            
+            // Analysis thresholds
+            thresholds: {
+                shortDuration: 1800, // 30 minutes in seconds
+                longDuration: 7200,  // 2 hours in seconds
+                highConfidence: 0.8,
+                minSessionsForPattern: 2,
+                minSessionsForInsight: 5
+            },
+            
+            // Feature extraction weights
+            featureWeights: {
+                durationNormalization: 3600, // Convert to hours
+                codeDeltasNormalization: 10,
+                fileChangesNormalization: 5
+            },
+            
+            // Visualization settings
+            visualization: {
+                markerSize: {
+                    default: 10,
+                    selected: 15
+                },
+                markerLineWidth: {
+                    default: 1,
+                    selected: 3
+                },
+                maxDisplayItems: 5,
+                plotMargins: { t: 50, r: 150, b: 50, l: 50 },
+                maxFileExtensionLength: 5
+            },
+            
+            // DBSCAN parameters
+            dbscan: {
+                eps: 0.5,
+                minPts: 2
+            },
+            
+            // t-SNE projection parameters
+            tsne: {
+                maxIterations: 100,
+                learningRate: 0.1,
+                perplexity: 15,
+                initialScale: 4
+            }
+        };
+
+        try {
+            const savedConfig = localStorage.getItem('kura-dashboard-config');
+            if (savedConfig) {
+                const parsed = JSON.parse(savedConfig);
+                return { ...defaultConfig, ...parsed };
+            }
+        } catch (error) {
+            console.warn('Failed to load saved configuration, using defaults:', error);
+        }
+        
+        return defaultConfig;
+    }
+
+    saveConfiguration() {
+        try {
+            localStorage.setItem('kura-dashboard-config', JSON.stringify(this.config));
+        } catch (error) {
+            console.warn('Failed to save configuration:', error);
+        }
+    }
+
+    updateConfiguration(key, value) {
+        try {
+            // Validate the value before updating
+            if (!this.validateConfigurationValue(key, value)) {
+                console.warn(`Invalid configuration value for ${key}:`, value);
+                return false;
+            }
+
+            if (key.includes('.')) {
+                const keys = key.split('.');
+                let current = this.config;
+                for (let i = 0; i < keys.length - 1; i++) {
+                    if (!current[keys[i]]) {
+                        current[keys[i]] = {};
+                    }
+                    current = current[keys[i]];
+                }
+                current[keys[keys.length - 1]] = value;
+            } else {
+                this.config[key] = value;
+            }
+            this.saveConfiguration();
+            return true;
+        } catch (error) {
+            console.error('Error updating configuration:', error);
+            return false;
+        }
+    }
+
+    validateConfigurationValue(key, value) {
+        const validations = {
+            clusterCount: (v) => Number.isInteger(v) && v >= 2 && v <= 20,
+            umapNeighbors: (v) => Number.isInteger(v) && v >= 5 && v <= 50,
+            umapMinDist: (v) => typeof v === 'number' && v >= 0.01 && v <= 1.0,
+            clusteringMethod: (v) => ['intent-based', 'kmeans', 'hierarchical', 'dbscan'].includes(v),
+            'thresholds.shortDuration': (v) => Number.isInteger(v) && v > 0,
+            'thresholds.longDuration': (v) => Number.isInteger(v) && v > 0,
+            'thresholds.highConfidence': (v) => typeof v === 'number' && v >= 0 && v <= 1,
+            'thresholds.minSessionsForPattern': (v) => Number.isInteger(v) && v >= 1,
+            'thresholds.minSessionsForInsight': (v) => Number.isInteger(v) && v >= 1
+        };
+
+        const validator = validations[key];
+        return validator ? validator(value) : true;
+    }
+
+    initializeConfigurationUI() {
+        // Set initial values for configuration controls
+        const clusterCountSlider = document.getElementById('cluster-count');
+        const umapNeighborsSlider = document.getElementById('umap-n-neighbors');
+        const umapMinDistSlider = document.getElementById('umap-min-dist');
+        const clusteringMethodSelect = document.getElementById('clustering-method');
+
+        if (clusterCountSlider) {
+            clusterCountSlider.value = this.config.clusterCount;
+            document.getElementById('cluster-count-value').textContent = this.config.clusterCount;
+        }
+
+        if (umapNeighborsSlider) {
+            umapNeighborsSlider.value = this.config.umapNeighbors;
+            document.getElementById('umap-n-neighbors-value').textContent = this.config.umapNeighbors;
+        }
+
+        if (umapMinDistSlider) {
+            umapMinDistSlider.value = this.config.umapMinDist;
+            document.getElementById('umap-min-dist-value').textContent = this.config.umapMinDist;
+        }
+
+        if (clusteringMethodSelect) {
+            clusteringMethodSelect.value = this.config.clusteringMethod;
+        }
     }
 
     initializeEventListeners() {
@@ -43,11 +198,36 @@ class KuraDashboard {
             this.updatePatternInsights(e.target.value);
         });
 
+        // Configuration controls
+        document.getElementById('cluster-count').addEventListener('input', (e) => {
+            this.updateConfiguration('clusterCount', parseInt(e.target.value));
+            document.getElementById('cluster-count-value').textContent = e.target.value;
+        });
+        
+        document.getElementById('umap-n-neighbors').addEventListener('input', (e) => {
+            this.updateConfiguration('umapNeighbors', parseInt(e.target.value));
+            document.getElementById('umap-n-neighbors-value').textContent = e.target.value;
+        });
+        
+        document.getElementById('umap-min-dist').addEventListener('input', (e) => {
+            this.updateConfiguration('umapMinDist', parseFloat(e.target.value));
+            document.getElementById('umap-min-dist-value').textContent = e.target.value;
+        });
+        
+        document.getElementById('clustering-method').addEventListener('change', (e) => {
+            this.updateConfiguration('clusteringMethod', e.target.value);
+        });
+        
+        document.getElementById('recompute-clusters-btn').addEventListener('click', () => this.recomputeClusters());
+
         // Quick actions
-        document.getElementById('generate-notebook-btn').addEventListener('click', () => this.showNotebookModal());
+        document.getElementById('generate-notebook-btn').addEventListener('click', () => this.generateAnalysisNotebook());
         document.getElementById('export-cluster-btn').addEventListener('click', () => this.exportSelectedCluster());
         document.getElementById('create-procedure-btn').addEventListener('click', () => this.showProcedureModal());
         document.getElementById('share-insights-btn').addEventListener('click', () => this.shareInsights());
+        document.getElementById('analyze-patterns-btn').addEventListener('click', () => this.analyzePatterns());
+        document.getElementById('export-umap-btn').addEventListener('click', () => this.exportUMAPData());
+        document.getElementById('info-btn').addEventListener('click', () => this.showInfoModal());
 
         // Session details
         document.getElementById('close-details-btn').addEventListener('click', () => this.closeSessionDetails());
@@ -60,6 +240,14 @@ class KuraDashboard {
         this.showLoading(true);
         
         try {
+            // First try to load real sessions data
+            const sessionsResponse = await fetch('/api/sessions');
+            let sessionsData = { sessions: [] };
+            
+            if (sessionsResponse.ok) {
+                sessionsData = await sessionsResponse.json();
+            }
+            
             // Load PKL sessions and run Kura analysis
             const response = await fetch('/api/sessions/analyze-with-kura', {
                 method: 'POST',
@@ -67,7 +255,7 @@ class KuraDashboard {
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                    test_mode: true, // Use test mode for now
+                    test_mode: false, // Use real data
                     include_dashboard_data: true
                 })
             });
@@ -79,14 +267,25 @@ class KuraDashboard {
             const data = await response.json();
             
             if (data.success) {
-                this.sessions = data.sessions || [];
+                this.sessions = this.validateAndSanitizeSessions(data.sessions || []);
                 this.clusters = data.clusters || [];
                 this.umapData = data.umap_coordinates || [];
+                
+                // If we have real sessions but no clusters, create basic clusters
+                if (this.sessions.length > 0 && this.clusters.length === 0) {
+                    this.clusters = this.createBasicClusters();
+                }
+                
+                // If we have sessions but no UMAP data, create basic coordinates
+                if (this.sessions.length > 0 && this.umapData.length === 0) {
+                    this.umapData = this.createBasicUMAPData();
+                }
                 
                 this.renderClusterTree();
                 this.renderUMAPPlot();
                 this.updateStatistics();
                 this.updatePatternInsights('success_patterns');
+                this.updateStatusBar();
             } else {
                 throw new Error(data.error || 'Unknown error');
             }
@@ -94,13 +293,63 @@ class KuraDashboard {
             console.error('Error loading data:', error);
             this.showError('Failed to load Kura analysis data: ' + error.message);
             
-            // No mock data - use real session data
-            console.log('No Kura data available, using empty state');
+            // Fallback to basic session data if available
+            try {
+                const fallbackResponse = await fetch('/api/sessions');
+                if (fallbackResponse.ok) {
+                    const fallbackData = await fallbackResponse.json();
+                    if (fallbackData.success && fallbackData.sessions.length > 0) {
+                        this.sessions = fallbackData.sessions;
+                        this.clusters = this.createBasicClusters();
+                        this.umapData = this.createBasicUMAPData();
+                        
+                        this.renderClusterTree();
+                        this.renderUMAPPlot();
+                        this.updateStatistics();
+                        this.updatePatternInsights('success_patterns');
+                        this.updateStatusBar();
+                        
+                        console.log('Using fallback session data');
+                        return;
+                    }
+                }
+            } catch (fallbackError) {
+                console.error('Fallback data loading failed:', fallbackError);
+            }
+            
+            console.log('No data available, showing empty state');
         } finally {
             this.showLoading(false);
         }
     }
 
+    validateAndSanitizeSessions(sessions) {
+        if (!Array.isArray(sessions)) {
+            console.warn('Sessions data is not an array, returning empty array');
+            return [];
+        }
+
+        return sessions.filter(session => {
+            // Basic validation
+            if (!session || typeof session !== 'object') {
+                return false;
+            }
+
+            // Ensure required fields exist with defaults
+            session.id = session.id || `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            session.intent = session.intent || 'unknown';
+            session.outcome = session.outcome || 'in-progress';
+            session.timestamp = session.timestamp || new Date().toISOString();
+            session.duration = typeof session.duration === 'number' ? session.duration : 0;
+            session.confidence = typeof session.confidence === 'number' ? Math.max(0, Math.min(1, session.confidence)) : 0.5;
+            session.currentFile = session.currentFile || 'unknown';
+            session.summary = session.summary || `${session.intent} session on ${session.currentFile}`;
+            session.codeDeltas = Array.isArray(session.codeDeltas) ? session.codeDeltas : [];
+            session.fileChanges = Array.isArray(session.fileChanges) ? session.fileChanges : [];
+
+            return true;
+        });
+    }
 
     renderClusterTree() {
         const container = document.getElementById('cluster-tree');
@@ -129,55 +378,401 @@ class KuraDashboard {
         });
     }
 
+    createBasicClusters() {
+        return this.createClusters(this.config.clusteringMethod);
+    }
+
+    createClusters(method = 'intent-based') {
+        switch (method) {
+            case 'kmeans':
+                return this.createKMeansClusters();
+            case 'hierarchical':
+                return this.createHierarchicalClusters();
+            case 'dbscan':
+                return this.createDBSCANClusters();
+            case 'intent-based':
+            default:
+                return this.createIntentBasedClusters();
+        }
+    }
+
+    createIntentBasedClusters() {
+        // Group sessions by intent to create basic clusters
+        const intentGroups = {};
+        this.sessions.forEach(session => {
+            const intent = session.intent || 'unknown';
+            if (!intentGroups[intent]) {
+                intentGroups[intent] = [];
+            }
+            intentGroups[intent].push(session.id);
+        });
+
+        return Object.entries(intentGroups).map(([intent, sessionIds], index) => {
+            const sessionsInCluster = this.sessions.filter(s => sessionIds.includes(s.id));
+            const successCount = sessionsInCluster.filter(s => s.outcome === 'success' || s.outcome === 'completed').length;
+            
+            return {
+                id: `cluster_${intent}_${index}`,
+                name: `${intent.charAt(0).toUpperCase() + intent.slice(1)} Tasks`,
+                sessions: sessionIds,
+                size: sessionIds.length,
+                success_rate: sessionIds.length > 0 ? successCount / sessionIds.length : 0,
+                avg_duration: this.calculateAverageDuration(sessionsInCluster),
+                intent: intent
+            };
+        });
+    }
+
+    createKMeansClusters() {
+        // Simple K-means clustering based on session features
+        const features = this.sessions.map(session => this.extractSessionFeatures(session));
+        const k = Math.min(this.config.clusterCount, this.sessions.length);
+        
+        if (k <= 1) {
+            return [{
+                id: 'cluster_all',
+                name: 'All Sessions',
+                size: this.sessions.length,
+                sessions: this.sessions.map(s => s.id),
+                success_rate: this.sessions.filter(s => s.outcome === 'success').length / this.sessions.length,
+                avg_duration: this.calculateAverageDuration(this.sessions)
+            }];
+        }
+
+        // Simple K-means implementation
+        const centroids = this.initializeCentroids(features, k);
+        const clusters = this.performKMeans(features, centroids, k);
+        
+        return clusters.map((clusterSessions, index) => ({
+            id: `cluster_kmeans_${index}`,
+            name: `Cluster ${index + 1}`,
+            size: clusterSessions.length,
+            sessions: clusterSessions.map(i => this.sessions[i].id),
+            success_rate: clusterSessions.length > 0 ? 
+                clusterSessions.filter(i => this.sessions[i].outcome === 'success').length / clusterSessions.length : 0,
+            avg_duration: clusterSessions.length > 0 ? 
+                this.calculateAverageDuration(clusterSessions.map(i => this.sessions[i])) : 0
+        }));
+    }
+
+    createHierarchicalClusters() {
+        // Hierarchical clustering based on session similarity
+        const features = this.sessions.map(session => this.extractSessionFeatures(session));
+        const k = Math.min(this.config.clusterCount, this.sessions.length);
+        
+        if (k <= 1) {
+            return [{
+                id: 'cluster_all',
+                name: 'All Sessions',
+                size: this.sessions.length,
+                sessions: this.sessions.map(s => s.id),
+                success_rate: this.sessions.filter(s => s.outcome === 'success').length / this.sessions.length,
+                avg_duration: this.calculateAverageDuration(this.sessions)
+            }];
+        }
+
+        // Simple hierarchical clustering
+        const clusters = this.performHierarchicalClustering(features, k);
+        
+        return clusters.map((clusterSessions, index) => ({
+            id: `cluster_hierarchical_${index}`,
+            name: `Cluster ${index + 1}`,
+            size: clusterSessions.length,
+            sessions: clusterSessions.map(i => this.sessions[i].id),
+            success_rate: clusterSessions.length > 0 ? 
+                clusterSessions.filter(i => this.sessions[i].outcome === 'success').length / clusterSessions.length : 0,
+            avg_duration: clusterSessions.length > 0 ? 
+                this.calculateAverageDuration(clusterSessions.map(i => this.sessions[i])) : 0
+        }));
+    }
+
+    createDBSCANClusters() {
+        // DBSCAN clustering for density-based grouping
+        const features = this.sessions.map(session => this.extractSessionFeatures(session));
+        const clusters = this.performDBSCAN(features);
+        
+        return clusters.map((clusterSessions, index) => ({
+            id: `cluster_dbscan_${index}`,
+            name: `Cluster ${index + 1}`,
+            size: clusterSessions.length,
+            sessions: clusterSessions.map(i => this.sessions[i].id),
+            success_rate: clusterSessions.length > 0 ? 
+                clusterSessions.filter(i => this.sessions[i].outcome === 'success').length / clusterSessions.length : 0,
+            avg_duration: clusterSessions.length > 0 ? 
+                this.calculateAverageDuration(clusterSessions.map(i => this.sessions[i])) : 0
+        }));
+    }
+
+    createBasicUMAPData() {
+        // Create basic UMAP coordinates based on session characteristics
+        return this.sessions.map((session, index) => {
+            const intentHash = session.intent ? session.intent.split('').reduce((a, b) => a + b.charCodeAt(0), 0) : 0;
+            const outcomeHash = session.outcome ? session.outcome.split('').reduce((a, b) => a + b.charCodeAt(0), 0) : 0;
+            const sessionHash = (intentHash + outcomeHash + index) % 1000;
+            
+            return {
+                session_id: session.id,
+                x: Math.cos(sessionHash * 2 * Math.PI / 1000) * (0.3 + (sessionHash % 100) / 200),
+                y: Math.sin(sessionHash * 2 * Math.PI / 1000) * (0.3 + (sessionHash % 100) / 200),
+                intent: session.intent || 'unknown',
+                outcome: session.outcome || 'in_progress',
+                confidence: session.confidence || 0.5
+            };
+        });
+    }
+
+    calculateAverageDuration(sessions) {
+        if (sessions.length === 0) return 0;
+        const totalDuration = sessions.reduce((sum, session) => {
+            return sum + (session.duration || 0);
+        }, 0);
+        return totalDuration / sessions.length;
+    }
+
+    // Feature extraction for clustering
+    extractSessionFeatures(session) {
+        const intentMap = { 'explore': 0, 'implement': 1, 'debug': 2, 'refactor': 3, 'unknown': 4 };
+        const outcomeMap = { 'success': 0, 'in-progress': 1, 'stuck': 2, 'failed': 3 };
+        
+        return [
+            intentMap[session.intent] || 4,
+            outcomeMap[session.outcome] || 1,
+            (session.duration || 0) / this.config.featureWeights.durationNormalization,
+            (session.confidence || 0.5),
+            (session.codeDeltas?.length || 0) / this.config.featureWeights.codeDeltasNormalization,
+            (session.fileChanges?.length || 0) / this.config.featureWeights.fileChangesNormalization
+        ];
+    }
+
+    // K-means clustering implementation
+    initializeCentroids(features, k) {
+        const centroids = [];
+        const featureCount = features[0].length;
+        
+        for (let i = 0; i < k; i++) {
+            const centroid = [];
+            for (let j = 0; j < featureCount; j++) {
+                centroid.push(Math.random());
+            }
+            centroids.push(centroid);
+        }
+        
+        return centroids;
+    }
+
+    calculateDistance(point1, point2) {
+        let sum = 0;
+        for (let i = 0; i < point1.length; i++) {
+            sum += Math.pow(point1[i] - point2[i], 2);
+        }
+        return Math.sqrt(sum);
+    }
+
+    performKMeans(features, centroids, k, maxIterations = 100) {
+        let clusters = Array(k).fill().map(() => []);
+        let iterations = 0;
+        
+        while (iterations < maxIterations) {
+            // Assign points to clusters
+            const newClusters = Array(k).fill().map(() => []);
+            
+            features.forEach((point, index) => {
+                let minDistance = Infinity;
+                let closestCentroid = 0;
+                
+                centroids.forEach((centroid, centroidIndex) => {
+                    const distance = this.calculateDistance(point, centroid);
+                    if (distance < minDistance) {
+                        minDistance = distance;
+                        closestCentroid = centroidIndex;
+                    }
+                });
+                
+                newClusters[closestCentroid].push(index);
+            });
+            
+            // Check for convergence
+            let converged = true;
+            for (let i = 0; i < k; i++) {
+                if (newClusters[i].length !== clusters[i].length) {
+                    converged = false;
+                    break;
+                }
+            }
+            
+            clusters = newClusters;
+            
+            if (converged) break;
+            
+            // Update centroids
+            centroids = clusters.map(cluster => {
+                if (cluster.length === 0) return centroids[clusters.indexOf(cluster)];
+                
+                const centroid = Array(features[0].length).fill(0);
+                cluster.forEach(pointIndex => {
+                    features[pointIndex].forEach((value, featureIndex) => {
+                        centroid[featureIndex] += value;
+                    });
+                });
+                
+                return centroid.map(value => value / cluster.length);
+            });
+            
+            iterations++;
+        }
+        
+        return clusters;
+    }
+
+    // Hierarchical clustering implementation
+    performHierarchicalClustering(features, k) {
+        // Simple hierarchical clustering using single linkage
+        const n = features.length;
+        const clusters = features.map((_, index) => [index]);
+        
+        while (clusters.length > k) {
+            let minDistance = Infinity;
+            let mergeIndex1 = 0;
+            let mergeIndex2 = 1;
+            
+            // Find closest clusters
+            for (let i = 0; i < clusters.length; i++) {
+                for (let j = i + 1; j < clusters.length; j++) {
+                    const distance = this.calculateClusterDistance(clusters[i], clusters[j], features);
+                    if (distance < minDistance) {
+                        minDistance = distance;
+                        mergeIndex1 = i;
+                        mergeIndex2 = j;
+                    }
+                }
+            }
+            
+            // Merge clusters
+            clusters[mergeIndex1] = clusters[mergeIndex1].concat(clusters[mergeIndex2]);
+            clusters.splice(mergeIndex2, 1);
+        }
+        
+        return clusters;
+    }
+
+    calculateClusterDistance(cluster1, cluster2, features) {
+        let minDistance = Infinity;
+        
+        cluster1.forEach(point1 => {
+            cluster2.forEach(point2 => {
+                const distance = this.calculateDistance(features[point1], features[point2]);
+                if (distance < minDistance) {
+                    minDistance = distance;
+                }
+            });
+        });
+        
+        return minDistance;
+    }
+
+    // DBSCAN clustering implementation
+    performDBSCAN(features, eps = null, minPts = null) {
+        eps = eps || this.config.dbscan.eps;
+        minPts = minPts || this.config.dbscan.minPts;
+        const n = features.length;
+        const visited = Array(n).fill(false);
+        const clusters = [];
+        let clusterId = 0;
+        
+        for (let i = 0; i < n; i++) {
+            if (visited[i]) continue;
+            
+            visited[i] = true;
+            const neighbors = this.getNeighbors(i, features, eps);
+            
+            if (neighbors.length < minPts) {
+                // Noise point
+                continue;
+            }
+            
+            // Start new cluster
+            const cluster = [i];
+            let j = 0;
+            
+            while (j < neighbors.length) {
+                const neighbor = neighbors[j];
+                
+                if (!visited[neighbor]) {
+                    visited[neighbor] = true;
+                    const neighborNeighbors = this.getNeighbors(neighbor, features, eps);
+                    
+                    if (neighborNeighbors.length >= minPts) {
+                        neighbors.push(...neighborNeighbors);
+                    }
+                }
+                
+                if (!cluster.includes(neighbor)) {
+                    cluster.push(neighbor);
+                }
+                
+                j++;
+            }
+            
+            clusters.push(cluster);
+            clusterId++;
+        }
+        
+        return clusters;
+    }
+
+    getNeighbors(pointIndex, features, eps) {
+        const neighbors = [];
+        
+        features.forEach((feature, index) => {
+            if (index !== pointIndex) {
+                const distance = this.calculateDistance(features[pointIndex], feature);
+                if (distance <= eps) {
+                    neighbors.push(index);
+                }
+            }
+        });
+        
+        return neighbors;
+    }
+
     buildHierarchy() {
-        // Build hierarchical cluster structure
-        // This is a simplified version - in real implementation, this would come from Kura
+        // Build hierarchical cluster structure from real data
+        const intentGroups = {};
+        this.sessions.forEach(session => {
+            const intent = session.intent || 'unknown';
+            if (!intentGroups[intent]) {
+                intentGroups[intent] = [];
+            }
+            intentGroups[intent].push(session);
+        });
+
+        const children = Object.entries(intentGroups).map(([intent, sessions]) => {
+            const successCount = sessions.filter(s => s.outcome === 'success' || s.outcome === 'completed').length;
+            const avgDuration = this.calculateAverageDuration(sessions);
+            
+            return {
+                id: `cluster_${intent}`,
+                name: `${intent.charAt(0).toUpperCase() + intent.slice(1)} Tasks`,
+                size: sessions.length,
+                success_rate: sessions.length > 0 ? successCount / sessions.length : 0,
+                avg_duration: avgDuration,
+                sessions: sessions.map(s => s.id)
+            };
+        });
+
         return {
             id: 'root',
             name: 'All Sessions',
             size: this.sessions.length,
-            children: [
-                {
-                    id: 'data_science',
-                    name: 'Data Science Workflows',
-                    size: 2,
-                    children: [
-                        {
-                            id: 'cluster_explore',
-                            name: 'Data Exploration',
-                            size: 1,
-                            sessions: ['session_001']
-                        },
-                        {
-                            id: 'cluster_implement',
-                            name: 'Implementation',
-                            size: 1,
-                            sessions: ['session_003']
-                        }
-                    ]
-                },
-                {
-                    id: 'problem_solving',
-                    name: 'Problem Solving',
-                    size: 1,
-                    children: [
-                        {
-                            id: 'cluster_debug',
-                            name: 'Debugging',
-                            size: 1,
-                            sessions: ['session_002']
-                        }
-                    ]
-                }
-            ]
+            children: children
         };
     }
 
     renderClusterNode(node, depth) {
         const indent = '  '.repeat(depth);
         const hasChildren = node.children && node.children.length > 0;
-        const icon = hasChildren ? '📁' : '📄';
-        const toggle = hasChildren ? '▼' : '';
+        const icon = hasChildren ? '[DIR]' : '[FILE]';
+        const toggle = hasChildren ? '[-]' : '';
         
         let html = `
             <div class="cluster-node" data-cluster-id="${node.id}" data-depth="${depth}">
@@ -228,7 +823,7 @@ class KuraDashboard {
                 xanchor: 'left',
                 yanchor: 'top'
             },
-            margin: { t: 50, r: 150, b: 50, l: 50 },
+            margin: this.config.visualization.plotMargins,
             dragmode: 'select'
         };
 
@@ -273,7 +868,7 @@ class KuraDashboard {
             groupedData[groupKey].x.push(point.x);
             groupedData[groupKey].y.push(point.y);
             groupedData[groupKey].text.push(this.formatHoverText(point));
-            groupedData[groupKey].ids.push(point.id);
+            groupedData[groupKey].ids.push(point.session_id || point.id);
         });
 
         // Create traces
@@ -290,10 +885,10 @@ class KuraDashboard {
                 hovertemplate: '%{text}<extra></extra>',
                 marker: {
                     color: data.color,
-                    size: 10,
+                    size: this.config.visualization.markerSize.default,
                     opacity: 0.7,
                     line: {
-                        width: 1,
+                        width: this.config.visualization.markerLineWidth.default,
                         color: 'white'
                     }
                 }
@@ -333,15 +928,16 @@ class KuraDashboard {
     }
 
     formatHoverText(point) {
-        const session = this.sessions.find(s => s.id === point.id);
-        if (!session) return point.id;
+        const sessionId = point.session_id || point.id;
+        const session = this.sessions.find(s => s.id === sessionId);
+        if (!session) return sessionId;
 
         return `
             <b>${session.id}</b><br>
-            Intent: ${session.intent}<br>
-            Outcome: ${session.outcome}<br>
-            File: ${session.currentFile}<br>
-            Confidence: ${(session.confidence * 100).toFixed(1)}%<br>
+            Intent: ${session.intent || 'unknown'}<br>
+            Outcome: ${session.outcome || 'in_progress'}<br>
+            File: ${session.currentFile || 'unknown'}<br>
+            Confidence: ${((session.confidence || 0.5) * 100).toFixed(1)}%<br>
             ${session.summary || ''}
         `.trim();
     }
@@ -377,18 +973,105 @@ class KuraDashboard {
         `;
     }
 
+    updateStatusBar() {
+        // Update status bar elements if they exist
+        const sessionCountEl = document.getElementById('session-count');
+        const clusterCountEl = document.getElementById('cluster-count');
+        const selectedCountEl = document.getElementById('selected-count');
+        const lastUpdatedEl = document.getElementById('last-updated');
+        const analysisModeEl = document.getElementById('analysis-mode');
+
+        if (sessionCountEl) {
+            sessionCountEl.textContent = `${this.sessions.length} sessions loaded`;
+        }
+        if (clusterCountEl) {
+            clusterCountEl.textContent = `${this.clusters.length} clusters`;
+        }
+        if (selectedCountEl) {
+            selectedCountEl.textContent = `${this.selectedSessions.size} selected`;
+        }
+        if (lastUpdatedEl) {
+            lastUpdatedEl.textContent = `Updated ${new Date().toLocaleTimeString()}`;
+        }
+        if (analysisModeEl) {
+            analysisModeEl.textContent = 'Live Mode';
+        }
+    }
+
     calculateStatistics() {
-        const successful = this.sessions.filter(s => s.outcome === 'success').length;
+        if (!this.sessions || this.sessions.length === 0) {
+            return {
+                successRate: 0,
+                avgDuration: 0,
+                mostCommonIntent: 'none',
+                fileTypes: 0
+            };
+        }
+
+        // Calculate success rate - consider multiple success indicators
+        const successful = this.sessions.filter(s => 
+            s.outcome === 'success' || 
+            s.outcome === 'completed' || 
+            s.outcome === 'SUCCESS' ||
+            s.outcome === 'COMPLETED' ||
+            (s.phase && s.phase === 'COMPLETED')
+        ).length;
         const successRate = this.sessions.length > 0 ? successful / this.sessions.length : 0;
+        
+        // Calculate average duration with better logic
+        const sessionsWithDuration = this.sessions.filter(s => {
+            // Check if session has duration field
+            if (s.duration && typeof s.duration === 'number' && s.duration > 0) {
+                return true;
+            }
+            // Check if session has start and end times
+            if (s.endTime && s.timestamp) {
+                const start = new Date(s.timestamp);
+                const end = new Date(s.endTime);
+                return !isNaN(start.getTime()) && !isNaN(end.getTime()) && end > start;
+            }
+            return false;
+        });
+
+        let totalDuration = 0;
+        sessionsWithDuration.forEach(s => {
+            if (s.duration && typeof s.duration === 'number') {
+                // Duration is already in seconds
+                totalDuration += s.duration;
+            } else if (s.endTime && s.timestamp) {
+                const start = new Date(s.timestamp);
+                const end = new Date(s.endTime);
+                totalDuration += (end.getTime() - start.getTime()) / 1000; // Convert to seconds
+            }
+        });
+        
+        const avgDuration = sessionsWithDuration.length > 0 ? 
+            Math.round(totalDuration / sessionsWithDuration.length / 60) : 0; // Convert to minutes
         
         const intentCounts = {};
         const fileTypes = new Set();
         
         this.sessions.forEach(session => {
-            intentCounts[session.intent] = (intentCounts[session.intent] || 0) + 1;
+            const intent = session.intent || 'unknown';
+            intentCounts[intent] = (intentCounts[intent] || 0) + 1;
+            
             if (session.currentFile) {
-                const ext = session.currentFile.split('.').pop();
-                fileTypes.add('.' + ext);
+                const ext = session.currentFile.split('.').pop()?.toLowerCase();
+                if (ext && ext.length <= this.config.visualization.maxFileExtensionLength) {
+                    fileTypes.add(ext);
+                }
+            }
+            
+            // Also check codeDeltas for file types
+            if (session.codeDeltas) {
+                session.codeDeltas.forEach(delta => {
+                    if (delta.filePath) {
+                        const ext = delta.filePath.split('.').pop()?.toLowerCase();
+                        if (ext && ext.length <= this.config.visualization.maxFileExtensionLength) {
+                            fileTypes.add(ext);
+                        }
+                    }
+                });
             }
         });
 
@@ -397,7 +1080,7 @@ class KuraDashboard {
 
         return {
             successRate,
-            avgDuration: 0, // Will be calculated from real data
+            avgDuration,
             mostCommonIntent,
             fileTypes: fileTypes.size
         };
@@ -425,67 +1108,263 @@ class KuraDashboard {
     }
 
     generateInsights(type) {
+        if (this.sessions.length === 0) {
+            return [{
+                title: 'No Data Available',
+                description: 'No sessions found. Start using Cursor IDE to see insights.',
+                metrics: [
+                    { value: '0', label: 'Sessions' },
+                    { value: '0%', label: 'Success Rate' },
+                    { value: '0min', label: 'Avg Duration' }
+                ]
+            }];
+        }
+
         switch (type) {
             case 'success_patterns':
-                return [
-                    {
-                        title: 'High Success Rate Pattern',
-                        description: 'Data exploration sessions have the highest success rate',
-                        metrics: [
-                            { value: '92%', label: 'Success Rate' },
-                            { value: '1', label: 'Sessions' },
-                            { value: '12min', label: 'Avg Duration' }
-                        ]
-                    },
-                    {
-                        title: 'Implementation Efficiency',
-                        description: 'Implementation tasks complete quickly when well-planned',
-                        metrics: [
-                            { value: '88%', label: 'Success Rate' },
-                            { value: '1', label: 'Sessions' },
-                            { value: '15min', label: 'Avg Duration' }
-                        ]
-                    }
-                ];
+                return this.generateSuccessPatterns();
             case 'failure_patterns':
-                return [
-                    {
-                        title: 'Debugging Challenges',
-                        description: 'Machine learning debugging sessions often get stuck',
-                        metrics: [
-                            { value: '35%', label: 'Stuck Rate' },
-                            { value: '1', label: 'Sessions' },
-                            { value: '25min', label: 'Avg Duration' }
-                        ]
-                    }
-                ];
+                return this.generateFailurePatterns();
             case 'temporal_patterns':
-                return [
-                    {
-                        title: 'Morning Productivity',
-                        description: 'Sessions started in the morning have higher success rates',
-                        metrics: [
-                            { value: '90%', label: 'Morning Success' },
-                            { value: '2', label: 'Sessions' },
-                            { value: '14min', label: 'Avg Duration' }
-                        ]
-                    }
-                ];
+                return this.generateTemporalPatterns();
             case 'file_patterns':
-                return [
-                    {
-                        title: 'Jupyter Notebook Success',
-                        description: 'Jupyter notebooks are associated with successful exploration',
-                        metrics: [
-                            { value: '92%', label: 'Success Rate' },
-                            { value: '1', label: 'Sessions' },
-                            { value: '.ipynb', label: 'File Type' }
-                        ]
-                    }
-                ];
+                return this.generateFilePatterns();
             default:
-                return [];
+                return this.generateSuccessPatterns();
         }
+    }
+
+    generateSuccessPatterns() {
+        const insights = [];
+        
+        // Calculate overall statistics
+        const totalSessions = this.sessions.length;
+        const successfulSessions = this.sessions.filter(s => 
+            s.outcome === 'success' || 
+            s.outcome === 'completed' || 
+            s.outcome === 'SUCCESS' ||
+            s.outcome === 'COMPLETED' ||
+            (s.phase && s.phase === 'COMPLETED')
+        );
+        
+        const overallSuccessRate = totalSessions > 0 ? (successfulSessions.length / totalSessions) : 0;
+        
+        // Find the most successful intent
+        const intentStats = {};
+        this.sessions.forEach(session => {
+            const intent = session.intent || 'unknown';
+            if (!intentStats[intent]) {
+                intentStats[intent] = { total: 0, successful: 0, durations: [] };
+            }
+            intentStats[intent].total++;
+            if (session.outcome === 'success' || 
+                session.outcome === 'completed' || 
+                session.outcome === 'SUCCESS' ||
+                session.outcome === 'COMPLETED' ||
+                (session.phase && session.phase === 'COMPLETED')) {
+                intentStats[intent].successful++;
+            }
+            if (session.duration) {
+                intentStats[intent].durations.push(session.duration);
+            }
+        });
+
+        // Always provide overall insights first
+        insights.push({
+            title: 'Overall Performance',
+            description: `Analysis of ${totalSessions} sessions across all intents`,
+            metrics: [
+                { value: `${(overallSuccessRate * 100).toFixed(1)}%`, label: 'Success Rate' },
+                { value: totalSessions.toString(), label: 'Total Sessions' },
+                { value: successfulSessions.length.toString(), label: 'Successful' }
+            ]
+        });
+
+        // Find the intent with highest success rate
+        let bestIntent = null;
+        let bestSuccessRate = 0;
+        
+        Object.entries(intentStats).forEach(([intent, stats]) => {
+            const successRate = stats.total > 0 ? stats.successful / stats.total : 0;
+            if (successRate > bestSuccessRate && stats.total >= this.config.thresholds.minSessionsForPattern) {
+                bestSuccessRate = successRate;
+                bestIntent = intent;
+            }
+        });
+
+        if (bestIntent && intentStats[bestIntent]) {
+            const stats = intentStats[bestIntent];
+            const avgDuration = stats.durations.length > 0 ? 
+                Math.round(stats.durations.reduce((a, b) => a + b, 0) / stats.durations.length / 60) : 0;
+            
+            insights.push({
+                title: 'Best Performing Intent',
+                description: `${bestIntent.charAt(0).toUpperCase() + bestIntent.slice(1)} tasks show highest success rate`,
+                metrics: [
+                    { value: `${(bestSuccessRate * 100).toFixed(1)}%`, label: 'Success Rate' },
+                    { value: stats.total.toString(), label: 'Sessions' },
+                    { value: `${avgDuration}min`, label: 'Avg Duration' }
+                ]
+            });
+        }
+
+        // Find the most efficient sessions (shortest duration with success)
+        if (successfulSessions.length > 0) {
+            const avgSuccessfulDuration = successfulSessions.reduce((sum, s) => {
+                if (s.duration) {
+                    return sum + s.duration;
+                } else if (s.endTime && s.timestamp) {
+                    const start = new Date(s.timestamp);
+                    const end = new Date(s.endTime);
+                    return sum + (end.getTime() - start.getTime()) / 1000;
+                }
+                return sum;
+            }, 0) / successfulSessions.length;
+            
+            insights.push({
+                title: 'Efficiency Insights',
+                description: 'Successful sessions show consistent patterns',
+                metrics: [
+                    { value: `${(successfulSessions.length / this.sessions.length * 100).toFixed(1)}%`, label: 'Success Rate' },
+                    { value: successfulSessions.length.toString(), label: 'Successful' },
+                    { value: `${Math.round(avgSuccessfulDuration / 60)}min`, label: 'Avg Duration' }
+                ]
+            });
+        }
+
+        // If we have very few sessions, provide encouraging insights
+        if (totalSessions < this.config.thresholds.minSessionsForInsight) {
+            insights.push({
+                title: 'Getting Started',
+                description: 'Continue using Cursor IDE to build more comprehensive patterns',
+                metrics: [
+                    { value: `${totalSessions}`, label: 'Sessions Tracked' },
+                    { value: 'Growing', label: 'Data Collection' },
+                    { value: 'Active', label: 'Monitoring' }
+                ]
+            });
+        }
+
+        return insights;
+    }
+
+    generateFailurePatterns() {
+        const stuckSessions = this.sessions.filter(s => s.outcome === 'stuck' || s.outcome === 'failed');
+        
+        if (stuckSessions.length === 0) {
+            return [{
+                title: 'No Failure Patterns',
+                description: 'No stuck or failed sessions found',
+                metrics: [
+                    { value: '0%', label: 'Stuck Rate' },
+                    { value: '0', label: 'Sessions' },
+                    { value: '0min', label: 'Avg Duration' }
+                ]
+            }];
+        }
+
+        const avgStuckDuration = stuckSessions.reduce((sum, s) => sum + (s.duration || 0), 0) / stuckSessions.length;
+        
+        return [{
+            title: 'Debugging Challenges',
+            description: 'Some sessions encounter difficulties',
+            metrics: [
+                { value: `${(stuckSessions.length / this.sessions.length * 100).toFixed(0)}%`, label: 'Stuck Rate' },
+                { value: stuckSessions.length.toString(), label: 'Sessions' },
+                { value: `${Math.round(avgStuckDuration)}min`, label: 'Avg Duration' }
+            ]
+        }];
+    }
+
+    generateTemporalPatterns() {
+        // Group sessions by hour of day
+        const hourlyStats = {};
+        this.sessions.forEach(session => {
+            const hour = new Date(session.timestamp).getHours();
+            if (!hourlyStats[hour]) {
+                hourlyStats[hour] = { count: 0, successful: 0 };
+            }
+            hourlyStats[hour].count++;
+            if (session.outcome === 'success' || session.outcome === 'completed') {
+                hourlyStats[hour].successful++;
+            }
+        });
+
+        // Find peak hour
+        let peakHour = null;
+        let maxSessions = 0;
+        Object.entries(hourlyStats).forEach(([hour, stats]) => {
+            if (stats.count > maxSessions) {
+                maxSessions = stats.count;
+                peakHour = hour;
+            }
+        });
+
+        if (peakHour && hourlyStats[peakHour]) {
+            const stats = hourlyStats[peakHour];
+            const successRate = stats.count > 0 ? stats.successful / stats.count : 0;
+            
+            return [{
+                title: 'Peak Activity Hours',
+                description: `Most sessions occur around ${peakHour}:00`,
+                metrics: [
+                    { value: `${peakHour}:00`, label: 'Peak Hour' },
+                    { value: stats.count.toString(), label: 'Sessions' },
+                    { value: `${(successRate * 100).toFixed(0)}%`, label: 'Success Rate' }
+                ]
+            }];
+        }
+
+        return [{
+            title: 'No Temporal Patterns',
+            description: 'Insufficient data to identify temporal patterns',
+            metrics: [
+                { value: 'N/A', label: 'Peak Hour' },
+                { value: '0', label: 'Sessions' },
+                { value: '0%', label: 'Success Rate' }
+            ]
+        }];
+    }
+
+    generateFilePatterns() {
+        const fileTypeStats = {};
+        this.sessions.forEach(session => {
+            if (session.currentFile) {
+                const ext = session.currentFile.split('.').pop() || 'unknown';
+                if (!fileTypeStats[ext]) {
+                    fileTypeStats[ext] = 0;
+                }
+                fileTypeStats[ext]++;
+            }
+        });
+
+        const totalFiles = Object.values(fileTypeStats).reduce((sum, count) => sum + count, 0);
+        
+        if (totalFiles === 0) {
+            return [{
+                title: 'No File Patterns',
+                description: 'No file type data available',
+                metrics: [
+                    { value: '0%', label: 'Python Files' },
+                    { value: '0%', label: 'Jupyter Notebooks' },
+                    { value: '0%', label: 'Other' }
+                ]
+            }];
+        }
+
+        const pythonCount = fileTypeStats['py'] || 0;
+        const notebookCount = fileTypeStats['ipynb'] || 0;
+        const otherCount = totalFiles - pythonCount - notebookCount;
+
+        return [{
+            title: 'File Type Distribution',
+            description: 'Distribution of file types in sessions',
+            metrics: [
+                { value: `${(pythonCount / totalFiles * 100).toFixed(0)}%`, label: 'Python Files' },
+                { value: `${(notebookCount / totalFiles * 100).toFixed(0)}%`, label: 'Jupyter Notebooks' },
+                { value: `${(otherCount / totalFiles * 100).toFixed(0)}%`, label: 'Other' }
+            ]
+        }];
     }
 
     // Event Handlers
@@ -520,10 +1399,10 @@ class KuraDashboard {
             const isExpanded = !children.classList.contains('hidden');
             if (isExpanded) {
                 children.classList.add('hidden');
-                toggle.textContent = '▶';
+                toggle.textContent = '>';
             } else {
                 children.classList.remove('hidden');
-                toggle.textContent = '▼';
+                toggle.textContent = '[-]';
             }
         }
     }
@@ -588,10 +1467,10 @@ class KuraDashboard {
         container.innerHTML = `
             <p><strong>${points.length} sessions selected</strong></p>
             <ul>
-                ${points.slice(0, 5).map(point => `
+                ${points.slice(0, this.config.visualization.maxDisplayItems).map(point => `
                     <li>${point.id} (${point.data.name || 'Unknown'})</li>
                 `).join('')}
-                ${points.length > 5 ? `<li>... and ${points.length - 5} more</li>` : ''}
+                ${points.length > this.config.visualization.maxDisplayItems ? `<li>... and ${points.length - this.config.visualization.maxDisplayItems} more</li>` : ''}
             </ul>
         `;
     }
@@ -612,6 +1491,11 @@ class KuraDashboard {
             return `<div class="selected-session-item">${sessionId}: ${session?.summary || 'No summary'}</div>`;
         }).join('') || '<div class="selected-session-item">No sessions selected</div>';
         
+        modal.classList.add('active');
+    }
+
+    showInfoModal() {
+        const modal = document.getElementById('info-modal');
         modal.classList.add('active');
     }
 
@@ -659,10 +1543,14 @@ class KuraDashboard {
         if (this.umapPlot) {
             const update = {
                 'marker.size': this.umapData.map(point => 
-                    this.selectedSessions.has(point.id) ? 15 : 10
+                    this.selectedSessions.has(point.id) ? 
+                        this.config.visualization.markerSize.selected : 
+                        this.config.visualization.markerSize.default
                 ),
                 'marker.line.width': this.umapData.map(point =>
-                    this.selectedSessions.has(point.id) ? 3 : 1
+                    this.selectedSessions.has(point.id) ? 
+                        this.config.visualization.markerLineWidth.selected : 
+                        this.config.visualization.markerLineWidth.default
                 )
             };
 
@@ -717,7 +1605,7 @@ class KuraDashboard {
             children.classList.remove('hidden');
         });
         document.querySelectorAll('.cluster-toggle').forEach(toggle => {
-            toggle.textContent = '▼';
+            toggle.textContent = '[-]';
         });
     }
 
@@ -726,7 +1614,7 @@ class KuraDashboard {
             children.classList.add('hidden');
         });
         document.querySelectorAll('.cluster-toggle').forEach(toggle => {
-            toggle.textContent = '▶';
+            toggle.textContent = '>';
         });
     }
 
@@ -762,7 +1650,8 @@ class KuraDashboard {
         // Generate shareable URL with current state
         const state = {
             colorBy: this.currentColorBy,
-            selectedSessions: Array.from(this.selectedSessions)
+            selectedSessions: Array.from(this.selectedSessions),
+            config: this.config
         };
         
         const url = new URL(window.location);
@@ -771,6 +1660,352 @@ class KuraDashboard {
         navigator.clipboard.writeText(url.toString()).then(() => {
             alert('Shareable URL copied to clipboard!');
         });
+    }
+
+    // New enhanced quick action methods
+    recomputeClusters() {
+        this.showLoading(true);
+        
+        try {
+            // Recompute clusters with new configuration
+            this.clusters = this.createClusters(this.config.clusteringMethod);
+            
+            // Update UMAP data with new parameters
+            this.umapData = this.createEnhancedUMAPData();
+            
+            // Re-render visualizations
+            this.renderClusterTree();
+            this.renderUMAPPlot();
+            this.updateStatistics();
+            this.updatePatternInsights('success_patterns');
+            this.updateStatusBar();
+            
+            console.log('Clusters recomputed successfully');
+        } catch (error) {
+            console.error('Error recomputing clusters:', error);
+            this.showError('Failed to recompute clusters: ' + error.message);
+        } finally {
+            this.showLoading(false);
+        }
+    }
+
+    generateAnalysisNotebook() {
+        const selectedSessions = Array.from(this.selectedSessions);
+        if (selectedSessions.length === 0) {
+            alert('Please select sessions first by clicking on them in the UMAP plot or cluster tree.');
+            return;
+        }
+
+        const notebookData = {
+            title: `Session Analysis - ${new Date().toLocaleDateString()}`,
+            sessions: selectedSessions.map(id => this.sessions.find(s => s.id === id)).filter(Boolean),
+            clusters: this.clusters,
+            config: this.config,
+            analysis: this.generateSessionAnalysis(selectedSessions)
+        };
+
+        // Create and download notebook
+        const notebookContent = this.createJupyterNotebook(notebookData);
+        const blob = new Blob([notebookContent], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `session-analysis-${new Date().toISOString().slice(0, 10)}.ipynb`;
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+
+    analyzePatterns() {
+        const patterns = this.identifyPatterns();
+        const insights = this.generateInsights(patterns);
+        
+        // Update pattern insights display
+        const insightsContainer = document.getElementById('pattern-insights');
+        insightsContainer.innerHTML = `
+            <div class="insight-section">
+                <h4>Pattern Analysis Results</h4>
+                <div class="insight-metrics">
+                    <div class="insight-metric">
+                        <div class="insight-metric-label">Success Patterns</div>
+                        <div class="insight-metric-value">${patterns.successPatterns.length}</div>
+                    </div>
+                    <div class="insight-metric">
+                        <div class="insight-metric-label">Efficiency Patterns</div>
+                        <div class="insight-metric-value">${patterns.efficiencyPatterns.length}</div>
+                    </div>
+                    <div class="insight-metric">
+                        <div class="insight-metric-label">Risk Patterns</div>
+                        <div class="insight-metric-value">${patterns.riskPatterns.length}</div>
+                    </div>
+                </div>
+                <div class="insight-list">
+                    ${insights.map(insight => `<li>${insight}</li>`).join('')}
+                </div>
+            </div>
+        `;
+    }
+
+    exportUMAPData() {
+        const umapExport = {
+            sessions: this.sessions,
+            umapData: this.umapData,
+            clusters: this.clusters,
+            config: this.config,
+            exportTime: new Date().toISOString(),
+            metadata: {
+                totalSessions: this.sessions.length,
+                clusterCount: this.clusters.length,
+                selectedSessions: Array.from(this.selectedSessions)
+            }
+        };
+
+        const blob = new Blob([JSON.stringify(umapExport, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `umap-data-${new Date().toISOString().slice(0, 10)}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+
+    // Enhanced UMAP data creation
+    createEnhancedUMAPData() {
+        if (this.sessions.length === 0) return [];
+        
+        // Use configuration parameters for better UMAP projection
+        const features = this.sessions.map(session => this.extractSessionFeatures(session));
+        
+        // Simple UMAP-like projection using t-SNE approximation
+        return this.performTSNEProjection(features, this.config.umapNeighbors, this.config.umapMinDist);
+    }
+
+    performTSNEProjection(features, perplexity = null, learningRate = null) {
+        // Simplified t-SNE-like projection for UMAP visualization
+        perplexity = perplexity || this.config.tsne.perplexity;
+        learningRate = learningRate || this.config.tsne.learningRate;
+        
+        const n = features.length;
+        const result = [];
+        
+        // Initialize with random positions
+        for (let i = 0; i < n; i++) {
+            result.push({
+                session_id: this.sessions[i].id,
+                x: (Math.random() - 0.5) * this.config.tsne.initialScale,
+                y: (Math.random() - 0.5) * this.config.tsne.initialScale,
+                intent: this.sessions[i].intent || 'unknown',
+                outcome: this.sessions[i].outcome || 'in-progress',
+                confidence: this.sessions[i].confidence || 0.5
+            });
+        }
+        
+        // Simple optimization to separate similar points
+        for (let iter = 0; iter < this.config.tsne.maxIterations; iter++) {
+            for (let i = 0; i < n; i++) {
+                let forceX = 0, forceY = 0;
+                
+                for (let j = 0; j < n; j++) {
+                    if (i === j) continue;
+                    
+                    const dx = result[i].x - result[j].x;
+                    const dy = result[i].y - result[j].y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    
+                    if (distance > 0) {
+                        const featureDistance = this.calculateDistance(features[i], features[j]);
+                        const attraction = featureDistance < 0.5 ? -0.01 : 0.01;
+                        
+                        forceX += (dx / distance) * attraction;
+                        forceY += (dy / distance) * attraction;
+                    }
+                }
+                
+                result[i].x += forceX * learningRate;
+                result[i].y += forceY * learningRate;
+            }
+        }
+        
+        return result;
+    }
+
+    // Pattern analysis methods
+    identifyPatterns() {
+        const patterns = {
+            successPatterns: [],
+            efficiencyPatterns: [],
+            riskPatterns: []
+        };
+        
+        // Analyze success patterns
+        const successfulSessions = this.sessions.filter(s => s.outcome === 'success');
+        if (successfulSessions.length > 0) {
+            patterns.successPatterns = this.analyzeSuccessPatterns(successfulSessions);
+        }
+        
+        // Analyze efficiency patterns
+        patterns.efficiencyPatterns = this.analyzeEfficiencyPatterns();
+        
+        // Analyze risk patterns
+        patterns.riskPatterns = this.analyzeRiskPatterns();
+        
+        return patterns;
+    }
+
+    analyzeSuccessPatterns(sessions) {
+        const patterns = [];
+        
+        // Pattern: Short duration with high confidence
+        const shortHighConf = sessions.filter(s => 
+            s.duration < this.config.thresholds.shortDuration && 
+            s.confidence > this.config.thresholds.highConfidence
+        );
+        if (shortHighConf.length > 0) {
+            patterns.push({
+                type: 'Quick Success',
+                description: 'Sessions with short duration and high confidence tend to succeed',
+                count: shortHighConf.length,
+                successRate: 1.0
+            });
+        }
+        
+        return patterns;
+    }
+
+    analyzeEfficiencyPatterns() {
+        const patterns = [];
+        
+        // Calculate efficiency metrics
+        const avgDuration = this.sessions.reduce((sum, s) => sum + (s.duration || 0), 0) / this.sessions.length;
+        const efficientSessions = this.sessions.filter(s => s.duration < avgDuration && s.outcome === 'success');
+        
+        if (efficientSessions.length > 0) {
+            patterns.push({
+                type: 'Efficient Sessions',
+                description: 'Sessions that complete successfully in below-average time',
+                count: efficientSessions.length,
+                efficiency: efficientSessions.length / this.sessions.length
+            });
+        }
+        
+        return patterns;
+    }
+
+    analyzeRiskPatterns() {
+        const patterns = [];
+        
+        // Pattern: Long duration sessions
+        const longSessions = this.sessions.filter(s => s.duration > this.config.thresholds.longDuration);
+        if (longSessions.length > 0) {
+            const stuckRate = longSessions.filter(s => s.outcome === 'stuck').length / longSessions.length;
+            patterns.push({
+                type: 'Long Duration Risk',
+                description: 'Sessions longer than 2 hours have higher risk of getting stuck',
+                count: longSessions.length,
+                riskLevel: stuckRate
+            });
+        }
+        
+        return patterns;
+    }
+
+    generateInsights(patterns) {
+        const insights = [];
+        
+        patterns.successPatterns.forEach(pattern => {
+            insights.push(`✅ ${pattern.description} (${pattern.count} sessions)`);
+        });
+        
+        patterns.efficiencyPatterns.forEach(pattern => {
+            insights.push(`⚡ ${pattern.description} (${(pattern.efficiency * 100).toFixed(1)}% of sessions)`);
+        });
+        
+        patterns.riskPatterns.forEach(pattern => {
+            insights.push(`⚠️ ${pattern.description} (${(pattern.riskLevel * 100).toFixed(1)}% risk)`);
+        });
+        
+        return insights;
+    }
+
+    generateSessionAnalysis(sessionIds) {
+        const sessions = sessionIds.map(id => this.sessions.find(s => s.id === id)).filter(Boolean);
+        
+        return {
+            totalSessions: sessions.length,
+            successRate: sessions.filter(s => s.outcome === 'success').length / sessions.length,
+            avgDuration: sessions.reduce((sum, s) => sum + (s.duration || 0), 0) / sessions.length,
+            intentDistribution: this.getIntentDistribution(sessions),
+            outcomeDistribution: this.getOutcomeDistribution(sessions)
+        };
+    }
+
+    getIntentDistribution(sessions) {
+        const distribution = {};
+        sessions.forEach(session => {
+            const intent = session.intent || 'unknown';
+            distribution[intent] = (distribution[intent] || 0) + 1;
+        });
+        return distribution;
+    }
+
+    getOutcomeDistribution(sessions) {
+        const distribution = {};
+        sessions.forEach(session => {
+            const outcome = session.outcome || 'unknown';
+            distribution[outcome] = (distribution[outcome] || 0) + 1;
+        });
+        return distribution;
+    }
+
+    createJupyterNotebook(data) {
+        const notebook = {
+            cells: [
+                {
+                    cell_type: "markdown",
+                    metadata: {},
+                    source: [
+                        `# ${data.title}\n`,
+                        `\n`,
+                        `## Session Analysis Report\n`,
+                        `\n`,
+                        `Generated on: ${new Date().toLocaleString()}\n`,
+                        `Total Sessions: ${data.analysis.totalSessions}\n`,
+                        `Success Rate: ${(data.analysis.successRate * 100).toFixed(1)}%\n`,
+                        `Average Duration: ${Math.round(data.analysis.avgDuration / 60)} minutes`
+                    ]
+                },
+                {
+                    cell_type: "code",
+                    execution_count: null,
+                    metadata: {},
+                    output_type: "execute_result",
+                    source: [
+                        "import pandas as pd\n",
+                        "import matplotlib.pyplot as plt\n",
+                        "import seaborn as sns\n",
+                        "\n",
+                        "# Load session data\n",
+                        "sessions_data = " + JSON.stringify(data.sessions, null, 2) + "\n",
+                        "df = pd.DataFrame(sessions_data)\n",
+                        "print(f'Loaded {len(df)} sessions')"
+                    ]
+                }
+            ],
+            metadata: {
+                kernelspec: {
+                    display_name: "Python 3",
+                    language: "python",
+                    name: "python3"
+                },
+                language_info: {
+                    name: "python",
+                    version: "3.8.0"
+                }
+            },
+            nbformat: 4,
+            nbformat_minor: 4
+        };
+        
+        return JSON.stringify(notebook, null, 2);
     }
 }
 

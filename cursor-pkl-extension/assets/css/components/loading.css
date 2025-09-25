@@ -75,6 +75,7 @@
 }
 
 .empty-state-title {
+  font-family: var(--font-family-base);
   font-size: var(--font-size-lg);
   font-weight: var(--font-weight-semibold);
   color: var(--text-primary);
@@ -82,6 +83,7 @@
 }
 
 .empty-state-description {
+  font-family: var(--font-family-base);
   font-size: var(--font-size-base);
   color: var(--text-secondary);
   margin: 0 0 var(--space-6) 0;

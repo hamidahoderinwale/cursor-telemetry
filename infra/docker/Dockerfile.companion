@@ -1,0 +1,38 @@
+# Companion Service Dockerfile
+FROM node:20-alpine
+
+# Set working directory
+WORKDIR /app
+
+# Install system dependencies
+RUN apk add --no-cache \
+    python3 \
+    make \
+    g++ \
+    sqlite
+
+# Copy package files
+COPY cursor-activity-logger/companion/package*.json ./
+COPY packages/shared/package*.json ./packages/shared/
+
+# Install dependencies
+RUN npm install
+
+# Copy source code
+COPY cursor-activity-logger/companion/src ./src
+COPY packages/shared/src ./packages/shared/src
+
+# Create data directory
+RUN mkdir -p /app/data
+
+# Expose port
+EXPOSE 43918
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:43918/healthz || exit 1
+
+# Start command
+CMD ["node", "src/index.js"]
+
+

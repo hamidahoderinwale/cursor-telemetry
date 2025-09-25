@@ -1,0 +1,10 @@
+{
+  "exportPath": "/Users/hamidaho/cursor_export_20250906_010707",
+  "outputDir": "/Users/hamidaho/cursor_dashboard",
+  "dashboardFile": "/Users/hamidaho/cursor_dashboard/index.html",
+  "dataFile": "/Users/hamidaho/cursor_dashboard/data.json",
+  "autoUpdate": true,
+  "updateInterval": 30,
+  "watchMode": false,
+  "lastBuild": "2025-09-07T12:17:04.076815"
+}

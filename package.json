@@ -1,0 +1,40 @@
+{
+  "name": "cursor-activity-dashboard",
+  "version": "2.0.0",
+  "description": "Real-time dashboard for Cursor Activity Logger with WebSocket support",
+  "main": "dashboard-server.js",
+  "scripts": {
+    "start": "node dashboard-server.js",
+    "start-companion": "cd cursor-activity-logger/companion && node src/index.js",
+    "start-all": "./start-dashboard.sh",
+    "dev": "nodemon dashboard-server.js",
+    "test": "node smoke-test.js",
+    "health": "make health",
+    "smoke-test": "node smoke-test.js",
+    "setup": "make setup",
+    "build": "make build",
+    "lint": "make lint",
+    "typecheck": "make typecheck",
+    "clean": "make clean",
+    "status": "make status",
+    "logs": "make logs"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "ws": "^8.14.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "keywords": [
+    "cursor",
+    "activity",
+    "dashboard",
+    "websocket",
+    "real-time",
+    "prompt-tracking"
+  ],
+  "author": "Cursor Activity Logger",
+  "license": "MIT"
+}

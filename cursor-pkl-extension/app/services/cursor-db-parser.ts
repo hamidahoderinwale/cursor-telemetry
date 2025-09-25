@@ -19,9 +19,9 @@ export class CursorDBParser {
 
   private findCursorDB(): string | null {
     const possiblePaths = [
-      // Standard Cursor database locations
-      path.join(process.env.HOME || '', 'Library/Application Support/Cursor/User/globalStorage'),
+      // Standard Cursor database locations - prioritize workspace storage
       path.join(process.env.HOME || '', 'Library/Application Support/Cursor/User/workspaceStorage'),
+      path.join(process.env.HOME || '', 'Library/Application Support/Cursor/User/globalStorage'),
       path.join(process.env.HOME || '', 'Library/Application Support/Cursor/logs'),
       // Additional potential locations
       path.join(process.env.HOME || '', 'Library/Application Support/Cursor/User/History'),
@@ -35,6 +35,7 @@ export class CursorDBParser {
       if (fs.existsSync(basePath)) {
         const dbFiles = this.findSQLiteFiles(basePath);
         if (dbFiles.length > 0) {
+          console.log(`Found Cursor database: ${dbFiles[0]}`);
           return dbFiles[0]; // Use the first found database
         }
       }
@@ -57,8 +58,13 @@ export class CursorDBParser {
           
           if (entry.isDirectory()) {
             scanDir(fullPath);
-          } else if (entry.isFile() && entry.name.endsWith('.db')) {
-            files.push(fullPath);
+          } else if (entry.isFile()) {
+            const ext = path.extname(entry.name).toLowerCase();
+            const name = entry.name.toLowerCase();
+            // Include .vscdb files (VS Code/Cursor workspace databases) and standard SQLite files
+            if (ext === '.db' || ext === '.sqlite' || ext === '.sqlite3' || name.includes('.vscdb')) {
+              files.push(fullPath);
+            }
           }
         }
       } catch (error) {

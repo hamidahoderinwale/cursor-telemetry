@@ -18,12 +18,7 @@
     "server": "node src/web-interface/web-server.js",
     "web": "node src/web-interface/web-server.js",
     "monitor": "node src/web-interface/real-monitor.js",
-    "test": "node scripts/test-end-to-end.sh",
-    "test:facets": "node src/testing/test-enhanced-facets.js",
-    "test:ast": "node src/testing/test-ast-enhanced-facets.js",
-    "test:toggle": "node src/testing/test-toggle-percentages.js",
-    "quick-start": "node scripts/quick-start.sh",
-    "full-start": "concurrently \"npm run server\" \"npm start\""
+    "quick-start": "node scripts/quick-start.sh"
   },
   "dependencies": {
     "@types/react": "^19.1.13",

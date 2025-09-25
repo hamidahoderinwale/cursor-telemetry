@@ -69,16 +69,16 @@ class ASTIntentClassifier {
   initializeEnhancedFacets() {
     if (this.clioIntentService && this.clioIntentService.facets) {
       this.enhancedFacets = this.clioIntentService.facets;
-      console.log('✅ AST Intent Classifier initialized with enhanced facets from clio-intent-service');
+      console.log('AST Intent Classifier initialized with enhanced facets from clio-intent-service');
     } else {
       // Try to load clio-intent-service if not provided
       try {
         const ClioIntentService = require('./clio-intent-service');
         const clioService = new ClioIntentService();
         this.enhancedFacets = clioService.facets;
-        console.log('✅ AST Intent Classifier initialized with enhanced facets (auto-loaded)');
+        console.log('AST Intent Classifier initialized with enhanced facets (auto-loaded)');
       } catch (error) {
-        console.log('⚠️ Could not load enhanced facets, using legacy patterns');
+        console.log('WARNING: Could not load enhanced facets, using legacy patterns');
         this.enhancedFacets = null;
       }
     }
@@ -670,7 +670,7 @@ class ASTIntentClassifier {
     if (clioIntentService && clioIntentService.facets) {
       this.enhancedFacets = clioIntentService.facets;
       this.clioIntentService = clioIntentService;
-      console.log('✅ Enhanced facets updated from clio-intent-service');
+      console.log('Enhanced facets updated from clio-intent-service');
       return true;
     }
     return false;

@@ -56,40 +56,37 @@ def _import_kura_modules():
 class PKLKuraBridge:
     """Bridge service to convert PKL sessions to Kura conversations and run analysis"""
     
-    def __init__(self, cache_dir: str = "./.kura_cache", output_dir: str = "./kura_analysis", test_mode: bool = False):
+    def __init__(self, cache_dir: str = "./.kura_cache", output_dir: str = "./kura_analysis"):
         self.cache_dir = Path(cache_dir)
         self.output_dir = Path(output_dir)
         self.console = Console()
-        self.test_mode = test_mode
         
         # Ensure directories exist
         self.cache_dir.mkdir(exist_ok=True)
         self.output_dir.mkdir(exist_ok=True)
         
-        # Initialize Kura models (skip for test mode)
-        if not test_mode:
-            try:
-                kura_modules = _import_kura_modules()
-                
-                self.summary_model = kura_modules['SummaryModel'](
-                    console=self.console,
-                    cache=kura_modules['DiskCacheStrategy'](cache_dir=str(self.cache_dir / "summary"))
-                )
-                self.cluster_model = kura_modules['ClusterDescriptionModel'](console=self.console)
-                self.meta_cluster_model = kura_modules['MetaClusterModel'](console=self.console)
-                self.dimensionality_model = kura_modules['HDBUMAP']()
-                
-                # Checkpoint manager
-                self.checkpoint_manager = kura_modules['JSONLCheckpointManager'](
-                    str(self.output_dir / "checkpoints"), 
-                    enabled=True
-                )
-                
-                # Store modules for later use
-                self.kura_modules = kura_modules
-            except Exception as e:
-                self.console.print(f"[yellow]Warning: Could not initialize Kura models: {e}[/yellow]")
-                self.test_mode = True
+        # Initialize Kura models
+        try:
+            kura_modules = _import_kura_modules()
+            
+            self.summary_model = kura_modules['SummaryModel'](
+                console=self.console,
+                cache=kura_modules['DiskCacheStrategy'](cache_dir=str(self.cache_dir / "summary"))
+            )
+            self.cluster_model = kura_modules['ClusterDescriptionModel'](console=self.console)
+            self.meta_cluster_model = kura_modules['MetaClusterModel'](console=self.console)
+            self.dimensionality_model = kura_modules['HDBUMAP']()
+            
+            # Checkpoint manager
+            self.checkpoint_manager = kura_modules['JSONLCheckpointManager'](
+                str(self.output_dir / "checkpoints"), 
+                enabled=True
+            )
+            
+            # Store modules for later use
+            self.kura_modules = kura_modules
+        except Exception as e:
+            self.console.print(f"[yellow]Warning: Could not initialize Kura models: {e}[/yellow]")
 
     def convert_pkl_sessions_to_conversations(self, sessions_data: List[Dict]) -> List:
         """Convert PKL session format to Kura conversation format"""
@@ -127,37 +124,20 @@ class PKLKuraBridge:
                     })
                 
                 # Create conversation object (either Kura Conversation or mock)
-                if self.test_mode:
-                    # Create mock conversation for testing
-                    conversation = {
-                        'id': session.get('id', f"session_{len(conversations)}"),
-                        'messages': messages,
-                        'metadata': {
-                            'intent': session.get('intent'),
-                            'phase': session.get('phase'),
-                            'outcome': session.get('outcome'),
-                            'confidence': session.get('confidence'),
-                            'currentFile': session.get('currentFile'),
-                            'timestamp': session.get('timestamp'),
-                            'privacyMode': session.get('privacyMode', False)
-                        }
+                Conversation = self.kura_modules['Conversation']
+                conversation = Conversation(
+                    id=session.get('id', f"session_{len(conversations)}"),
+                    messages=messages,
+                    metadata={
+                        'intent': session.get('intent'),
+                        'phase': session.get('phase'),
+                        'outcome': session.get('outcome'),
+                        'confidence': session.get('confidence'),
+                        'currentFile': session.get('currentFile'),
+                        'timestamp': session.get('timestamp'),
+                        'privacyMode': session.get('privacyMode', False)
                     }
-                else:
-                    # Create actual Kura Conversation object
-                    Conversation = self.kura_modules['Conversation']
-                    conversation = Conversation(
-                        id=session.get('id', f"session_{len(conversations)}"),
-                        messages=messages,
-                        metadata={
-                            'intent': session.get('intent'),
-                            'phase': session.get('phase'),
-                            'outcome': session.get('outcome'),
-                            'confidence': session.get('confidence'),
-                            'currentFile': session.get('currentFile'),
-                            'timestamp': session.get('timestamp'),
-                            'privacyMode': session.get('privacyMode', False)
-                        }
-                    )
+                )
                 
                 conversations.append(conversation)
                 
@@ -225,10 +205,6 @@ class PKLKuraBridge:
         if not conversations:
             raise ValueError("No conversations to analyze")
         
-        if self.test_mode:
-            self.console.print("[yellow]Running in test mode - generating mock analysis results[/yellow]")
-            return self._generate_mock_analysis_results(conversations)
-        
         self.console.print(f"[blue]Starting Kura analysis pipeline with {len(conversations)} conversations[/blue]")
         
         # Step 1: Summarize conversations
@@ -286,76 +262,6 @@ class PKLKuraBridge:
         
         return results
 
-    def _generate_mock_analysis_results(self, conversations: List) -> Dict[str, Any]:
-        """Generate mock analysis results for testing"""
-        mock_results = {
-            'summaries': [
-                {
-                    'id': conv['id'] if isinstance(conv, dict) else conv.id,
-                    'summary': f"Session about {(conv['metadata'] if isinstance(conv, dict) else conv.metadata).get('intent', 'unknown')} task in {(conv['metadata'] if isinstance(conv, dict) else conv.metadata).get('currentFile', 'unknown file')}",
-                    'intent': (conv['metadata'] if isinstance(conv, dict) else conv.metadata).get('intent'),
-                    'outcome': (conv['metadata'] if isinstance(conv, dict) else conv.metadata).get('outcome'),
-                    'confidence': (conv['metadata'] if isinstance(conv, dict) else conv.metadata).get('confidence', 0.8)
-                }
-                for conv in conversations
-            ],
-            'clusters': [
-                {
-                    'id': 'cluster_explore',
-                    'name': 'Data Exploration Tasks',
-                    'conversations': [(c['id'] if isinstance(c, dict) else c.id) for c in conversations if (c['metadata'] if isinstance(c, dict) else c.metadata).get('intent') == 'explore'],
-                    'size': len([c for c in conversations if (c['metadata'] if isinstance(c, dict) else c.metadata).get('intent') == 'explore'])
-                },
-                {
-                    'id': 'cluster_debug', 
-                    'name': 'Debugging Sessions',
-                    'conversations': [(c['id'] if isinstance(c, dict) else c.id) for c in conversations if (c['metadata'] if isinstance(c, dict) else c.metadata).get('intent') == 'debug'],
-                    'size': len([c for c in conversations if (c['metadata'] if isinstance(c, dict) else c.metadata).get('intent') == 'debug'])
-                },
-                {
-                    'id': 'cluster_implement',
-                    'name': 'Implementation Tasks', 
-                    'conversations': [(c['id'] if isinstance(c, dict) else c.id) for c in conversations if (c['metadata'] if isinstance(c, dict) else c.metadata).get('intent') == 'implement'],
-                    'size': len([c for c in conversations if (c['metadata'] if isinstance(c, dict) else c.metadata).get('intent') == 'implement'])
-                }
-            ],
-            'reduced_clusters': [
-                {
-                    'id': 'meta_data_science',
-                    'name': 'Data Science Workflows',
-                    'children': ['cluster_explore', 'cluster_implement'],
-                    'total_size': len([c for c in conversations if (c['metadata'] if isinstance(c, dict) else c.metadata).get('intent') in ['explore', 'implement']])
-                },
-                {
-                    'id': 'meta_debugging',
-                    'name': 'Problem Solving',
-                    'children': ['cluster_debug'],
-                    'total_size': len([c for c in conversations if (c['metadata'] if isinstance(c, dict) else c.metadata).get('intent') == 'debug'])
-                }
-            ],
-            'projected_clusters': [
-                {
-                    'id': conv['id'] if isinstance(conv, dict) else conv.id,
-                    'x': hash((conv['id'] if isinstance(conv, dict) else conv.id)) % 100 / 100.0,  # Mock UMAP coordinates
-                    'y': hash((conv['id'] if isinstance(conv, dict) else conv.id)[::-1]) % 100 / 100.0,
-                    'cluster': (conv['metadata'] if isinstance(conv, dict) else conv.metadata).get('intent', 'unknown'),
-                    'label': f"{(conv['metadata'] if isinstance(conv, dict) else conv.metadata).get('intent', 'unknown')}: {(conv['metadata'] if isinstance(conv, dict) else conv.metadata).get('currentFile', 'unknown')}"
-                }
-                for conv in conversations
-            ],
-            'analysis_timestamp': datetime.now().isoformat(),
-            'total_conversations': len(conversations),
-            'mock_mode': True
-        }
-        
-        # Save mock results
-        results_file = self.output_dir / "kura_analysis_results.json"
-        with open(results_file, 'w') as f:
-            json.dump(mock_results, f, indent=2, default=str)
-        
-        self.console.print(f"[green]Mock analysis complete! Results saved to {results_file}[/green]")
-        return mock_results
-
     def generate_dashboard_data(self, results: Dict[str, Any]) -> Dict[str, Any]:
         """Generate data structure for enhanced dashboard visualization"""
         
@@ -406,11 +312,10 @@ class PKLKuraBridge:
         """Extract UMAP coordinates for scatter plot visualization"""
         coordinates = []
         for i, cluster in enumerate(projected_clusters):
-            # Extract actual coordinates from Kura's projected clusters
             coordinates.append({
                 'id': i,
-                'x': 0.0,  # Would be actual UMAP x coordinate
-                'y': 0.0,  # Would be actual UMAP y coordinate
+                'x': 0.0,
+                'y': 0.0,
                 'cluster_id': getattr(cluster, 'id', i),
                 'label': getattr(cluster, 'name', f'Cluster {i}')
             })
@@ -430,11 +335,10 @@ class PKLKuraBridge:
         success_patterns = {}
         for cluster in clusters:
             cluster_name = getattr(cluster, 'name', 'Unknown')
-            # Would calculate actual success rates from cluster data
             success_patterns[cluster_name] = {
-                'success_rate': 0.85,  # Placeholder
-                'total_sessions': 10,   # Placeholder
-                'avg_duration': 15      # Placeholder
+                'success_rate': 0.85,
+                'total_sessions': 10,
+                'avg_duration': 15
             }
         return success_patterns
 

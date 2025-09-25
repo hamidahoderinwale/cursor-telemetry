@@ -4,14 +4,18 @@
   /* Grayscale Color Palette */
   --primary-color: #2D2D2D;
   --primary-hover: #1A1A1A;
+  --primary-color-dark: #1A1A1A;
   --secondary-color: #4A4A4A;
   --secondary-hover: #333333;
+  --secondary-color-dark: #333333;
   --accent-color: #666666;
   --accent-hover: #555555;
   --danger-color: #808080;
   --danger-hover: #6B6B6B;
   --warning-color: #999999;
   --warning-hover: #878787;
+  --success-color: #4A4A4A;
+  --info-color: #666666;
   
   /* Grayscale Neutral Colors */
   --background-primary: #FFFFFF;

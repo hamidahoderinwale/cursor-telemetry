@@ -290,7 +290,7 @@ class JupyterParser {
       /^\s*[│┌┐└┘─├┤┬┴┼]/, // Starts with box drawing
       /^\s*[█▄▀▐▌▀▄]/, // Block characters
       /^\s*[\*\-\+]/, // Bullet patterns
-      /^\s*[▲▼◄►]/, // Arrow patterns
+      /^\s*[<>^v]/, // Arrow patterns
     ];
     
     return vizPatterns.some(pattern => pattern.test(text));

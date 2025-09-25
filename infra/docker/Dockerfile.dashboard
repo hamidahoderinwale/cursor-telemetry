@@ -1,0 +1,29 @@
+# Dashboard Service Dockerfile
+FROM node:20-alpine
+
+# Set working directory
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+COPY apps/dashboard/package*.json ./apps/dashboard/
+
+# Install dependencies
+RUN npm install
+
+# Copy source code
+COPY apps/dashboard/src ./apps/dashboard/src
+COPY cursor_dashboard_optimized.html ./public/index.html
+COPY dashboard.css ./public/dashboard.css
+
+# Expose port
+EXPOSE 9000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:9000/healthz || exit 1
+
+# Start command
+CMD ["node", "apps/dashboard/dist/server.js"]
+
+

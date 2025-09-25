@@ -44,7 +44,7 @@ class KuraAPIServer {
             try {
                 const { test_mode = true, include_dashboard_data = false } = req.body;
                 
-                console.log('🔬 Starting Kura analysis...');
+                console.log('Starting Kura analysis...');
                 const result = await this.runKuraAnalysis(test_mode, include_dashboard_data);
                 
                 res.json({

@@ -30,12 +30,20 @@ class ClioIntentService {
    */
   findClioPath() {
     const possiblePaths = [
+      // Check PATH first
+      '/usr/local/bin/clio',
+      '/opt/homebrew/bin/clio',
+      '/usr/bin/clio',
+      // Check common installation directories
       path.join(__dirname, 'OpenClio'),
       path.join(__dirname, '..', 'OpenClio'),
       path.join(process.env.HOME || '', 'OpenClio'),
       path.join(process.env.HOME || '', 'clio'),
-      '/usr/local/bin/clio',
-      '/opt/clio'
+      path.join(process.env.HOME || '', '.local/bin/clio'),
+      '/opt/clio',
+      // Check if clio is available via npm/yarn
+      path.join(process.env.HOME || '', 'node_modules/.bin/clio'),
+      path.join(__dirname, '..', '..', 'node_modules/.bin/clio')
     ];
 
     for (const clioPath of possiblePaths) {
@@ -45,7 +53,19 @@ class ClioIntentService {
       }
     }
 
-    console.log('Clio not found in standard locations');
+    // Try to find clio in PATH using which command
+    try {
+      const { execSync } = require('child_process');
+      const clioPath = execSync('which clio', { encoding: 'utf8' }).trim();
+      if (clioPath && fs.existsSync(clioPath)) {
+        console.log(`Found Clio in PATH: ${clioPath}`);
+        return clioPath;
+      }
+    } catch (error) {
+      // Clio not in PATH
+    }
+
+    console.log('Clio not found in standard locations - using enhanced built-in facets');
     return null;
   }
 

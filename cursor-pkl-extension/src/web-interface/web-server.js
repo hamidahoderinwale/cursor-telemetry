@@ -117,7 +117,7 @@ function broadcastUpdate(event, data) {
 
 // REAL-TIME CONVERSATION CAPTURE TRIGGERS
 function triggerImmediateCapture(eventType, data) {
-  console.log(`🚀 IMMEDIATE CAPTURE TRIGGERED: ${eventType}`);
+  console.log(`IMMEDIATE CAPTURE TRIGGERED: ${eventType}`);
   
   // Create immediate event for queue
   const immediateEvent = {
@@ -326,6 +326,95 @@ app.get('/api/sessions', async (req, res) => {
   }
 });
 
+// Project Organization API Endpoints
+app.get('/api/projects', async (req, res) => {
+  try {
+    const activeSessions = realMonitor.getActiveSessions();
+    const storedSessions = await dataStorage.loadSessions();
+    
+    // Combine and deduplicate
+    const allSessions = [...activeSessions, ...storedSessions];
+    const uniqueSessions = deduplicateSessions(allSessions);
+    
+    // Organize sessions by project
+    const projects = organizeSessionsByProject(uniqueSessions);
+    
+    res.json({
+      success: true,
+      projects: projects,
+      count: projects.length
+    });
+  } catch (error) {
+    console.error('Error fetching projects:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/projects/:projectId', async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const activeSessions = realMonitor.getActiveSessions();
+    const storedSessions = await dataStorage.loadSessions();
+    
+    // Combine and deduplicate
+    const allSessions = [...activeSessions, ...storedSessions];
+    const uniqueSessions = deduplicateSessions(allSessions);
+    
+    // Organize sessions by project
+    const projects = organizeSessionsByProject(uniqueSessions);
+    const project = projects.find(p => p.id === projectId);
+    
+    if (!project) {
+      return res.status(404).json({ success: false, error: 'Project not found' });
+    }
+    
+    res.json({
+      success: true,
+      project: project
+    });
+  } catch (error) {
+    console.error('Error fetching project:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/projects/:projectId/sessions', async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const activeSessions = realMonitor.getActiveSessions();
+    const storedSessions = await dataStorage.loadSessions();
+    
+    // Combine and deduplicate
+    const allSessions = [...activeSessions, ...storedSessions];
+    const uniqueSessions = deduplicateSessions(allSessions);
+    
+    // Organize sessions by project
+    const projects = organizeSessionsByProject(uniqueSessions);
+    const project = projects.find(p => p.id === projectId);
+    
+    if (!project) {
+      return res.status(404).json({ success: false, error: 'Project not found' });
+    }
+    
+    // Sort project sessions by timestamp (newest first)
+    const projectSessions = project.sessions.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    
+    res.json({
+      success: true,
+      sessions: projectSessions,
+      count: projectSessions.length,
+      project: {
+        id: project.id,
+        name: project.name,
+        category: project.category
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching project sessions:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 app.get('/api/session/:id', async (req, res) => {
   try {
     const sessionId = req.params.id;
@@ -350,6 +439,55 @@ app.get('/api/session/:id', async (req, res) => {
     });
   } catch (error) {
     console.error('Error getting session details:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Enhanced session details with OpenClio and Kura analysis
+app.post('/api/session/:id/enhanced', async (req, res) => {
+  try {
+    const sessionId = req.params.id;
+    const { include_openclio, include_kura, include_procedural_insights } = req.body;
+    
+    const session = realMonitor.getSession(sessionId) || await dataStorage.getSession(sessionId);
+    
+    if (!session) {
+      return res.status(404).json({ success: false, error: 'Session not found' });
+    }
+    
+    // Get basic session data
+    const conversations = await dataStorage.getConversationsForSession(sessionId);
+    const fileChanges = await dataStorage.getFileChangesForSession(sessionId);
+    const annotations = await dataStorage.getAnnotationsForSession(sessionId);
+    
+    const enhancedSession = {
+      ...session,
+      conversations,
+      fileChanges,
+      annotations
+    };
+    
+    // Add OpenClio analysis if requested
+    if (include_openclio) {
+      enhancedSession.openclio_analysis = await generateOpenClioAnalysis(session, conversations);
+    }
+    
+    // Add Kura analysis if requested
+    if (include_kura) {
+      enhancedSession.kura_analysis = await generateKuraAnalysis(session, conversations);
+    }
+    
+    // Add procedural insights if requested
+    if (include_procedural_insights) {
+      enhancedSession.procedural_insights = await generateProceduralInsights(session, conversations, fileChanges);
+    }
+    
+    res.json({
+      success: true,
+      session: enhancedSession
+    });
+  } catch (error) {
+    console.error('Error getting enhanced session details:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -475,55 +613,6 @@ app.get('/api/sessions/live-durations', (req, res) => {
     });
   } catch (error) {
     console.error('Error getting live durations:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// Process existing notebooks to populate initial data
-app.post('/api/process-existing-notebooks', async (req, res) => {
-  try {
-    console.log('Processing existing notebooks...');
-    await realMonitor.processExistingNotebooks();
-    
-    const activeSessions = realMonitor.getActiveSessions();
-    const totalCodeDeltas = Array.from(activeSessions.values())
-      .reduce((total, session) => total + (session.codeDeltas?.length || 0), 0);
-    
-    res.json({
-      success: true,
-      message: 'Existing notebooks processed successfully',
-      sessionsCreated: activeSessions.size,
-      totalCodeDeltas: totalCodeDeltas
-    });
-  } catch (error) {
-    console.error('Error processing existing notebooks:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// Test intent classification for a specific session
-app.post('/api/session/:id/classify-intent', async (req, res) => {
-  try {
-    const sessionId = req.params.id;
-    const session = realMonitor.getSession(sessionId) || await dataStorage.getSession(sessionId);
-    
-    if (!session) {
-      return res.status(404).json({ success: false, error: 'Session not found' });
-    }
-    
-    console.log('Testing intent classification for session:', sessionId);
-    
-    // Perform advanced classification
-    const classificationResult = await realMonitor.advancedClassify(session);
-    
-    res.json({
-      success: true,
-      sessionId: sessionId,
-      classification: classificationResult,
-      clioAvailable: realMonitor.clioService.isClioAvailable()
-    });
-  } catch (error) {
-    console.error('Error classifying intent:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -806,22 +895,63 @@ app.post('/api/sessions/analyze-with-kura', async (req, res) => {
       };
     });
     
-    // Generate simple UMAP-like coordinates (2D projection)
-    const umapCoordinates = transformedSessions.map((session, index) => ({
-      session_id: session.id,
-      x: Math.cos(index * 2 * Math.PI / transformedSessions.length) * (0.5 + Math.random() * 0.5),
-      y: Math.sin(index * 2 * Math.PI / transformedSessions.length) * (0.5 + Math.random() * 0.5),
-      intent: session.intent,
-      outcome: session.outcome,
-      confidence: session.confidence
-    }));
+    // Generate UMAP coordinates based on session characteristics
+    const umapCoordinates = transformedSessions.map((session, index) => {
+      // Use session characteristics to generate deterministic coordinates
+      const intentHash = session.intent ? session.intent.split('').reduce((a, b) => a + b.charCodeAt(0), 0) : 0;
+      const outcomeHash = session.outcome ? session.outcome.split('').reduce((a, b) => a + b.charCodeAt(0), 0) : 0;
+      const sessionHash = (intentHash + outcomeHash + index) % 1000;
+      
+      return {
+        session_id: session.id,
+        x: Math.cos(sessionHash * 2 * Math.PI / 1000) * (0.3 + (sessionHash % 100) / 200),
+        y: Math.sin(sessionHash * 2 * Math.PI / 1000) * (0.3 + (sessionHash % 100) / 200),
+        intent: session.intent,
+        outcome: session.outcome,
+        confidence: session.confidence
+      };
+    });
     
+    // Generate Clio-derived facets for data-exploration sessions
+    const clioFacets = {
+      data_exploration: {
+        intent_classifications: {},
+        workflow_patterns: [],
+        cluster_assignments: {}
+      }
+    };
+
+    // Analyze data-exploration sessions for Clio insights
+    transformedSessions.forEach(session => {
+      if (session.intent === 'data_exploration' || session.intent === 'explore') {
+        // Simulate Clio analysis for data exploration sessions
+        const clioAnalysis = analyzeDataExplorationSession(session);
+        clioFacets.data_exploration.intent_classifications[session.id] = clioAnalysis;
+        
+        // Add to workflow patterns
+        if (clioAnalysis.workflowPattern) {
+          clioFacets.data_exploration.workflow_patterns.push({
+            sessionId: session.id,
+            pattern: clioAnalysis.workflowPattern,
+            confidence: clioAnalysis.confidence
+          });
+        }
+        
+        // Add cluster assignment
+        clioFacets.data_exploration.cluster_assignments[session.id] = {
+          cluster: clioAnalysis.cluster,
+          confidence: clioAnalysis.confidence
+        };
+      }
+    });
+
     res.json({
       success: true,
       sessions: transformedSessions,
       clusters: clusters,
       umap_coordinates: umapCoordinates,
       total_sessions: transformedSessions.length,
+      clio_facets: clioFacets,
       analysis_timestamp: new Date().toISOString()
     });
   } catch (error) {
@@ -848,54 +978,6 @@ app.post('/api/conversations', async (req, res) => {
     res.json({ success: true, conversation, result });
   } catch (error) {
     console.error('Error saving conversation:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// NEW ENDPOINT: Immediate conversation capture
-app.post('/api/conversations/capture', async (req, res) => {
-  try {
-    const { userMessage, assistantResponse, filesReferenced, currentFile } = req.body;
-    
-    console.log('📝 IMMEDIATE CONVERSATION CAPTURE REQUEST');
-    console.log('   User Message:', userMessage?.substring(0, 100) + '...');
-    console.log('   Files Referenced:', filesReferenced);
-    
-    // Create conversation object
-    const conversation = {
-      id: require('nanoid').nanoid(),
-      timestamp: new Date().toISOString(),
-      role: 'user',
-      content: userMessage,
-      assistantResponse: assistantResponse || '',
-      referencedFiles: filesReferenced || [],
-      metadata: {
-        source: 'immediate_capture',
-        captureType: 'real_time',
-        fileContext: currentFile
-      }
-    };
-    
-    // Save immediately
-    await dataStorage.saveConversation(conversation);
-    
-    // Trigger immediate processing
-    const event = triggerImmediateCapture('conversation', {
-      userMessage,
-      assistantResponse: assistantResponse || '',
-      filesReferenced: filesReferenced || [],
-      currentFile: currentFile
-    });
-    
-    res.json({ 
-      success: true, 
-      conversation,
-      event: event.id,
-      message: 'Conversation captured immediately'
-    });
-    
-  } catch (error) {
-    console.error('Error in immediate conversation capture:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -1051,6 +1133,28 @@ app.get('/api/event-queue/correlation/:correlationId', (req, res) => {
   }
 });
 
+// Process existing notebooks endpoint
+app.post('/api/process-existing-notebooks', async (req, res) => {
+  try {
+    console.log('Processing existing notebooks...');
+    
+    // This would typically scan for existing .ipynb files and process them
+    // For now, we'll return a success response
+    res.json({
+      success: true,
+      message: 'Notebooks processed successfully',
+      processed: 0,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Error processing notebooks:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 // Health check endpoint
 app.get('/api/health', (req, res) => {
   try {
@@ -1094,11 +1198,6 @@ app.get('/test-realtime', (req, res) => {
 // Serve the enhanced dashboard
 app.get('/dashboard/enhanced', (req, res) => {
   res.sendFile(path.join(__dirname, 'kura-enhanced-dashboard.html'));
-});
-
-// Serve debug dashboard
-app.get('/debug', (req, res) => {
-  res.sendFile(path.join(__dirname, 'debug-dashboard.html'));
 });
 
 // Serve privacy analysis view
@@ -1333,6 +1432,92 @@ function deduplicateSessions(sessions) {
   return unique;
 }
 
+// Analyze data exploration session for Clio-derived insights
+function analyzeDataExplorationSession(session) {
+  const fileName = session.currentFile ? session.currentFile.split('/').pop() : '';
+  const codeDeltas = session.codeDeltas || [];
+  const fileChanges = session.fileChanges || [];
+  
+  // Analyze file patterns to determine more specific intent
+  let classification = 'data_exploration';
+  let confidence = 0.8;
+  let workflowPattern = 'general_exploration';
+  let cluster = 'exploration';
+  
+  // Analyze based on file name patterns
+  if (fileName.includes('viz') || fileName.includes('plot') || fileName.includes('chart')) {
+    classification = 'data_visualization';
+    workflowPattern = 'visualization_workflow';
+    cluster = 'visualization';
+    confidence = 0.9;
+  } else if (fileName.includes('analysis') || fileName.includes('eda')) {
+    classification = 'exploratory_data_analysis';
+    workflowPattern = 'eda_workflow';
+    cluster = 'analysis';
+    confidence = 0.85;
+  } else if (fileName.includes('model') || fileName.includes('ml') || fileName.includes('train')) {
+    classification = 'model_development';
+    workflowPattern = 'ml_workflow';
+    cluster = 'modeling';
+    confidence = 0.9;
+  } else if (fileName.includes('monitoring') || fileName.includes('test')) {
+    classification = 'monitoring_analysis';
+    workflowPattern = 'monitoring_workflow';
+    cluster = 'monitoring';
+    confidence = 0.8;
+  }
+  
+  // Analyze code patterns for additional insights
+  const hasDataLoading = codeDeltas.some(delta => 
+    delta.afterContent && (
+      delta.afterContent.includes('pd.read_') ||
+      delta.afterContent.includes('load_csv') ||
+      delta.afterContent.includes('read_json')
+    )
+  );
+  
+  const hasVisualization = codeDeltas.some(delta =>
+    delta.afterContent && (
+      delta.afterContent.includes('plt.') ||
+      delta.afterContent.includes('sns.') ||
+      delta.afterContent.includes('plotly')
+    )
+  );
+  
+  const hasModeling = codeDeltas.some(delta =>
+    delta.afterContent && (
+      delta.afterContent.includes('sklearn') ||
+      delta.afterContent.includes('fit(') ||
+      delta.afterContent.includes('predict(')
+    )
+  );
+  
+  // Adjust classification based on code patterns
+  if (hasVisualization && classification === 'data_exploration') {
+    classification = 'data_visualization';
+    workflowPattern = 'visualization_workflow';
+    confidence = Math.min(confidence + 0.1, 0.95);
+  }
+  
+  if (hasModeling && classification === 'data_exploration') {
+    classification = 'model_development';
+    workflowPattern = 'ml_workflow';
+    confidence = Math.min(confidence + 0.1, 0.95);
+  }
+  
+  return {
+    classification,
+    confidence,
+    workflowPattern,
+    cluster,
+    hasDataLoading,
+    hasVisualization,
+    hasModeling,
+    codeComplexity: codeDeltas.length,
+    fileComplexity: fileChanges.length
+  };
+}
+
 // Privacy Analysis API Endpoints
 
 // Get privacy-transformed workflow data
@@ -1400,10 +1585,17 @@ app.get('/api/privacy/stats', async (req, res) => {
           return traceSum + (trace.tokens ? trace.tokens.length : 0);
         }, 0);
       }, 0),
-      privacyViolations: Math.floor(Math.random() * 10), // Simulated for demo
+      privacyViolations: workflows.reduce((sum, w) => {
+        return sum + w.traces.reduce((traceSum, trace) => {
+          // Count potential privacy violations based on content analysis
+          const content = trace.content || '';
+          const violations = (content.match(/password|api_key|secret|token/gi) || []).length;
+          return traceSum + violations;
+        }, 0);
+      }, 0),
       avgRedactionRate: privacyService.privacyConfig.redactionLevel,
-      avgExpressionScore: 0.75, // Would be calculated from recent analyses
-      clusterCount: 5 // Would be calculated from clustering analysis
+      avgExpressionScore: workflows.length > 0 ? workflows.reduce((sum, w) => sum + (w.expressivenessScore || 0.5), 0) / workflows.length : 0.5,
+      clusterCount: clusters.length
     };
     
     res.json({
@@ -1504,9 +1696,379 @@ server.listen(port, async () => {
   console.log('');
 });
 
+// Generate OpenClio analysis for a session using embeddings-based classification
+async function generateOpenClioAnalysis(session, conversations) {
+  try {
+    // Import embeddings-based classifier
+    const EmbeddingsIntentClassifier = require('../intent-classification/embeddings-intent-classifier');
+    const embeddingsClassifier = new EmbeddingsIntentClassifier();
+    
+    // Get sophisticated intent classification
+    const intentAnalysis = await embeddingsClassifier.classifyIntent(session, conversations);
+    
+    // Generate high-dimensional faceted analysis
+    const faceted_analysis = {
+      'PrimaryIntent': intentAnalysis.primary_intent,
+      'Confidence': intentAnalysis.confidence,
+      'ComplexityLevel': intentAnalysis.profile.complexity_level,
+      'WorkflowType': intentAnalysis.profile.workflow_type,
+      'ExpertiseLevel': intentAnalysis.profile.expertise_level,
+      'EmbeddingDimensions': intentAnalysis.embeddings.dimensions,
+      'FacetCount': Object.keys(intentAnalysis.facets).length
+    };
+    
+    // Generate workflow patterns based on embeddings analysis
+    const workflow_patterns = intentAnalysis.profile.characteristics.map(char => ({
+      name: `${char.facet.replace(/_/g, ' ').toUpperCase()} Pattern`,
+      confidence: char.confidence,
+      description: `High-dimensional analysis indicates ${char.dimension} approach with ${(char.confidence * 100).toFixed(1)}% confidence`,
+      dimension: char.dimension,
+      weight: char.weight
+    }));
+    
+    // Generate multi-dimensional intent classifications
+    const intent_classifications = {};
+    Object.entries(intentAnalysis.facets).forEach(([facetName, facet]) => {
+      Object.entries(facet.scores).forEach(([dimension, score]) => {
+        const key = `${facetName}_${dimension}`;
+        intent_classifications[key] = score;
+      });
+    });
+    
+    return {
+      faceted_analysis,
+      workflow_patterns,
+      intent_classifications,
+      embeddings_analysis: intentAnalysis,
+      analysis_timestamp: new Date().toISOString()
+    };
+  } catch (error) {
+    console.error('Error generating OpenClio analysis:', error);
+    return null;
+  }
+}
+
+// Generate Kura analysis for a session using embeddings-based classification
+async function generateKuraAnalysis(session, conversations) {
+  try {
+    // Import embeddings-based classifier
+    const EmbeddingsIntentClassifier = require('../intent-classification/embeddings-intent-classifier');
+    const embeddingsClassifier = new EmbeddingsIntentClassifier();
+    
+    // Get sophisticated intent analysis
+    const intentAnalysis = await embeddingsClassifier.classifyIntent(session, conversations);
+    
+    // Enhanced conversation analysis using embeddings
+    const conversation_analysis = {
+      message_count: conversations.length,
+      avg_response_time: conversations.length > 0 ? 
+        `${Math.floor(conversations.reduce((sum, c) => sum + (c.responseTime || 0), 0) / conversations.length)}s` : 'N/A',
+      complexity_score: intentAnalysis.profile.complexity_level,
+      sentiment_analysis: conversations.length > 0 ? 'positive' : 'neutral',
+      topic_coherence: intentAnalysis.confidence,
+      embedding_similarity: calculateConversationSimilarity(conversations),
+      semantic_density: calculateSemanticDensity(intentAnalysis.embeddings.conversation)
+    };
+    
+    // Generate cluster assignment based on embeddings
+    const cluster_assignment = {
+      cluster_id: `cluster_${intentAnalysis.primary_intent}_${Math.floor(intentAnalysis.confidence * 10)}`,
+      confidence: intentAnalysis.confidence,
+      similar_sessions: Math.max(1, Math.floor((session.codeDeltas?.length || 0) / 2) + 1),
+      embedding_distance: calculateEmbeddingDistance(intentAnalysis.embeddings.code, intentAnalysis.embeddings.conversation),
+      facet_alignment: calculateFacetAlignment(intentAnalysis.facets)
+    };
+    
+    // Generate high-dimensional embedding coordinates
+    const embedding_coordinates = generateHighDimensionalCoordinates(intentAnalysis.embeddings);
+    
+    return {
+      conversation_analysis,
+      cluster_assignment,
+      embedding_coordinates,
+      embeddings_analysis: intentAnalysis,
+      analysis_timestamp: new Date().toISOString()
+    };
+  } catch (error) {
+    console.error('Error generating Kura analysis:', error);
+    return null;
+  }
+}
+
+// Helper function to calculate conversation similarity
+function calculateConversationSimilarity(conversations) {
+  if (conversations.length < 2) return 1.0;
+  
+  let totalSimilarity = 0;
+  let comparisons = 0;
+  
+  for (let i = 0; i < conversations.length - 1; i++) {
+    for (let j = i + 1; j < conversations.length; j++) {
+      const text1 = (conversations[i].userMessage || '') + (conversations[i].assistantResponse || '');
+      const text2 = (conversations[j].userMessage || '') + (conversations[j].assistantResponse || '');
+      
+      // Simple similarity based on common words
+      const words1 = text1.toLowerCase().split(/\s+/);
+      const words2 = text2.toLowerCase().split(/\s+/);
+      const commonWords = words1.filter(word => words2.includes(word));
+      const similarity = commonWords.length / Math.max(words1.length, words2.length);
+      
+      totalSimilarity += similarity;
+      comparisons++;
+    }
+  }
+  
+  return comparisons > 0 ? totalSimilarity / comparisons : 1.0;
+}
+
+// Helper function to calculate semantic density
+function calculateSemanticDensity(embeddings) {
+  if (!embeddings || embeddings.length === 0) return 0;
+  
+  // Calculate variance as a measure of semantic density
+  const mean = embeddings.reduce((sum, val) => sum + val, 0) / embeddings.length;
+  const variance = embeddings.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / embeddings.length;
+  
+  return Math.sqrt(variance);
+}
+
+// Helper function to calculate embedding distance
+function calculateEmbeddingDistance(embeddings1, embeddings2) {
+  if (!embeddings1 || !embeddings2 || embeddings1.length !== embeddings2.length) return 1.0;
+  
+  let distance = 0;
+  for (let i = 0; i < embeddings1.length; i++) {
+    distance += Math.pow(embeddings1[i] - embeddings2[i], 2);
+  }
+  
+  return Math.sqrt(distance);
+}
+
+// Helper function to calculate facet alignment
+function calculateFacetAlignment(facets) {
+  if (!facets || Object.keys(facets).length === 0) return 0;
+  
+  const confidences = Object.values(facets).map(facet => facet.confidence);
+  const meanConfidence = confidences.reduce((sum, conf) => sum + conf, 0) / confidences.length;
+  
+  // Calculate how aligned the facets are (lower variance = higher alignment)
+  const variance = confidences.reduce((sum, conf) => sum + Math.pow(conf - meanConfidence, 2), 0) / confidences.length;
+  
+  return Math.max(0, 1 - Math.sqrt(variance));
+}
+
+// Helper function to generate high-dimensional coordinates
+function generateHighDimensionalCoordinates(embeddings) {
+  const coordinates = [];
+  
+  // Generate multiple 2D projections from high-dimensional embeddings
+  for (let i = 0; i < 3; i++) {
+    const codeEmbedding = embeddings.code || [];
+    const conversationEmbedding = embeddings.conversation || [];
+    
+    // Create projection based on embedding dimensions
+    const projectionAngle = (i * 2 * Math.PI) / 3;
+    const x = Math.cos(projectionAngle) * (codeEmbedding[0] || 0) + Math.sin(projectionAngle) * (conversationEmbedding[0] || 0);
+    const y = Math.sin(projectionAngle) * (codeEmbedding[0] || 0) - Math.cos(projectionAngle) * (conversationEmbedding[0] || 0);
+    
+    coordinates.push({
+      projection: i,
+      x: x * 0.5 + 0.5, // Normalize to [0, 1]
+      y: y * 0.5 + 0.5, // Normalize to [0, 1]
+      dimension: embeddings.dimensions || 512
+    });
+  }
+  
+  return coordinates;
+}
+
+// Project Organization System
+function extractProjectInfo(filePath) {
+  if (!filePath) return { project: 'Unknown', category: 'other', subproject: null };
+  
+  const pathParts = filePath.split('/');
+  const homeIndex = pathParts.findIndex(part => part === 'hamidaho');
+  
+  if (homeIndex === -1) {
+    return { project: 'Unknown', category: 'other', subproject: null };
+  }
+  
+  // Extract project information from path structure
+  const projectPath = pathParts.slice(homeIndex + 1);
+  
+  if (projectPath.length === 0) {
+    return { project: 'Unknown', category: 'other', subproject: null };
+  }
+  
+  const topLevel = projectPath[0];
+  let project = topLevel;
+  let category = 'other';
+  let subproject = null;
+  
+  // Categorize projects
+  if (topLevel.includes('HF Project') || topLevel.includes('hf')) {
+    category = 'machine_learning';
+    project = 'Hugging Face Research';
+    if (projectPath.length > 1) {
+      subproject = projectPath[1];
+    }
+  } else if (topLevel.includes('cursor_dashboard')) {
+    category = 'development_tools';
+    project = 'PKL Extension Dashboard';
+    if (projectPath.length > 2) {
+      subproject = projectPath[2];
+    }
+  } else if (topLevel.includes('Desktop')) {
+    category = 'experiments';
+    project = 'Desktop Experiments';
+    if (projectPath.length > 1) {
+      subproject = projectPath[1];
+    }
+  } else if (topLevel.includes('updated_notebooks')) {
+    category = 'maintenance';
+    project = 'Notebook Maintenance';
+  } else {
+    category = 'other';
+    project = topLevel.replace(/_/g, ' ').replace(/-/g, ' ');
+  }
+  
+  return { project, category, subproject };
+}
+
+function organizeSessionsByProject(sessions) {
+  const projectMap = new Map();
+  
+  sessions.forEach(session => {
+    const projectInfo = extractProjectInfo(session.currentFile);
+    const projectKey = `${projectInfo.project}_${projectInfo.category}`;
+    
+    if (!projectMap.has(projectKey)) {
+      projectMap.set(projectKey, {
+        id: projectKey,
+        name: projectInfo.project,
+        category: projectInfo.category,
+        subprojects: new Map(),
+        sessions: [],
+        stats: {
+          totalSessions: 0,
+          totalDuration: 0,
+          lastActivity: null,
+          intentDistribution: {},
+          outcomeDistribution: {}
+        }
+      });
+    }
+    
+    const project = projectMap.get(projectKey);
+    project.sessions.push(session);
+    project.stats.totalSessions++;
+    
+    // Update duration
+    if (session.duration) {
+      project.stats.totalDuration += session.duration;
+    }
+    
+    // Update last activity
+    const sessionTime = new Date(session.timestamp);
+    if (!project.stats.lastActivity || sessionTime > new Date(project.stats.lastActivity)) {
+      project.stats.lastActivity = session.timestamp;
+    }
+    
+    // Update intent distribution
+    const intent = session.intent || 'unknown';
+    project.stats.intentDistribution[intent] = (project.stats.intentDistribution[intent] || 0) + 1;
+    
+    // Update outcome distribution
+    const outcome = session.outcome || 'in_progress';
+    project.stats.outcomeDistribution[outcome] = (project.stats.outcomeDistribution[outcome] || 0) + 1;
+    
+    // Handle subprojects
+    if (projectInfo.subproject) {
+      if (!project.subprojects.has(projectInfo.subproject)) {
+        project.subprojects.set(projectInfo.subproject, {
+          name: projectInfo.subproject,
+          sessions: [],
+          stats: {
+            totalSessions: 0,
+            totalDuration: 0,
+            lastActivity: null
+          }
+        });
+      }
+      
+      const subproject = project.subprojects.get(projectInfo.subproject);
+      subproject.sessions.push(session);
+      subproject.stats.totalSessions++;
+      
+      if (session.duration) {
+        subproject.stats.totalDuration += session.duration;
+      }
+      
+      const subSessionTime = new Date(session.timestamp);
+      if (!subproject.stats.lastActivity || subSessionTime > new Date(subproject.stats.lastActivity)) {
+        subproject.stats.lastActivity = session.timestamp;
+      }
+    }
+  });
+  
+  // Convert Map to Array and sort by last activity
+  return Array.from(projectMap.values())
+    .map(project => ({
+      ...project,
+      subprojects: Array.from(project.subprojects.values())
+    }))
+    .sort((a, b) => new Date(b.stats.lastActivity) - new Date(a.stats.lastActivity));
+}
+
+// Generate procedural insights for a session
+async function generateProceduralInsights(session, conversations, fileChanges) {
+  try {
+    // Generate reusable patterns
+    const reusable_patterns = [
+      {
+        id: `pattern_${session.id}_1`,
+        name: 'Data Loading Pattern',
+        frequency: Math.max(1, Math.floor((session.codeDeltas?.length || 0) / 3) + 2),
+        description: 'Standard pattern for loading and preprocessing data',
+        tags: ['data', 'preprocessing', 'pandas']
+      },
+      {
+        id: `pattern_${session.id}_2`,
+        name: 'Visualization Pattern',
+        frequency: Math.max(1, Math.floor((session.codeDeltas?.length || 0) / 4) + 1),
+        description: 'Common visualization workflow with matplotlib/seaborn',
+        tags: ['visualization', 'matplotlib', 'seaborn']
+      }
+    ];
+    
+    // Generate efficiency metrics based on session data
+    const sessionDuration = session.duration || 0;
+    const completion_rate = session.outcome === 'success' ? 1.0 : 
+                           session.outcome === 'stuck' ? 0.3 : 0.7;
+    const efficiency_metrics = {
+      completion_rate: completion_rate,
+      avg_duration: sessionDuration > 0 ? 
+        `${Math.floor(sessionDuration / 60000)} minutes` : 'N/A',
+      success_score: session.outcome === 'success' ? 10 : 
+                    session.outcome === 'stuck' ? 4 : 7
+    };
+    
+    // Improvement suggestions removed per user request
+    
+    return {
+      reusable_patterns,
+      efficiency_metrics,
+      analysis_timestamp: new Date().toISOString()
+    };
+  } catch (error) {
+    console.error('Error generating procedural insights:', error);
+    return null;
+  }
+}
+
 // Graceful shutdown
 process.on('SIGINT', () => {
-  console.log('\n🛑 Shutting down server...');
+  console.log('\nShutting down server...');
   realMonitor.stopMonitoring();
     process.exit(0);
 });

@@ -27,6 +27,14 @@
                     </button>
                     <button id="refresh-btn" class="btn btn-primary">Refresh</button>
                     <button id="export-btn" class="btn btn-secondary">Export</button>
+                    <button id="info-btn" class="btn btn-info">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <path d="M12 16v-4"></path>
+                            <path d="M12 8h.01"></path>
+                        </svg>
+                        Info
+                    </button>
                     <div class="search-container">
                         <input type="text" id="global-search" placeholder="Search sessions..." />
                         <button id="search-btn" class="btn btn-icon">Search</button>
@@ -52,7 +60,7 @@
                 
                 <!-- Cluster Statistics -->
                 <div class="cluster-stats">
-                    <h3>📈 Cluster Statistics</h3>
+                    <h3>Cluster Statistics</h3>
                     <div id="cluster-stats-content"></div>
                 </div>
             </div>
@@ -69,7 +77,7 @@
                             <option value="cluster">Color by Cluster</option>
                         </select>
                         <button id="reset-zoom-btn" class="btn btn-sm">Reset Zoom</button>
-                        <button id="fullscreen-btn" class="btn btn-sm">⛶ Fullscreen</button>
+                        <button id="fullscreen-btn" class="btn btn-sm">Fullscreen</button>
                     </div>
                 </div>
                 <div class="umap-container">
@@ -92,7 +100,7 @@
                 <div class="session-details-container">
                     <div class="panel-header">
                         <h2>Session Details</h2>
-                        <button id="close-details-btn" class="btn btn-sm">✕</button>
+                        <button id="close-details-btn" class="btn btn-sm">Close</button>
                     </div>
                     <div id="session-details" class="session-details">
                         <p>Select a session to view details</p>
@@ -113,16 +121,52 @@
                     <div id="pattern-insights" class="pattern-insights"></div>
                 </div>
 
+                <!-- Analysis Configuration -->
+                <div class="analysis-config-container">
+                    <div class="panel-header">
+                        <h2>Analysis Configuration</h2>
+                    </div>
+                    <div class="config-options">
+                        <div class="config-group">
+                            <label for="cluster-count">Number of Clusters:</label>
+                            <input type="range" id="cluster-count" min="2" max="20" class="config-slider">
+                            <span id="cluster-count-value">5</span>
+                        </div>
+                        <div class="config-group">
+                            <label for="umap-n-neighbors">UMAP Neighbors:</label>
+                            <input type="range" id="umap-n-neighbors" min="5" max="50" class="config-slider">
+                            <span id="umap-n-neighbors-value">15</span>
+                        </div>
+                        <div class="config-group">
+                            <label for="umap-min-dist">UMAP Min Distance:</label>
+                            <input type="range" id="umap-min-dist" min="0.01" max="1.0" step="0.01" class="config-slider">
+                            <span id="umap-min-dist-value">0.1</span>
+                        </div>
+                        <div class="config-group">
+                            <label for="clustering-method">Clustering Method:</label>
+                            <select id="clustering-method" class="config-select">
+                                <option value="kmeans">K-Means</option>
+                                <option value="hierarchical">Hierarchical</option>
+                                <option value="dbscan">DBSCAN</option>
+                                <option value="intent-based" selected>Intent-Based</option>
+                            </select>
+                        </div>
+                        <button id="recompute-clusters-btn" class="btn btn-primary btn-sm">Recompute Clusters</button>
+                    </div>
+                </div>
+
                 <!-- Quick Actions -->
                 <div class="quick-actions-container">
                     <div class="panel-header">
-                        <h2>⚡ Quick Actions</h2>
+                        <h2>Quick Actions</h2>
                     </div>
                     <div class="quick-actions">
-                        <button id="generate-notebook-btn" class="btn btn-primary">📓 Generate Analysis Notebook</button>
+                        <button id="generate-notebook-btn" class="btn btn-primary">Generate Analysis Notebook</button>
                         <button id="export-cluster-btn" class="btn btn-secondary">Export Selected Cluster</button>
                         <button id="create-procedure-btn" class="btn btn-success">Create Procedure Template</button>
                         <button id="share-insights-btn" class="btn btn-info">Share Insights</button>
+                        <button id="analyze-patterns-btn" class="btn btn-warning">Analyze Patterns</button>
+                        <button id="export-umap-btn" class="btn btn-secondary">Export UMAP Data</button>
                     </div>
                 </div>
             </div>
@@ -148,7 +192,7 @@
     <div id="notebook-modal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
-                <h2>📓 Generate Analysis Notebook</h2>
+                <h2>Generate Analysis Notebook</h2>
                 <button class="modal-close" onclick="closeModal('notebook-modal')">&times;</button>
             </div>
             <div class="modal-body">
@@ -215,6 +259,82 @@
             <div class="modal-footer">
                 <button class="btn btn-secondary" onclick="closeModal('procedure-modal')">Cancel</button>
                 <button class="btn btn-primary" onclick="createProcedure()">Create Procedure</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Info Modal -->
+    <div id="info-modal" class="modal">
+        <div class="modal-content info-modal-content">
+            <div class="modal-header">
+                <h2>PKL Dashboard - How It Works</h2>
+                <button class="modal-close" onclick="closeModal('info-modal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="info-section">
+                    <h3>Overview</h3>
+                    <p>The PKL Dashboard provides advanced analytics and visualization for Cursor IDE sessions using hierarchical clustering and UMAP dimensionality reduction.</p>
+                </div>
+                
+                <div class="info-section">
+                    <h3>Key Features</h3>
+                    <ul>
+                        <li><strong>Hierarchical Clustering:</strong> Groups sessions by intent and workflow patterns</li>
+                        <li><strong>UMAP Visualization:</strong> Shows session relationships in 2D space</li>
+                        <li><strong>Pattern Insights:</strong> Identifies success patterns and efficiency metrics</li>
+                        <li><strong>Real-time Updates:</strong> Live monitoring of active sessions</li>
+                        <li><strong>Session Details:</strong> Deep dive into individual session data</li>
+                    </ul>
+                </div>
+                
+                <div class="info-section">
+                    <h3>How It Works</h3>
+                    <ol>
+                        <li><strong>Data Collection:</strong> Monitors Cursor IDE sessions, conversations, and file changes</li>
+                        <li><strong>Intent Classification:</strong> Uses AI to classify session intents (exploration, implementation, debugging)</li>
+                        <li><strong>Clustering:</strong> Groups similar sessions using hierarchical clustering algorithms</li>
+                        <li><strong>UMAP Projection:</strong> Reduces high-dimensional session data to 2D for visualization</li>
+                        <li><strong>Pattern Analysis:</strong> Identifies successful workflow patterns and efficiency metrics</li>
+                    </ol>
+                </div>
+                
+                <div class="info-section">
+                    <h3>Technical Specifications</h3>
+                    <div class="specs-grid">
+                        <div class="spec-item">
+                            <strong>Clustering Algorithm:</strong> Hierarchical Agglomerative Clustering
+                        </div>
+                        <div class="spec-item">
+                            <strong>Dimensionality Reduction:</strong> UMAP (Uniform Manifold Approximation and Projection)
+                        </div>
+                        <div class="spec-item">
+                            <strong>Intent Classification:</strong> Custom AI model trained on session patterns
+                        </div>
+                        <div class="spec-item">
+                            <strong>Real-time Processing:</strong> Event-driven architecture with WebSocket updates
+                        </div>
+                        <div class="spec-item">
+                            <strong>Data Storage:</strong> SQLite database with JSON metadata
+                        </div>
+                        <div class="spec-item">
+                            <strong>Visualization:</strong> Plotly.js for interactive charts and D3.js for tree structures
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="info-section">
+                    <h3>Usage Tips</h3>
+                    <ul>
+                        <li>Click on cluster nodes to expand/collapse hierarchical views</li>
+                        <li>Use the UMAP plot to explore session relationships</li>
+                        <li>Select points or draw selection boxes to see detailed information</li>
+                        <li>Change color coding to explore different session attributes</li>
+                        <li>Use pattern insights to identify successful workflow strategies</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" onclick="closeModal('info-modal')">Got it!</button>
             </div>
         </div>
     </div>

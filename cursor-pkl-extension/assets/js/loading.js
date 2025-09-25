@@ -5,7 +5,7 @@
 
 // Track stylesheet loading to prevent FOUC
 let stylesheetsLoaded = 0;
-const totalStylesheets = 3; // critical.css, variables.css, and main.css
+const totalStylesheets = 2; // variables.css and main.css
 
 function checkStylesheetsLoaded() {
   stylesheetsLoaded++;
@@ -32,6 +32,13 @@ function hideLoadingOverlay() {
     if (loadingOverlay) {
       loadingOverlay.classList.add('hidden');
       console.log('Loading overlay hidden');
+      
+      // Ensure the main dashboard content becomes visible
+      const dashboardElement = document.querySelector('.dashboard');
+      if (dashboardElement) {
+        dashboardElement.classList.add('loaded');
+        console.log('Dashboard content set to visible.');
+      }
       
       // Remove from DOM after transition
       setTimeout(() => {
