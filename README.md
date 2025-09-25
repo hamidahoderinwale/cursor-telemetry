@@ -1,10 +1,10 @@
 # Cursor Telemetry Dashboard
 
-A comprehensive real-time dashboard system for monitoring, analyzing, and integrating Cursor IDE activity with advanced data science workflow insights and memory management capabilities.
+A comprehensive real-time dashboard system for monitoring, analyzing, and integrating Cursor IDE activity with advanced data science workflow insights and memory management capabilities. **Specifically designed for Jupyter notebook users working in Cursor IDE.**
 
 ## Project Overview
 
-The Cursor Telemetry Dashboard is an intelligent monitoring and analysis platform that captures, processes, and visualizes development activities from Cursor IDE. It provides deep insights into data science workflows through advanced cell-stage classification, real-time session tracking, and executable memory generation.
+The Cursor Telemetry Dashboard is an intelligent monitoring and analysis platform that captures, processes, and visualizes development activities from Cursor IDE. It provides deep insights into data science workflows through advanced cell-stage classification, real-time session tracking, and executable memory generation. **This tool is specifically optimized for users working with Jupyter notebooks (.ipynb files) in Cursor IDE.**
 
 ### Key Capabilities
 
@@ -150,6 +150,7 @@ The Cursor Telemetry Dashboard is an intelligent monitoring and analysis platfor
 - Node.js 16+ 
 - macOS (for AppleScript integration)
 - Cursor IDE
+- **Jupyter notebook files (.ipynb) for analysis**
 
 ### Installation
 
@@ -263,4 +264,4 @@ For questions, issues, or contributions, please:
 
 ---
 
-**Note**: This dashboard is designed for data science workflows and provides specialized insights into notebook-based development patterns. The system is optimized for macOS and Cursor IDE integration.
+**Note**: This dashboard is designed specifically for data science workflows and provides specialized insights into Jupyter notebook-based development patterns. The system is optimized for macOS, Cursor IDE integration, and requires .ipynb files for full functionality.
