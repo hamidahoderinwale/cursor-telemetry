@@ -478,6 +478,21 @@ class LiveDashboard {
                         </svg>
                         Return to Context
                     </button>
+                    <button class="btn btn-sm btn-success" onclick="generateNotebook('${session.id}')">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                            <polyline points="14,2 14,8 20,8"></polyline>
+                        </svg>
+                        Generate Notebook
+                    </button>
+                    <button class="btn btn-sm btn-info" onclick="createIntegrationPackage('${session.id}')">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                            <polyline points="3.27,6.96 12,12.01 20.73,6.96"></polyline>
+                            <line x1="12" y1="22.08" x2="12" y2="12"></line>
+                        </svg>
+                        Create Package
+                    </button>
                 </div>
             </div>
         `).join('');
@@ -2881,6 +2896,113 @@ class LiveDashboard {
     }
 
     /**
+     * Generate notebook from session
+     */
+    async generateNotebook(sessionId) {
+        try {
+            console.log(`Generating notebook for session: ${sessionId}`);
+            this.showNotification('Generating notebook...', 'info');
+            
+            const response = await fetch(`/api/session/${sessionId}/generate-notebook`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({})
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                this.showNotification('Notebook generated successfully!', 'success');
+                
+                // Create download link
+                const downloadLink = document.createElement('a');
+                downloadLink.href = data.downloadUrl;
+                downloadLink.download = data.notebook.filename;
+                downloadLink.click();
+                
+                console.log('Notebook generated:', data.notebook);
+            } else {
+                throw new Error(data.error || 'Failed to generate notebook');
+            }
+        } catch (error) {
+            console.error('Error generating notebook:', error);
+            this.showNotification(`Error generating notebook: ${error.message}`, 'error');
+        }
+    }
+
+    /**
+     * Create integration package from session
+     */
+    async createIntegrationPackage(sessionId) {
+        try {
+            console.log(`Creating integration package for session: ${sessionId}`);
+            this.showNotification('Creating integration package...', 'info');
+            
+            const response = await fetch(`/api/session/${sessionId}/create-integration-package`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({})
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                this.showNotification('Integration package created successfully!', 'success');
+                
+                // Show package details
+                const packageInfo = `
+                    <div class="integration-package-info">
+                        <h4>Integration Package Created</h4>
+                        <p><strong>Session File:</strong> ${data.sessionFile.filename}</p>
+                        ${data.notebook ? `<p><strong>Notebook:</strong> ${data.notebook.filename}</p>` : ''}
+                        <p><strong>Actions:</strong> ${data.package.actions.length} actions available</p>
+                    </div>
+                `;
+                
+                // Create a modal to show package info
+                const modal = document.createElement('div');
+                modal.className = 'modal active';
+                modal.innerHTML = `
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h2>Integration Package</h2>
+                            <button class="modal-close" onclick="this.closest('.modal').remove()">×</button>
+                        </div>
+                        <div class="modal-body">
+                            ${packageInfo}
+                            <div class="package-actions">
+                                <button class="btn btn-primary" onclick="window.open('${data.sessionFile.downloadUrl}')">Download Session File</button>
+                                ${data.notebook ? `<button class="btn btn-success" onclick="window.open('${data.notebook.downloadUrl}')">Download Notebook</button>` : ''}
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                document.body.appendChild(modal);
+                
+                console.log('Integration package created:', data.package);
+            } else {
+                throw new Error(data.error || 'Failed to create integration package');
+            }
+        } catch (error) {
+            console.error('Error creating integration package:', error);
+            this.showNotification(`Error creating integration package: ${error.message}`, 'error');
+        }
+    }
+
+    /**
      * Set up keyboard shortcuts for accessibility
      */
     setupKeyboardShortcuts() {
@@ -3077,6 +3199,18 @@ document.addEventListener('DOMContentLoaded', function() {
     window.returnToContext = function(sessionId) {
         if (window.dashboard) {
             window.dashboard.returnToContext(sessionId);
+        }
+    };
+    
+    window.generateNotebook = function(sessionId) {
+        if (window.dashboard) {
+            window.dashboard.generateNotebook(sessionId);
+        }
+    };
+    
+    window.createIntegrationPackage = function(sessionId) {
+        if (window.dashboard) {
+            window.dashboard.createIntegrationPackage(sessionId);
         }
     };
     

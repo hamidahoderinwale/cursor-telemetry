@@ -1119,6 +1119,146 @@ const memoryAPI = new MemoryAPI();
 // Setup memory API routes
 memoryAPI.setupRoutes(app);
 
+// Notebook Generation API Integration
+const { NotebookGenerator } = require('../services/notebook-generator');
+const { FileBasedIntegration } = require('../services/file-based-integration');
+
+const notebookGenerator = new NotebookGenerator();
+const fileBasedIntegration = new FileBasedIntegration();
+
+// Notebook generation endpoints
+app.post('/api/session/:id/generate-notebook', async (req, res) => {
+  try {
+    const sessionId = req.params.id;
+    const options = req.body;
+    
+    console.log(`Notebook generation requested for session: ${sessionId}`);
+    
+    const result = await notebookGenerator.generateNotebook(sessionId);
+    
+    if (result.success) {
+      res.json({
+        success: true,
+        message: 'Notebook generated successfully',
+        notebook: result,
+        downloadUrl: `/api/download/notebook/${result.filename}`
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        error: result.error,
+        message: 'Failed to generate notebook'
+      });
+    }
+  } catch (error) {
+    console.error('Notebook generation API error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// File-based integration endpoints
+app.post('/api/session/:id/create-session-file', async (req, res) => {
+  try {
+    const sessionId = req.params.id;
+    const options = req.body;
+    
+    console.log(`Session file creation requested for session: ${sessionId}`);
+    
+    const result = await fileBasedIntegration.createCursorSessionFile(sessionId);
+    
+    if (result.success) {
+      res.json({
+        success: true,
+        message: 'Cursor session file created successfully',
+        sessionFile: result,
+        downloadUrl: `/api/download/session/${result.filename}`
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        error: result.error,
+        message: 'Failed to create session file'
+      });
+    }
+  } catch (error) {
+    console.error('Session file creation API error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Comprehensive integration package endpoint
+app.post('/api/session/:id/create-integration-package', async (req, res) => {
+  try {
+    const sessionId = req.params.id;
+    const options = req.body;
+    
+    console.log(`Integration package creation requested for session: ${sessionId}`);
+    
+    const result = await fileBasedIntegration.createIntegrationPackage(sessionId);
+    
+    if (result.success) {
+      res.json({
+        success: true,
+        message: 'Integration package created successfully',
+        package: result.package,
+        sessionFile: result.sessionFile,
+        notebook: result.notebook
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        error: result.error,
+        message: 'Failed to create integration package'
+      });
+    }
+  } catch (error) {
+    console.error('Integration package creation API error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// File download endpoints
+app.get('/api/download/notebook/:filename', async (req, res) => {
+  try {
+    const filename = req.params.filename;
+    const filepath = path.join(notebookGenerator.options.outputDir, filename);
+    
+    if (await fs.access(filepath).then(() => true).catch(() => false)) {
+      res.download(filepath);
+    } else {
+      res.status(404).json({ error: 'File not found' });
+    }
+  } catch (error) {
+    console.error('Notebook download error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/download/session/:filename', async (req, res) => {
+  try {
+    const filename = req.params.filename;
+    const filepath = path.join(fileBasedIntegration.options.sessionFilesDir, filename);
+    
+    if (await fs.access(filepath).then(() => true).catch(() => false)) {
+      res.download(filepath);
+    } else {
+      res.status(404).json({ error: 'File not found' });
+    }
+  } catch (error) {
+    console.error('Session file download error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Legacy return-to-context endpoint (now uses dynamic integration)
 app.post('/api/session/:id/return-to-context', async (req, res) => {
   try {

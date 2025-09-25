@@ -1257,26 +1257,42 @@ class DynamicCursorIntegration {
 
   // Helper methods
   async loadSession(sessionId) {
-    // Simple fallback - return basic session structure
-    return {
-      id: sessionId,
-      timestamp: new Date().toISOString(),
-      intent: 'data_analysis',
-      files: [],
-      codeDeltas: [],
-      fileChanges: [],
-      conversations: [],
-      notebookState: {
-        executedCells: [],
-        variables: {},
-        outputs: [],
-        imports: [],
-        dataFiles: [],
-        environment: {},
-        errors: [],
-        userNotes: []
+    try {
+      // Load real session data from API
+      const response = await fetch(`http://localhost:3000/api/session/${sessionId}`);
+      if (!response.ok) {
+        throw new Error(`Failed to load session: ${response.status}`);
       }
-    };
+      
+      const data = await response.json();
+      if (data.success && data.session) {
+        return data.session;
+      }
+      
+      throw new Error('Session data not found in response');
+    } catch (error) {
+      console.error('Error loading session data:', error);
+      // Return minimal fallback structure
+      return {
+        id: sessionId,
+        timestamp: new Date().toISOString(),
+        intent: 'unknown',
+        files: [],
+        codeDeltas: [],
+        fileChanges: [],
+        conversations: [],
+        notebookState: {
+          executedCells: [],
+          variables: {},
+          outputs: [],
+          imports: [],
+          dataFiles: [],
+          environment: {},
+          errors: [],
+          userNotes: []
+        }
+      };
+    }
   }
 
   async mapSessionFilesToWorkspace(session, workspaceInfo) {
@@ -1330,34 +1346,184 @@ class DynamicCursorIntegration {
   }
 
   async generateDynamicActions(embeddings, intentAnalysis, session) {
-    // Generate dynamic actions from embeddings
-    return {
+    // Generate dynamic actions from real session data
+    const actions = {
       contextRestoration: {
-        restoreWorkspace: { path: '/mock/workspace' },
-        restoreFiles: session.files || [],
-        restoreConfiguration: { python: '3.8' }
+        restoreWorkspace: { path: this.extractWorkspace(session) },
+        restoreFiles: this.extractFiles(session),
+        restoreConfiguration: this.extractEnvironment(session)
       },
       workflowExecution: {
-        steps: [
-          { description: 'Load data', code: 'df = pd.read_csv("data.csv")' },
-          { description: 'Analyze data', code: 'df.describe()' }
-        ]
+        steps: this.extractWorkflowSteps(session)
       },
       knowledgeInjection: {
-        insights: [
-          'Use pandas for data manipulation',
-          'Consider data cleaning before analysis'
-        ],
-        warnings: [
-          'Check for missing values',
-          'Validate data types'
-        ],
-        suggestions: [
-          'Try different visualization types',
-          'Consider statistical analysis'
-        ]
+        insights: this.extractInsights(session),
+        warnings: this.extractWarnings(session),
+        suggestions: this.extractSuggestions(session)
       }
     };
+    
+    return actions;
+  }
+
+  /**
+   * Extract workspace from session data
+   */
+  extractWorkspace(session) {
+    if (session.currentFile) {
+      const path = require('path');
+      return path.dirname(session.currentFile);
+    }
+    
+    if (session.fileChanges && Array.isArray(session.fileChanges) && session.fileChanges.length > 0) {
+      const path = require('path');
+      return path.dirname(session.fileChanges[0].file);
+    }
+    
+    return process.cwd();
+  }
+
+  /**
+   * Extract files from session data
+   */
+  extractFiles(session) {
+    const files = new Set();
+    
+    if (session.currentFile) {
+      files.add(session.currentFile);
+    }
+    
+    if (session.fileChanges && Array.isArray(session.fileChanges)) {
+      session.fileChanges.forEach(change => {
+        if (change.file) {
+          files.add(change.file);
+        }
+      });
+    }
+    
+    return Array.from(files);
+  }
+
+  /**
+   * Extract environment from session data
+   */
+  extractEnvironment(session) {
+    const environment = {
+      python: '3.8',
+      platform: process.platform,
+      node: process.version
+    };
+    
+    // Look for environment-specific code
+    if (session.codeDeltas && Array.isArray(session.codeDeltas)) {
+      const allCode = session.codeDeltas.map(d => d.content).join('\n');
+      
+      if (allCode.includes('tensorflow') || allCode.includes('tf.')) {
+        environment.tensorflow = true;
+      }
+      if (allCode.includes('torch') || allCode.includes('pytorch')) {
+        environment.pytorch = true;
+      }
+      if (allCode.includes('sklearn') || allCode.includes('sklearn.')) {
+        environment.sklearn = true;
+      }
+    }
+    
+    return environment;
+  }
+
+  /**
+   * Extract workflow steps from session data
+   */
+  extractWorkflowSteps(session) {
+    const steps = [];
+    
+    if (session.codeDeltas && Array.isArray(session.codeDeltas)) {
+      session.codeDeltas.forEach((delta, index) => {
+        if (delta.content && delta.content.trim()) {
+          steps.push({
+            description: `Step ${index + 1}: ${delta.type || 'Code execution'}`,
+            code: delta.content,
+            timestamp: delta.timestamp
+          });
+        }
+      });
+    }
+    
+    return steps;
+  }
+
+  /**
+   * Extract insights from session data
+   */
+  extractInsights(session) {
+    const insights = [];
+    
+    if (session.codeDeltas && Array.isArray(session.codeDeltas)) {
+      const allCode = session.codeDeltas.map(d => d.content).join('\n');
+      
+      if (allCode.includes('pd.read_')) {
+        insights.push('Data loading with pandas detected');
+      }
+      if (allCode.includes('.describe()')) {
+        insights.push('Data exploration with describe() method');
+      }
+      if (allCode.includes('plt.') || allCode.includes('sns.')) {
+        insights.push('Data visualization with matplotlib/seaborn');
+      }
+      if (allCode.includes('def ') || allCode.includes('class ')) {
+        insights.push('Function/class definition patterns found');
+      }
+    }
+    
+    return insights;
+  }
+
+  /**
+   * Extract warnings from session data
+   */
+  extractWarnings(session) {
+    const warnings = [];
+    
+    if (session.codeDeltas && Array.isArray(session.codeDeltas)) {
+      const allCode = session.codeDeltas.map(d => d.content).join('\n');
+      
+      if (allCode.includes('pd.') && !allCode.includes('import pandas')) {
+        warnings.push('Pandas usage detected without import statement');
+      }
+      if (allCode.includes('np.') && !allCode.includes('import numpy')) {
+        warnings.push('NumPy usage detected without import statement');
+      }
+      if (allCode.includes('plt.') && !allCode.includes('import matplotlib')) {
+        warnings.push('Matplotlib usage detected without import statement');
+      }
+    }
+    
+    return warnings;
+  }
+
+  /**
+   * Extract suggestions from session data
+   */
+  extractSuggestions(session) {
+    const suggestions = [];
+    
+    suggestions.push('Review and adapt file paths for your environment');
+    suggestions.push('Verify data file availability before running code');
+    suggestions.push('Consider adding error handling for data operations');
+    
+    if (session.codeDeltas && Array.isArray(session.codeDeltas)) {
+      const allCode = session.codeDeltas.map(d => d.content).join('\n');
+      
+      if (allCode.includes('pd.read_')) {
+        suggestions.push('Consider adding data validation after loading');
+      }
+      if (allCode.includes('plt.')) {
+        suggestions.push('Add plot titles and labels for better visualization');
+      }
+    }
+    
+    return suggestions;
   }
 }
 
