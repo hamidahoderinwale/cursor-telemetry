@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live PKL Dashboard</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    
+    <!-- Preload critical resources -->
+    <link rel="preload" href="assets/css/variables.css" as="style">
+    <link rel="preload" href="assets/css/main.css" as="style">
+    <link rel="preload" href="assets/js/loading.js" as="script">
+    <link rel="preload" href="components/shared/dashboard.js" as="script">
+    
+    <!-- Loading utilities - must be loaded before stylesheets that call checkStylesheetsLoaded() -->
+    <script src="assets/js/loading.js"></script>
+    
+    <!-- CSS loaded first -->
+    <link rel="stylesheet" href="assets/css/variables.css" onload="checkStylesheetsLoaded()">
+    <link rel="stylesheet" href="assets/css/main.css" onload="checkStylesheetsLoaded()">
+    
+    <!-- External dependencies -->
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/plotly.js-dist@2.26.0/plotly.min.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    
+    <!-- Real-time status styles -->
+    <style>
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+            transition: background-color 0.3s ease;
+        }
+        
+        .status-dot.connected {
+            background-color: var(--status-success);
+            box-shadow: 0 0 6px var(--success-color);
+        }
+        
+        .status-dot.disconnected {
+            background-color: var(--status-error);
+            box-shadow: 0 0 6px var(--danger-color);
+        }
+        
+        .session-duration.active {
+            color: var(--status-success);
+            font-weight: var(--font-weight-semibold);
+        }
+        
+        .session-duration.inactive {
+            color: var(--text-tertiary);
+        }
+        
+        /* Privacy Analysis Modal Styles */
+        .privacy-modal-content {
+            max-width: 95vw;
+            max-height: 95vh;
+            width: 1200px;
+            height: 800px;
+            overflow-y: auto;
+        }
+        
+        .privacy-modal-content .modal-body {
+            padding: 0;
+            height: calc(100% - 60px);
+            overflow-y: auto;
+        }
+        
+        .privacy-analysis-container {
+            padding: var(--space-5);
+            font-family: var(--font-family-base);
+            color: var(--text-primary);
+            background: var(--background-primary);
+        }
+        
+        .privacy-controls-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: var(--space-4);
+            margin-bottom: var(--space-5);
+        }
+        
+        .config-item {
+            background: var(--background-secondary);
+            padding: var(--space-4);
+            border: 1px solid var(--border-color);
+        }
+        
+        .config-label {
+            font-size: var(--font-size-sm);
+            color: var(--text-secondary);
+            margin-bottom: var(--space-2);
+            font-weight: var(--font-weight-medium);
+        }
+        
+        .config-input {
+            width: 100%;
+            padding: var(--space-2) var(--space-3);
+            border: 1px solid var(--border-color);
+            background: var(--background-primary);
+            color: var(--text-primary);
+            font-size: var(--font-size-sm);
+            font-family: var(--font-family-base);
+        }
+        
+        .config-input:focus {
+            outline: var(--focus-ring);
+            border-color: var(--primary-color);
+        }
+        
+        .privacy-metrics {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: var(--space-4);
+            margin: var(--space-5) 0;
+        }
+        
+        .metric-card {
+            background: var(--background-secondary);
+            padding: var(--space-4);
+            border: 1px solid var(--border-color);
+            text-align: center;
+        }
+        
+        .metric-value {
+            font-size: var(--font-size-2xl);
+            font-weight: var(--font-weight-bold);
+            color: var(--primary-color);
+            margin-bottom: var(--space-1);
+        }
+        
+        .metric-label {
+            font-size: var(--font-size-xs);
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">Loading Dashboard...</div>
+    </div>
+
+    <!-- Main Dashboard Content -->
+    <div class="dashboard-content" id="dashboardContent" style="display: none;">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <div class="header-left">
+                    <h1>PKL Dashboard</h1>
+                    <div class="header-nav">
+                        <button id="refresh-btn" class="btn btn-nav">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path>
+                                <path d="M21 3v5h-5"></path>
+                                <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path>
+                                <path d="M3 21v-5h5"></path>
+                            </svg>
+                            Refresh
+                        </button>
+                        <div class="nav-divider"></div>
+                        <button id="export-btn" class="btn btn-nav">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="7,10 12,15 17,10"></polyline>
+                                <line x1="12" y1="15" x2="12" y2="3"></line>
+                            </svg>
+                            Export
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="header-center">
+                    <div class="search-container">
+                        <input type="text" id="global-search" placeholder="Search sessions, files, or prompts..." />
+                        <button id="search-btn" class="btn btn-icon">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="11" cy="11" r="8"></circle>
+                                <path d="M21 21l-4.35-4.35"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="header-right">
+                    <div class="status-indicator">
+                        <div class="status-dot disconnected" id="connectionStatus"></div>
+                        <span class="status-text" id="connectionText">Connecting...</span>
+                    </div>
+                    <div class="header-actions">
+                        <button id="privacy-analysis-btn" class="btn btn-secondary">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                            </svg>
+                            Privacy
+                        </button>
+                        <button id="enhanced-view-btn" class="btn btn-primary">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M3 3h18v18H3zM9 9h6v6H9z"></path>
+                            </svg>
+                            Enhanced View
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Statistics Section -->
+            <section class="stats-section">
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-value" id="totalSessions">0</div>
+                        <div class="stat-label">Total Sessions</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="activeSessions">0</div>
+                        <div class="stat-label">Active Sessions</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="completedSessions">0</div>
+                        <div class="stat-label">Completed</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="failedSessions">0</div>
+                        <div class="stat-label">Failed</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="totalChanges">0</div>
+                        <div class="stat-label">Code Changes</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="totalConversations">0</div>
+                        <div class="stat-label">Conversations</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- View Controls -->
+            <div class="view-controls">
+                <button class="view-btn active" id="timeline-view-btn" onclick="switchView('timeline')">Development Timeline</button>
+                <button class="view-btn" id="projects-sessions-view-btn" onclick="switchView('projects-sessions')">Projects & Sessions</button>
+                <button class="view-btn" id="notebooks-view-btn" onclick="switchView('notebooks')">Notebooks</button>
+                <button class="view-btn" id="visualizations-view-btn" onclick="switchView('visualizations')">Workflow Analysis</button>
+                <button class="view-btn" id="embeddings-view-btn" onclick="switchView('embeddings')">Clio & Kura</button>
+                <button class="view-btn" id="enhanced-view-btn" onclick="window.location.href='/dashboard/enhanced'">Enhanced View</button>
+            </div>
+
+            <!-- Analysis Visualizations -->
+            <section class="analysis-section" id="analysis-section">
+                <h2 class="section-title">Session Analysis</h2>
+                <div class="visualizations-grid">
+                    <div class="viz-container">
+                        <h3>Session Embeddings Map</h3>
+                        <div id="embeddings-container" class="viz-content"></div>
+                    </div>
+                    <div class="viz-container">
+                        <h3>Cell Stage Distribution</h3>
+                        <div id="intent-timeline-container" class="viz-content"></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Sessions List -->
+            <section class="sessions-list" id="sessions-list">
+                <!-- Sessions will be dynamically loaded here -->
+            </section>
+        </main>
+    </div>
+
+    <!-- Session Detail Modal -->
+    <div class="modal" id="sessionModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="session-detail-title">Session Details</h3>
+                <button class="modal-close" onclick="closeSessionModal()">&times;</button>
+            </div>
+            <div class="modal-body" id="session-detail-body">
+                <!-- Session details will be loaded here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Privacy Analysis Modal -->
+    <div class="modal" id="privacyModal">
+        <div class="modal-content privacy-modal-content">
+            <div class="modal-header">
+                <h3>Privacy Analysis</h3>
+                <button class="modal-close" onclick="closePrivacyModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="privacy-analysis-container">
+                    <h4>Privacy Configuration</h4>
+                    <div class="privacy-controls-grid">
+                        <div class="config-item">
+                            <div class="config-label">Epsilon (Privacy Budget)</div>
+                            <input type="range" class="config-input" id="epsilon-slider" min="0.1" max="10" step="0.1" value="1.0">
+                            <span id="epsilon-value">1.0</span>
+                        </div>
+                        <div class="config-item">
+                            <div class="config-label">Redaction Level (%)</div>
+                            <input type="range" class="config-input" id="redaction-slider" min="0" max="100" step="5" value="50">
+                            <span id="redaction-value">50%</span>
+                        </div>
+                        <div class="config-item">
+                            <div class="config-label">Abstraction Level</div>
+                            <input type="range" class="config-input" id="abstraction-slider" min="1" max="5" step="1" value="3">
+                            <span id="abstraction-value">3</span>
+                        </div>
+                    </div>
+                    
+                    <div class="privacy-metrics">
+                        <div class="metric-card">
+                            <div class="metric-value" id="privacy-score">85</div>
+                            <div class="metric-label">Privacy Score</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value" id="expressiveness-score">0.75</div>
+                            <div class="metric-label">Expressiveness</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value" id="violation-count">3</div>
+                            <div class="metric-label">Violations</div>
+                        </div>
+                    </div>
+                    
+                    <button class="btn btn-primary" onclick="runPrivacyAnalysis()">Run Analysis</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="components/cell-stage-classifier.js"></script>
+    <script src="components/shared/dashboard.js"></script>
+    <script src="components/real-data-visualizations.js"></script>
+    
+    <script>
+        // Initialize dashboard when DOM is loaded
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOM loaded, initializing dashboard...');
+            
+            // Initialize the dashboard
+            window.dashboard = new LiveDashboard();
+            
+            // Set up global event handlers
+            setupGlobalEventHandlers();
+        });
+
+        // Global event handlers
+        function setupGlobalEventHandlers() {
+            // Refresh button
+            document.getElementById('refresh-btn').addEventListener('click', function() {
+                if (window.dashboard) {
+                    window.dashboard.loadSessions();
+                }
+            });
+
+            // Export button
+            document.getElementById('export-btn').addEventListener('click', function() {
+                if (window.dashboard) {
+                    window.dashboard.exportData();
+                }
+            });
+
+            // Privacy analysis button
+            document.getElementById('privacy-analysis-btn').addEventListener('click', function() {
+                openPrivacyModal();
+            });
+
+            // Enhanced view button
+            document.getElementById('enhanced-view-btn').addEventListener('click', function() {
+                window.location.href = '/dashboard/enhanced';
+            });
+
+            // Global search
+            const searchInput = document.getElementById('global-search');
+            const searchBtn = document.getElementById('search-btn');
+            
+            searchBtn.addEventListener('click', function() {
+                const query = searchInput.value.trim();
+                if (query && window.dashboard) {
+                    window.dashboard.searchSessions(query);
+                }
+            });
+
+            searchInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    searchBtn.click();
+                }
+            });
+        }
+
+        // Modal functions
+        function closeSessionModal() {
+            const modal = document.getElementById('sessionModal');
+            modal.classList.remove('active');
+        }
+
+        function closePrivacyModal() {
+            const modal = document.getElementById('privacyModal');
+            modal.classList.remove('active');
+        }
+
+        function openPrivacyModal() {
+            const modal = document.getElementById('privacyModal');
+            modal.classList.add('active');
+        }
+
+        // Privacy analysis functions
+        function runPrivacyAnalysis() {
+            console.log('Running privacy analysis...');
+            // Implementation would go here
+        }
+
+        // Global functions for HTML onclick handlers
+        window.switchView = function(viewType) {
+            if (window.dashboard) {
+                window.dashboard.switchView(viewType);
+            }
+        };
+
+        window.viewSession = function(sessionId) {
+            if (window.dashboard) {
+                window.dashboard.viewSession(sessionId);
+            }
+        };
+
+        window.returnToContext = function(sessionId) {
+            if (window.dashboard) {
+                window.dashboard.returnToContext(sessionId);
+            }
+        };
+
+        window.toggleCodeDeltas = function(sessionId) {
+            if (window.dashboard) {
+                window.dashboard.toggleCodeDeltas(sessionId);
+            }
+        };
+    </script>
+</body>
+</html>

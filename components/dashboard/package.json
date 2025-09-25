@@ -1,0 +1,26 @@
+{
+  "name": "pkl-dashboard",
+  "version": "1.0.0",
+  "description": "PKL Dashboard with dynamic cursor integration",
+  "main": "src/web-interface/web-server.js",
+  "scripts": {
+    "start": "node src/web-interface/web-server.js",
+    "dev": "nodemon src/web-interface/web-server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "socket.io": "^4.7.2",
+    "cors": "^2.8.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "keywords": [
+    "dashboard",
+    "cursor",
+    "integration",
+    "v-measure"
+  ],
+  "author": "PKL Team",
+  "license": "MIT"
+}

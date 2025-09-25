@@ -1,0 +1,168 @@
+/* Search Component Styles */
+
+.search-section {
+  margin-bottom: var(--space-6);
+}
+
+.search-container {
+  display: flex;
+  gap: var(--space-4);
+  align-items: center;
+  background: var(--background-primary);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--border-color);
+}
+
+.search-input-wrapper {
+  position: relative;
+  flex: 1;
+  display: flex;
+  align-items: center;
+}
+
+.search-icon {
+  position: absolute;
+  left: var(--space-3);
+  color: var(--text-secondary);
+  z-index: 1;
+}
+
+.search-input {
+  width: 100%;
+  padding: var(--space-3) var(--space-3) var(--space-3) var(--space-10);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--background-secondary);
+  color: var(--text-primary);
+  font-size: var(--font-size-base);
+  transition: var(--transition-fast);
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px var(--primary-color);
+}
+
+.search-input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.search-shortcut {
+  position: absolute;
+  right: var(--space-3);
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  background: var(--background-tertiary);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+}
+
+.search-filters {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+}
+
+.filter-select {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--background-secondary);
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.filter-select:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px var(--primary-color);
+}
+
+/* Search Suggestions and No Results */
+.no-sessions {
+  text-align: center;
+  padding: var(--space-8);
+  color: var(--text-secondary);
+}
+
+.no-sessions-icon {
+  font-size: 48px;
+  margin-bottom: var(--space-4);
+  opacity: 0.5;
+}
+
+.no-sessions h3 {
+  margin: 0 0 var(--space-2) 0;
+  color: var(--text-primary);
+}
+
+.no-sessions p {
+  margin: 0 0 var(--space-4) 0;
+  color: var(--text-secondary);
+}
+
+.search-suggestions {
+  margin-top: var(--space-4);
+}
+
+.suggestion-label {
+  display: block;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  margin-bottom: var(--space-2);
+}
+
+.suggestion-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  justify-content: center;
+}
+
+.suggestion-tag {
+  display: inline-block;
+  padding: var(--space-1) var(--space-2);
+  background: var(--background-light);
+  border: 1px solid var(--border-color-light);
+  border-radius: var(--border-radius);
+  font-size: var(--font-size-xs);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.suggestion-tag:hover {
+  background: var(--primary-color);
+  color: var(--background-primary);
+  border-color: var(--primary-color);
+}
+
+/* Responsive Search */
+@media (max-width: 768px) {
+  .search-container {
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+  
+  .search-input {
+    width: 100%;
+  }
+  
+  .search-filters {
+    flex-direction: column;
+    gap: var(--space-2);
+    width: 100%;
+  }
+  
+  .filter-select {
+    width: 100%;
+  }
+}

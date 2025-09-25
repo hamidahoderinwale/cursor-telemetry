@@ -1,0 +1,220 @@
+/**
+ * Notification System Styles
+ * Provides toast-style notifications for user feedback
+ */
+
+.notification {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 10000;
+    min-width: 300px;
+    max-width: 500px;
+    padding: 0;
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow-lg);
+    border: 1px solid var(--border-color);
+    animation: slideInRight 0.3s ease-out;
+    font-family: var(--font-family-base);
+}
+
+.notification-content {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-4);
+    color: var(--text-inverse);
+}
+
+.notification-message {
+    flex: 1;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.4;
+}
+
+.notification-close {
+    background: none;
+    border: none;
+    color: var(--text-inverse);
+    font-size: var(--font-size-lg);
+    font-weight: var(--font-weight-bold);
+    cursor: pointer;
+    padding: 0;
+    margin-left: var(--space-3);
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: var(--transition-fast);
+}
+
+.notification-close:hover {
+    background-color: rgba(255, 255, 255, 0.2);
+}
+
+/* Notification Types */
+.notification-info {
+    background-color: var(--info-color);
+    border-color: var(--info-color);
+}
+
+.notification-success {
+    background-color: var(--success-color);
+    border-color: var(--success-color);
+}
+
+.notification-warning {
+    background-color: var(--warning-color);
+    border-color: var(--warning-color);
+}
+
+.notification-error {
+    background-color: var(--danger-color);
+    border-color: var(--danger-color);
+}
+
+/* Animations */
+@keyframes slideInRight {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+@keyframes slideOutRight {
+    from {
+        transform: translateX(0);
+        opacity: 1;
+    }
+    to {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+}
+
+.notification.removing {
+    animation: slideOutRight 0.3s ease-in forwards;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .notification {
+        top: 10px;
+        right: 10px;
+        left: 10px;
+        min-width: auto;
+        max-width: none;
+    }
+    
+    .notification-content {
+        padding: var(--space-3);
+    }
+    
+    .notification-message {
+        font-size: var(--font-size-xs);
+    }
+}
+
+/* High Contrast Mode */
+@media (prefers-contrast: high) {
+    .notification {
+        border-width: 2px;
+    }
+    
+    .notification-close {
+        border: 1px solid var(--text-inverse);
+    }
+}
+
+/* Reduced Motion */
+@media (prefers-reduced-motion: reduce) {
+    .notification {
+        animation: none;
+    }
+    
+    .notification.removing {
+        animation: none;
+    }
+}
+
+/* Keyboard Shortcuts Help Styles */
+.keyboard-shortcuts-help {
+    padding: var(--space-4);
+}
+
+.keyboard-shortcuts-help h3 {
+    font-family: var(--font-family-base);
+    font-size: var(--font-size-lg);
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+    margin: 0 0 var(--space-4) 0;
+    text-align: center;
+}
+
+.shortcuts-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: var(--space-3);
+}
+
+.shortcut-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-3);
+    background: var(--background-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    transition: var(--transition-fast);
+}
+
+.shortcut-item:hover {
+    background: var(--background-hover);
+    border-color: var(--primary-color);
+}
+
+.shortcut-item kbd {
+    display: inline-block;
+    padding: var(--space-1) var(--space-2);
+    background: var(--background-primary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    font-family: var(--font-family-mono);
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-medium);
+    color: var(--text-primary);
+    box-shadow: var(--shadow-sm);
+    min-width: 80px;
+    text-align: center;
+}
+
+.shortcut-item span {
+    font-size: var(--font-size-sm);
+    color: var(--text-secondary);
+    font-weight: var(--font-weight-medium);
+}
+
+/* Responsive shortcuts grid */
+@media (max-width: 768px) {
+    .shortcuts-grid {
+        grid-template-columns: 1fr;
+        gap: var(--space-2);
+    }
+    
+    .shortcut-item {
+        flex-direction: column;
+        gap: var(--space-2);
+        text-align: center;
+    }
+    
+    .shortcut-item kbd {
+        min-width: auto;
+    }
+}
