@@ -505,6 +505,7 @@ class LiveDashboard {
         const activeSessions = this.sessions.filter(s => 
             s.outcome === 'in_progress' || 
             s.outcome === 'IN_PROGRESS' || 
+            s.phase === 'IN_PROGRESS' ||
             !s.outcome
         ).length;
         const completedSessions = this.sessions.filter(s => 
@@ -644,17 +645,17 @@ class LiveDashboard {
     }
 
     showSessionDetails(session) {
-        const modal = document.getElementById('sessionDetailModal');
+        const modal = document.getElementById('sessionModal');
         const title = document.getElementById('session-detail-title');
-        const body = document.getElementById('session-detail-body');
+        const container = modal?.querySelector('.session-detail-container');
         
-        if (modal && title && body) {
+        if (modal && title && container) {
             const projectName = this.extractProjectName(session.currentFile);
             const eventType = this.getEventType(session);
             const workflowMetrics = this.calculateWorkflowMetrics(session);
             
             title.textContent = `Work Session: ${session.intent || 'Temporal Actions'}`;
-            body.innerHTML = `
+            container.innerHTML = `
                 <div class="session-detail-content">
                     <div class="session-header">
                         <div class="session-title-section">
@@ -770,9 +771,13 @@ class LiveDashboard {
                             <div id="session-tab-overview" class="tab-panel active">
                                 <div class="overview-content">
                                     <h4>Session Overview</h4>
-                                    <p>This session involved ${workflowMetrics.totalChanges} code changes across ${workflowMetrics.filesModified} files, with ${workflowMetrics.totalConversations} AI conversations.</p>
-                                    ${session.intent ? `<p><strong>Intent:</strong> ${session.intent}</p>` : ''}
-                                    ${session.outcome ? `<p><strong>Outcome:</strong> ${session.outcome}</p>` : ''}
+                                    <div class="overview-details">
+                                        <p>This session involved <strong>${workflowMetrics.totalChanges}</strong> code changes across <strong>${workflowMetrics.filesModified}</strong> files, with <strong>${workflowMetrics.totalConversations}</strong> AI conversations.</p>
+                                        ${session.intent ? `<div class="overview-item"><strong>Intent:</strong> ${session.intent}</div>` : ''}
+                                        ${session.outcome ? `<div class="overview-item"><strong>Outcome:</strong> ${session.outcome}</div>` : ''}
+                                        ${session.duration ? `<div class="overview-item"><strong>Duration:</strong> ${this.formatDuration(session.duration)}</div>` : ''}
+                                        ${session.currentFile ? `<div class="overview-item"><strong>Primary File:</strong> ${session.currentFile.split('/').pop()}</div>` : ''}
+                                    </div>
                                 </div>
                             </div>
                             
@@ -815,7 +820,7 @@ class LiveDashboard {
     }
 
     closeSessionDetail() {
-        const modal = document.getElementById('sessionDetailModal');
+        const modal = document.getElementById('sessionModal');
         if (modal) {
             modal.classList.remove('active');
         }
@@ -864,19 +869,25 @@ class LiveDashboard {
 
     async openPrivacyModal() {
         const modal = document.getElementById('privacyModal');
-        const modalBody = document.getElementById('privacy-modal-body');
+        const modalBody = modal?.querySelector('.modal-body');
         
-        if (modal && modalBody) {
+        if (modal) {
             // Show loading state
-            modalBody.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p>Loading privacy analysis...</p></div>';
+            if (modalBody) {
+                modalBody.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p>Loading privacy analysis...</p></div>';
+            }
             modal.classList.add('active');
             
             try {
                 // Load privacy analysis content
-                await this.loadPrivacyAnalysisContent(modalBody);
+                if (modalBody) {
+                    await this.loadPrivacyAnalysisContent(modalBody);
+                }
             } catch (error) {
                 console.error('Error loading privacy analysis:', error);
-                modalBody.innerHTML = '<div class="error-state">Error loading privacy analysis: ' + error.message + '</div>';
+                if (modalBody) {
+                    modalBody.innerHTML = '<div class="error-state">Error loading privacy analysis: ' + error.message + '</div>';
+                }
             }
         }
     }
@@ -1807,16 +1818,112 @@ class LiveDashboard {
         const container = document.getElementById('sessions-list');
         if (!container) return;
 
-        console.log('Rendering enhanced projects & sessions view');
+        console.log('Rendering projects & sessions view');
 
-        // Initialize the enhanced project/session view if not already done
-        if (!this.enhancedProjectSessionView) {
-            // Load the enhanced project session view component
-            await this.loadEnhancedProjectSessionView();
-        } else {
-            // Re-render the existing view and refresh data
-            await this.enhancedProjectSessionView.loadProjects();
+        // Wait for sessions to be loaded if they're not available yet
+        if (!this.sessions || !Array.isArray(this.sessions)) {
+            console.log('Sessions not loaded yet, waiting...');
+            container.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p>Loading projects and sessions...</p></div>';
+            
+            // Try to load sessions if they're not available
+            try {
+                await this.loadSessions();
+            } catch (error) {
+                console.error('Error loading sessions:', error);
+                container.innerHTML = '<div class="error-state">Error loading sessions: ' + error.message + '</div>';
+                return;
+            }
         }
+
+        // Group sessions by project
+        const projects = this.groupSessionsByProject();
+        
+        // Render projects and sessions
+        let html = '<div class="projects-sessions-view">';
+        html += '<h2>Projects & Sessions</h2>';
+        
+        if (Object.keys(projects).length === 0) {
+            html += '<div class="no-data">No projects found</div>';
+        } else {
+            Object.entries(projects).forEach(([projectName, sessions]) => {
+                html += this.renderProjectCard(projectName, sessions);
+            });
+        }
+        
+        html += '</div>';
+        container.innerHTML = html;
+    }
+
+    groupSessionsByProject() {
+        const projects = {};
+        
+        // Safety check for sessions
+        if (!this.sessions || !Array.isArray(this.sessions)) {
+            console.warn('No sessions available for grouping');
+            return projects;
+        }
+        
+        this.sessions.forEach(session => {
+            const projectName = this.extractProjectName(session);
+            if (!projects[projectName]) {
+                projects[projectName] = [];
+            }
+            projects[projectName].push(session);
+        });
+        
+        return projects;
+    }
+
+    extractProjectName(session) {
+        // Extract project name from file path or use a default
+        if (session.currentFile) {
+            const pathParts = session.currentFile.split('/');
+            return pathParts[pathParts.length - 2] || 'Unknown Project';
+        }
+        return session.intent || 'Unknown Project';
+    }
+
+    renderProjectCard(projectName, sessions) {
+        const activeSessions = sessions.filter(s => s.outcome === 'IN_PROGRESS' || s.phase === 'IN_PROGRESS').length;
+        const totalSessions = sessions.length;
+        
+        return `
+            <div class="project-card" onclick="toggleProject('${projectName}')">
+                <div class="project-header">
+                    <h3>${projectName}</h3>
+                    <div class="project-stats">
+                        <span class="stat">${totalSessions} sessions</span>
+                        <span class="stat active">${activeSessions} active</span>
+                    </div>
+                    <div class="project-toggle">▼</div>
+                </div>
+                <div class="project-sessions" id="project-${projectName.replace(/\s+/g, '-')}">
+                    ${sessions.map(session => this.renderSessionCard(session)).join('')}
+                </div>
+            </div>
+        `;
+    }
+
+    renderSessionCard(session) {
+        const statusClass = session.outcome === 'IN_PROGRESS' || session.phase === 'IN_PROGRESS' ? 'active' : 'completed';
+        const changes = session.codeDeltas ? session.codeDeltas.length : 0;
+        
+        return `
+            <div class="session-card ${statusClass}" onclick="viewSession('${session.id}')">
+                <div class="session-header">
+                    <span class="session-id">${session.id}</span>
+                    <span class="session-status">${statusClass}</span>
+                </div>
+                <div class="session-details">
+                    <div class="session-intent">${session.intent || 'Unknown'}</div>
+                    <div class="session-file">${session.currentFile ? session.currentFile.split('/').pop() : 'No file'}</div>
+                    <div class="session-stats">
+                        <span>${changes} changes</span>
+                        <span>${new Date(session.timestamp).toLocaleString()}</span>
+                    </div>
+                </div>
+            </div>
+        `;
     }
 
     async loadEnhancedProjectSessionView() {
@@ -3202,6 +3309,22 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     };
     
+    window.toggleProject = function(projectName) {
+        const projectId = 'project-' + projectName.replace(/\s+/g, '-');
+        const sessionsDiv = document.getElementById(projectId);
+        const toggle = event.currentTarget.querySelector('.project-toggle');
+        
+        if (sessionsDiv) {
+            if (sessionsDiv.style.display === 'none') {
+                sessionsDiv.style.display = 'block';
+                toggle.textContent = '▼';
+            } else {
+                sessionsDiv.style.display = 'none';
+                toggle.textContent = '▶';
+            }
+        }
+    };
+    
     window.generateNotebook = function(sessionId) {
         if (window.dashboard) {
             window.dashboard.generateNotebook(sessionId);
@@ -3255,6 +3378,24 @@ document.addEventListener('DOMContentLoaded', function() {
     window.exportPrivacyReport = function() {
         if (window.dashboard) {
             window.dashboard.exportPrivacyReport();
+        }
+    };
+    
+    window.openInfoModal = function() {
+        if (window.dashboard) {
+            window.dashboard.openInfoModal();
+        }
+    };
+    
+    window.closeInfoModal = function() {
+        if (window.dashboard) {
+            window.dashboard.closeInfoModal();
+        }
+    };
+    
+    window.closeSessionModal = function() {
+        if (window.dashboard) {
+            window.dashboard.closeSessionDetail();
         }
     };
     
