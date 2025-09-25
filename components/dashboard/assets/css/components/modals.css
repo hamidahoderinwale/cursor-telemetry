@@ -89,50 +89,59 @@
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: var(--space-4);
-  padding-bottom: var(--space-3);
-  border-bottom: 1px solid var(--border-color);
+  margin-bottom: var(--space-6);
+  padding: var(--space-4) var(--space-5);
+  background: var(--background-secondary);
+  border-radius: var(--border-radius);
+  border: 1px solid var(--border-color);
 }
 
 .session-title-section {
   flex: 1;
+  margin-right: var(--space-4);
 }
 
 .session-title {
-  font-size: var(--font-size-xl);
-  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-bold);
   color: var(--text-primary);
-  margin: 0 0 var(--space-2) 0;
+  margin: 0 0 var(--space-3) 0;
+  line-height: 1.2;
 }
 
 .session-badges {
   display: flex;
   gap: var(--space-2);
   flex-wrap: wrap;
+  margin-top: var(--space-2);
 }
 
 .session-badges span {
-  padding: var(--space-1) var(--space-2);
-  border-radius: var(--border-radius-sm);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--border-radius-full);
   font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-medium);
+  font-weight: var(--font-weight-semibold);
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  white-space: nowrap;
 }
 
 .event-type-badge {
   background: var(--primary-color);
   color: white;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .project-badge {
   background: var(--background-tertiary);
   color: var(--text-secondary);
+  border: 1px solid var(--border-color);
 }
 
 .status-badge {
   background: var(--success-color);
   color: white;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .status-badge.in_progress {
@@ -146,21 +155,50 @@
 .session-actions {
   display: flex;
   gap: var(--space-2);
+  align-items: flex-start;
+  flex-shrink: 0;
+}
+
+.session-actions .btn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  border-radius: var(--border-radius);
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.session-actions .btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.session-actions .btn svg {
+  flex-shrink: 0;
 }
 
 /* Metadata Grid */
 .session-metadata-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: var(--space-4);
-  margin-bottom: var(--space-4);
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: var(--space-5);
+  margin-bottom: var(--space-6);
 }
 
 .metadata-card {
   background: var(--background-secondary);
   border: 1px solid var(--border-color);
-  border-radius: var(--border-radius);
-  padding: var(--space-4);
+  border-radius: var(--border-radius-lg);
+  padding: var(--space-5);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  transition: box-shadow 0.2s ease;
+}
+
+.metadata-card:hover {
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
 }
 
 .metadata-header {
@@ -179,14 +217,19 @@
 .metadata-content {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--space-3);
 }
 
 .metadata-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: var(--space-1) 0;
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--border-color-light);
+}
+
+.metadata-item:last-child {
+  border-bottom: none;
 }
 
 .metadata-label {
@@ -194,14 +237,16 @@
   font-weight: var(--font-weight-medium);
   color: var(--text-secondary);
   flex: 1;
+  margin-right: var(--space-3);
 }
 
 .metadata-value {
   font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
+  font-weight: var(--font-weight-semibold);
   color: var(--text-primary);
   text-align: right;
   flex: 1;
+  word-break: break-word;
 }
 
 /* Overview Content */
@@ -320,6 +365,42 @@
   
   .modal-footer .btn {
     width: 100%;
+  }
+  
+  /* Session Header Mobile */
+  .session-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-4);
+  }
+  
+  .session-title-section {
+    margin-right: 0;
+  }
+  
+  .session-actions {
+    align-self: stretch;
+  }
+  
+  .session-actions .btn {
+    width: 100%;
+    justify-content: center;
+  }
+  
+  /* Metadata Grid Mobile */
+  .session-metadata-grid {
+    grid-template-columns: 1fr;
+    gap: var(--space-4);
+  }
+  
+  .metadata-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-1);
+  }
+  
+  .metadata-value {
+    text-align: left;
   }
 }
 
