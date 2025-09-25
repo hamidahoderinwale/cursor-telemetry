@@ -63,12 +63,19 @@
   --btn-danger-text: #FFFFFF;
   --btn-danger-hover: #AA0000;
   
-  /* High-Contrast Intent Colors */
-  --intent-explore: #000000;
-  --intent-explore-hover: #333333;
-  --intent-implement: #333333;
-  --intent-debug: #666666;
-  --intent-unknown: #999999;
+  /* High-Contrast Intent Colors - Meaningful Color Scheme */
+  --intent-explore: #2563eb;        /* Blue - exploration/discovery */
+  --intent-explore-hover: #1d4ed8;
+  --intent-implement: #059669;      /* Green - implementation/building */
+  --intent-implement-hover: #047857;
+  --intent-debug: #dc2626;          /* Red - debugging/fixing */
+  --intent-debug-hover: #b91c1c;
+  --intent-refactor: #7c3aed;       /* Purple - refactoring/improving */
+  --intent-refactor-hover: #6d28d9;
+  --intent-data-exploration: #ea580c; /* Orange - data analysis */
+  --intent-data-exploration-hover: #c2410c;
+  --intent-unknown: #6b7280;        /* Gray - unknown/uncertain */
+  --intent-unknown-hover: #4b5563;
   --primary-color-bg: #F8F8F8;
   
   /* Typography - Funnel Sans */

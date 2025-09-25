@@ -59,7 +59,7 @@ function broadcastUpdate(type, data) {
     data,
     timestamp: new Date().toISOString()
   });
-  console.log(`📡 Broadcasted ${type} update:`, data.id || data.sessionId);
+  console.log(`Broadcasted ${type} update:`, data.id || data.sessionId);
 }
 
 // Middleware
@@ -377,7 +377,7 @@ async function processFileChange(filePath) {
         // Save entry to database
         try {
           await db.add('entries', entry);
-          console.log(`💾 Saved entry to database: ${entry.id}`);
+          console.log(`Saved entry to database: ${entry.id}`);
           
           // Broadcast real-time update to connected clients
           broadcastUpdate('file-change', {
@@ -410,7 +410,7 @@ async function processFileChange(filePath) {
             // Update the entry in database with prompt_id
             await db.update('entries', entry.id, { prompt_id: lastPrompt.id });
             
-            console.log(`🔗 Linked prompt ${lastPrompt.id} to entry ${entry.id}`);
+            console.log(`Linked prompt ${lastPrompt.id} to entry ${entry.id}`);
           }
         } catch (error) {
           console.error('Error linking prompt to entry:', error);
@@ -477,10 +477,10 @@ function startFileWatcher() {
 
 // Socket.IO connection handling
 io.on('connection', (socket) => {
-  console.log(`📡 Client connected: ${socket.id}`);
+  console.log(`Client connected: ${socket.id}`);
   
   socket.on('disconnect', () => {
-    console.log(`📡 Client disconnected: ${socket.id}`);
+    console.log(`Client disconnected: ${socket.id}`);
   });
   
   // Send current data to newly connected client

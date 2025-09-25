@@ -17,7 +17,7 @@ let pollingInterval = null;
 async function init() {
     try {
         await db.open();
-        console.log('✅ Database opened successfully');
+        console.log('Database opened successfully');
         
         // Start companion polling
         startCompanionPolling();
@@ -32,7 +32,7 @@ async function init() {
         setInterval(loadData, 5000);
         
     } catch (error) {
-        console.error('❌ Error initializing dashboard:', error);
+        console.error('Error initializing dashboard:', error);
         showError('Failed to initialize dashboard');
     }
 }
@@ -118,7 +118,7 @@ async function loadData() {
         const entries = await db.entries.orderBy('timestamp').reverse().toArray();
         const events = await db.events.orderBy('timestamp').reverse().toArray();
 
-        console.log(`📊 Loaded data: ${sessions.length} sessions, ${entries.length} entries, ${events.length} events`);
+        console.log(`Loaded data: ${sessions.length} sessions, ${entries.length} entries, ${events.length} events`);
 
         // Update stats
         updateStats(sessions, entries, events);
@@ -133,7 +133,7 @@ async function loadData() {
         renderActivityFeed(groupedData);
 
     } catch (error) {
-        console.error('❌ Error loading data:', error);
+        console.error('Error loading data:', error);
         showError('Failed to load data');
     }
 }

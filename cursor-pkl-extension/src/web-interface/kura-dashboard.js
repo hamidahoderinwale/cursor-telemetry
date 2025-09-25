@@ -21,6 +21,12 @@ class KuraDashboard {
         // Load configuration from localStorage or use defaults
         this.config = this.loadConfiguration();
         
+        // Initialize modal handlers first
+        initializeModalHandlers();
+        
+        // Load saved settings
+        this.loadUserSettings();
+        
         this.initializeEventListeners();
         this.initializeConfigurationUI();
         this.loadData();
@@ -345,7 +351,12 @@ class KuraDashboard {
             }
 
             if (infoBtn) {
-                infoBtn.addEventListener('click', () => this.showInfoModal());
+                infoBtn.addEventListener('click', () => openModal('info-modal'));
+            }
+
+            const settingsBtn = document.getElementById('settings-btn');
+            if (settingsBtn) {
+                settingsBtn.addEventListener('click', () => openModal('settings-modal'));
             }
 
             if (closeDetailsBtn) {
@@ -1767,50 +1778,256 @@ class KuraDashboard {
             return;
         }
 
+        // Get prompt information from various possible sources
+        const prompts = session.prompts || session.conversations || session.messages || [];
+        const codeChanges = session.codeDeltas ? session.codeDeltas.length : 0;
+        const fileChanges = session.fileChanges ? session.fileChanges.length : 0;
+        const totalChanges = codeChanges + fileChanges;
+        const duration = this.formatDuration(session.duration);
+        const confidence = session.confidence ? Math.round(session.confidence * 100) : 0;
+        const filePath = session.currentFile || 'Unknown';
+        const fileName = filePath.split('/').pop();
+
         container.innerHTML = `
-            <div class="session-card">
-                <div class="session-header">
-                    <span class="session-id">${session.id}</span>
-                    <span class="session-timestamp">${new Date(session.timestamp).toLocaleString()}</span>
-                </div>
-                <div class="session-meta">
-                    <div class="meta-item">
-                        <div class="meta-label">Intent</div>
-                        <div class="meta-value">${session.intent || 'Unknown'}</div>
+            <div class="session-details-card">
+                <div class="session-details-header">
+                    <div class="session-title">
+                        <h3>Session: ${session.intent ? session.intent.replace(/_/g, ' ') : 'Unknown Intent'}</h3>
+                        <span class="session-id">${session.id}</span>
                     </div>
-                    <div class="meta-item">
-                        <div class="meta-label">Outcome</div>
-                        <div class="meta-value">${session.outcome || 'In Progress'}</div>
-                    </div>
-                    <div class="meta-item">
-                        <div class="meta-label">File</div>
-                        <div class="meta-value">${session.currentFile || 'Unknown'}</div>
-                    </div>
-                    <div class="meta-item">
-                        <div class="meta-label">Confidence</div>
-                        <div class="meta-value">${session.confidence ? (session.confidence * 100).toFixed(1) + '%' : 'N/A'}</div>
+                    <div class="session-status-badge">
+                        <span class="status-badge status-${session.outcome || 'IN_PROGRESS'}">${session.outcome || 'IN_PROGRESS'}</span>
                     </div>
                 </div>
-                <div class="session-content">
-                    ${session.summary || 'No summary available'}
-                </div>
-                
-                ${this.renderConversations(session)}
-                
-                ${session.codeDeltas && session.codeDeltas.length > 0 ? `
-                <div class="session-meta">
-                    <div class="meta-item">
-                        <div class="meta-label">Code Changes</div>
-                        <div class="meta-value">${session.codeDeltas.length} changes</div>
+
+                <div class="session-overview-grid">
+                    <div class="overview-item">
+                        <div class="overview-label">Confidence</div>
+                        <div class="overview-value">${confidence}%</div>
                     </div>
-                    <div class="meta-item">
-                        <div class="meta-label">File Changes</div>
-                        <div class="meta-value">${session.fileChanges ? session.fileChanges.length : 0} files</div>
+                    <div class="overview-item">
+                        <div class="overview-label">Duration</div>
+                        <div class="overview-value">${duration}</div>
+                    </div>
+                    <div class="overview-item">
+                        <div class="overview-label">Total Changes</div>
+                        <div class="overview-value">${totalChanges}</div>
+                    </div>
+                    <div class="overview-item">
+                        <div class="overview-label">Prompts</div>
+                        <div class="overview-value">${prompts.length}</div>
+                    </div>
+                </div>
+
+                <div class="session-file-section">
+                    <h4>File Information</h4>
+                    <div class="file-detail">
+                        <span class="file-icon">📄</span>
+                        <div class="file-info">
+                            <div class="file-name">${fileName}</div>
+                            <div class="file-path">${filePath}</div>
+                        </div>
+                    </div>
+                </div>
+
+                ${prompts.length > 0 ? `
+                <div class="session-prompts-section">
+                    <h4>Prompts & Conversations (${prompts.length})</h4>
+                    <div class="prompts-list">
+                        ${prompts.slice(0, 5).map((prompt, index) => this.renderPromptItem(prompt, index)).join('')}
+                        ${prompts.length > 5 ? `<div class="more-prompts">+${prompts.length - 5} more prompts</div>` : ''}
                     </div>
                 </div>
                 ` : ''}
+
+                ${session.codeDeltas && session.codeDeltas.length > 0 ? `
+                <div class="session-changes-section">
+                    <h4>Code Changes (${session.codeDeltas.length})</h4>
+                    <div class="changes-list">
+                        ${session.codeDeltas.slice(0, 3).map((delta, index) => `
+                            <div class="change-item">
+                                <div class="change-header">
+                                    <span class="change-type">${delta.type || 'modification'}</span>
+                                    <span class="change-time">${this.formatTimestamp(delta.timestamp)}</span>
+                                </div>
+                                <div class="change-content">
+                                    <pre class="code-preview">${this.truncateCode(delta.content || delta.after || '', 150)}</pre>
+                                </div>
+                            </div>
+                        `).join('')}
+                        ${session.codeDeltas.length > 3 ? `<div class="more-changes">+${session.codeDeltas.length - 3} more changes</div>` : ''}
+                    </div>
+                </div>
+                ` : ''}
+
+                <div class="session-timeline-section">
+                    <h4>Session Timeline</h4>
+                    <div class="timeline">
+                        <div class="timeline-item">
+                            <div class="timeline-marker start"></div>
+                            <div class="timeline-content">
+                                <div class="timeline-title">Session Started</div>
+                                <div class="timeline-time">${this.formatTimestamp(session.timestamp)}</div>
+                            </div>
+                        </div>
+                        ${session.lastActivity ? `
+                        <div class="timeline-item">
+                            <div class="timeline-marker activity"></div>
+                            <div class="timeline-content">
+                                <div class="timeline-title">Last Activity</div>
+                                <div class="timeline-time">${this.formatTimestamp(session.lastActivity)}</div>
+                            </div>
+                        </div>
+                        ` : ''}
+                        <div class="timeline-item">
+                            <div class="timeline-marker end"></div>
+                            <div class="timeline-content">
+                                <div class="timeline-title">Session Duration</div>
+                                <div class="timeline-time">${duration}</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="session-summary-section">
+                    <h4>Summary</h4>
+                    <div class="summary-content">
+                        ${session.summary || this.generateSessionSummary(session)}
+                    </div>
+                </div>
             </div>
         `;
+    }
+
+    renderPromptItem(prompt, index) {
+        // Handle different prompt data formats
+        let promptText = '';
+        let responseText = '';
+        let timestamp = '';
+        let promptType = 'user';
+
+        if (typeof prompt === 'string') {
+            promptText = prompt;
+        } else if (prompt.prompt || prompt.user_message || prompt.user_input) {
+            promptText = prompt.prompt || prompt.user_message || prompt.user_input || '';
+            responseText = prompt.response || prompt.assistant_message || prompt.assistant_response || '';
+            timestamp = prompt.timestamp || prompt.time || '';
+            promptType = prompt.type || 'user';
+        } else if (prompt.content) {
+            promptText = prompt.content;
+            timestamp = prompt.timestamp || prompt.time || '';
+        } else if (prompt.message) {
+            promptText = prompt.message;
+            timestamp = prompt.timestamp || prompt.time || '';
+        }
+
+        return `
+            <div class="prompt-item">
+                <div class="prompt-header">
+                    <span class="prompt-type">${promptType}</span>
+                    <span class="prompt-time">${this.formatTimestamp(timestamp)}</span>
+                </div>
+                <div class="prompt-content">
+                    <div class="prompt-text">${this.truncateText(promptText, 200)}</div>
+                    ${responseText ? `<div class="response-text">${this.truncateText(responseText, 150)}</div>` : ''}
+                </div>
+            </div>
+        `;
+    }
+
+    formatDuration(seconds) {
+        if (!seconds || seconds === 0) return '0s';
+        
+        const hours = Math.floor(seconds / 3600);
+        const minutes = Math.floor((seconds % 3600) / 60);
+        const secs = Math.floor(seconds % 60);
+        
+        if (hours > 0) {
+            return `${hours}h ${minutes}m`;
+        } else if (minutes > 0) {
+            return `${minutes}m ${secs}s`;
+        } else {
+            return `${secs}s`;
+        }
+    }
+
+    formatTimestamp(timestamp) {
+        if (!timestamp) return 'Unknown';
+        
+        const date = new Date(timestamp);
+        const now = new Date();
+        const diffMs = now - date;
+        const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+        const diffDays = Math.floor(diffHours / 24);
+        
+        if (diffDays > 0) {
+            return `${diffDays}d ago`;
+        } else if (diffHours > 0) {
+            return `${diffHours}h ago`;
+        } else {
+            const diffMinutes = Math.floor(diffMs / (1000 * 60));
+            return diffMinutes > 0 ? `${diffMinutes}m ago` : 'Just now';
+        }
+    }
+
+    truncateCode(code, maxLength) {
+        if (!code || code.length <= maxLength) return code;
+        return code.substring(0, maxLength) + '...';
+    }
+
+    truncateText(text, maxLength) {
+        if (!text || text.length <= maxLength) return text;
+        return text.substring(0, maxLength) + '...';
+    }
+
+    generateSessionSummary(session) {
+        const intent = session.intent ? session.intent.replace(/_/g, ' ') : 'unknown';
+        const fileName = session.currentFile ? session.currentFile.split('/').pop() : 'unknown file';
+        const changes = (session.codeDeltas ? session.codeDeltas.length : 0) + (session.fileChanges ? session.fileChanges.length : 0);
+        const prompts = session.prompts ? session.prompts.length : 0;
+        
+        if (changes > 0 && prompts > 0) {
+            return `${intent} session on ${fileName} with ${prompts} prompts and ${changes} changes`;
+        } else if (changes > 0) {
+            return `${intent} session on ${fileName} with ${changes} changes`;
+        } else if (prompts > 0) {
+            return `${intent} session on ${fileName} with ${prompts} prompts`;
+        } else {
+            return `${intent} session on ${fileName}`;
+        }
+    }
+
+    loadUserSettings() {
+        const savedSettings = localStorage.getItem('pkl-dashboard-settings');
+        if (savedSettings) {
+            const settings = JSON.parse(savedSettings);
+            this.applySettings(settings);
+        }
+    }
+
+    applySettings(settings) {
+        // Apply items per page
+        if (settings.itemsPerPage) {
+            this.itemsPerPage = parseInt(settings.itemsPerPage);
+        }
+        
+        // Apply default view
+        if (settings.defaultView && settings.defaultView !== this.currentView) {
+            this.currentView = settings.defaultView;
+            this.updateViewToggle();
+        }
+        
+        // Apply color scheme
+        if (settings.defaultColorScheme) {
+            this.currentColorBy = settings.defaultColorScheme;
+            const colorSelect = document.getElementById('color-by-select');
+            if (colorSelect) {
+                colorSelect.value = settings.defaultColorScheme;
+            }
+        }
+        
+        // Apply other settings as needed
+        this.settings = settings;
     }
 
     renderConversations(session) {
@@ -2721,40 +2938,66 @@ class KuraDashboard {
 }
 
 // Global functions for modal handling
+// Global modal state management
+window.modalState = {
+    activeModal: null,
+    isInitialized: false
+};
+
 function closeModal(modalId) {
     const modal = document.getElementById(modalId);
     if (modal) {
         modal.classList.remove('active');
         modal.classList.add('hidden');
         modal.style.display = 'none';
+        window.modalState.activeModal = null;
+        
+        // Remove body scroll lock
+        document.body.classList.remove('modal-open');
     }
 }
 
 function openModal(modalId) {
+    // Close any existing modal first
+    if (window.modalState.activeModal && window.modalState.activeModal !== modalId) {
+        closeModal(window.modalState.activeModal);
+    }
+    
     const modal = document.getElementById(modalId);
     if (modal) {
         modal.classList.remove('hidden');
         modal.classList.add('active');
         modal.style.display = 'flex';
+        window.modalState.activeModal = modalId;
+        
+        // Add body scroll lock
+        document.body.classList.add('modal-open');
+        
+        // Focus the modal for accessibility
+        const firstFocusable = modal.querySelector('button, input, select, textarea, [tabindex]:not([tabindex="-1"])');
+        if (firstFocusable) {
+            firstFocusable.focus();
+        }
     }
 }
 
-// Enhanced modal functionality
+// Enhanced modal functionality with proper state management
 function initializeModalHandlers() {
+    if (window.modalState.isInitialized) {
+        return; // Prevent duplicate initialization
+    }
+    
     // ESC key to close modals
     document.addEventListener('keydown', function(event) {
-        if (event.key === 'Escape') {
-            const activeModal = document.querySelector('.modal.active');
-            if (activeModal) {
-                closeModal(activeModal.id);
-            }
+        if (event.key === 'Escape' && window.modalState.activeModal) {
+            closeModal(window.modalState.activeModal);
         }
     });
 
     // Click outside modal to close
     document.addEventListener('click', function(event) {
-        if (event.target.classList.contains('modal')) {
-            closeModal(event.target.id);
+        if (event.target.classList.contains('modal') && window.modalState.activeModal) {
+            closeModal(window.modalState.activeModal);
         }
     });
 
@@ -2764,11 +3007,66 @@ function initializeModalHandlers() {
             event.stopPropagation();
         }
     });
+    
+    // Close modal buttons
+    document.addEventListener('click', function(event) {
+        if (event.target.classList.contains('modal-close') || 
+            event.target.closest('.modal-close')) {
+            const modal = event.target.closest('.modal');
+            if (modal) {
+                closeModal(modal.id);
+            }
+        }
+    });
+    
+    window.modalState.isInitialized = true;
 }
 
 function generateNotebook() {
     console.log('Generating notebook...');
     closeModal('notebook-modal');
+}
+
+function saveSettings() {
+    const settings = {
+        itemsPerPage: document.getElementById('items-per-page').value,
+        defaultView: document.getElementById('default-view').value,
+        autoRefresh: document.getElementById('auto-refresh').value,
+        showTimestamps: document.getElementById('show-timestamps').checked,
+        defaultColorScheme: document.getElementById('default-color-scheme').value,
+        animationSpeed: document.getElementById('animation-speed').value
+    };
+    
+    // Save to localStorage
+    localStorage.setItem('pkl-dashboard-settings', JSON.stringify(settings));
+    
+    // Apply settings to current dashboard instance
+    if (window.kuraDashboard) {
+        window.kuraDashboard.applySettings(settings);
+    }
+    
+    closeModal('settings-modal');
+    
+    // Show success message
+    console.log('Settings saved successfully');
+}
+
+function loadSettings() {
+    const savedSettings = localStorage.getItem('pkl-dashboard-settings');
+    if (savedSettings) {
+        const settings = JSON.parse(savedSettings);
+        
+        // Apply settings to form
+        if (document.getElementById('items-per-page')) document.getElementById('items-per-page').value = settings.itemsPerPage || '10';
+        if (document.getElementById('default-view')) document.getElementById('default-view').value = settings.defaultView || 'clusters';
+        if (document.getElementById('auto-refresh')) document.getElementById('auto-refresh').value = settings.autoRefresh || '30';
+        if (document.getElementById('show-timestamps')) document.getElementById('show-timestamps').checked = settings.showTimestamps !== false;
+        if (document.getElementById('default-color-scheme')) document.getElementById('default-color-scheme').value = settings.defaultColorScheme || 'intent';
+        if (document.getElementById('animation-speed')) document.getElementById('animation-speed').value = settings.animationSpeed || 'normal';
+        
+        return settings;
+    }
+    return null;
 }
 
 function createProcedure() {

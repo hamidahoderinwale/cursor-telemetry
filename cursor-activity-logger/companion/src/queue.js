@@ -22,12 +22,12 @@ class Queue {
       if (linkedPrompt) {
         entryWithId.prompt = linkedPrompt.text;
         entryWithId.prompt_timestamp = linkedPrompt.timestamp;
-        console.log(`🔗 Linked prompt to code change: ${entryWithId.id}`);
+        console.log(`Linked prompt to code change: ${entryWithId.id}`);
       }
     }
     
     this.entries.push(entryWithId);
-    console.log(`📝 Added entry: ${entryWithId.id} (${entry.source})`);
+    console.log(`Added entry: ${entryWithId.id} (${entry.source})`);
     
     // Add corresponding event
     this.addEvent({
@@ -47,7 +47,7 @@ class Queue {
     };
     
     this.events.push(eventWithId);
-    console.log(`📊 Added event: ${eventWithId.type}`);
+    console.log(`Added event: ${eventWithId.type}`);
     
     return eventWithId;
   }
@@ -109,7 +109,7 @@ class Queue {
   // Acknowledge processed cursor
   acknowledge(cursor) {
     this.cursor = cursor;
-    console.log(`✅ Acknowledged cursor: ${cursor}`);
+    console.log(`Acknowledged cursor: ${cursor}`);
   }
 
   // Get queue statistics

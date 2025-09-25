@@ -18,7 +18,7 @@ class ClipboardMonitor {
 
   start() {
     if (this.isMonitoring) {
-      console.log('⚠️ Clipboard monitor already running');
+      console.log('Clipboard monitor already running');
       return;
     }
 
@@ -44,7 +44,7 @@ class ClipboardMonitor {
           queue.addPendingPrompt(text);
           this.lastClipboard = text;
           
-          console.log(`💾 Saved prompt to database: ${promptId}`);
+          console.log(`Saved prompt to database: ${promptId}`);
         }
       } catch (error) {
         // Silently handle clipboard errors (permission denied, etc.)

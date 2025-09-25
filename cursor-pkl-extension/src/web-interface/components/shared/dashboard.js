@@ -885,34 +885,146 @@ class LiveDashboard {
         if (!container) return;
         
         try {
-            const response = await fetch('/api/visualizations');
+            // Load session analysis data from Kura
+            const response = await fetch('/api/sessions/analyze-with-kura', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    test_mode: false,
+                    include_dashboard_data: true
+                })
+            });
+            
+            if (!response.ok) {
+                throw new Error(`Failed to load session analysis: ${response.status}`);
+            }
+            
             const data = await response.json();
             
-            if (data.success && data.sessions.length > 0) {
-                const visualizationsHtml = data.sessions.map(session => `
-                    <div class="visualization-card">
-                        <div class="viz-header">
-                            <h3 class="viz-title">${session.file.split('/').pop()}</h3>
-                            <span class="viz-count">${session.total} visualizations</span>
+            if (data.success && data.sessions && data.sessions.length > 0) {
+                // Create session analysis visualizations
+                const visualizationsHtml = `
+                    <div class="analysis-dashboard">
+                        <div class="analysis-stats">
+                            <div class="stat-card">
+                                <h3>Total Sessions</h3>
+                                <div class="stat-value">${data.total_sessions || data.sessions.length}</div>
+                            </div>
+                            <div class="stat-card">
+                                <h3>Active Sessions</h3>
+                                <div class="stat-value">${data.sessions.filter(s => s.phase === 'IN_PROGRESS').length}</div>
+                            </div>
+                            <div class="stat-card">
+                                <h3>Intent Clusters</h3>
+                                <div class="stat-value">${data.clusters ? data.clusters.length : 0}</div>
+                            </div>
                         </div>
-                        <div class="viz-preview">
-                            <p>Contains ${session.total} visualization(s)</p>
-                            <p>Last modified: ${new Date(session.timestamp).toLocaleString()}</p>
+                        
+                        <div class="analysis-charts">
+                            <div class="chart-container">
+                                <h3>Intent Distribution</h3>
+                                <div class="intent-chart" id="intent-distribution-chart"></div>
+                            </div>
+                            <div class="chart-container">
+                                <h3>Session Timeline</h3>
+                                <div class="timeline-chart" id="session-timeline-chart"></div>
+                            </div>
                         </div>
-                        <div class="viz-actions">
-                            <button class="btn btn-sm btn-primary" onclick="dashboard.viewSession('${session.sessionId}')">View Session</button>
+                        
+                        <div class="recent-sessions">
+                            <h3>Recent Sessions</h3>
+                            <div class="sessions-preview">
+                                ${data.sessions.slice(0, 5).map(session => `
+                                    <div class="session-preview-card">
+                                        <div class="session-intent-badge ${session.intent}">${session.intent}</div>
+                                        <div class="session-info">
+                                            <div class="session-file">${session.currentFile ? session.currentFile.split('/').pop() : 'Unknown'}</div>
+                                            <div class="session-time">${new Date(session.timestamp).toLocaleString()}</div>
+                                        </div>
+                                        <div class="session-status ${session.phase}">${session.phase}</div>
+                                    </div>
+                                `).join('')}
+                            </div>
                         </div>
                     </div>
-                `).join('');
+                `;
                 
-                container.innerHTML = `<div class="visualizations-grid">${visualizationsHtml}</div>`;
+                container.innerHTML = visualizationsHtml;
+                
+                // Initialize charts after DOM is updated
+                this.initializeAnalysisCharts(data);
             } else {
-                container.innerHTML = '<div class="no-sessions">No visualizations found</div>';
+                container.innerHTML = '<div class="no-sessions">No session data available for analysis</div>';
             }
         } catch (error) {
-            console.error('Error loading visualizations:', error);
-            container.innerHTML = '<div class="no-sessions">Error loading visualizations</div>';
+            console.error('Error loading session analysis:', error);
+            container.innerHTML = '<div class="no-sessions">Error loading session analysis</div>';
         }
+    }
+
+    initializeAnalysisCharts(data) {
+        // Initialize intent distribution chart
+        this.createIntentDistributionChart(data.sessions);
+        
+        // Initialize session timeline chart
+        this.createSessionTimelineChart(data.sessions);
+    }
+
+    createIntentDistributionChart(sessions) {
+        const container = document.getElementById('intent-distribution-chart');
+        if (!container) return;
+
+        // Count intents
+        const intentCounts = {};
+        sessions.forEach(session => {
+            const intent = session.intent || 'unknown';
+            intentCounts[intent] = (intentCounts[intent] || 0) + 1;
+        });
+
+        // Create simple bar chart
+        const maxCount = Math.max(...Object.values(intentCounts));
+        const chartHtml = Object.entries(intentCounts).map(([intent, count]) => {
+            const percentage = (count / maxCount) * 100;
+            return `
+                <div class="intent-bar">
+                    <div class="intent-label">${intent}</div>
+                    <div class="intent-bar-container">
+                        <div class="intent-bar-fill" style="width: ${percentage}%"></div>
+                        <span class="intent-count">${count}</span>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        container.innerHTML = `<div class="intent-chart-content">${chartHtml}</div>`;
+    }
+
+    createSessionTimelineChart(sessions) {
+        const container = document.getElementById('session-timeline-chart');
+        if (!container) return;
+
+        // Sort sessions by timestamp
+        const sortedSessions = sessions.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+        
+        // Create timeline visualization
+        const timelineHtml = sortedSessions.slice(-10).map(session => {
+            const time = new Date(session.timestamp);
+            const timeStr = time.toLocaleTimeString();
+            return `
+                <div class="timeline-item">
+                    <div class="timeline-time">${timeStr}</div>
+                    <div class="timeline-dot ${session.intent}"></div>
+                    <div class="timeline-content">
+                        <div class="timeline-intent">${session.intent}</div>
+                        <div class="timeline-file">${session.currentFile ? session.currentFile.split('/').pop() : 'Unknown'}</div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        container.innerHTML = `<div class="timeline-content">${timelineHtml}</div>`;
     }
 
     async renderEmbeddings() {

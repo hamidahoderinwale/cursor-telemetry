@@ -14,14 +14,14 @@ class FileWatcher {
 
   start() {
     if (this.isWatching) {
-      console.log('⚠️ File watcher already running');
+      console.log('File watcher already running');
       return;
     }
 
     const cfg = config.get();
     const watchPath = cfg.root_dir;
     
-    console.log(`🔍 Starting file watcher for: ${watchPath}`);
+    console.log(`Starting file watcher for: ${watchPath}`);
     
     this.watcher = chokidar.watch(watchPath, {
       ignored: cfg.ignore,
@@ -37,10 +37,10 @@ class FileWatcher {
       .on('add', (filePath) => this.handleFileChange(filePath, 'add'))
       .on('change', (filePath) => this.handleFileChange(filePath, 'change'))
       .on('unlink', (filePath) => this.handleFileDelete(filePath))
-      .on('error', (error) => console.error('❌ File watcher error:', error))
+      .on('error', (error) => console.error('File watcher error:', error))
       .on('ready', () => {
         this.isWatching = true;
-        console.log('✅ File watcher ready');
+        console.log('File watcher ready');
       });
   }
 
@@ -63,7 +63,7 @@ class FileWatcher {
       const cfg = config.get();
       const relativePath = relative(cfg.root_dir, filePath);
       
-      console.log(`📝 File ${eventType}: ${relativePath}`);
+      console.log(`File ${eventType}: ${relativePath}`);
 
       // Read current content
       const currentContent = existsSync(filePath) ? readFileSync(filePath, 'utf8') : '';
@@ -102,7 +102,7 @@ class FileWatcher {
       }
 
     } catch (error) {
-      console.error(`❌ Error handling file change ${filePath}:`, error);
+      console.error(`Error handling file change ${filePath}:`, error);
     }
   }
 
@@ -111,7 +111,7 @@ class FileWatcher {
       const cfg = config.get();
       const relativePath = relative(cfg.root_dir, filePath);
       
-      console.log(`🗑️ File deleted: ${relativePath}`);
+      console.log(`File deleted: ${relativePath}`);
       
       // Remove from snapshots
       this.snapshots.delete(filePath);
@@ -123,7 +123,7 @@ class FileWatcher {
       });
       
     } catch (error) {
-      console.error(`❌ Error handling file delete ${filePath}:`, error);
+      console.error(`Error handling file delete ${filePath}:`, error);
     }
   }
 

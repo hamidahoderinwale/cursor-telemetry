@@ -17,27 +17,65 @@
         <!-- Header -->
         <header class="dashboard-header">
             <div class="header-content">
-                <h1>PKL Dashboard</h1>
-                <div class="header-controls">
-                    <button id="back-to-main-btn" class="btn btn-secondary" onclick="window.location.href='/'">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M19 12H5M12 19l-7-7 7-7"></path>
-                        </svg>
-                        Back to Main
-                    </button>
-                    <button id="refresh-btn" class="btn btn-primary">Refresh</button>
-                    <button id="export-btn" class="btn btn-secondary">Export</button>
-                    <button id="info-btn" class="btn btn-info">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <circle cx="12" cy="12" r="10"></circle>
-                            <path d="M12 16v-4"></path>
-                            <path d="M12 8h.01"></path>
-                        </svg>
-                        Info
-                    </button>
+                <div class="header-left">
+                    <h1>PKL Dashboard</h1>
+                    <div class="header-nav">
+                        <button id="back-to-main-btn" class="btn btn-nav" onclick="window.location.href='/'">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M19 12H5M12 19l-7-7 7-7"></path>
+                            </svg>
+                            Main Dashboard
+                        </button>
+                        <div class="nav-divider"></div>
+                        <button id="refresh-btn" class="btn btn-nav">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path>
+                                <path d="M21 3v5h-5"></path>
+                                <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path>
+                                <path d="M3 21v-5h5"></path>
+                            </svg>
+                            Refresh
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="header-center">
                     <div class="search-container">
-                        <input type="text" id="global-search" placeholder="Search sessions..." />
-                        <button id="search-btn" class="btn btn-icon">Search</button>
+                        <input type="text" id="global-search" placeholder="Search sessions, files, or prompts..." />
+                        <button id="search-btn" class="btn btn-icon">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="11" cy="11" r="8"></circle>
+                                <path d="M21 21l-4.35-4.35"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="header-right">
+                    <div class="header-actions">
+                        <button id="export-btn" class="btn btn-action">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="7,10 12,15 17,10"></polyline>
+                                <line x1="12" y1="15" x2="12" y2="3"></line>
+                            </svg>
+                            Export
+                        </button>
+                        <button id="settings-btn" class="btn btn-action">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="3"></circle>
+                                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1 1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                            </svg>
+                            Settings
+                        </button>
+                        <button id="info-btn" class="btn btn-action">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <path d="M12 16v-4"></path>
+                                <path d="M12 8h.01"></path>
+                            </svg>
+                            Help
+                        </button>
                     </div>
                 </div>
             </div>
@@ -276,6 +314,74 @@
             <div class="modal-footer">
                 <button class="btn btn-secondary" onclick="closeModal('procedure-modal')">Cancel</button>
                 <button class="btn btn-primary" onclick="createProcedure()">Create Procedure</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Dashboard Settings</h2>
+                <button class="modal-close" onclick="closeModal('settings-modal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="settings-section">
+                    <h3>Display Preferences</h3>
+                    <div class="form-group">
+                        <label for="items-per-page">Items per page:</label>
+                        <select id="items-per-page">
+                            <option value="5">5</option>
+                            <option value="10" selected>10</option>
+                            <option value="20">20</option>
+                            <option value="50">50</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="default-view">Default view:</label>
+                        <select id="default-view">
+                            <option value="clusters" selected>Clusters</option>
+                            <option value="projects">Projects</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="settings-section">
+                    <h3>Analysis Settings</h3>
+                    <div class="form-group">
+                        <label for="auto-refresh">Auto-refresh interval (seconds):</label>
+                        <input type="number" id="auto-refresh" value="30" min="10" max="300">
+                    </div>
+                    <div class="form-group">
+                        <label for="show-timestamps">Show detailed timestamps:</label>
+                        <input type="checkbox" id="show-timestamps" checked>
+                    </div>
+                </div>
+                
+                <div class="settings-section">
+                    <h3>Visualization</h3>
+                    <div class="form-group">
+                        <label for="default-color-scheme">Default color scheme:</label>
+                        <select id="default-color-scheme">
+                            <option value="intent" selected>Intent</option>
+                            <option value="outcome">Outcome</option>
+                            <option value="file_type">File Type</option>
+                            <option value="cluster">Cluster</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="animation-speed">Animation speed:</label>
+                        <select id="animation-speed">
+                            <option value="slow">Slow</option>
+                            <option value="normal" selected>Normal</option>
+                            <option value="fast">Fast</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('settings-modal')">Cancel</button>
+                <button class="btn btn-primary" onclick="saveSettings()">Save Settings</button>
             </div>
         </div>
     </div>
