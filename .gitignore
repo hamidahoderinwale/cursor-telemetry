@@ -141,6 +141,9 @@ test-results/
 *.db-shm
 *.db-wal
 
+# Snapshot directories (large Cursor IDE state files)
+snapshots/
+
 # Archive and legacy files
 archive/
 legacy/
