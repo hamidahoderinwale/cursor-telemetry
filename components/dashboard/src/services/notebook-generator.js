@@ -46,6 +46,7 @@ class NotebookGenerator {
       }
 
       console.log(`Generating notebook for session: ${sessionId}`);
+      console.log('Session data:', JSON.stringify(sessionData, null, 2));
       
       // Generate notebook cells from session data
       const cells = await this.generateCells(sessionData);

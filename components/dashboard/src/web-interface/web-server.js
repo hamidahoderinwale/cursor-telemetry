@@ -1134,7 +1134,18 @@ app.post('/api/session/:id/generate-notebook', async (req, res) => {
     
     console.log(`Notebook generation requested for session: ${sessionId}`);
     
-    const result = await notebookGenerator.generateNotebook(sessionId);
+    // Load session data first
+    const session = realMonitor.getSession(sessionId) || await dataStorage.getSession(sessionId);
+    
+    if (!session) {
+      return res.status(404).json({
+        success: false,
+        error: 'Session not found',
+        message: 'Session not found'
+      });
+    }
+    
+    const result = await notebookGenerator.generateNotebook(sessionId, session);
     
     if (result.success) {
       res.json({
@@ -1200,7 +1211,18 @@ app.post('/api/session/:id/create-integration-package', async (req, res) => {
     
     console.log(`Integration package creation requested for session: ${sessionId}`);
     
-    const result = await fileBasedIntegration.createIntegrationPackage(sessionId);
+    // Load session data first
+    const session = realMonitor.getSession(sessionId) || await dataStorage.getSession(sessionId);
+    
+    if (!session) {
+      return res.status(404).json({
+        success: false,
+        error: 'Session not found',
+        message: 'Session not found'
+      });
+    }
+    
+    const result = await fileBasedIntegration.createIntegrationPackage(sessionId, session);
     
     if (result.success) {
       res.json({
