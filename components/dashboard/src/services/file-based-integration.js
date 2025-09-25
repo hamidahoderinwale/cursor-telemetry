@@ -95,7 +95,8 @@ class FileBasedIntegration {
   async loadSessionData(sessionId) {
     try {
       // Use the data storage service directly instead of fetch
-      const { dataStorage } = require('./mock-database');
+      const DataStorage = require('../data-processing/data-storage');
+      const dataStorage = new DataStorage();
       const sessions = await dataStorage.loadSessions();
       const session = sessions.find(s => s.id === sessionId);
       

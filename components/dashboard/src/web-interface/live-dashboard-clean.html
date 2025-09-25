@@ -252,7 +252,7 @@
                 <button class="view-btn" id="notebooks-view-btn" onclick="switchView('notebooks')">Notebooks</button>
                 <button class="view-btn" id="visualizations-view-btn" onclick="switchView('visualizations')">Workflow Analysis</button>
                 <button class="view-btn" id="embeddings-view-btn" onclick="switchView('embeddings')">Clio & Kura</button>
-                <button class="view-btn" id="enhanced-view-btn" onclick="window.location.href='/dashboard/enhanced'">Enhanced View</button>
+                <button class="view-btn" id="enhanced-view-btn-2" onclick="window.location.href='/dashboard/enhanced'">Enhanced View</button>
             </div>
 
             <!-- Analysis Visualizations -->
@@ -354,6 +354,39 @@
             
             // Set up global event handlers
             setupGlobalEventHandlers();
+            
+            // Debug: Check if functions are available
+            setTimeout(() => {
+                console.log('Dashboard functions available:', {
+                    switchView: typeof window.switchView,
+                    viewSession: typeof window.viewSession,
+                    openPrivacyModal: typeof window.openPrivacyModal,
+                    dashboard: !!window.dashboard
+                });
+                
+                // Ensure loading overlay is hidden
+                const loadingOverlay = document.getElementById('loadingOverlay');
+                if (loadingOverlay) {
+                    console.log('Loading overlay still present, hiding it');
+                    loadingOverlay.style.display = 'none';
+                }
+                
+                // Ensure dashboard content is visible
+                const dashboardContent = document.getElementById('dashboardContent');
+                if (dashboardContent) {
+                    dashboardContent.style.display = 'block';
+                    console.log('Dashboard content made visible');
+                }
+                
+                // Test button click functionality
+                const testBtn = document.getElementById('privacy-analysis-btn');
+                if (testBtn) {
+                    console.log('Privacy button found, adding test click handler');
+                    testBtn.addEventListener('click', function(e) {
+                        console.log('Privacy button clicked!', e);
+                    });
+                }
+            }, 1000);
         });
 
         // Global event handlers

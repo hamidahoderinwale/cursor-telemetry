@@ -1226,6 +1226,18 @@
   word-wrap: break-word;
 }
 
+/* Ensure buttons are clickable */
+.btn, button {
+  pointer-events: auto !important;
+  cursor: pointer !important;
+}
+
+/* Ensure no overlay is blocking clicks */
+.loading-overlay.hidden {
+  display: none !important;
+  pointer-events: none !important;
+}
+
 .viz-tooltip strong {
   color: var(--warning-color);
 }

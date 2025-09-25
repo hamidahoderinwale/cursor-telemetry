@@ -17,8 +17,18 @@ class MemoryAPI {
 
     // Initialize services
     this.dynamicIntegration = new DynamicCursorIntegration();
-    this.notebookGenerator = null;
     this.qualityMetrics = new MemoryQualityMetrics();
+    
+    // Initialize notebook generator if enabled
+    if (this.options.enableNotebookGeneration) {
+      try {
+        const { NotebookGenerator } = require('../services/notebook-generator');
+        this.notebookGenerator = new NotebookGenerator();
+      } catch (error) {
+        console.warn('Notebook generator not available:', error.message);
+        this.notebookGenerator = null;
+      }
+    }
     
     // API endpoints
     this.endpoints = new Map();
@@ -110,7 +120,11 @@ class MemoryAPI {
         
         console.log(`Enhanced notebook generation requested for session: ${sessionId}`);
         
-        const result = await this.notebookGenerator.generateEnhancedNotebook(sessionId, options);
+        if (!this.notebookGenerator) {
+          throw new Error('Notebook generator not available');
+        }
+        
+        const result = await this.notebookGenerator.generateNotebook(sessionId, options);
         
         res.json(result);
       } catch (error) {
@@ -331,7 +345,11 @@ class MemoryAPI {
       const sessionId = req.params.id;
       const options = req.body;
       
-      const result = await this.notebookGenerator.generateEnhancedNotebook(sessionId, options);
+      if (!this.notebookGenerator) {
+        throw new Error('Notebook generator not available');
+      }
+      
+      const result = await this.notebookGenerator.generateNotebook(sessionId, options);
       res.json(result);
     } catch (error) {
       console.error('Notebook generation error:', error);

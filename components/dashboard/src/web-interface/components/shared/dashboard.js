@@ -3232,6 +3232,51 @@ document.addEventListener('DOMContentLoaded', function() {
             window.dashboard.viewProjectDetails(projectName);
         }
     };
+    
+    // Add missing privacy modal functions
+    window.openPrivacyModal = function() {
+        if (window.dashboard) {
+            window.dashboard.openPrivacyModal();
+        }
+    };
+    
+    window.closePrivacyModal = function() {
+        if (window.dashboard) {
+            window.dashboard.closePrivacyModal();
+        }
+    };
+    
+    window.runPrivacyAnalysis = function() {
+        if (window.dashboard) {
+            window.dashboard.runPrivacyAnalysis();
+        }
+    };
+    
+    window.exportPrivacyReport = function() {
+        if (window.dashboard) {
+            window.dashboard.exportPrivacyReport();
+        }
+    };
+    
+    window.configurePrivacySettings = function() {
+        if (window.dashboard) {
+            window.dashboard.configurePrivacySettings();
+        }
+    };
+    
+    // Add session tab switching
+    window.switchSessionTab = function(tabName) {
+        if (window.dashboard) {
+            window.dashboard.switchSessionTab(tabName);
+        }
+    };
+    
+    // Debug function to check if dashboard is loaded
+    window.checkDashboard = function() {
+        console.log('Dashboard loaded:', !!window.dashboard);
+        console.log('Dashboard instance:', window.dashboard);
+        return window.dashboard;
+    };
 });
 
 // Clean up on page unload
