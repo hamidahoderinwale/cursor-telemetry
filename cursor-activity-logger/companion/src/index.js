@@ -7,18 +7,37 @@ const chokidar = require('chokidar');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
-const Dexie = require('dexie');
-
 // Import the new queue system and clipboard monitor
 const { queue: queueSystem } = require('./queue.js');
 const { clipboardMonitor } = require('./clipboardMonitor.js');
 
-// Database setup for companion service
-const db = new Dexie('CursorActivityLoggerCompanion');
-db.version(1).stores({
-    entries: '++id, session_id, timestamp, source, file_path, prompt, response, notes, tags, before_code, after_code, prompt_id',
-    prompts: '++id, timestamp, text, status, linked_entry_id'
-});
+// Simple in-memory database for companion service (replacing Dexie/IndexedDB)
+const db = {
+    _entries: [],
+    _prompts: [],
+    nextId: 1,
+    
+    get entries() { return this._entries; },
+    set entries(val) { this._entries = val; },
+    
+    get prompts() { return this._prompts; },
+    set prompts(val) { this._prompts = val; },
+    
+    async add(table, data) {
+        const item = { ...data, id: this.nextId++ };
+        this[table].push(item);
+        return item;
+    },
+    
+    async update(table, id, updates) {
+        const index = this[table].findIndex(item => item.id === id);
+        if (index >= 0) {
+            this[table][index] = { ...this[table][index], ...updates };
+            return this[table][index];
+        }
+        return null;
+    }
+};
 
 const PORT = process.env.PORT || 43918;
 const app = express();
@@ -345,11 +364,9 @@ async function processFileChange(filePath) {
         
         // Link the most recent pending prompt to this entry
         try {
-          const lastPrompt = await db.prompts
-            .orderBy('timestamp')
-            .reverse()
+          const lastPrompt = db.prompts
             .filter(p => p.status === 'pending')
-            .first();
+            .sort((a, b) => b.timestamp - a.timestamp)[0];
           
           if (lastPrompt) {
             await db.prompts.update(lastPrompt.id, {

@@ -326,6 +326,19 @@
   display: flex;
   align-items: center;
   gap: var(--space-1);
+  min-width: 2.5rem;
+  justify-content: center;
+  transition: all var(--transition-fast);
+}
+
+.session-actions .btn:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+.session-actions .btn:active {
+  transform: translateY(0);
+  box-shadow: none;
 }
 
 /* Responsive Session Cards */
