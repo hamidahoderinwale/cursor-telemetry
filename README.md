@@ -1,42 +1,53 @@
 # PKL Dashboard - Procedural Knowledge Library
 
-Real-time monitoring and analysis system for Cursor IDE sessions with privacy-preserving workflow analysis capabilities.
+Real-time monitoring and analysis system for Cursor IDE sessions with privacy-preserving workflow analysis capabilities and advanced embeddings-based intent classification.
 
 ## Architecture
 
 ### Core Components
 
-- **Node.js Web Server** (Port 3000): Express API with WebSocket support
-- **Event Queue System**: Memory-based priority queue with correlation and deduplication
-- **Real-time Monitor**: File system watcher with chokidar for live session tracking
-- **Session Builder**: Event correlation and session boundary detection
+- **Node.js Web Server** (Port 3000): Express API with WebSocket support and real-time event processing
+- **Event Queue System**: Memory-based priority queue with correlation and deduplication (optimized for real-time capture)
+- **Real-time Monitor**: File system watcher with chokidar for live session tracking across multiple file types
+- **Session Builder**: Event correlation and session boundary detection with configurable timeouts
 - **Data Storage**: SQLite with JSON storage for sessions and conversations
+- **Embeddings Intent Classifier**: 512-dimensional embeddings with 8 multi-faceted analysis dimensions
 
 ### Event Processing Pipeline
 
-- **Event Capture**: Multi-source event collection (notebooks, Cursor DB, manual API)
-- **Event Queue**: Priority-based processing (high/medium/low) with retry logic
-- **Correlation Engine**: Smart event correlation with configurable rules
-- **Session Building**: Real-time session construction from correlated events
-- **WebSocket Broadcasting**: Live updates to connected clients
+- **Event Capture**: Multi-source event collection (notebooks, Cursor DB, manual API) with immediate processing
+- **Event Queue**: Priority-based processing (high/medium/low) with retry logic and real-time optimization
+- **Correlation Engine**: Smart event correlation with configurable rules and 5-second correlation window
+- **Session Building**: Real-time session construction from correlated events with 1-minute timeout
+- **WebSocket Broadcasting**: Live updates to connected clients with immediate event triggers
 
 ### Analysis & Intelligence
 
-- **Kura Integration**: Hierarchical clustering with UMAP visualization
-- **OpenClio Integration**: Multi-dimensional facet analysis
-- **Intent Classification**: AST-based intent detection (explore/implement/debug/refactor)
+- **Kura Integration**: Hierarchical clustering with UMAP visualization and embeddings-based coordinates
+- **OpenClio Integration**: Multi-dimensional facet analysis with sophisticated intent classification
+- **Embeddings Intent Classification**: 512-dimensional embeddings with 8 multi-faceted analysis dimensions:
+  - Cognitive Complexity (low/medium/high/expert)
+  - Workflow Pattern (exploratory/iterative/systematic/experimental)
+  - Domain Expertise (beginner/intermediate/advanced/expert)
+  - Problem-Solving Approach (analytical/creative/pragmatic/theoretical)
+  - Data Interaction (consumption/transformation/analysis/modeling)
+  - Communication Style (concise/detailed/collaborative/independent)
+  - Temporal Pattern (burst/sustained/episodic/continuous)
+  - Tool Usage (minimal/moderate/extensive/specialized)
 - **Procedure Pattern Detection**: Automated workflow pattern recognition
-- **Privacy Engine**: Differential privacy with configurable epsilon values
+- **Privacy Engine**: Differential privacy with configurable epsilon values and content analysis
 
 ### Frontend Components
 
-- **Live Dashboard**: Real-time session monitoring with WebSocket updates and live session data display
-- **Enhanced Dashboard**: Kura clustering visualization interface with UMAP embeddings
-- **Privacy Analysis Interface**: Interactive privacy configuration with real-time metrics
+- **Live Dashboard**: Real-time session monitoring with WebSocket updates, search functionality, and project organization
+- **Enhanced Dashboard**: Kura clustering visualization interface with UMAP embeddings and embeddings-based facet visualization
+- **Privacy Analysis Interface**: Interactive privacy configuration with real-time metrics and content analysis
 - **Export System**: Multi-format export (JSON, CSV, Markdown, PDF)
-- **Session Management**: Annotation, context return, and session control
-- **Interactive Timeline**: Event scrubbing with code diff visualization
-- **Clio-Derived Facet Updates**: Automatic data-exploration facet updates from OpenClio analysis
+- **Session Management**: Annotation, context return, and session control with clickable session cards
+- **Interactive Timeline**: Event scrubbing with code diff visualization and automatic analysis on page load
+- **Search and Filtering**: Comprehensive search across all session properties with intent and outcome filters
+- **Project Organization**: Automatic categorization and grouping of sessions based on file paths
+- **Embeddings Visualization**: Radial layout visualization of high-dimensional intent facets with interactive tooltips
 
 ## Installation
 
@@ -80,12 +91,16 @@ node src/web-interface/web-server.js
 - `GET /api/event-queue/stats` - Event queue statistics
 - `POST /api/capture-prompt` - Capture prompt with code changes
 - `POST /api/conversations` - Manual conversation data
+- `POST /api/conversations/capture` - Immediate real-time conversation capture
 
 ### Analysis
 
-- `POST /api/sessions/analyze-with-kura` - Kura clustering analysis
+- `POST /api/sessions/analyze-with-kura` - Kura clustering analysis with embeddings integration
 - `GET /api/visualizations` - Aggregated visualization data
 - `GET /api/procedures/patterns` - Detected procedure patterns
+- `GET /api/projects` - Project organization and categorization
+- `GET /api/projects/:projectId` - Specific project details
+- `GET /api/projects/:projectId/sessions` - Sessions for a specific project
 
 ### Export & Privacy
 
@@ -153,32 +168,45 @@ node src/web-interface/web-server.js
 }
 ```
 
-## Recent UI Improvements
+## Recent Updates and Improvements
 
-### Dashboard Enhancements (Latest Update)
+### CSS Refactoring and Repository Cleanup
 
-- **Fixed Empty Session Display**: Replaced empty states with actual session data
-- **Updated Statistics**: Proper calculation of total sessions, changes, and durations
-- **Enhanced Session List**: Shows real-time session data with correct timestamps and intents
-- **Privacy Dashboard Consistency**: Unified styling across all dashboard components
-- **Clio-Derived Facet Updates**: Automatic updates to data-exploration facets from OpenClio analysis
-- **Improved Data Visualization**: Better integration with Kura clustering and UMAP embeddings
+- **Consolidated CSS Architecture**: Refactored CSS into component-based structure with consistent design system
+- **Removed Duplicate Files**: Cleaned up repository by removing unused CSS files and consolidating styles
+- **Fixed JavaScript Syntax Errors**: Resolved class structure issues and duplicate method definitions
+- **Updated File References**: Corrected CSS and JavaScript file paths in HTML templates
 
-### Key Features Now Working
+### Enhanced Intent Classification System
 
-- Real-time session monitoring with live data display
-- Automatic intent classification updates based on Clio analysis
-- Consistent UI styling across all dashboard components
-- Proper privacy metrics display (28 sessions, 2 violations, 50% redaction rate)
-- Dynamic workflow pattern visualization updates
+- **Embeddings-Based Classification**: Replaced hardcoded intent classifications with sophisticated 512-dimensional embeddings
+- **Multi-Faceted Analysis**: 8-dimensional analysis covering cognitive complexity, workflow patterns, domain expertise, and more
+- **High-Dimensional Visualization**: Radial layout visualization of intent facets with interactive tooltips
+- **Dynamic Facet Updates**: Real-time updates to session cards showing embeddings-based intent analysis
+
+### Real-Time Processing Optimizations
+
+- **Immediate Event Capture**: Optimized event queue for real-time processing with 100ms intervals
+- **Faster Correlation**: Reduced correlation window to 5 seconds for immediate event correlation
+- **Enhanced Broadcasting**: Immediate WebSocket broadcasting for real-time dashboard updates
+- **Content Analysis**: Privacy violations detection through actual content analysis instead of random generation
+
+### Project Organization and Search
+
+- **Automatic Project Detection**: Intelligent categorization of sessions based on file paths
+- **Comprehensive Search**: Search across all session properties including embeddings facets
+- **Advanced Filtering**: Intent and outcome filters with embeddings-based classification
+- **Project Navigation**: Hierarchical project organization with session grouping
 
 ## Performance Metrics
 
-- **Event Processing**: ~1000 events/second capacity
-- **Session Correlation**: 30-second correlation window
-- **WebSocket Latency**: <100ms for real-time updates
+- **Event Processing**: ~1000 events/second capacity with real-time optimization
+- **Session Correlation**: 5-second correlation window for immediate processing
+- **WebSocket Latency**: <100ms for real-time updates with immediate event triggers
 - **Memory Usage**: Configurable limits with automatic cleanup
 - **Storage**: Automatic data retention and compression
+- **Embeddings Processing**: 512-dimensional analysis with 8-facet classification
+- **Search Performance**: Comprehensive search across all session properties with debounced input
 
 ## System Verification
 
@@ -192,18 +220,20 @@ curl http://localhost:3000/api/stats
 
 ### Verified Components
 
-- Event Queue System with priority processing
-- Real-time monitoring with file system watching
-- Session building with event correlation
-- WebSocket updates for live client notifications
+- Event Queue System with priority processing and real-time optimization
+- Real-time monitoring with file system watching across multiple file types
+- Session building with event correlation and configurable timeouts
+- WebSocket updates for live client notifications with immediate triggers
 - Export system with multi-format support
-- Kura integration for hierarchical clustering
-- Privacy engine with differential privacy
-- Interactive timeline with code diff visualization
-- **UI Bug Fixes**: Fixed empty session displays and statistics calculations
-- **Privacy Dashboard**: Consistent styling and proper data display
-- **Clio Integration**: Automatic data-exploration facet updates from OpenClio analysis
-- **Enhanced Visualizations**: Improved UMAP embeddings and workflow pattern displays
+- Kura integration for hierarchical clustering with embeddings-based coordinates
+- Privacy engine with differential privacy and content analysis
+- Interactive timeline with code diff visualization and automatic analysis
+- **CSS Architecture**: Component-based CSS structure with consistent design system
+- **JavaScript Structure**: Fixed class definitions and removed duplicate methods
+- **Embeddings Classification**: 512-dimensional intent classification with 8-facet analysis
+- **Project Organization**: Automatic session categorization and hierarchical grouping
+- **Search and Filtering**: Comprehensive search with debounced input and advanced filters
+- **Real-Time Processing**: Optimized event processing with immediate capture and broadcasting
 
 ## Development
 
