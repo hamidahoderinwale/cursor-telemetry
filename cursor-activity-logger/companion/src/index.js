@@ -2,7 +2,7 @@
 
 const express = require('express');
 const cors = require('cors');
-const { createServer } = require('http');
+const http = require('http');
 const chokidar = require('chokidar');
 const path = require('path');
 const fs = require('fs');
@@ -41,6 +41,26 @@ const db = {
 
 const PORT = process.env.PORT || 43918;
 const app = express();
+const { Server } = require('socket.io');
+
+// Create HTTP server and Socket.IO
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"]
+  }
+});
+
+// Real-time broadcast function
+function broadcastUpdate(type, data) {
+  io.emit('realtime-update', {
+    type,
+    data,
+    timestamp: new Date().toISOString()
+  });
+  console.log(`📡 Broadcasted ${type} update:`, data.id || data.sessionId);
+}
 
 // Middleware
 app.use(cors());
@@ -356,8 +376,20 @@ async function processFileChange(filePath) {
         
         // Save entry to database
         try {
-          await db.entries.add(entry);
+          await db.add('entries', entry);
           console.log(`💾 Saved entry to database: ${entry.id}`);
+          
+          // Broadcast real-time update to connected clients
+          broadcastUpdate('file-change', {
+            id: entry.id,
+            sessionId: entry.session_id,
+            filePath: relativePath,
+            changeType: 'modified',
+            timestamp: new Date().toISOString(),
+            beforeContent: previousContent,
+            afterContent: content,
+            diff: diff.summary
+          });
         } catch (error) {
           console.error('Error saving entry to database:', error);
         }
@@ -369,14 +401,14 @@ async function processFileChange(filePath) {
             .sort((a, b) => b.timestamp - a.timestamp)[0];
           
           if (lastPrompt) {
-            await db.prompts.update(lastPrompt.id, {
+            await db.update('prompts', lastPrompt.id, {
               status: 'linked',
               linked_entry_id: entry.id
             });
             entry.prompt_id = lastPrompt.id;
             
             // Update the entry in database with prompt_id
-            await db.entries.update(entry.id, { prompt_id: lastPrompt.id });
+            await db.update('entries', entry.id, { prompt_id: lastPrompt.id });
             
             console.log(`🔗 Linked prompt ${lastPrompt.id} to entry ${entry.id}`);
           }
@@ -443,11 +475,26 @@ function startFileWatcher() {
     });
 }
 
-// Start the server
-const server = createServer(app);
+// Socket.IO connection handling
+io.on('connection', (socket) => {
+  console.log(`📡 Client connected: ${socket.id}`);
+  
+  socket.on('disconnect', () => {
+    console.log(`📡 Client disconnected: ${socket.id}`);
+  });
+  
+  // Send current data to newly connected client
+  socket.emit('initial-data', {
+    entries: db.entries,
+    events: events,
+    queue: queue
+  });
+});
 
+// Start the server
 server.listen(PORT, '127.0.0.1', () => {
   console.log(`🚀 Companion service running on http://127.0.0.1:${PORT}`);
+  console.log(`📡 WebSocket server running on ws://127.0.0.1:${PORT}`);
   console.log(`📁 Watching: ${config.root_dir}`);
   console.log(`🚫 Ignoring: ${config.ignore.length} patterns`);
   

@@ -42,11 +42,15 @@ class LiveDashboard {
 
     initializeWebSocket() {
         try {
-            // Initialize Socket.IO client
-            this.socket = io();
+            // Initialize Socket.IO client for main dashboard
+            this.socket = io('http://localhost:3000');
             
+            // Initialize companion service WebSocket for real-time file changes
+            this.companionSocket = io('http://localhost:43918');
+            
+            // Main dashboard WebSocket
             this.socket.on('connect', () => {
-                console.log('Connected to WebSocket server');
+                console.log('Connected to main WebSocket server');
                 this.updateConnectionStatus(true);
                 
                 // Request initial data
@@ -55,7 +59,7 @@ class LiveDashboard {
             });
             
             this.socket.on('disconnect', () => {
-                console.log('Disconnected from WebSocket server');
+                console.log('Disconnected from main WebSocket server');
                 this.updateConnectionStatus(false);
             });
             
@@ -84,6 +88,27 @@ class LiveDashboard {
                 this.updateLiveDurations();
             });
             
+            // Companion service WebSocket for real-time file changes
+            this.companionSocket.on('connect', () => {
+                console.log('Connected to companion service WebSocket');
+                this.updateCompanionStatus(true);
+            });
+            
+            this.companionSocket.on('disconnect', () => {
+                console.log('Disconnected from companion service WebSocket');
+                this.updateCompanionStatus(false);
+            });
+            
+            this.companionSocket.on('realtime-update', (update) => {
+                console.log('Real-time update received:', update.type, update.data);
+                this.handleRealtimeUpdate(update);
+            });
+            
+            this.companionSocket.on('initial-data', (data) => {
+                console.log('Received initial data from companion:', data.entries.length, 'entries');
+                this.handleInitialCompanionData(data);
+            });
+            
             this.socket.on('error', (error) => {
                 console.error('WebSocket error:', error);
                 this.showError('WebSocket error: ' + error.message);
@@ -108,6 +133,135 @@ class LiveDashboard {
                 statusText.textContent = 'Connection lost - using fallback';
             }
         }
+    }
+
+    updateCompanionStatus(connected) {
+        console.log('Companion service status:', connected ? 'connected' : 'disconnected');
+        // You can add UI indicators for companion service status here
+    }
+
+    handleRealtimeUpdate(update) {
+        switch (update.type) {
+            case 'file-change':
+                this.handleFileChange(update.data);
+                break;
+            case 'prompt-captured':
+                this.handlePromptCaptured(update.data);
+                break;
+            default:
+                console.log('Unknown real-time update type:', update.type);
+        }
+    }
+
+    handleFileChange(data) {
+        console.log('File change detected:', data.filePath);
+        
+        // Create a new session entry for this file change
+        const newSession = {
+            id: `realtime-${Date.now()}`,
+            timestamp: data.timestamp,
+            intent: 'file-edit',
+            phase: 'success',
+            outcome: 'success',
+            confidence: 0.9,
+            currentFile: data.filePath,
+            fileChanges: [{
+                id: data.id,
+                sessionId: `realtime-${Date.now()}`,
+                timestamp: data.timestamp,
+                filePath: data.filePath,
+                changeType: data.changeType,
+                beforeSnippet: data.beforeContent,
+                afterSnippet: data.afterContent,
+                lineRange: { start: 1, end: 1 }
+            }],
+            codeDeltas: [{
+                id: `delta-${data.id}`,
+                sessionId: `realtime-${Date.now()}`,
+                timestamp: data.timestamp,
+                filePath: data.filePath,
+                beforeContent: data.beforeContent,
+                afterContent: data.afterContent,
+                changeType: data.changeType,
+                diff: data.diff
+            }],
+            linkedEvents: [],
+            privacyMode: false,
+            userConsent: true,
+            dataRetention: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+            annotations: []
+        };
+
+        // Add to sessions array and sort chronologically
+        this.sessions.unshift(newSession);
+        this.sessions.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        
+        // Re-render the dashboard
+        this.renderSessions();
+        this.updateStatistics();
+        
+        // Show notification
+        this.showNotification(`File updated: ${data.filePath.split('/').pop()}`, 'info');
+    }
+
+    handlePromptCaptured(data) {
+        console.log('Prompt captured:', data.text);
+        this.showNotification('New prompt captured', 'success');
+    }
+
+    handleInitialCompanionData(data) {
+        // Process initial data from companion service
+        console.log('Processing initial companion data:', data);
+        
+        // You can merge this data with existing sessions or create new ones
+        if (data.entries && data.entries.length > 0) {
+            console.log(`Found ${data.entries.length} entries from companion service`);
+        }
+    }
+
+    showNotification(message, type = 'info') {
+        // Create a simple notification
+        const notification = document.createElement('div');
+        notification.className = `notification notification-${type}`;
+        notification.textContent = message;
+        notification.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 12px 20px;
+            border-radius: 4px;
+            color: white;
+            font-weight: 500;
+            z-index: 1000;
+            animation: slideIn 0.3s ease-out;
+        `;
+        
+        // Set background color based on type
+        switch (type) {
+            case 'success':
+                notification.style.backgroundColor = '#10b981';
+                break;
+            case 'error':
+                notification.style.backgroundColor = '#ef4444';
+                break;
+            case 'warning':
+                notification.style.backgroundColor = '#f59e0b';
+                break;
+            default:
+                notification.style.backgroundColor = '#3b82f6';
+        }
+        
+        document.body.appendChild(notification);
+        
+        // Remove after 3 seconds
+        setTimeout(() => {
+            notification.style.animation = 'slideOut 0.3s ease-in';
+            setTimeout(() => {
+                if (notification.parentNode) {
+                    notification.parentNode.removeChild(notification);
+                }
+            }, 300);
+        }, 3000);
     }
 
     updateLiveDurations() {
