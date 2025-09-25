@@ -2691,7 +2691,7 @@ async function init() {
         
         // Try to connect to companion service
         try {
-            const response = await fetch('http://127.0.0.1:43917/health');
+            const response = await fetch('http://127.0.0.1:43918/health');
             if (response.ok) {
                 companionAvailable = true;
                 showNotification('Companion service connected - using file watcher + MCP integration', 'success');

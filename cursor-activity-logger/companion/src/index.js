@@ -20,7 +20,7 @@ db.version(1).stores({
     prompts: '++id, timestamp, text, status, linked_entry_id'
 });
 
-const PORT = process.env.PORT || 43917;
+const PORT = process.env.PORT || 43918;
 const app = express();
 
 // Middleware
@@ -310,7 +310,7 @@ function calculateDiff(text1, text2) {
   };
 }
 
-function processFileChange(filePath) {
+async function processFileChange(filePath) {
   console.log(`🔍 Processing file change: ${filePath}`);
   try {
     const content = fs.readFileSync(filePath, 'utf8');

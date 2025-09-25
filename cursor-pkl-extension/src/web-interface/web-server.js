@@ -115,15 +115,55 @@ const AppleScriptService = {
 };
 
 const PrivacyService = class {
-  constructor() {}
+  constructor() {
+    this.privacyConfig = {
+      epsilon: 1.0,
+      redactionLevel: 0.5,
+      anonymization: true,
+      dataRetention: '30d'
+    };
+  }
+  
   analyzePrivacy() { return { risk: 'low', issues: [] }; }
   sanitizeData(data) { return data; }
-  collectWorkflowData() { 
+  
+  collectWorkflowData(sessions) { 
+    // Convert sessions to workflow format
+    const workflows = sessions.map(session => ({
+      id: session.id,
+      traces: session.conversations || [],
+      expressivenessScore: 0.5 + Math.random() * 0.4, // Mock score
+      privacyScore: 85
+    }));
+    
     return { 
-      workflows: [], 
+      workflows: workflows, 
       privacyScore: 85, 
       recommendations: ['Use data anonymization', 'Implement access controls'] 
     }; 
+  }
+  
+  async applyPrivacyTransformations(workflows) {
+    // Mock privacy transformations
+    return workflows.map(workflow => ({
+      ...workflow,
+      transformed: true,
+      redactedTraces: workflow.traces.map(trace => ({
+        ...trace,
+        content: trace.content ? trace.content.replace(/password|api_key|secret/gi, '[REDACTED]') : trace.content
+      }))
+    }));
+  }
+  
+  async measureExpressiveness(originalWorkflows, transformedWorkflows) {
+    // Mock expressiveness measurement
+    return {
+      expressivenessScore: 0.75,
+      informationLoss: 0.15,
+      privacyGain: 0.25,
+      originalCount: originalWorkflows.length,
+      transformedCount: transformedWorkflows.length
+    };
   }
 };
 
@@ -2010,7 +2050,8 @@ app.post('/api/privacy/analyze', async (req, res) => {
     const sessions = await dataStorage.loadSessions();
     
     // Collect workflow data
-    const workflows = await privacyService.collectWorkflowData(sessions);
+    const workflowData = await privacyService.collectWorkflowData(sessions);
+    const workflows = workflowData.workflows || [];
     
     // Apply privacy transformations
     const transformedWorkflows = await privacyService.applyPrivacyTransformations(workflows);
@@ -2051,27 +2092,28 @@ app.post('/api/privacy/config', async (req, res) => {
 app.get('/api/privacy/stats', async (req, res) => {
   try {
     const sessions = await dataStorage.loadSessions();
-    const workflows = await privacyService.collectWorkflowData(sessions);
+    const workflowData = await privacyService.collectWorkflowData(sessions);
+    const workflows = workflowData.workflows || [];
     
     // Calculate aggregate statistics
     const stats = {
-      totalSessions: workflows.length,
+      totalSessions: sessions.length,
       totalTokens: workflows.reduce((sum, w) => {
-        return sum + w.traces.reduce((traceSum, trace) => {
+        return sum + (w.traces || []).reduce((traceSum, trace) => {
           return traceSum + (trace.tokens ? trace.tokens.length : 0);
         }, 0);
       }, 0),
       privacyViolations: workflows.reduce((sum, w) => {
-        return sum + w.traces.reduce((traceSum, trace) => {
+        return sum + (w.traces || []).reduce((traceSum, trace) => {
           // Count potential privacy violations based on content analysis
           const content = trace.content || '';
           const violations = (content.match(/password|api_key|secret|token/gi) || []).length;
           return traceSum + violations;
         }, 0);
       }, 0),
-      avgRedactionRate: privacyService.privacyConfig.redactionLevel,
+      avgRedactionRate: privacyService.privacyConfig?.redactionLevel || 0.5,
       avgExpressionScore: workflows.length > 0 ? workflows.reduce((sum, w) => sum + (w.expressivenessScore || 0.5), 0) / workflows.length : 0.5,
-      clusterCount: clusters.length
+      clusterCount: 0
     };
     
     res.json({
@@ -2092,7 +2134,8 @@ app.post('/api/privacy/export', async (req, res) => {
     
     // Get sessions and perform analysis
     const sessions = await dataStorage.loadSessions();
-    const workflows = await privacyService.collectWorkflowData(sessions);
+    const workflowData = await privacyService.collectWorkflowData(sessions);
+    const workflows = workflowData.workflows || [];
     const transformedWorkflows = await privacyService.applyPrivacyTransformations(workflows);
     const metrics = await privacyService.measureExpressiveness(workflows, transformedWorkflows);
     
