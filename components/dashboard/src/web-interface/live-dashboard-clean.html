@@ -837,7 +837,7 @@
                 <button class="view-btn" id="projects-sessions-view-btn" onclick="switchView('projects-sessions')">Projects & Sessions</button>
                 <button class="view-btn" id="notebooks-view-btn" onclick="switchView('notebooks')">Notebooks</button>
                 <button class="view-btn" id="visualizations-view-btn" onclick="switchView('visualizations')">Workflow Analysis</button>
-                <button class="view-btn" id="embeddings-view-btn" onclick="window.location.href='/dashboard/enhanced'">Clio & Kura</button>
+                <button class="view-btn" id="embeddings-view-btn" onclick="switchView('embeddings')">Clio & Kura</button>
             </div>
 
             <!-- Analysis Visualizations -->
@@ -940,15 +940,28 @@
             <div class="modal-body" id="info-modal-body">
                 <div class="info-container">
                     <h4>About This Dashboard</h4>
-                    <p>This is a real-time dashboard for monitoring coding sessions and development activities.</p>
+                    <p>This is a real-time dashboard for monitoring coding sessions and development activities, specifically optimized for Jupyter notebook workflows in Cursor IDE.</p>
                     
                     <h4>Features</h4>
                     <ul>
                         <li>Real-time session monitoring</li>
+                        <li>Enhanced cell-stage classification system</li>
+                        <li>Timeline visualization with UMAP clustering</li>
                         <li>Privacy analysis and metrics</li>
                         <li>Project and session management</li>
                         <li>Data visualization and insights</li>
                         <li>Export and integration capabilities</li>
+                        <li>Conversation data integration</li>
+                        <li>Executable memory generation</li>
+                    </ul>
+                    
+                    <h4>Data Sources</h4>
+                    <p><strong>Conversation Data:</strong> Sourced from multiple channels:</p>
+                    <ul>
+                        <li><strong>Real-time monitoring:</strong> Cursor IDE's internal SQLite database via CursorDBParser</li>
+                        <li><strong>API integration:</strong> Direct POST requests to /api/conversations endpoint</li>
+                        <li><strong>IPC communication:</strong> Electron app integration via ConversationTracker service</li>
+                        <li><strong>Data persistence:</strong> JSON-based storage with DataStorage service</li>
                     </ul>
                     
                     <h4>Keyboard Shortcuts</h4>
@@ -981,8 +994,8 @@
         document.addEventListener('DOMContentLoaded', function() {
             console.log('DOM loaded, initializing dashboard...');
             
-            // Initialize the dashboard
-            window.dashboard = new LiveDashboard();
+            // Initialize the dashboard (handled by dashboard.js)
+            // window.dashboard = new LiveDashboard();
             
             // Set up global event handlers
             setupGlobalEventHandlers();
@@ -1043,22 +1056,47 @@
             });
 
 
-            // Global search
-            const searchInput = document.getElementById('global-search');
-            const searchBtn = document.getElementById('search-btn');
-            
-            searchBtn.addEventListener('click', function() {
-                const query = searchInput.value.trim();
-                if (query && window.dashboard) {
-                    window.dashboard.searchSessions(query);
+            // Global search - moved to after dashboard initialization
+            setTimeout(() => {
+                const searchInput = document.getElementById('global-search');
+                const searchBtn = document.getElementById('search-btn');
+                
+                console.log('Search elements found:', {
+                    searchInput: !!searchInput,
+                    searchBtn: !!searchBtn
+                });
+                
+                if (searchBtn) {
+                    searchBtn.addEventListener('click', function() {
+                        console.log('Search button clicked');
+                        const query = searchInput.value.trim();
+                        console.log('Search query:', query);
+                        console.log('Dashboard available:', !!window.dashboard);
+                        if (query && window.dashboard) {
+                            window.dashboard.searchSessions(query);
+                        } else if (!query) {
+                            console.log('No query provided');
+                        } else if (!window.dashboard) {
+                            console.log('Dashboard not available');
+                        }
+                    });
+                } else {
+                    console.error('Search button not found');
                 }
-            });
 
-            searchInput.addEventListener('keypress', function(e) {
-                if (e.key === 'Enter') {
-                    searchBtn.click();
+                if (searchInput) {
+                    searchInput.addEventListener('keypress', function(e) {
+                        if (e.key === 'Enter') {
+                            console.log('Enter key pressed in search input');
+                            if (searchBtn) {
+                                searchBtn.click();
+                            }
+                        }
+                    });
+                } else {
+                    console.error('Search input not found');
                 }
-            });
+            }, 1000);
         }
 
         // Modal functions

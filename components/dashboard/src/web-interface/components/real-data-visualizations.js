@@ -993,9 +993,14 @@ class RealDataVisualizations {
         insightsList.innerHTML += `<li>Total cells analyzed: <strong>${stageDistribution.totalCells}</strong></li>`;
         
         // Add complexity insights
-        if (stageDistribution.complexity) {
+        if (stageDistribution.complexity && stageDistribution.complexity.average !== undefined) {
             const complexity = stageDistribution.complexity;
-            insightsList.innerHTML += `<li>Average complexity: <strong>${complexity.average.toFixed(1)}</strong> (max: ${complexity.max}, min: ${complexity.min})</li>`;
+            const avg = complexity.average || 0;
+            const max = complexity.max || 0;
+            const min = complexity.min || 0;
+            insightsList.innerHTML += `<li>Average complexity: <strong>${avg.toFixed(1)}</strong> (max: ${max}, min: ${min})</li>`;
+        } else {
+            insightsList.innerHTML += `<li>Complexity analysis: <strong>Not available</strong></li>`;
         }
         
         // Add facet insights

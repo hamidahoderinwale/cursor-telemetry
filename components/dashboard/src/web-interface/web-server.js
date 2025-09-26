@@ -1840,6 +1840,93 @@ app.post('/api/sessions/analyze-with-kura', async (req, res) => {
   }
 });
 
+// Clio analysis endpoint for enhanced dashboard
+app.post('/api/sessions/analyze-with-clio', async (req, res) => {
+  try {
+    const activeSessions = realMonitor.getActiveSessions();
+    const storedSessions = await dataStorage.loadSessions();
+    
+    // Combine and deduplicate
+    const allSessions = [...activeSessions];
+    storedSessions.forEach(stored => {
+      if (!allSessions.find(s => s.id === stored.id)) {
+        allSessions.push(stored);
+      }
+    });
+
+    if (allSessions.length === 0) {
+      return res.json({
+        success: true,
+        visualizations: [],
+        facets: {},
+        total_sessions: 0,
+        analysis_timestamp: new Date().toISOString()
+      });
+    }
+
+    // Generate Clio analysis for notebook visualizations
+    const clioAnalysis = {
+      visualizations: [],
+      facets: {
+        data_exploration: {
+          intent_classifications: {},
+          workflow_patterns: [],
+          cluster_assignments: {}
+        },
+        code_analysis: {
+          patterns: [],
+          complexity_metrics: {},
+          refactoring_suggestions: []
+        },
+        temporal_patterns: {
+          session_flows: [],
+          productivity_cycles: [],
+          collaboration_patterns: []
+        }
+      },
+      total_sessions: allSessions.length,
+      analysis_timestamp: new Date().toISOString()
+    };
+
+    // Analyze each session for Clio insights
+    allSessions.forEach(session => {
+      const sessionAnalysis = analyzeSessionForClio(session);
+      
+      // Add to visualizations if it's a notebook-related session
+      if (sessionAnalysis.hasNotebookContent) {
+        clioAnalysis.visualizations.push({
+          sessionId: session.id,
+          type: sessionAnalysis.visualizationType,
+          content: sessionAnalysis.content,
+          confidence: sessionAnalysis.confidence,
+          timestamp: session.timestamp
+        });
+      }
+
+      // Add to facets based on session type
+      if (session.intent === 'data_exploration' || session.intent === 'explore') {
+        clioAnalysis.facets.data_exploration.intent_classifications[session.id] = sessionAnalysis;
+      }
+      
+      if (sessionAnalysis.codePatterns && sessionAnalysis.codePatterns.length > 0) {
+        clioAnalysis.facets.code_analysis.patterns.push({
+          sessionId: session.id,
+          patterns: sessionAnalysis.codePatterns,
+          complexity: sessionAnalysis.complexity
+        });
+      }
+    });
+
+    res.json({
+      success: true,
+      ...clioAnalysis
+    });
+  } catch (error) {
+    console.error('Error in Clio analysis:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Save a new conversation
 app.post('/api/conversations', async (req, res) => {
   try {
@@ -2312,6 +2399,99 @@ function deduplicateSessions(sessions) {
   return unique;
 }
 
+// Analyze session for Clio insights
+function analyzeSessionForClio(session) {
+  const fileName = session.currentFile ? session.currentFile.split('/').pop() : '';
+  const codeDeltas = session.codeDeltas || [];
+  const fileChanges = session.fileChanges || [];
+  
+  // Check if this is a notebook-related session
+  const hasNotebookContent = fileName.includes('.ipynb') || 
+                            fileName.includes('.py') || 
+                            session.intent === 'data_exploration' ||
+                            session.intent === 'explore';
+  
+  // Determine visualization type
+  let visualizationType = 'general';
+  let confidence = 0.5;
+  let content = '';
+  let codePatterns = [];
+  let complexity = 0;
+  
+  if (hasNotebookContent) {
+    // Analyze code deltas for patterns
+    codeDeltas.forEach(delta => {
+      if (delta.content) {
+        const deltaContent = delta.content.toLowerCase();
+        
+        // Check for visualization patterns
+        if (deltaContent.includes('matplotlib') || deltaContent.includes('seaborn') || 
+            deltaContent.includes('plotly') || deltaContent.includes('plot')) {
+          visualizationType = 'data_visualization';
+          confidence = 0.8;
+          content = delta.content.substring(0, 200) + '...';
+        }
+        
+        // Check for data analysis patterns
+        if (deltaContent.includes('pandas') || deltaContent.includes('numpy') || 
+            deltaContent.includes('dataframe') || deltaContent.includes('analysis')) {
+          visualizationType = 'data_analysis';
+          confidence = 0.7;
+          content = delta.content.substring(0, 200) + '...';
+        }
+        
+        // Extract code patterns
+        if (deltaContent.includes('import')) {
+          codePatterns.push('imports');
+        }
+        if (deltaContent.includes('def ') || deltaContent.includes('function')) {
+          codePatterns.push('functions');
+        }
+        if (deltaContent.includes('class ')) {
+          codePatterns.push('classes');
+        }
+        if (deltaContent.includes('for ') || deltaContent.includes('while ')) {
+          codePatterns.push('loops');
+        }
+        if (deltaContent.includes('if ') || deltaContent.includes('elif ')) {
+          codePatterns.push('conditionals');
+        }
+        
+        // Calculate basic complexity
+        const lines = delta.content.split('\n').length;
+        const functions = (delta.content.match(/def\s+\w+/g) || []).length;
+        const classes = (delta.content.match(/class\s+\w+/g) || []).length;
+        complexity += lines + (functions * 2) + (classes * 3);
+      }
+    });
+    
+    // Analyze file changes if no code deltas
+    if (codeDeltas.length === 0 && fileChanges.length > 0) {
+      fileChanges.forEach(change => {
+        if (change.afterSnippet) {
+          const changeContent = change.afterSnippet.toLowerCase();
+          if (changeContent.includes('matplotlib') || changeContent.includes('plot')) {
+            visualizationType = 'data_visualization';
+            confidence = 0.6;
+            content = change.afterSnippet.substring(0, 200) + '...';
+          }
+        }
+      });
+    }
+  }
+  
+  return {
+    hasNotebookContent,
+    visualizationType,
+    content,
+    confidence,
+    codePatterns: [...new Set(codePatterns)], // Remove duplicates
+    complexity: Math.max(1, complexity),
+    sessionId: session.id,
+    timestamp: session.timestamp
+  };
+}
+
 // Analyze data exploration session for Clio-derived insights
 function analyzeDataExplorationSession(session) {
   const fileName = session.currentFile ? session.currentFile.split('/').pop() : '';
@@ -2642,7 +2822,7 @@ async function generateKuraAnalysis(session, conversations) {
     const conversation_analysis = {
       message_count: conversations.length,
       avg_response_time: conversations.length > 0 ? 
-        `${Math.floor(conversations.reduce((sum, c) => sum + (c.responseTime || 0), 0) / conversations.length)}s` : 'N/A',
+        `${Math.floor(conversations.reduce((sum, c) => sum + (c.responseTime || 0), 0) / conversations.length)}s` : '0s',
       complexity_score: intentAnalysis.profile.complexity_level,
       sentiment_analysis: conversations.length > 0 ? 'positive' : 'neutral',
       topic_coherence: intentAnalysis.confidence,
@@ -2928,7 +3108,7 @@ async function generateProceduralInsights(session, conversations, fileChanges) {
     const efficiency_metrics = {
       completion_rate: completion_rate,
       avg_duration: sessionDuration > 0 ? 
-        `${Math.floor(sessionDuration / 60000)} minutes` : 'N/A',
+        `${Math.floor(sessionDuration / 60000)} minutes` : '0 minutes',
       success_score: session.outcome === 'success' ? 10 : 
                     session.outcome === 'stuck' ? 4 : 7
     };

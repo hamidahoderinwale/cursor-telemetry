@@ -692,7 +692,7 @@ class LiveDashboard {
                                 </div>
                                 <div class="metadata-item">
                                     <span class="metadata-label">Duration</span>
-                                    <span class="metadata-value">${session.duration ? this.formatDuration(session.duration) : 'N/A'}</span>
+                                    <span class="metadata-value">${session.duration ? this.formatDuration(session.duration) : '0s'}</span>
                                 </div>
                                 <div class="metadata-item">
                                     <span class="metadata-label">Primary File</span>
@@ -771,13 +771,9 @@ class LiveDashboard {
                             <div id="session-tab-overview" class="tab-panel active">
                                 <div class="overview-content">
                                     <h4>Session Overview</h4>
-                                    <div class="overview-details">
-                                        <p>This session involved <strong>${workflowMetrics.totalChanges}</strong> code changes across <strong>${workflowMetrics.filesModified}</strong> files, with <strong>${workflowMetrics.totalConversations}</strong> AI conversations.</p>
-                                        ${session.intent ? `<div class="overview-item"><strong>Intent:</strong> ${session.intent}</div>` : ''}
-                                        ${session.outcome ? `<div class="overview-item"><strong>Outcome:</strong> ${session.outcome}</div>` : ''}
-                                        ${session.duration ? `<div class="overview-item"><strong>Duration:</strong> ${this.formatDuration(session.duration)}</div>` : ''}
-                                        ${session.currentFile ? `<div class="overview-item"><strong>Primary File:</strong> ${session.currentFile.split('/').pop()}</div>` : ''}
-                                    </div>
+                                    <p>This session involved ${workflowMetrics.totalChanges} code changes across ${workflowMetrics.filesModified} files, with ${workflowMetrics.totalConversations} AI conversations.</p>
+                                    ${session.intent ? `<p><strong>Intent:</strong> ${session.intent}</p>` : ''}
+                                    ${session.outcome ? `<p><strong>Outcome:</strong> ${session.outcome}</p>` : ''}
                                 </div>
                             </div>
                             
@@ -1707,6 +1703,8 @@ class LiveDashboard {
     }
 
     switchView(viewType) {
+        console.log('Switching to view:', viewType);
+        
         // Update current view
         this.currentView = viewType;
         
@@ -1719,21 +1717,32 @@ class LiveDashboard {
         const activeBtn = document.getElementById(`${viewType}-view-btn`);
         if (activeBtn) {
             activeBtn.classList.add('active');
+            console.log('Set active button for view:', viewType);
+        } else {
+            console.error('Button not found for view:', viewType);
         }
         
         // Render the selected view
+        console.log('Rendering current view:', this.currentView);
         this.renderCurrentView();
     }
 
     renderCurrentView() {
         const sessionsList = document.getElementById('sessions-list');
-        if (!sessionsList) return;
+        if (!sessionsList) {
+            console.error('sessions-list element not found');
+            return;
+        }
+        
+        console.log('Rendering current view:', this.currentView);
         
         switch(this.currentView) {
             case 'timeline':
+                console.log('Rendering timeline view');
                 this.renderTimeline();
                 break;
             case 'projects-sessions':
+                console.log('Rendering projects-sessions view');
                 this.renderProjectsSessions();
                 break;
             case 'projects':
@@ -1749,8 +1758,7 @@ class LiveDashboard {
                 this.renderVisualizations();
                 break;
             case 'embeddings':
-                // Redirect to enhanced view for Clio & Kura functionality
-                window.location.href = '/dashboard/enhanced';
+                this.renderEmbeddings();
                 break;
             default:
                 this.renderTimeline();
@@ -1817,9 +1825,13 @@ class LiveDashboard {
 
     async renderProjectsSessions() {
         const container = document.getElementById('sessions-list');
-        if (!container) return;
+        if (!container) {
+            console.error('sessions-list container not found');
+            return;
+        }
 
         console.log('Rendering projects & sessions view');
+        console.log('Current sessions:', this.sessions);
 
         // Wait for sessions to be loaded if they're not available yet
         if (!this.sessions || !Array.isArray(this.sessions)) {
@@ -1829,6 +1841,7 @@ class LiveDashboard {
             // Try to load sessions if they're not available
             try {
                 await this.loadSessions();
+                console.log('Sessions loaded:', this.sessions);
             } catch (error) {
                 console.error('Error loading sessions:', error);
                 container.innerHTML = '<div class="error-state">Error loading sessions: ' + error.message + '</div>';
@@ -1838,6 +1851,7 @@ class LiveDashboard {
 
         // Group sessions by project
         const projects = this.groupSessionsByProject();
+        console.log('Grouped projects:', projects);
         
         // Render projects and sessions
         let html = '<div class="projects-sessions-view">';
@@ -1847,11 +1861,13 @@ class LiveDashboard {
             html += '<div class="no-data">No projects found</div>';
         } else {
             Object.entries(projects).forEach(([projectName, sessions]) => {
+                console.log(`Rendering project: ${projectName} with ${sessions.length} sessions`);
                 html += this.renderProjectCard(projectName, sessions);
             });
         }
         
         html += '</div>';
+        console.log('Final HTML:', html);
         container.innerHTML = html;
     }
 
@@ -2174,7 +2190,12 @@ class LiveDashboard {
         if (!container) return;
         
         try {
-            const response = await fetch('/api/sessions/analyze-with-kura');
+            const response = await fetch('/api/sessions/analyze-with-kura', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
             const data = await response.json();
             
             if (data.success && data.umap_coordinates) {
@@ -2198,8 +2219,8 @@ class LiveDashboard {
                             </div>
                         </div>
                         <div class="embeddings-actions">
-                            <button class="btn btn-primary" onclick="window.location.href='/dashboard/enhanced'">
-                                View Interactive UMAP
+                            <button class="btn btn-primary" onclick="switchView('visualizations')">
+                                View Workflow Analysis
                             </button>
                         </div>
                     </div>
@@ -2640,10 +2661,6 @@ class LiveDashboard {
                                 <div class="kura-value">${kuraData.clusters ? kuraData.clusters.length : 0}</div>
                                 <div class="kura-label">Identified Clusters</div>
                             </div>
-                            <div class="kura-metric">
-                                <div class="kura-value">${kuraData.analysis ? kuraData.analysis.insights : 'N/A'}</div>
-                                <div class="kura-label">Key Insights</div>
-                            </div>
                         </div>
                     </div>
                 ` : ''}
@@ -2659,10 +2676,258 @@ class LiveDashboard {
                         </div>
                     </div>
                 ` : ''}
+                
+                ${kuraData && kuraData.success && kuraData.umap_coordinates ? `
+                    <div class="umap-visualization">
+                        <h3>Session Embeddings (UMAP)</h3>
+                        <div class="umap-container">
+                            <div class="umap-info">
+                                <p>${kuraData.total_sessions} sessions mapped to 2D space using UMAP dimensionality reduction</p>
+                                <div class="umap-legend">
+                                    <div class="legend-item">
+                                        <span class="legend-color" style="background-color: #3b82f6;"></span>
+                                        <span>Explore Sessions</span>
+                                    </div>
+                                    <div class="legend-item">
+                                        <span class="legend-color" style="background-color: #10b981;"></span>
+                                        <span>Data Exploration</span>
+                                    </div>
+                                    <div class="legend-item">
+                                        <span class="legend-color" style="background-color: #f59e0b;"></span>
+                                        <span>Other Intents</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="umap-plot" id="umap-plot"></div>
+                        </div>
+                    </div>
+                ` : ''}
             </div>
         `;
 
         container.innerHTML = analysisHtml;
+        
+        // Render UMAP visualization if data is available
+        if (kuraData && kuraData.success && kuraData.umap_coordinates) {
+            this.renderUMAPVisualization(kuraData.umap_coordinates, kuraData.clusters);
+        }
+    }
+
+    renderUMAPVisualization(umapCoordinates, clusters) {
+        const plotContainer = document.getElementById('umap-plot');
+        if (!plotContainer) return;
+
+        // Set up the SVG dimensions
+        const width = 600;
+        const height = 400;
+        const margin = { top: 20, right: 20, bottom: 40, left: 40 };
+
+        // Create SVG
+        const svg = d3.select(plotContainer)
+            .append('svg')
+            .attr('width', width)
+            .attr('height', height)
+            .style('background', 'var(--background-primary)')
+            .style('border-radius', '8px')
+            .style('border', '1px solid var(--border-color)');
+
+        // Create scales
+        const xExtent = d3.extent(umapCoordinates, d => d.x);
+        const yExtent = d3.extent(umapCoordinates, d => d.y);
+        
+        const xScale = d3.scaleLinear()
+            .domain(xExtent)
+            .range([margin.left, width - margin.right]);
+            
+        const yScale = d3.scaleLinear()
+            .domain(yExtent)
+            .range([height - margin.bottom, margin.top]);
+
+        // Color mapping for different intents
+        const colorMap = {
+            'explore': '#3b82f6',
+            'data_exploration': '#10b981',
+            'EXPLORE': '#8b5cf6',
+            'default': '#f59e0b'
+        };
+
+        // Add axes
+        const xAxis = d3.axisBottom(xScale)
+            .tickSize(0)
+            .tickFormat('')
+            .tickPadding(10);
+            
+        const yAxis = d3.axisLeft(yScale)
+            .tickSize(0)
+            .tickFormat('')
+            .tickPadding(10);
+
+        svg.append('g')
+            .attr('class', 'x-axis')
+            .attr('transform', `translate(0, ${height - margin.bottom})`)
+            .call(xAxis)
+            .style('color', 'var(--text-secondary)');
+
+        svg.append('g')
+            .attr('class', 'y-axis')
+            .attr('transform', `translate(${margin.left}, 0)`)
+            .call(yAxis)
+            .style('color', 'var(--text-secondary)');
+
+        // Add axis labels
+        svg.append('text')
+            .attr('class', 'x-label')
+            .attr('x', width / 2)
+            .attr('y', height - 5)
+            .style('text-anchor', 'middle')
+            .style('font-size', '12px')
+            .style('fill', 'var(--text-secondary)')
+            .text('UMAP Dimension 1');
+
+        svg.append('text')
+            .attr('class', 'y-label')
+            .attr('x', 15)
+            .attr('y', height / 2)
+            .attr('transform', 'rotate(-90, 15, ' + (height / 2) + ')')
+            .style('text-anchor', 'middle')
+            .style('font-size', '12px')
+            .style('fill', 'var(--text-secondary)')
+            .text('UMAP Dimension 2');
+
+        // Add grid lines
+        const xGrid = d3.axisBottom(xScale)
+            .tickSize(-(height - margin.top - margin.bottom))
+            .tickFormat('')
+            .ticks(5);
+
+        const yGrid = d3.axisLeft(yScale)
+            .tickSize(-(width - margin.left - margin.right))
+            .tickFormat('')
+            .ticks(5);
+
+        svg.append('g')
+            .attr('class', 'x-grid')
+            .attr('transform', `translate(0, ${height - margin.bottom})`)
+            .call(xGrid)
+            .style('stroke', 'var(--border-color)')
+            .style('stroke-opacity', 0.3);
+
+        svg.append('g')
+            .attr('class', 'y-grid')
+            .attr('transform', `translate(${margin.left}, 0)`)
+            .call(yGrid)
+            .style('stroke', 'var(--border-color)')
+            .style('stroke-opacity', 0.3);
+
+        // Add data points
+        const points = svg.selectAll('.data-point')
+            .data(umapCoordinates)
+            .enter()
+            .append('circle')
+            .attr('class', 'data-point')
+            .attr('cx', d => xScale(d.x))
+            .attr('cy', d => yScale(d.y))
+            .attr('r', 4)
+            .attr('fill', d => colorMap[d.intent] || colorMap.default)
+            .attr('opacity', 0.7)
+            .attr('stroke', 'var(--background-primary)')
+            .attr('stroke-width', 1)
+            .style('cursor', 'pointer')
+            .on('mouseover', function(event, d) {
+                // Highlight the point
+                d3.select(this)
+                    .attr('r', 6)
+                    .attr('opacity', 1)
+                    .attr('stroke', 'var(--text-primary)')
+                    .attr('stroke-width', 2);
+
+                // Show tooltip
+                const tooltip = d3.select('body').append('div')
+                    .attr('class', 'umap-tooltip')
+                    .style('position', 'absolute')
+                    .style('background', 'var(--background-secondary)')
+                    .style('border', '1px solid var(--border-color)')
+                    .style('border-radius', '4px')
+                    .style('padding', '8px')
+                    .style('font-size', '12px')
+                    .style('color', 'var(--text-primary)')
+                    .style('pointer-events', 'none')
+                    .style('z-index', '1000')
+                    .style('box-shadow', '0 2px 8px rgba(0,0,0,0.1)');
+
+                tooltip.html(`
+                    <div><strong>Session:</strong> ${d.session_id}</div>
+                    <div><strong>Intent:</strong> ${d.intent}</div>
+                    <div><strong>Outcome:</strong> ${d.outcome}</div>
+                    <div><strong>Confidence:</strong> ${(d.confidence * 100).toFixed(1)}%</div>
+                `);
+
+                tooltip.style('left', (event.pageX + 10) + 'px')
+                       .style('top', (event.pageY - 10) + 'px');
+            })
+            .on('mouseout', function(event, d) {
+                // Reset the point
+                d3.select(this)
+                    .attr('r', 4)
+                    .attr('opacity', 0.7)
+                    .attr('stroke', 'var(--background-primary)')
+                    .attr('stroke-width', 1);
+
+                // Remove tooltip
+                d3.selectAll('.umap-tooltip').remove();
+            })
+            .on('click', function(event, d) {
+                // Find and show session details
+                const session = this.sessions?.find(s => s.id === d.session_id);
+                if (session) {
+                    this.showSessionDetails(session);
+                }
+            }.bind(this));
+
+        // Add title
+        svg.append('text')
+            .attr('class', 'plot-title')
+            .attr('x', width / 2)
+            .attr('y', 15)
+            .style('text-anchor', 'middle')
+            .style('font-size', '14px')
+            .style('font-weight', '600')
+            .style('fill', 'var(--text-primary)')
+            .text('Session Clustering Visualization');
+
+        // Add cluster information if available
+        if (clusters && clusters.length > 0) {
+            const clusterInfo = svg.append('g')
+                .attr('class', 'cluster-info')
+                .attr('transform', `translate(${width - 150}, ${margin.top + 20})`);
+
+            clusterInfo.append('text')
+                .attr('class', 'cluster-title')
+                .attr('x', 0)
+                .attr('y', 0)
+                .style('font-size', '12px')
+                .style('font-weight', '600')
+                .style('fill', 'var(--text-primary)')
+                .text('Clusters:');
+
+            clusters.forEach((cluster, i) => {
+                const clusterItem = clusterInfo.append('g')
+                    .attr('class', 'cluster-item')
+                    .attr('transform', `translate(0, ${(i + 1) * 20})`);
+
+                clusterItem.append('circle')
+                    .attr('r', 6)
+                    .attr('fill', colorMap[cluster.name.toLowerCase().replace(/\s+/g, '_')] || colorMap.default)
+                    .attr('opacity', 0.7);
+
+                clusterItem.append('text')
+                    .attr('x', 15)
+                    .attr('y', 4)
+                    .style('font-size', '11px')
+                    .style('fill', 'var(--text-secondary)')
+                    .text(`${cluster.name} (${cluster.size})`);
+            });
+        }
     }
 
     calculateWorkflowInsights() {
@@ -2670,8 +2935,8 @@ class LiveDashboard {
         if (sessions.length === 0) {
             return {
                 avgSessionDuration: '0m',
-                mostActiveHour: 'N/A',
-                productivityTrend: 'N/A',
+                mostActiveHour: 'Unknown',
+                productivityTrend: 'Stable',
                 totalLinesChanged: 0,
                 filesPerSession: 0,
                 refactoringRate: '0%',
@@ -2764,7 +3029,10 @@ class LiveDashboard {
      * Search sessions by query
      */
     async searchSessions(query) {
+        console.log('searchSessions called with query:', query);
+        
         if (!query || query.trim().length === 0) {
+            console.log('Empty query, reloading all sessions');
             this.loadSessions(); // Reload all sessions
             return;
         }
@@ -3159,24 +3427,20 @@ class LiveDashboard {
             }
 
             // Number keys: Switch views
-            if (e.key >= '1' && e.key <= '6') {
+            if (e.key >= '1' && e.key <= '5') {
                 const viewMap = {
                     '1': 'timeline',
                     '2': 'projects-sessions',
                     '3': 'notebooks',
                     '4': 'visualizations',
-                    '5': 'embeddings',
-                    '6': 'enhanced'
+                    '5': 'embeddings'
                 };
                 
                 const viewType = viewMap[e.key];
-                if (viewType && viewType !== 'enhanced') {
+                if (viewType) {
                     e.preventDefault();
                     this.switchView(viewType);
                     this.showNotification(`Switched to ${viewType} view`, 'info');
-                } else if (viewType === 'enhanced') {
-                    e.preventDefault();
-                    window.location.href = '/dashboard/enhanced';
                 }
             }
 
@@ -3227,8 +3491,8 @@ class LiveDashboard {
                         <span>Close modals</span>
                     </div>
                     <div class="shortcut-item">
-                        <kbd>1-6</kbd>
-                        <span>Switch views</span>
+                        <kbd>1-5</kbd>
+                        <span>Switch views (Timeline, Projects, Notebooks, Visualizations, Embeddings)</span>
                     </div>
                     <div class="shortcut-item">
                         <kbd>H</kbd>

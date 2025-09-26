@@ -544,6 +544,39 @@ class CellStageClassifier {
     }
 
     /**
+     * Analyze content diversity for better stage classification
+     */
+    analyzeContentDiversity(content, normalizedContent) {
+        return {
+            hasImports: /^(import|from)\s+/.test(content) || normalizedContent.includes('import'),
+            hasDataLoading: /(read_csv|read_json|load|fetch|download|pd\.read|np\.load)/.test(normalizedContent),
+            hasVisualization: /(plot|chart|graph|visualize|matplotlib|seaborn|plotly|show|plt\.)/.test(normalizedContent),
+            hasML: /(fit|predict|train|model|sklearn|tensorflow|pytorch|xgboost|ml)/.test(normalizedContent),
+            hasStats: /(ttest|anova|chi2|regression|correlation|pvalue|statistical|stats)/.test(normalizedContent),
+            hasPreprocessing: /(clean|preprocess|transform|fillna|dropna|encode|normalize|scale)/.test(normalizedContent),
+            hasDocumentation: /(comment|docstring|markdown|explain|note|todo|#)/.test(normalizedContent),
+            hasTesting: /(test|assert|validate|check|verify|unittest|pytest)/.test(normalizedContent),
+            hasInteractive: /(interactive|dashboard|widget|streamlit|dash|bokeh)/.test(normalizedContent),
+            hasResults: /(conclusion|interpret|result|finding|insight|summary)/.test(normalizedContent),
+            lineCount: content.split('\n').length,
+            complexity: this.calculateBasicComplexity(content)
+        };
+    }
+
+    /**
+     * Calculate basic complexity score
+     */
+    calculateBasicComplexity(content) {
+        const lines = content.split('\n').length;
+        const functions = (content.match(/def\s+\w+/g) || []).length;
+        const classes = (content.match(/class\s+\w+/g) || []).length;
+        const loops = (content.match(/for\s+|while\s+/g) || []).length;
+        const conditionals = (content.match(/if\s+|elif\s+/g) || []).length;
+        
+        return lines + (functions * 2) + (classes * 3) + (loops * 1.5) + (conditionals * 1.2);
+    }
+
+    /**
      * Generate holistic insights from combined analyses
      */
     generateHolisticInsights(basicClassification, astAnalysis, clioAnalysis) {
@@ -605,7 +638,7 @@ class CellStageClassifier {
         const stageScores = {};
 
         // Special handling for notebook update messages
-        if (normalizedContent.includes('notebook updated') || normalizedContent.includes('cells')) {
+        if (normalizedContent.includes('notebook updated') && normalizedContent.includes('cells')) {
             return {
                 stage: 'data_visualization',
                 confidence: 0.8,
@@ -614,7 +647,20 @@ class CellStageClassifier {
             };
         }
 
-        // Score each stage based on keyword matches
+        // Special handling for empty or minimal content
+        if (content.trim().length < 10) {
+            return {
+                stage: 'unknown',
+                confidence: 0.1,
+                matches: 0,
+                stageInfo: this.cellStages.unknown
+            };
+        }
+
+        // Enhanced content analysis for better diversity
+        const contentAnalysis = this.analyzeContentDiversity(content, normalizedContent);
+
+        // Score each stage based on keyword matches and content analysis
         Object.entries(this.cellStages).forEach(([stageKey, stageInfo]) => {
             let score = 0;
             let matches = 0;
@@ -626,24 +672,61 @@ class CellStageClassifier {
                 score += matches_found * (1 / stageInfo.keywords.length);
             });
 
+            // Apply content analysis boosts
+            if (contentAnalysis.hasImports && stageKey === 'import') {
+                score *= 2.5;
+            }
+            if (contentAnalysis.hasDataLoading && stageKey === 'data_loading') {
+                score *= 2.0;
+            }
+            if (contentAnalysis.hasVisualization && stageKey === 'data_visualization') {
+                score *= 2.0;
+            }
+            if (contentAnalysis.hasML && stageKey === 'machine_learning') {
+                score *= 2.0;
+            }
+            if (contentAnalysis.hasStats && stageKey === 'statistical_analysis') {
+                score *= 2.0;
+            }
+            if (contentAnalysis.hasPreprocessing && stageKey === 'data_preprocessing') {
+                score *= 2.0;
+            }
+            if (contentAnalysis.hasDocumentation && stageKey === 'documentation') {
+                score *= 2.0;
+            }
+
             // Boost score for markdown cells with documentation keywords
             if (cellType === 'markdown' && stageInfo.keywords.some(k => 
                 ['comment', 'docstring', 'markdown', 'explain', 'note'].includes(k))) {
                 score *= 1.5;
             }
 
-            // Boost score for import statements
-            if (stageKey === 'import' && normalizedContent.includes('import')) {
-                score *= 2;
-            }
-
             // Boost score for data exploration keywords
             if (stageKey === 'exploratory_analysis' && (
                 normalizedContent.includes('explore') || 
                 normalizedContent.includes('analysis') ||
-                normalizedContent.includes('data')
+                (normalizedContent.includes('data') && normalizedContent.includes('shape'))
             )) {
                 score *= 1.5;
+            }
+
+            // Boost score for data visualization keywords
+            if (stageKey === 'data_visualization' && (
+                normalizedContent.includes('plot') || 
+                normalizedContent.includes('chart') ||
+                normalizedContent.includes('visualize') ||
+                normalizedContent.includes('matplotlib') ||
+                normalizedContent.includes('seaborn')
+            )) {
+                score *= 1.5;
+            }
+
+            // Boost score for import statements
+            if (stageKey === 'import' && (
+                normalizedContent.includes('import') || 
+                normalizedContent.includes('from')
+            )) {
+                score *= 2.0;
             }
 
             stageScores[stageKey] = {
@@ -659,12 +742,13 @@ class CellStageClassifier {
             .sort((a, b) => b[1].score - a[1].score)[0];
 
         if (!bestMatch || bestMatch[1].score === 0) {
-            // Default to exploratory analysis for notebook content
-            if (normalizedContent.includes('notebook') || normalizedContent.includes('cell')) {
+            // Only default to exploratory analysis for actual analysis content
+            if (normalizedContent.includes('analyze') || normalizedContent.includes('explore') || 
+                normalizedContent.includes('data') || normalizedContent.includes('plot')) {
                 return {
                     stage: 'exploratory_analysis',
-                    confidence: 0.6,
-                    matches: 1,
+                    confidence: 0.3,
+                    matches: 0,
                     stageInfo: this.cellStages.exploratory_analysis
                 };
             }
@@ -894,12 +978,35 @@ class CellStageClassifier {
      * Calculate session-level complexity metrics
      */
     calculateSessionComplexity(cellStages) {
-        const complexities = cellStages.map(cell => cell.analyses?.ast?.complexity || 0);
+        if (!cellStages || cellStages.length === 0) {
+            return {
+                average: 0,
+                max: 0,
+                min: 0,
+                total: 0
+            };
+        }
+
+        const complexities = cellStages.map(cell => {
+            if (cell.analyses && cell.analyses.ast && typeof cell.analyses.ast.complexity === 'number') {
+                return cell.analyses.ast.complexity;
+            }
+            return 0;
+        }).filter(c => c > 0);
+        
+        if (complexities.length === 0) {
+            return {
+                average: 0,
+                max: 0,
+                min: 0,
+                total: 0
+            };
+        }
         
         return {
-            average: complexities.reduce((sum, c) => sum + c, 0) / complexities.length || 0,
-            max: Math.max(...complexities, 0),
-            min: Math.min(...complexities, 0),
+            average: complexities.reduce((sum, c) => sum + c, 0) / complexities.length,
+            max: Math.max(...complexities),
+            min: Math.min(...complexities),
             total: complexities.reduce((sum, c) => sum + c, 0)
         };
     }
@@ -1098,3 +1205,4 @@ if (typeof window !== 'undefined') {
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = CellStageClassifier;
 }
+

@@ -2472,56 +2472,140 @@
 
 .workflow-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: var(--space-4);
-  margin-bottom: var(--space-6);
+  grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+  gap: 1.5rem;
+  margin: 1.5rem 0;
+  padding: 0 1rem;
 }
 
 .workflow-section {
   background: var(--background-secondary);
   border: 1px solid var(--border-color);
-  border-radius: var(--border-radius);
-  padding: var(--space-4);
+  border-radius: 12px;
+  padding: 1.5rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transition: all 0.2s ease;
+}
+
+.workflow-section:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transform: translateY(-2px);
 }
 
 .workflow-section h3 {
-  margin: 0 0 var(--space-3) 0;
-  font-size: var(--font-size-lg);
+  margin: 0 0 1.25rem 0;
+  font-size: 1.25rem;
+  font-weight: 600;
   color: var(--text-primary);
-  border-bottom: 1px solid var(--border-color);
-  padding-bottom: var(--space-2);
+  border-bottom: 2px solid var(--primary-color);
+  padding-bottom: 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.workflow-section h3::before {
+  content: '';
+  width: 4px;
+  height: 20px;
+  background: var(--primary-color);
+  border-radius: 2px;
 }
 
 .pattern-metrics,
 .evolution-metrics {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
-  gap: var(--space-3);
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
 }
 
 .pattern-item,
 .evolution-item {
   text-align: center;
-  padding: var(--space-3);
+  padding: 1.25rem 1rem;
   background: var(--background-primary);
   border: 1px solid var(--border-color);
-  border-radius: var(--border-radius);
+  border-radius: 8px;
+  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.pattern-item:hover,
+.evolution-item:hover {
+  border-color: var(--primary-color);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transform: translateY(-1px);
+}
+
+.pattern-item::before,
+.evolution-item::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.pattern-item:hover::before,
+.evolution-item:hover::before {
+  opacity: 1;
 }
 
 .pattern-value,
 .evolution-value {
-  font-size: var(--font-size-xl);
-  font-weight: var(--font-weight-bold);
+  font-size: 1.75rem;
+  font-weight: 700;
   color: var(--primary-color);
-  margin-bottom: var(--space-1);
+  margin-bottom: 0.5rem;
+  line-height: 1.2;
+  display: block;
 }
 
 .pattern-label,
 .evolution-label {
-  font-size: var(--font-size-sm);
+  font-size: 0.8rem;
   color: var(--text-secondary);
   text-transform: uppercase;
-  font-weight: var(--font-weight-medium);
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  line-height: 1.3;
+  display: block;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .workflow-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+    margin: 1rem 0;
+    padding: 0 0.5rem;
+  }
+  
+  .workflow-section {
+    padding: 1rem;
+  }
+  
+  .pattern-metrics,
+  .evolution-metrics {
+    grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+    gap: 0.75rem;
+  }
+  
+  .pattern-item,
+  .evolution-item {
+    padding: 1rem 0.75rem;
+  }
+  
+  .pattern-value,
+  .evolution-value {
+    font-size: 1.5rem;
+  }
 }
 
 .project-breakdown {

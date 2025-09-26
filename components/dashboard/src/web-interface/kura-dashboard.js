@@ -1658,7 +1658,7 @@ class KuraDashboard {
             title: 'No Temporal Patterns',
             description: 'Insufficient data to identify temporal patterns',
             metrics: [
-                { value: 'N/A', label: 'Peak Hour' },
+                { value: 'Unknown', label: 'Peak Hour' },
                 { value: '0', label: 'Sessions' },
                 { value: '0%', label: 'Success Rate' }
             ]
