@@ -87,7 +87,7 @@ function enqueue(kind, payload) {
     events.push(payload);
   }
   
-  console.log(`📦 Enqueued ${kind} #${sequence}: ${payload.id || payload.type}`);
+  console.log(`� Enqueued ${kind} #${sequence}: ${payload.id || payload.type}`);
 }
 
 // File watcher state
@@ -98,9 +98,9 @@ let fileSnapshots = new Map();
 let config;
 try {
   config = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'config.json'), 'utf8'));
-  console.log('📋 Loaded configuration from config.json');
+  console.log(' Loaded configuration from config.json');
 } catch (error) {
-  console.log('⚠️ Using default configuration');
+  console.log(' Using default configuration');
   config = {
     root_dir: process.cwd(),
     ignore: [
@@ -124,7 +124,7 @@ try {
   };
 }
 
-console.log('🔧 Configuration:', {
+console.log(' Configuration:', {
   root_dir: config.root_dir,
   ignore_count: config.ignore.length,
   diff_threshold: config.diff_threshold
@@ -151,13 +151,13 @@ app.get('/health', (req, res) => {
 app.get('/queue', (req, res) => {
   const since = Number(req.query.since || 0);
   
-  console.log(`📤 Queue request: since=${since}, queue_length=${queue.length}`);
+  console.log(`� Queue request: since=${since}, queue_length=${queue.length}`);
   
   const newItems = queue.filter(item => item.seq > since);
   const newEntries = newItems.filter(item => item.kind === 'entry').map(item => item.payload);
   const newEvents = newItems.filter(item => item.kind === 'event').map(item => item.payload);
   
-  console.log(`📤 Queue response: ${newEntries.length} entries, ${newEvents.length} events since seq ${since}`);
+  console.log(`� Queue response: ${newEntries.length} entries, ${newEvents.length} events since seq ${since}`);
   
   res.json({
     entries: newEntries,
@@ -203,7 +203,7 @@ app.post('/ack', (req, res) => {
     events = queue.filter(item => item.kind === 'event').map(item => item.payload);
     
     const afterCount = queue.length;
-    console.log(`✅ Queue acknowledged up to seq ${ackSeq}. Cleaned up ${beforeCount - afterCount} old items. Remaining: ${queue.length} items`);
+    console.log(` Queue acknowledged up to seq ${ackSeq}. Cleaned up ${beforeCount - afterCount} old items. Remaining: ${queue.length} items`);
   }
   res.json({ status: 'acknowledged', cursor: ackCursor });
 });
@@ -221,7 +221,7 @@ app.post('/config', (req, res) => {
 
 // MCP endpoints
 app.post('/mcp/log-prompt-response', (req, res) => {
-  console.log('📥 MCP request received:', req.body);
+  console.log('� MCP request received:', req.body);
   const { session_id, file_path, prompt, response } = req.body;
   
   const entry = {
@@ -235,7 +235,7 @@ app.post('/mcp/log-prompt-response', (req, res) => {
     notes: 'Logged via MCP'
   };
   
-  console.log('📝 Creating entry:', entry);
+  console.log(' Creating entry:', entry);
   
   // Create matching event
   const event = {
@@ -250,7 +250,7 @@ app.post('/mcp/log-prompt-response', (req, res) => {
   enqueue('entry', entry);
   enqueue('event', event);
   
-  console.log(`📝 MCP entry added: ${entry.id} - ${entry.file_path}`);
+  console.log(` MCP entry added: ${entry.id} - ${entry.file_path}`);
   
   res.json({ success: true, entry_id: entry.id });
 });
@@ -283,8 +283,8 @@ app.post('/mcp/log-code-change', (req, res) => {
   
   cursor = new Date().toISOString();
   
-  console.log(`📝 MCP code change added: ${entry.id} - ${entry.file_path}`);
-  console.log(`📊 Total entries: ${entries.length}, events: ${events.length}`);
+  console.log(` MCP code change added: ${entry.id} - ${entry.file_path}`);
+  console.log(` Total entries: ${entries.length}, events: ${events.length}`);
   
   res.json({ success: true, entry_id: entry.id });
 });
@@ -303,8 +303,8 @@ app.post('/mcp/log-event', (req, res) => {
   events.push(event);
   cursor = new Date().toISOString();
   
-  console.log(`📝 MCP event added: ${event.id} - ${event.type}`);
-  console.log(`📊 Total events: ${events.length}`);
+  console.log(` MCP event added: ${event.id} - ${event.type}`);
+  console.log(` Total events: ${events.length}`);
   
   res.json({ success: true, event_id: event.id });
 });
@@ -350,17 +350,17 @@ function calculateDiff(text1, text2) {
 }
 
 async function processFileChange(filePath) {
-  console.log(`🔍 Processing file change: ${filePath}`);
+  console.log(` Processing file change: ${filePath}`);
   try {
     const content = fs.readFileSync(filePath, 'utf8');
     const relativePath = path.relative(config.root_dir, filePath);
     const previousContent = fileSnapshots.get(relativePath) || '';
     
-    console.log(`📄 File: ${relativePath}, Previous length: ${previousContent.length}, Current length: ${content.length}`);
+    console.log(` File: ${relativePath}, Previous length: ${previousContent.length}, Current length: ${content.length}`);
     
     if (content !== previousContent) {
       const diff = calculateDiff(previousContent, content);
-      console.log(`📊 Diff: ${diff.summary}, Significant: ${diff.isSignificant}, Threshold: ${config.diff_threshold}`);
+      console.log(` Diff: ${diff.summary}, Significant: ${diff.isSignificant}, Threshold: ${config.diff_threshold}`);
       
       if (diff.isSignificant) {
         // Use the new queue system which will automatically link prompts
@@ -433,17 +433,17 @@ async function processFileChange(filePath) {
         enqueue('entry', entry);
         enqueue('event', event);
         
-        console.log(`📁 File change detected: ${relativePath}`);
+        console.log(` File change detected: ${relativePath}`);
       } else {
-        console.log(`⚠️ Change too small for ${relativePath}: ${diff.summary}`);
+        console.log(` Change too small for ${relativePath}: ${diff.summary}`);
       }
       
       fileSnapshots.set(relativePath, content);
     } else {
-      console.log(`ℹ️ No content change for ${relativePath}`);
+      console.log(`�️ No content change for ${relativePath}`);
     }
   } catch (error) {
-    console.error(`❌ Error processing file ${filePath}:`, error.message);
+    console.error(` Error processing file ${filePath}:`, error.message);
   }
 }
 
@@ -452,8 +452,8 @@ function startFileWatcher() {
     watcher.close();
   }
   
-  console.log(`🔍 Starting file watcher for: ${config.root_dir}`);
-  console.log(`🚫 Ignoring: ${config.ignore.join(', ')}`);
+  console.log(` Starting file watcher for: ${config.root_dir}`);
+  console.log(` Ignoring: ${config.ignore.join(', ')}`);
   
   watcher = chokidar.watch(config.root_dir, {
     ignored: config.ignore,
@@ -467,11 +467,11 @@ function startFileWatcher() {
     .on('unlink', (filePath) => {
       const relativePath = path.relative(config.root_dir, filePath);
       fileSnapshots.delete(relativePath);
-      console.log(`🗑️ File deleted: ${relativePath}`);
+      console.log(` File deleted: ${relativePath}`);
     })
-    .on('error', error => console.error(`❌ Watcher error: ${error}`))
+    .on('error', error => console.error(` Watcher error: ${error}`))
     .on('ready', () => {
-      console.log('✅ File watcher ready');
+      console.log(' File watcher ready');
     });
 }
 
@@ -493,10 +493,10 @@ io.on('connection', (socket) => {
 
 // Start the server
 server.listen(PORT, '127.0.0.1', () => {
-  console.log(`🚀 Companion service running on http://127.0.0.1:${PORT}`);
-  console.log(`📡 WebSocket server running on ws://127.0.0.1:${PORT}`);
-  console.log(`📁 Watching: ${config.root_dir}`);
-  console.log(`🚫 Ignoring: ${config.ignore.length} patterns`);
+  console.log(` Companion service running on http://127.0.0.1:${PORT}`);
+  console.log(` WebSocket server running on ws://127.0.0.1:${PORT}`);
+  console.log(` Watching: ${config.root_dir}`);
+  console.log(` Ignoring: ${config.ignore.length} patterns`);
   
   // Start file watcher
   startFileWatcher();
@@ -504,33 +504,33 @@ server.listen(PORT, '127.0.0.1', () => {
   // Start clipboard monitor for prompt capture
   if (config.enable_clipboard === true) {
     clipboardMonitor.start();
-    console.log('📋 Clipboard monitor started for prompt capture');
+    console.log(' Clipboard monitor started for prompt capture');
   } else {
-    console.log('📋 Clipboard monitor disabled in config');
+    console.log(' Clipboard monitor disabled in config');
   }
 });
 
 // Graceful shutdown
 process.on('SIGINT', () => {
-  console.log('\n🛑 Shutting down companion service...');
+  console.log('\n Shutting down companion service...');
   if (watcher) {
     watcher.close();
   }
   clipboardMonitor.stop();
   server.close(() => {
-    console.log('✅ Companion service stopped');
+    console.log(' Companion service stopped');
     process.exit(0);
   });
 });
 
 process.on('SIGTERM', () => {
-  console.log('\n🛑 Shutting down companion service...');
+  console.log('\n Shutting down companion service...');
   if (watcher) {
     watcher.close();
   }
   clipboardMonitor.stop();
   server.close(() => {
-    console.log('✅ Companion service stopped');
+    console.log(' Companion service stopped');
     process.exit(0);
   });
 });

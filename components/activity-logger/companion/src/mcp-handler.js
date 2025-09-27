@@ -36,7 +36,7 @@ class MCPHandler {
       const message = JSON.parse(line);
       this.processMessage(message);
     } catch (error) {
-      console.error('❌ Failed to parse message:', error.message);
+      console.error(' Failed to parse message:', error.message);
     }
   }
 
@@ -198,12 +198,12 @@ class MCPHandler {
       });
       
       if (!response.ok) {
-        console.error(`❌ Companion API error: ${response.status}`);
+        console.error(` Companion API error: ${response.status}`);
       } else {
-        console.log(`✅ Sent to companion: ${method} ${path}`);
+        console.log(` Sent to companion: ${method} ${path}`);
       }
     } catch (error) {
-      console.error('❌ Failed to send to companion:', error.message);
+      console.error(' Failed to send to companion:', error.message);
     }
   }
 

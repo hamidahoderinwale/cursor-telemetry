@@ -62,7 +62,7 @@ class Queue {
     };
     
     this.pendingPrompts.push(promptWithId);
-    console.log(`💬 Added pending prompt: ${promptWithId.id}`);
+    console.log(` Added pending prompt: ${promptWithId.id}`);
     
     // Keep only last 10 pending prompts to prevent memory issues
     if (this.pendingPrompts.length > 10) {
@@ -83,7 +83,7 @@ class Queue {
     prompt.status = 'linked';
     prompt.linked_entry_id = entry.id;
     
-    console.log(`🔗 Linked prompt ${prompt.id} to entry ${entry.id}`);
+    console.log(`� Linked prompt ${prompt.id} to entry ${entry.id}`);
     return prompt;
   }
 

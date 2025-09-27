@@ -49,7 +49,7 @@ class FileWatcher {
       this.watcher.close();
       this.watcher = null;
       this.isWatching = false;
-      console.log('🛑 File watcher stopped');
+      console.log(' File watcher stopped');
     }
   }
 
@@ -79,7 +79,7 @@ class FileWatcher {
         const diff = diffEngine.createDiff(previousContent, currentContent);
         
         if (diff && diff.length >= cfg.diff_threshold) {
-          console.log(`🔄 Code change detected: ${relativePath} (${diff.length} chars)`);
+          console.log(` Code change detected: ${relativePath} (${diff.length} chars)`);
           
           // Add to queue
           queue.addEntry({

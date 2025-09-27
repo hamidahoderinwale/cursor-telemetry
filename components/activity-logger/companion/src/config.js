@@ -30,7 +30,7 @@ if (existsSync(CONFIG_FILE)) {
     const fileConfig = JSON.parse(readFileSync(CONFIG_FILE, 'utf8'));
     currentConfig = { ...DEFAULT_CONFIG, ...fileConfig };
   } catch (error) {
-    console.warn('⚠️ Failed to load config file, using defaults:', error.message);
+    console.warn('�️ Failed to load config file, using defaults:', error.message);
   }
 }
 
@@ -46,7 +46,7 @@ export const config = {
     try {
       writeFileSync(CONFIG_FILE, JSON.stringify(currentConfig, null, 2));
     } catch (error) {
-      console.error('❌ Failed to save config:', error.message);
+      console.error(' Failed to save config:', error.message);
     }
     
     return currentConfig;
@@ -57,7 +57,7 @@ export const config = {
     try {
       writeFileSync(CONFIG_FILE, JSON.stringify(currentConfig, null, 2));
     } catch (error) {
-      console.error('❌ Failed to reset config:', error.message);
+      console.error(' Failed to reset config:', error.message);
     }
     return currentConfig;
   }

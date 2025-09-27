@@ -12,11 +12,11 @@ class MCPServer {
 
   start() {
     if (this.isRunning) {
-      console.log('⚠️ MCP server already running');
+      console.log('�️ MCP server already running');
       return;
     }
 
-    console.log('🔌 Starting MCP server...');
+    console.log(' Starting MCP server...');
     
     // Start the MCP server process
     this.process = spawn('node', ['src/mcp-handler.js'], {
@@ -31,7 +31,7 @@ class MCPServer {
           const message = JSON.parse(line);
           this.handleMCPMessage(message);
         } catch (error) {
-          console.error('❌ Failed to parse MCP message:', error.message);
+          console.error(' Failed to parse MCP message:', error.message);
         }
       }
     });
@@ -41,12 +41,12 @@ class MCPServer {
     });
 
     this.process.on('close', (code) => {
-      console.log(`🛑 MCP server process exited with code ${code}`);
+      console.log(` MCP server process exited with code ${code}`);
       this.isRunning = false;
     });
 
     this.isRunning = true;
-    console.log('✅ MCP server started');
+    console.log(' MCP server started');
   }
 
   stop() {
@@ -54,14 +54,14 @@ class MCPServer {
       this.process.kill();
       this.process = null;
       this.isRunning = false;
-      console.log('🛑 MCP server stopped');
+      console.log(' MCP server stopped');
     }
   }
 
   handleMCPMessage(message) {
     const { method, params, id } = message;
     
-    console.log(`📨 MCP message: ${method}`);
+    console.log(` MCP message: ${method}`);
     
     switch (method) {
       case 'logPromptResponse':
@@ -80,7 +80,7 @@ class MCPServer {
         this.handleSetConfig(params, id);
         break;
       default:
-        console.warn(`⚠️ Unknown MCP method: ${method}`);
+        console.warn(`�️ Unknown MCP method: ${method}`);
     }
   }
 
@@ -165,7 +165,7 @@ class MCPServer {
     const { root_dir, ignore, diff_threshold } = params;
     
     // Update configuration (this would need to be implemented)
-    console.log('📝 MCP config update:', params);
+    console.log(' MCP config update:', params);
     
     const response = {
       jsonrpc: '2.0',

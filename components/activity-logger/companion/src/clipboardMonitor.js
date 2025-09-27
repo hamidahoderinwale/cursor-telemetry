@@ -1,12 +1,29 @@
 import clipboard from 'clipboardy';
 import { queue } from './queue.js';
-import Dexie from 'dexie';
 
-// Database setup for prompt storage
-const db = new Dexie('CursorActivityLoggerCompanion');
-db.version(1).stores({
-    prompts: '++id, timestamp, text, status, linked_entry_id'
-});
+// Simple in-memory database for prompt storage (replacing Dexie/IndexedDB)
+const db = {
+    _prompts: [],
+    nextId: 1,
+    
+    get prompts() { return this._prompts; },
+    set prompts(val) { this._prompts = val; },
+    
+    async add(table, data) {
+        const item = { ...data, id: this.nextId++ };
+        this[table].push(item);
+        return item;
+    },
+    
+    async update(table, id, updates) {
+        const index = this[table].findIndex(item => item.id === id);
+        if (index >= 0) {
+            this[table][index] = { ...this[table][index], ...updates };
+            return this[table][index];
+        }
+        return null;
+    }
+};
 
 class ClipboardMonitor {
   constructor() {
@@ -14,6 +31,9 @@ class ClipboardMonitor {
     this.lastClipboard = '';
     this.intervalId = null;
     this.checkInterval = 2000; // Check every 2 seconds
+    this.capturedPrompts = new Set(); // Track captured prompts to prevent duplicates
+    this.lastCaptureTime = 0;
+    this.minCaptureInterval = 5000; // Minimum 5 seconds between captures
   }
 
   start() {
@@ -22,18 +42,25 @@ class ClipboardMonitor {
       return;
     }
 
-    console.log('📋 Starting clipboard monitor for prompt capture');
+    console.log(' Starting clipboard monitor for prompt capture');
     this.isMonitoring = true;
 
     this.intervalId = setInterval(async () => {
       try {
         const text = (await clipboard.read()).trim();
+        const now = Date.now();
         
-        if (text && text !== this.lastClipboard && this.isLikelyPrompt(text)) {
-          console.log(`💬 Captured potential prompt: ${text.slice(0, 80)}...`);
+        // Check if we should capture this prompt
+        if (text && 
+            text !== this.lastClipboard && 
+            this.isLikelyPrompt(text) &&
+            !this.capturedPrompts.has(text) &&
+            (now - this.lastCaptureTime) > this.minCaptureInterval) {
+          
+          console.log(` Captured potential prompt: ${text.slice(0, 80)}...`);
           
           // Save to database
-          const promptId = await db.prompts.add({
+          const promptId = await db.add('prompts', {
             timestamp: new Date().toISOString(),
             text: text,
             status: 'pending',
@@ -43,12 +70,14 @@ class ClipboardMonitor {
           // Also add to queue for immediate processing
           queue.addPendingPrompt(text);
           this.lastClipboard = text;
+          this.capturedPrompts.add(text);
+          this.lastCaptureTime = now;
           
-          console.log(`Saved prompt to database: ${promptId}`);
+          console.log(`Saved prompt to database: ${promptId.id}`);
         }
       } catch (error) {
         // Silently handle clipboard errors (permission denied, etc.)
-        if (error.message && !error.message.includes('permission')) {
+        if (error.message && !error.message.includes('permission') && !error.message.includes('IndexedDB')) {
           console.error('Clipboard monitor error:', error.message);
         }
       }
@@ -61,12 +90,26 @@ class ClipboardMonitor {
       this.intervalId = null;
     }
     this.isMonitoring = false;
-    console.log('🛑 Clipboard monitor stopped');
+    console.log(' Clipboard monitor stopped');
   }
 
   isLikelyPrompt(text) {
     // Basic heuristics to identify prompts
     if (text.length < 10 || text.length > 2000) return false;
+    
+    // Skip UI labels and metrics
+    const uiPatterns = [
+      /^(changes per hour|coding velocity|productivity measure)/i,
+      /^(total changes|files modified|conversations)/i,
+      /^(code velocity|refactoring rate|lines changed)/i,
+      /^\d+\/\d+$/,  // Numbers like "5/100"
+      /^\d+\/hr$/,   // Numbers like "5/hr"
+      /^[a-zA-Z\s]+:\s*\d+/,  // Labels like "Files: 5"
+    ];
+    
+    if (uiPatterns.some(pattern => pattern.test(text))) {
+      return false;
+    }
     
     // Skip code-like content
     const codePatterns = [
