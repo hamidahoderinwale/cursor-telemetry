@@ -151,3 +151,32 @@ legacy/
 # Documentation files (except main README)
 *.md
 !README.md
+
+# Cursor Dashboard specific
+.conversation-storage/
+.optimizations/
+temp/
+temp-*
+*_temp.*
+temp_*
+
+# Generated notebooks (keep some examples)
+generated-notebooks/
+!generated-notebooks/README.md
+
+# Test files
+test_*.html
+test_*.txt
+test_*.js
+
+# Server logs and temporary files
+server.log
+web-server.log
+temp-server.js
+
+# Cursor sessions (large binary files)
+cursor-sessions/
+
+# Database files (keep structure, ignore data)
+*.db-shm
+*.db-wal
