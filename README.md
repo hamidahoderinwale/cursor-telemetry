@@ -67,8 +67,6 @@ The Cursor Telemetry Dashboard is an intelligent monitoring and analysis platfor
 ## Tech Stack
 
 ### Frontend
-- **HTML5/CSS3**: Semantic markup with CSS variables and component-based styling
-- **JavaScript (ES6+)**: Modular architecture with class-based components
 - **D3.js**: Data visualization and interactive charts
 - **Socket.IO Client**: Real-time communication
 - **Funnel Sans**: Typography system
