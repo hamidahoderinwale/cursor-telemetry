@@ -554,7 +554,7 @@ async def main():
     print(f"Analyzed {results.get('conversations', 0)} conversations")
     print(f"OpenClio available: {results.get('openclio_available', False)}")
     print(f"Kura available: {results.get('kura_available', False)}")
-    print(f"📁 Results saved to: {args.output_dir}")
+    print(f"Results saved to: {args.output_dir}")
 
 
 if __name__ == "__main__":

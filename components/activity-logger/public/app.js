@@ -988,7 +988,7 @@ async function renderFeed() {
         if (sessions.length === 0) {
             elements.feedContent.innerHTML = `
                 <div class="dashboard-empty">
-                    <h2>🚀 Cursor Activity Dashboard</h2>
+                    <h2> Cursor Activity Dashboard</h2>
                     <p>No activity yet. Copy content from Cursor to begin capturing your interactions automatically.</p>
                     <div class="empty-actions">
                         <button class="btn btn-primary" onclick="startNewSession()">Start New Session</button>
@@ -1099,7 +1099,7 @@ async function renderEntry(entry) {
 
     return `
         <div class="timeline-item entry-item">
-            <div class="timeline-marker entry-marker">📋</div>
+            <div class="timeline-marker entry-marker"></div>
             <div class="timeline-content">
                 <div class="entry-header">
                     <span class="entry-timestamp">${formatTimestamp(entry.timestamp)}</span>
@@ -1143,15 +1143,15 @@ function renderEvent(event) {
     
     const eventIcons = {
         'session_start': '🕒',
-        'session_end': '🔚',
-        'entry_created': '📝',
-        'entry_manual': '✏️',
-        'export_json': '⬇️',
-        'database_cleared': '🗑️',
-        'clipboard_enabled': '🟢',
+        'session_end': '',
+        'entry_created': '',
+        'entry_manual': '',
+        'export_json': '',
+        'database_cleared': '',
+        'clipboard_enabled': '',
         'clipboard_disabled': '🔴',
         'attachment_added': '📎',
-        'search_performed': '🔍'
+        'search_performed': ''
     };
     
     const icon = eventIcons[event.type] || '📌';
@@ -3072,14 +3072,14 @@ function renderActivityItem(entry) {
         `${diffChars > 0 ? '+' : ''}${diffChars} chars`;
     
     // Determine activity type and description based on source
-    let activityIcon = '📝';
+    let activityIcon = '';
     let activityType = 'Activity';
     let description = '';
     let eventCategory = getEventSourceType(entry.source, entry);
     
     if (entry.source === 'filewatcher') {
         // Cursor events - file changes
-        activityIcon = '⚡';
+        activityIcon = '';
         activityType = 'Cursor Code Change';
         if (entry.prompt && (typeof entry.prompt === 'string' ? entry.prompt : entry.prompt.text)) {
             description = `Cursor: Code change with linked prompt. Diff: ${diffStr}`;
@@ -3089,7 +3089,7 @@ function renderActivityItem(entry) {
     } else if (entry.source === 'mcp') {
         // Cursor events - MCP communication
         if (entry.prompt && entry.response) {
-            activityIcon = '💬';
+            activityIcon = '';
             activityType = 'Cursor Conversation';
             description = `Cursor: Full conversation logged`;
         } else if (entry.prompt) {
@@ -3101,13 +3101,13 @@ function renderActivityItem(entry) {
             activityType = 'Cursor Response';
             description = `Cursor: Response logged`;
         } else {
-            activityIcon = '📋';
+            activityIcon = '';
             activityType = 'Cursor Activity';
             description = `Cursor: Activity logged`;
         }
     } else if (entry.source === 'clipboard') {
         // App events - clipboard capture
-        activityIcon = '📋';
+        activityIcon = '';
         activityType = 'App Clipboard';
         description = `App: Clipboard content captured`;
     } else if (entry.source === 'dom') {
@@ -3117,7 +3117,7 @@ function renderActivityItem(entry) {
         description = `App: DOM change detected`;
     } else {
         // Default events
-        activityIcon = '📱';
+        activityIcon = '';
         activityType = eventCategory === 'cursor' ? 'Cursor Event' : 'App Event';
         description = `${eventCategory === 'cursor' ? 'Cursor' : 'App'}: Activity logged`;
     }
@@ -3152,7 +3152,7 @@ function renderActivityItem(entry) {
     
     const promptSection = promptText && promptText.length > 0 ? `
         <div class="content-block prompt-block">
-            <div class="content-label">💬 Prompt:</div>
+            <div class="content-label"> Prompt:</div>
             <div class="content-text prompt-text">${promptText}</div>
         </div>
     ` : '';
@@ -3177,8 +3177,8 @@ function renderActivityItem(entry) {
     return `
         <div class="feed-item ${eventCategory}" onclick="toggleFeedItem(${entry.id})">
             <div class="header">
-                <div class="file-path">📁 ${filePath}</div>
-                <div class="timestamp">⏱ ${timestamp}</div>
+                <div class="file-path"> ${filePath}</div>
+                <div class="timestamp"> ${timestamp}</div>
                 <div class="event-category ${eventCategory}">${eventCategory.toUpperCase()}</div>
             </div>
             <div class="meta-row">
@@ -3221,25 +3221,25 @@ function renderEventItem(event) {
     
     // Event type icons
     const eventIcons = {
-        'session_start': '⚡',
-        'session_end': '🔚',
-        'entry_created': '📝',
-        'entry_manual': '✏️',
-        'export_json': '📤',
-        'database_cleared': '🗑️',
-        'clipboard_enabled': '🟢',
+        'session_start': '',
+        'session_end': '',
+        'entry_created': '',
+        'entry_manual': '',
+        'export_json': '',
+        'database_cleared': '',
+        'clipboard_enabled': '',
         'clipboard_disabled': '🔴',
         'attachment_added': '📎',
-        'search_performed': '🔍',
-        'code_change': '⚡',
-        'file_changed': '📁',
-        'pause_logging': '⏸️',
-        'resume_logging': '▶️',
-        'prompt_response': '💬',
-        'mcp_logged': '📋'
+        'search_performed': '',
+        'code_change': '',
+        'file_changed': '',
+        'pause_logging': '',
+        'resume_logging': '',
+        'prompt_response': '',
+        'mcp_logged': ''
     };
     
-    const icon = eventIcons[event.type] || '⚡';
+    const icon = eventIcons[event.type] || '';
     
     // Format details for display
     const detailsText = Object.keys(details).length > 0 

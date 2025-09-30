@@ -1,6 +1,6 @@
 #!/bin/bash
 
-echo "🎯 Starting Cursor Activity Dashboard..."
+echo "Starting Cursor Activity Dashboard..."
 
 # Kill any existing servers
 echo "Cleaning up existing servers..."
@@ -24,11 +24,11 @@ if curl -s http://localhost:8080/public/dashboard.html > /dev/null; then
     echo "   Test Page:      http://localhost:8080/public/test-complete.html"
     echo "   Simple Test:    http://localhost:8080/public/test-dashboard.html"
     echo ""
-    echo "🔧 Companion Service:"
+    echo "Companion Service:"
     if curl -s http://127.0.0.1:43917/health > /dev/null; then
         echo "   ✅ Running - Data available"
     else
-        echo "   ⚠️  Not running - Dashboard will work in browser-only mode"
+        echo "   Not running - Dashboard will work in browser-only mode"
     fi
     echo ""
     echo "Press Ctrl+C to stop the server"

@@ -8,9 +8,9 @@ set -e
 DB_PATH="/Users/hamidaho/cursor_export_20250906_010707/User/globalStorage/state.vscdb"
 OUTPUT_DIR="/Users/hamidaho/cursor_database_analysis_$(date +%Y%m%d_%H%M%S)"
 
-echo "🔍 Analyzing Cursor Database..."
-echo "📁 Database: $DB_PATH"
-echo "📊 Output directory: $OUTPUT_DIR"
+echo "Analyzing Cursor Database..."
+echo "Database: $DB_PATH"
+echo "Output directory: $OUTPUT_DIR"
 
 mkdir -p "$OUTPUT_DIR"
 
@@ -20,20 +20,20 @@ run_query() {
     local output_file="$2"
     local description="$3"
     
-    echo "📋 $description"
+    echo "$description"
     sqlite3 "$DB_PATH" "$query" > "$output_file"
     echo "   ✅ Saved to: $output_file"
 }
 
 # Basic database info
 echo ""
-echo "📊 Database Overview..."
+echo "Database Overview..."
 run_query ".tables" "$OUTPUT_DIR/01_tables.txt" "Listing all tables"
 run_query ".schema" "$OUTPUT_DIR/02_schema.txt" "Database schema"
 
 # ItemTable analysis
 echo ""
-echo "📋 Analyzing ItemTable..."
+echo "Analyzing ItemTable..."
 run_query "SELECT COUNT(*) as total_keys FROM ItemTable;" "$OUTPUT_DIR/03_itemtable_count.txt" "ItemTable key count"
 run_query "SELECT key, length(value) as value_size FROM ItemTable ORDER BY length(value) DESC LIMIT 20;" "$OUTPUT_DIR/04_largest_values.txt" "Largest values by size"
 run_query "SELECT key FROM ItemTable WHERE key LIKE '%cursor%' OR key LIKE '%ai%' OR key LIKE '%code%';" "$OUTPUT_DIR/05_cursor_ai_keys.txt" "Cursor/AI related keys"
@@ -46,7 +46,7 @@ run_query "SELECT key FROM cursorDiskKV LIMIT 50;" "$OUTPUT_DIR/07_cursor_keys_s
 
 # Extract specific interesting data
 echo ""
-echo "🎯 Extracting Specific Data..."
+echo "Extracting Specific Data..."
 
 # AI Code Tracking
 run_query "SELECT value FROM ItemTable WHERE key = 'aiCodeTrackingLines';" "$OUTPUT_DIR/08_ai_code_tracking.txt" "AI Code Tracking Data"
@@ -70,13 +70,13 @@ run_query "SELECT value FROM ItemTable WHERE key = 'ms-python.python';" "$OUTPUT
 
 # Export all keys for reference
 echo ""
-echo "📝 Exporting All Keys..."
+echo "Exporting All Keys..."
 run_query "SELECT key FROM ItemTable ORDER BY key;" "$OUTPUT_DIR/16_all_itemtable_keys.txt" "All ItemTable keys"
 run_query "SELECT key FROM cursorDiskKV ORDER BY key LIMIT 1000;" "$OUTPUT_DIR/17_cursor_keys_sample_1000.txt" "First 1000 cursor keys"
 
 # Create a summary report
 echo ""
-echo "📋 Creating Analysis Summary..."
+echo "Creating Analysis Summary..."
 cat > "$OUTPUT_DIR/ANALYSIS_SUMMARY.md" << EOF
 # Cursor Database Analysis Summary
 
@@ -147,7 +147,7 @@ EOF
 
 echo ""
 echo "✅ Analysis Complete!"
-echo "📁 Analysis directory: $OUTPUT_DIR"
-echo "📋 Summary report: $OUTPUT_DIR/ANALYSIS_SUMMARY.md"
+echo "Analysis directory: $OUTPUT_DIR"
+echo "Summary report: $OUTPUT_DIR/ANALYSIS_SUMMARY.md"
 echo ""
-echo "💡 Tip: Start with the ANALYSIS_SUMMARY.md file to understand what was extracted."
+echo "Tip: Start with the ANALYSIS_SUMMARY.md file to understand what was extracted."

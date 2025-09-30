@@ -300,7 +300,7 @@ function renderEvent(event) {
         <div class="feed-item event-card" data-entry-id="${event.id}" style="cursor: pointer;">
             <div class="header">
                 <div class="title">
-                    ⚡ ${event.type.replace(/_/g, ' ').toUpperCase()}
+                    ${event.type.replace(/_/g, ' ').toUpperCase()}
                 </div>
                 <div class="timestamp">${timestamp}</div>
             </div>

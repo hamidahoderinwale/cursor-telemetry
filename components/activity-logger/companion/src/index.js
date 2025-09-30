@@ -39,7 +39,7 @@ const db = {
     }
 };
 
-const PORT = process.env.PORT || 43918;
+const PORT = process.env.PORT || 43917;
 const app = express();
 const { Server } = require('socket.io');
 
@@ -75,8 +75,66 @@ let queue = []; // { seq, kind: 'entry'|'event', payload }
 // Session management
 let activeSession = 'session-' + Date.now();
 
+// Privacy filtering functions
+function shouldCaptureData(content, type) {
+  if (!privacyConfig.enabled || !privacyConfig.consentGiven) {
+    return true; // Capture everything if privacy not enabled
+  }
+  
+  // Check sensitivity level
+  if (privacyConfig.sensitivityLevel === 'high' && type === 'clipboard') {
+    return false; // Don't capture clipboard for high sensitivity
+  }
+  
+  return true;
+}
+
+function applyPrivacyRedaction(content) {
+  if (!privacyConfig.enabled || !privacyConfig.consentGiven) {
+    return content; // No redaction if privacy not enabled
+  }
+  
+  let redactedContent = content;
+  
+  // Redact names
+  if (privacyConfig.redactNames) {
+    redactedContent = redactedContent.replace(/\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b/g, '[NAME]');
+  }
+  
+  // Redact emails
+  if (privacyConfig.redactEmails) {
+    redactedContent = redactedContent.replace(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g, '[EMAIL]');
+  }
+  
+  // Redact numbers
+  if (privacyConfig.redactNumbers) {
+    redactedContent = redactedContent.replace(/\b\d+(?:\.\d+)?\b/g, '[NUMBER]');
+  }
+  
+  // Redact file paths
+  if (privacyConfig.redactFilePaths) {
+    redactedContent = redactedContent.replace(/(?:[a-zA-Z]:)?[\\\/](?:[^\\\/\n]+[\\\/])*[^\\\/\n]*/g, '[FILEPATH]');
+  }
+  
+  return redactedContent;
+}
+
 // Enqueue function for reliable queuing
 function enqueue(kind, payload) {
+  // Apply privacy filtering
+  if (!shouldCaptureData(payload.content || payload.data || '', kind)) {
+    console.log(` Privacy filter blocked ${kind} capture`);
+    return;
+  }
+  
+  // Apply privacy redaction
+  if (payload.content) {
+    payload.content = applyPrivacyRedaction(payload.content);
+  }
+  if (payload.data) {
+    payload.data = applyPrivacyRedaction(payload.data);
+  }
+  
   const item = { seq: ++sequence, kind, payload };
   queue.push(item);
   
@@ -96,6 +154,17 @@ let fileSnapshots = new Map();
 
 // Load configuration
 let config;
+let privacyConfig = {
+  enabled: false,
+  redactionLevel: 0.5,
+  sensitivityLevel: 'medium',
+  redactNames: true,
+  redactNumbers: true,
+  redactEmails: true,
+  redactFilePaths: false,
+  consentGiven: false
+};
+
 try {
   config = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'config.json'), 'utf8'));
   console.log(' Loaded configuration from config.json');
@@ -217,6 +286,136 @@ app.get('/config', (req, res) => {
 app.post('/config', (req, res) => {
   Object.assign(config, req.body);
   res.json({ status: 'updated', config });
+});
+
+// Privacy API endpoints
+app.get('/privacy/config', (req, res) => {
+  res.json(privacyConfig);
+});
+
+app.post('/privacy/config', (req, res) => {
+  Object.assign(privacyConfig, req.body);
+  console.log(' Privacy config updated:', privacyConfig);
+  res.json({ status: 'updated', privacyConfig });
+});
+
+app.post('/privacy/consent', (req, res) => {
+  const { consent } = req.body;
+  privacyConfig.consentGiven = consent;
+  privacyConfig.enabled = consent;
+  console.log(' Privacy consent updated:', consent);
+  res.json({ status: 'updated', consentGiven: consent });
+});
+
+app.get('/privacy/status', (req, res) => {
+  res.json({
+    enabled: privacyConfig.enabled,
+    consentGiven: privacyConfig.consentGiven,
+    sensitivityLevel: privacyConfig.sensitivityLevel,
+    redactionLevel: privacyConfig.redactionLevel
+  });
+});
+
+// Data deletion endpoints
+app.delete('/privacy/delete-session/:sessionId', (req, res) => {
+  const { sessionId } = req.params;
+  
+  try {
+    // Remove from in-memory storage
+    const sessionIndex = entries.findIndex(entry => entry.sessionId === sessionId);
+    if (sessionIndex >= 0) {
+      entries.splice(sessionIndex, 1);
+    }
+    
+    const eventIndex = events.findIndex(event => event.sessionId === sessionId);
+    if (eventIndex >= 0) {
+      events.splice(eventIndex, 1);
+    }
+    
+    // Remove from queue
+    const queueIndex = queue.findIndex(item => item.payload.sessionId === sessionId);
+    if (queueIndex >= 0) {
+      queue.splice(queueIndex, 1);
+    }
+    
+    console.log(` Deleted session ${sessionId} from companion service`);
+    res.json({ success: true, message: `Session ${sessionId} deleted` });
+  } catch (error) {
+    console.error('Error deleting session:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.delete('/privacy/delete-all', (req, res) => {
+  try {
+    // Clear all in-memory storage
+    entries.length = 0;
+    events.length = 0;
+    queue.length = 0;
+    sequence = 0;
+    
+    console.log(' Deleted all data from companion service');
+    res.json({ success: true, message: 'All data deleted' });
+  } catch (error) {
+    console.error('Error deleting all data:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/privacy/delete-sensitive', (req, res) => {
+  const { patterns } = req.body;
+  
+  try {
+    let deletedCount = 0;
+    
+    // Delete entries matching sensitive patterns
+    for (let i = entries.length - 1; i >= 0; i--) {
+      const entry = entries[i];
+      const content = entry.content || entry.data || '';
+      
+      if (patterns.some(pattern => {
+        const regex = new RegExp(pattern, 'gi');
+        return regex.test(content);
+      })) {
+        entries.splice(i, 1);
+        deletedCount++;
+      }
+    }
+    
+    // Delete events matching sensitive patterns
+    for (let i = events.length - 1; i >= 0; i--) {
+      const event = events[i];
+      const content = event.content || event.data || '';
+      
+      if (patterns.some(pattern => {
+        const regex = new RegExp(pattern, 'gi');
+        return regex.test(content);
+      })) {
+        events.splice(i, 1);
+        deletedCount++;
+      }
+    }
+    
+    // Delete queue items matching sensitive patterns
+    for (let i = queue.length - 1; i >= 0; i--) {
+      const item = queue[i];
+      const content = item.payload.content || item.payload.data || '';
+      
+      if (patterns.some(pattern => {
+        const regex = new RegExp(pattern, 'gi');
+        return regex.test(content);
+      })) {
+        queue.splice(i, 1);
+        deletedCount++;
+      }
+    }
+    
+    console.log(` Deleted ${deletedCount} items matching sensitive patterns`);
+    res.json({ success: true, deletedCount });
+  } catch (error) {
+    console.error('Error deleting sensitive data:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
 });
 
 // MCP endpoints
@@ -433,14 +632,14 @@ async function processFileChange(filePath) {
         enqueue('entry', entry);
         enqueue('event', event);
         
-        console.log(` File change detected: ${relativePath}`);
+        console.log(`File change detected: ${relativePath}`);
       } else {
-        console.log(` Change too small for ${relativePath}: ${diff.summary}`);
+        console.log(`Change too small for ${relativePath}: ${diff.summary}`);
       }
       
       fileSnapshots.set(relativePath, content);
     } else {
-      console.log(`�️ No content change for ${relativePath}`);
+      console.log(`�No content change for ${relativePath}`);
     }
   } catch (error) {
     console.error(` Error processing file ${filePath}:`, error.message);

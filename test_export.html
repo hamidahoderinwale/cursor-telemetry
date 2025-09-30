@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Export Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .test-button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .test-button:hover {
+            background: #0056b3;
+        }
+        .result {
+            margin-top: 10px;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 5px;
+            font-family: monospace;
+            white-space: pre-wrap;
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Export Functionality Test</h1>
+        
+        <div class="test-section">
+            <h3>Test 1: Basic Export Data Structure</h3>
+            <button class="test-button" onclick="testBasicExport()">Test Basic Export</button>
+            <div id="basic-result" class="result"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>Test 2: Calculate Statistics</h3>
+            <button class="test-button" onclick="testCalculateStatistics()">Test Calculate Statistics</button>
+            <div id="stats-result" class="result"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>Test 3: Calculate Workflow Insights</h3>
+            <button class="test-button" onclick="testCalculateWorkflowInsights()">Test Workflow Insights</button>
+            <div id="workflow-result" class="result"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>Test 4: Full Export Simulation</h3>
+            <button class="test-button" onclick="testFullExport()">Test Full Export</button>
+            <div id="full-result" class="result"></div>
+        </div>
+    </div>
+
+    <script>
+        // Mock data for testing
+        const mockSessions = [
+            {
+                id: 'session_1',
+                intent: 'data_analysis',
+                phase: 'IN_PROGRESS',
+                outcome: 'in_progress',
+                currentFile: 'analysis.py',
+                duration: 1800,
+                codeDeltas: [
+                    { type: 'insert', content: 'import pandas as pd' },
+                    { type: 'insert', content: 'df = pd.read_csv("data.csv")' }
+                ],
+                timestamp: new Date().toISOString()
+            },
+            {
+                id: 'session_2',
+                intent: 'visualization',
+                phase: 'COMPLETED',
+                outcome: 'success',
+                currentFile: 'plot.py',
+                duration: 900,
+                codeDeltas: [
+                    { type: 'insert', content: 'import matplotlib.pyplot as plt' },
+                    { type: 'insert', content: 'plt.plot([1,2,3,4])' }
+                ],
+                timestamp: new Date(Date.now() - 3600000).toISOString()
+            }
+        ];
+
+        const mockConversations = [
+            {
+                id: 'conv_1',
+                sessionId: 'session_1',
+                tokens: 150,
+                content: 'Help me analyze this dataset'
+            },
+            {
+                id: 'conv_2',
+                sessionId: 'session_2',
+                tokens: 200,
+                content: 'Create a visualization for the data'
+            }
+        ];
+
+        // Mock LiveDashboard class with the methods we need
+        class MockLiveDashboard {
+            constructor() {
+                this.sessions = mockSessions;
+                this.conversations = mockConversations;
+            }
+
+            calculateStatistics() {
+                const totalSessions = this.sessions.length;
+                const activeSessions = this.sessions.filter(s => 
+                    s.outcome === 'in_progress' || 
+                    s.outcome === 'IN_PROGRESS' || 
+                    s.phase === 'IN_PROGRESS' ||
+                    !s.outcome
+                ).length;
+
+                const totalChanges = this.sessions.reduce((sum, session) => {
+                    return sum + (session.codeDeltas ? session.codeDeltas.length : 0);
+                }, 0);
+
+                const totalConversations = this.conversations.length;
+
+                const sessionsWithDuration = this.sessions.filter(s => s.duration && s.duration > 0);
+                const avgDuration = sessionsWithDuration.length > 0 
+                    ? sessionsWithDuration.reduce((sum, s) => sum + s.duration, 0) / sessionsWithDuration.length
+                    : 0;
+
+                // Calculate additional metrics
+                const sessionsByIntent = {};
+                const sessionsByPhase = {};
+                const fileTypes = {};
+                const totalTokens = this.conversations.reduce((sum, c) => sum + (c.tokens || 0), 0);
+
+                this.sessions.forEach(session => {
+                    // Intent distribution
+                    const intent = session.intent || 'unknown';
+                    sessionsByIntent[intent] = (sessionsByIntent[intent] || 0) + 1;
+
+                    // Phase distribution
+                    const phase = session.phase || 'unknown';
+                    sessionsByPhase[phase] = (sessionsByPhase[phase] || 0) + 1;
+
+                    // File type analysis
+                    if (session.currentFile) {
+                        const ext = session.currentFile.split('.').pop() || 'no-extension';
+                        fileTypes[ext] = (fileTypes[ext] || 0) + 1;
+                    }
+                });
+
+                return {
+                    totalSessions,
+                    activeSessions,
+                    totalChanges,
+                    totalConversations,
+                    totalTokens,
+                    averageDuration: avgDuration,
+                    sessionsByIntent,
+                    sessionsByPhase,
+                    fileTypes,
+                    dataQuality: {
+                        sessionsWithDuration: sessionsWithDuration.length,
+                        sessionsWithIntent: Object.keys(sessionsByIntent).length,
+                        sessionsWithFiles: Object.keys(fileTypes).length,
+                        completenessScore: this.calculateCompletenessScore()
+                    }
+                };
+            }
+
+            calculateCompletenessScore() {
+                if (this.sessions.length === 0) return 0;
+
+                let totalScore = 0;
+                this.sessions.forEach(session => {
+                    let sessionScore = 0;
+                    
+                    // Check for essential data
+                    if (session.intent) sessionScore += 0.2;
+                    if (session.phase) sessionScore += 0.2;
+                    if (session.currentFile) sessionScore += 0.2;
+                    if (session.codeDeltas && session.codeDeltas.length > 0) sessionScore += 0.2;
+                    if (session.duration && session.duration > 0) sessionScore += 0.2;
+
+                    totalScore += sessionScore;
+                });
+
+                return totalScore / this.sessions.length;
+            }
+
+            calculateWorkflowInsights() {
+                const insights = {
+                    patterns: this.identifyWorkflowPatterns(),
+                    recommendations: this.generateRecommendations(),
+                    trends: this.analyzeTrends(),
+                    productivity: this.calculateProductivityMetrics()
+                };
+
+                return insights;
+            }
+
+            identifyWorkflowPatterns() {
+                const patterns = {
+                    commonIntents: this.getTopItems(this.sessions.map(s => s.intent).filter(Boolean), 5),
+                    commonPhases: this.getTopItems(this.sessions.map(s => s.phase).filter(Boolean), 5),
+                    commonFileTypes: this.getTopItems(
+                        this.sessions
+                            .map(s => s.currentFile)
+                            .filter(Boolean)
+                            .map(f => f.split('.').pop())
+                            .filter(Boolean), 
+                        5
+                    ),
+                    averageSessionLength: this.calculateAverageSessionLength(),
+                    mostActiveTime: this.calculateMostActiveTime()
+                };
+
+                return patterns;
+            }
+
+            generateRecommendations() {
+                const recommendations = [];
+
+                // Analyze session duration patterns
+                const shortSessions = this.sessions.filter(s => s.duration && s.duration < 300);
+                if (shortSessions.length > this.sessions.length * 0.3) {
+                    recommendations.push({
+                        type: 'duration',
+                        message: 'Consider longer focused sessions for better productivity',
+                        priority: 'medium'
+                    });
+                }
+
+                return recommendations;
+            }
+
+            analyzeTrends() {
+                const trends = {
+                    sessionFrequency: this.calculateSessionFrequency(),
+                    productivityTrend: this.calculateProductivityTrend(),
+                    technologyUsage: this.analyzeTechnologyUsage()
+                };
+
+                return trends;
+            }
+
+            calculateProductivityMetrics() {
+                const metrics = {
+                    sessionsPerDay: this.calculateSessionsPerDay(),
+                    averageChangesPerSession: this.calculateAverageChangesPerSession(),
+                    codeVelocity: this.calculateCodeVelocity(),
+                    conversationEfficiency: this.calculateConversationEfficiency()
+                };
+
+                return metrics;
+            }
+
+            getTopItems(items, limit = 5) {
+                const counts = {};
+                items.forEach(item => {
+                    counts[item] = (counts[item] || 0) + 1;
+                });
+
+                return Object.entries(counts)
+                    .sort(([,a], [,b]) => b - a)
+                    .slice(0, limit)
+                    .map(([item, count]) => ({ item, count }));
+            }
+
+            calculateAverageSessionLength() {
+                const sessionsWithDuration = this.sessions.filter(s => s.duration && s.duration > 0);
+                if (sessionsWithDuration.length === 0) return 0;
+                
+                return sessionsWithDuration.reduce((sum, s) => sum + s.duration, 0) / sessionsWithDuration.length;
+            }
+
+            calculateMostActiveTime() {
+                const hourCounts = {};
+                this.sessions.forEach(session => {
+                    if (session.timestamp) {
+                        const hour = new Date(session.timestamp).getHours();
+                        hourCounts[hour] = (hourCounts[hour] || 0) + 1;
+                    }
+                });
+
+                const mostActiveHour = Object.entries(hourCounts)
+                    .sort(([,a], [,b]) => b - a)[0];
+
+                return mostActiveHour ? {
+                    hour: mostActiveHour[0],
+                    count: mostActiveHour[1]
+                } : null;
+            }
+
+            calculateSessionFrequency() {
+                const now = new Date();
+                const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+                const oneMonthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+                const recentSessions = this.sessions.filter(s => 
+                    s.timestamp && new Date(s.timestamp) > oneWeekAgo
+                );
+                const monthlySessions = this.sessions.filter(s => 
+                    s.timestamp && new Date(s.timestamp) > oneMonthAgo
+                );
+
+                return {
+                    last7Days: recentSessions.length,
+                    last30Days: monthlySessions.length,
+                    averagePerWeek: monthlySessions.length / 4.3
+                };
+            }
+
+            calculateProductivityTrend() {
+                return 'stable';
+            }
+
+            analyzeTechnologyUsage() {
+                const fileTypes = {};
+                this.sessions.forEach(session => {
+                    if (session.currentFile) {
+                        const ext = session.currentFile.split('.').pop();
+                        if (ext) {
+                            fileTypes[ext] = (fileTypes[ext] || 0) + 1;
+                        }
+                    }
+                });
+
+                return Object.entries(fileTypes)
+                    .sort(([,a], [,b]) => b - a)
+                    .slice(0, 10)
+                    .map(([type, count]) => ({ type, count }));
+            }
+
+            calculateSessionsPerDay() {
+                const now = new Date();
+                const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+                const recentSessions = this.sessions.filter(s => 
+                    s.timestamp && new Date(s.timestamp) > oneWeekAgo
+                );
+
+                return recentSessions.length / 7;
+            }
+
+            calculateAverageChangesPerSession() {
+                if (this.sessions.length === 0) return 0;
+                
+                const totalChanges = this.sessions.reduce((sum, s) => sum + (s.codeDeltas?.length || 0), 0);
+                return totalChanges / this.sessions.length;
+            }
+
+            calculateCodeVelocity() {
+                const sessionsWithDuration = this.sessions.filter(s => s.duration && s.duration > 0);
+                if (sessionsWithDuration.length === 0) return 0;
+
+                const totalChanges = this.sessions.reduce((sum, s) => sum + (s.codeDeltas?.length || 0), 0);
+                const totalDuration = sessionsWithDuration.reduce((sum, s) => sum + s.duration, 0);
+
+                return totalChanges / (totalDuration / 3600);
+            }
+
+            calculateConversationEfficiency() {
+                if (this.conversations.length === 0) return 0;
+
+                const totalTokens = this.conversations.reduce((sum, c) => sum + (c.tokens || 0), 0);
+                const totalSessions = this.sessions.length;
+
+                return totalTokens / Math.max(totalSessions, 1);
+            }
+        }
+
+        // Initialize mock dashboard
+        const mockDashboard = new MockLiveDashboard();
+
+        // Test functions
+        function testBasicExport() {
+            try {
+                const result = {
+                    timestamp: new Date().toISOString(),
+                    sessions: mockDashboard.sessions,
+                    metadata: {
+                        totalSessions: mockDashboard.sessions.length,
+                        exportVersion: '1.0',
+                        dashboardVersion: '2.0'
+                    }
+                };
+                
+                document.getElementById('basic-result').innerHTML = 
+                    '<div class="success">✓ Basic export structure created successfully</div>' +
+                    '<pre>' + JSON.stringify(result, null, 2) + '</pre>';
+            } catch (error) {
+                document.getElementById('basic-result').innerHTML = 
+                    '<div class="error">✗ Error: ' + error.message + '</div>';
+            }
+        }
+
+        function testCalculateStatistics() {
+            try {
+                const stats = mockDashboard.calculateStatistics();
+                document.getElementById('stats-result').innerHTML = 
+                    '<div class="success">✓ Statistics calculated successfully</div>' +
+                    '<pre>' + JSON.stringify(stats, null, 2) + '</pre>';
+            } catch (error) {
+                document.getElementById('stats-result').innerHTML = 
+                    '<div class="error">✗ Error: ' + error.message + '</div>';
+            }
+        }
+
+        function testCalculateWorkflowInsights() {
+            try {
+                const insights = mockDashboard.calculateWorkflowInsights();
+                document.getElementById('workflow-result').innerHTML = 
+                    '<div class="success">✓ Workflow insights calculated successfully</div>' +
+                    '<pre>' + JSON.stringify(insights, null, 2) + '</pre>';
+            } catch (error) {
+                document.getElementById('workflow-result').innerHTML = 
+                    '<div class="error">✗ Error: ' + error.message + '</div>';
+            }
+        }
+
+        function testFullExport() {
+            try {
+                const exportData = {
+                    timestamp: new Date().toISOString(),
+                    sessions: mockDashboard.sessions,
+                    statistics: mockDashboard.calculateStatistics(),
+                    workflowInsights: mockDashboard.calculateWorkflowInsights(),
+                    metadata: {
+                        totalSessions: mockDashboard.sessions.length,
+                        exportVersion: '1.0',
+                        dashboardVersion: '2.0'
+                    }
+                };
+
+                // Simulate file download
+                const dataStr = JSON.stringify(exportData, null, 2);
+                const dataBlob = new Blob([dataStr], { type: 'application/json' });
+                const url = URL.createObjectURL(dataBlob);
+                
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `pkl-dashboard-export-${new Date().toISOString().split('T')[0]}.json`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+
+                document.getElementById('full-result').innerHTML = 
+                    '<div class="success">✓ Full export completed successfully - File downloaded!</div>' +
+                    '<pre>' + JSON.stringify(exportData, null, 2) + '</pre>';
+            } catch (error) {
+                document.getElementById('full-result').innerHTML = 
+                    '<div class="error">✗ Error: ' + error.message + '</div>';
+            }
+        }
+    </script>
+</body>
+</html>

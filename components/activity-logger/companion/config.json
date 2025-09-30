@@ -1,5 +1,5 @@
 {
-  "root_dir": "/Users/hamidaho/Desktop/cursor_dashboard/cursor-activity-logger/public",
+  "root_dir": "/Users/hamidaho/Desktop/cursor_dashboard",
   "ignore": [
     "node_modules/**",
     "**/node_modules/**",

@@ -1,0 +1,6 @@
+[submodule "components/dashboard/components/analysis/dg"]
+	path = components/dashboard/components/analysis/dg
+	url = https://github.com/mchalupa/dg.git
+[submodule "components/analysis/dg"]
+	path = components/analysis/dg
+	url = https://github.com/mchalupa/dg.git

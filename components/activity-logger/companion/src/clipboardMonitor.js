@@ -30,10 +30,10 @@ class ClipboardMonitor {
     this.isMonitoring = false;
     this.lastClipboard = '';
     this.intervalId = null;
-    this.checkInterval = 2000; // Check every 2 seconds
+    this.checkInterval = 10000; // Check every 10 seconds instead of 2 to reduce spam
     this.capturedPrompts = new Set(); // Track captured prompts to prevent duplicates
     this.lastCaptureTime = 0;
-    this.minCaptureInterval = 5000; // Minimum 5 seconds between captures
+    this.minCaptureInterval = 30000; // Minimum 30 seconds between captures to reduce spam
   }
 
   start() {

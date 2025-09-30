@@ -1,0 +1,605 @@
+openapi: 3.0.3
+info:
+  title: Cursor Telemetry API
+  description: |
+    A comprehensive API for monitoring, analyzing, and integrating Cursor IDE activity 
+    with advanced data science workflow insights and memory management capabilities.
+  version: 1.0.0
+  contact:
+    name: Cursor Telemetry Team
+    url: https://github.com/hamidahoderinwale/cursor-telemetry
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:3000/api
+    description: Development server
+  - url: https://api.cursor-telemetry.com/api
+    description: Production server
+
+security:
+  - ApiKeyAuth: []
+  - BearerAuth: []
+
+paths:
+  /sessions:
+    get:
+      summary: Get all sessions
+      description: Retrieve all development sessions
+      tags: [Sessions]
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: List of sessions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Session'
+                  timestamp:
+                    type: string
+                    format: date-time
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /sessions/search:
+    get:
+      summary: Search sessions
+      description: Search sessions by query
+      tags: [Sessions]
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Search query
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Session'
+                  timestamp:
+                    type: string
+                    format: date-time
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /sessions/{id}:
+    get:
+      summary: Get session by ID
+      description: Retrieve specific session details
+      tags: [Sessions]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Session ID
+      responses:
+        '200':
+          description: Session details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Session'
+                  timestamp:
+                    type: string
+                    format: date-time
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /sessions/{id}/generate-notebook:
+    post:
+      summary: Generate notebook from session
+      description: Generate executable Jupyter notebook from session
+      tags: [Sessions, Memory]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Session ID
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                includeMetadata:
+                  type: boolean
+                  default: true
+                format:
+                  type: string
+                  enum: [jupyter, colab, markdown]
+                  default: jupyter
+                addCells:
+                  type: boolean
+                  default: true
+      responses:
+        '200':
+          description: Generated notebook
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Memory'
+                  timestamp:
+                    type: string
+                    format: date-time
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /projects:
+    get:
+      summary: Get all projects
+      description: Retrieve all projects
+      tags: [Projects]
+      responses:
+        '200':
+          description: List of projects
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Project'
+                  timestamp:
+                    type: string
+                    format: date-time
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /projects/{id}:
+    get:
+      summary: Get project by ID
+      description: Retrieve specific project details
+      tags: [Projects]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Project ID
+      responses:
+        '200':
+          description: Project details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Project'
+                  timestamp:
+                    type: string
+                    format: date-time
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /stats:
+    get:
+      summary: Get system statistics
+      description: Retrieve system analytics and statistics
+      tags: [Analytics]
+      responses:
+        '200':
+          description: System statistics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Analytics'
+                  timestamp:
+                    type: string
+                    format: date-time
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /memories:
+    get:
+      summary: Get all memories
+      description: Retrieve all generated memories
+      tags: [Memory]
+      responses:
+        '200':
+          description: List of memories
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Memory'
+                  timestamp:
+                    type: string
+                    format: date-time
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /export:
+    post:
+      summary: Create data export
+      description: Export data in various formats
+      tags: [Export]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExportOptions'
+      responses:
+        '200':
+          description: Export created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      filename:
+                        type: string
+                      download_url:
+                        type: string
+                  timestamp:
+                    type: string
+                    format: date-time
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /health:
+    get:
+      summary: Health check
+      description: Check API health status
+      tags: [System]
+      security: []
+      responses:
+        '200':
+          description: API is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [ok, error]
+                  timestamp:
+                    type: string
+                    format: date-time
+                  version:
+                    type: string
+        '500':
+          description: API is unhealthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [error]
+                  error:
+                    type: string
+                  timestamp:
+                    type: string
+                    format: date-time
+
+components:
+  schemas:
+    Session:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique session identifier
+        name:
+          type: string
+          description: Session name
+        startTime:
+          type: string
+          format: date-time
+          description: Session start time
+        endTime:
+          type: string
+          format: date-time
+          description: Session end time
+        duration:
+          type: integer
+          description: Session duration in seconds
+        projectPath:
+          type: string
+          description: Project path
+        files:
+          type: array
+          items:
+            type: string
+          description: Files in session
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/Event'
+          description: Session events
+        metadata:
+          type: object
+          additionalProperties: true
+          description: Session metadata
+      required: [id, name, startTime, files, events, metadata]
+
+    Event:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique event identifier
+        type:
+          type: string
+          description: Event type
+        timestamp:
+          type: string
+          format: date-time
+          description: Event timestamp
+        data:
+          type: object
+          additionalProperties: true
+          description: Event data
+      required: [id, type, timestamp, data]
+
+    Project:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique project identifier
+        name:
+          type: string
+          description: Project name
+        path:
+          type: string
+          description: Project path
+        sessions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Session'
+          description: Project sessions
+        metadata:
+          type: object
+          additionalProperties: true
+          description: Project metadata
+      required: [id, name, path, sessions, metadata]
+
+    Analytics:
+      type: object
+      properties:
+        totalSessions:
+          type: integer
+          description: Total number of sessions
+        totalDuration:
+          type: integer
+          description: Total duration in seconds
+        averageSessionLength:
+          type: number
+          description: Average session length
+        mostActiveFiles:
+          type: array
+          items:
+            type: object
+            properties:
+              file:
+                type: string
+              count:
+                type: integer
+          description: Most active files
+        sessionTrends:
+          type: array
+          items:
+            type: object
+            properties:
+              date:
+                type: string
+                format: date
+              count:
+                type: integer
+          description: Session trends over time
+      required: [totalSessions, totalDuration, averageSessionLength]
+
+    Memory:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique memory identifier
+        sessionId:
+          type: string
+          description: Source session ID
+        name:
+          type: string
+          description: Memory name
+        content:
+          type: string
+          description: Memory content
+        type:
+          type: string
+          enum: [notebook, session-file, integration-package]
+          description: Memory type
+        createdAt:
+          type: string
+          format: date-time
+          description: Creation timestamp
+        metadata:
+          type: object
+          additionalProperties: true
+          description: Memory metadata
+      required: [id, sessionId, name, content, type, createdAt, metadata]
+
+    ExportOptions:
+      type: object
+      properties:
+        format:
+          type: string
+          enum: [json, csv, xlsx, pdf]
+          default: json
+          description: Export format
+        includeSessions:
+          type: boolean
+          default: true
+          description: Include session data
+        includeEvents:
+          type: boolean
+          default: true
+          description: Include event data
+        includeAnalytics:
+          type: boolean
+          default: true
+          description: Include analytics data
+        dateRange:
+          type: object
+          properties:
+            start:
+              type: string
+              format: date
+            end:
+              type: string
+              format: date
+          description: Date range filter
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+                example: false
+              error:
+                type: string
+              timestamp:
+                type: string
+                format: date-time
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+                example: false
+              error:
+                type: string
+                example: "Resource not found"
+              timestamp:
+                type: string
+                format: date-time
+
+    ServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+                example: false
+              error:
+                type: string
+                example: "Internal server error"
+              timestamp:
+                type: string
+                format: date-time
+
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+tags:
+  - name: Sessions
+    description: Session management and retrieval
+  - name: Projects
+    description: Project organization and analysis
+  - name: Analytics
+    description: Data analysis and statistics
+  - name: Memory
+    description: Memory generation and management
+  - name: Export
+    description: Data export and download
+  - name: System
+    description: System health and status

@@ -30,7 +30,7 @@ if (existsSync(CONFIG_FILE)) {
     const fileConfig = JSON.parse(readFileSync(CONFIG_FILE, 'utf8'));
     currentConfig = { ...DEFAULT_CONFIG, ...fileConfig };
   } catch (error) {
-    console.warn('�️ Failed to load config file, using defaults:', error.message);
+    console.warn('�Failed to load config file, using defaults:', error.message);
   }
 }
 

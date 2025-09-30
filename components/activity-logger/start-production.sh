@@ -3,7 +3,7 @@
 # Cursor Activity Logger - Production Startup Script
 # This script starts both the companion service and the SPA in production mode
 
-echo "🚀 Starting Cursor Activity Logger (Production Mode)..."
+echo "Starting Cursor Activity Logger (Production Mode)..."
 
 # Colors for output
 RED='\033[0;31m'
@@ -104,18 +104,18 @@ COMPANION_STATUS=$(curl -s http://127.0.0.1:43917/health | grep -o '"status":"[^
 ENTRIES_COUNT=$(curl -s http://127.0.0.1:43917/health | grep -o '"entries":[0-9]*' | cut -d':' -f2)
 
 echo ""
-echo -e "${GREEN}🎉 Cursor Activity Logger is running!${NC}"
+echo -e "${GREEN}Cursor Activity Logger is running!${NC}"
 echo ""
-echo -e "${BLUE}📊 Services:${NC}"
+echo -e "${BLUE}Services:${NC}"
 echo -e "  - Companion Service: ${GREEN}http://127.0.0.1:43917${NC} (Status: $COMPANION_STATUS)"
 echo -e "  - SPA Interface: ${GREEN}http://localhost:8000${NC}"
 echo ""
-echo -e "${BLUE}📈 Current Status:${NC}"
+echo -e "${BLUE}Current Status:${NC}"
 echo -e "  - Entries detected: ${GREEN}$ENTRIES_COUNT${NC}"
 echo -e "  - File watching: ${GREEN}Active${NC}"
 echo -e "  - MCP integration: ${GREEN}Ready${NC}"
 echo ""
-echo -e "${BLUE}🔧 Usage:${NC}"
+echo -e "${BLUE}Usage:${NC}"
 echo -e "  - Edit files in this directory to see code changes"
 echo -e "  - Open http://localhost:8000 in your browser"
 echo -e "  - Check companion logs: ${YELLOW}tail -f companion.log${NC}"

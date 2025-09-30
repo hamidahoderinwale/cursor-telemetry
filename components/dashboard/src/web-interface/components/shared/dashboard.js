@@ -6,6 +6,8 @@
 class LiveDashboard {
     constructor() {
         this.sessions = [];
+        this.conversations = [];
+        this.memories = []; // Initialize memories as empty array
         this.isLoading = false;
         this.refreshInterval = null;
         this.socket = null;
@@ -13,31 +15,164 @@ class LiveDashboard {
         this.currentView = 'timeline'; // Track current view
         this.enhancedProjectSessionView = null; // Enhanced project/session view
         
+        // Advanced search components
+        this.searchEngine = null;
+        this.realTimeSearch = null;
+        this.searchResults = [];
+        this.isSearchActive = false;
+        
+        // Enhanced session modal with program slicing
+        this.enhancedSessionModal = null;
+        
+        // Debounce timers
+        this.loadSessionsTimer = null;
+        this.loadConversationsTimer = null;
+        this.renderViewTimer = null;
+        
         this.initializeDashboard();
     }
 
+    /**
+     * Debounced version of loadSessions
+     */
+    loadSessionsDebounced() {
+        return new Promise((resolve) => {
+            clearTimeout(this.loadSessionsTimer);
+            this.loadSessionsTimer = setTimeout(async () => {
+                try {
+                    await this.loadSessions();
+                    resolve();
+                } catch (error) {
+                    console.error('Error in debounced loadSessions:', error);
+                    resolve();
+                }
+            }, 100);
+        });
+    }
+
+    /**
+     * Debounced version of loadConversations
+     */
+    loadConversationsDebounced() {
+        return new Promise((resolve) => {
+            clearTimeout(this.loadConversationsTimer);
+            this.loadConversationsTimer = setTimeout(async () => {
+                try {
+                    await this.loadConversations();
+                    resolve();
+                } catch (error) {
+                    console.error('Error in debounced loadConversations:', error);
+                    resolve();
+                }
+            }, 100);
+        });
+    }
+
+    /**
+     * Debounced version of renderCurrentView
+     */
+    renderCurrentViewDebounced() {
+        clearTimeout(this.renderViewTimer);
+        this.renderViewTimer = setTimeout(() => {
+            this.renderCurrentView();
+        }, 50);
+    }
+
+    /**
+     * Debounce utility to prevent excessive function calls
+     */
+    debounce(func, wait) {
+        let timeout;
+        return function executedFunction(...args) {
+            const later = () => {
+                clearTimeout(timeout);
+                func(...args);
+            };
+            clearTimeout(timeout);
+            timeout = setTimeout(later, wait);
+        };
+    }
+
     async initializeDashboard() {
-        console.log('Initializing Live Dashboard...');
-        
-        // Set up event listeners
-        this.setupEventListeners();
-        
-        // Initialize WebSocket connection
-        this.initializeWebSocket();
-        
-        // Load initial data
-        await this.loadSessions();
-        
+        try {
+            console.log('Initializing Live Dashboard...');
+            
+            // Initialize advanced search engine
+            this.initializeSearchEngine();
+            
+            // Set up event listeners
+            this.setupEventListeners();
+            
+            // Initialize WebSocket connection
+            this.initializeWebSocket();
+            
+            // Load initial data with error handling
+            try {
+                await this.loadSessionsDebounced();
+                await this.loadConversationsDebounced();
+            } catch (error) {
+                console.error('Error loading initial data:', error);
+                this.showNotification('Failed to load some data. Please refresh the page.', 'error');
+            }
+            
         // Initialize real data visualizations
         this.initializeRealDataVisualizations();
         
-        // Set default view to timeline
-        this.switchView('timeline');
+        // Initialize visualization detection
+        this.initializeVisualizationDetection();
         
-        // Set up auto-refresh every 30 seconds (fallback)
-        this.startAutoRefresh();
+        // Initialize enhanced session modal
+        this.initializeEnhancedSessionModal();
+            
+            // Ensure loading overlay is hidden and dashboard content is visible
+            this.ensureDashboardVisible();
+            
+            // Set default view to timeline
+            this.switchView('timeline');
+            
+            // Set up auto-refresh every 30 seconds (fallback)
+            this.startAutoRefresh();
+            
+            console.log('Live Dashboard initialized successfully');
+            
+            // Show success notification
+            this.showNotification('Dashboard loaded successfully', 'success');
+            
+        } catch (error) {
+            console.error('Failed to initialize dashboard:', error);
+            this.showNotification('Failed to initialize dashboard. Please refresh the page.', 'error');
+            
+            // Still try to make the dashboard visible even if initialization fails
+            this.ensureDashboardVisible();
+        }
+    }
+
+    ensureDashboardVisible() {
+        // Ensure loading overlay is hidden
+        const loadingOverlay = document.getElementById('loadingOverlay');
+        if (loadingOverlay) {
+            loadingOverlay.style.display = 'none';
+            loadingOverlay.classList.add('hidden');
+            console.log('Loading overlay hidden');
+        } else {
+            console.warn('Loading overlay element not found');
+        }
         
-        console.log('Live Dashboard initialized successfully');
+        // Ensure dashboard content is visible
+        const dashboardContent = document.getElementById('dashboardContent');
+        if (dashboardContent) {
+            dashboardContent.style.display = 'block';
+            dashboardContent.style.visibility = 'visible';
+            dashboardContent.style.opacity = '1';
+            console.log('Dashboard content made visible');
+        } else {
+            console.error('Dashboard content element not found');
+        }
+        
+        // Force update statistics to ensure they display
+        setTimeout(() => {
+            this.updateStatistics();
+        }, 100);
     }
 
     setupEventListeners() {
@@ -67,6 +202,7 @@ class LiveDashboard {
             script.onload = async () => {
                 if (typeof RealDataVisualizations !== 'undefined') {
                     this.realDataVisualizations = new RealDataVisualizations();
+                    window.realDataVisualizations = this.realDataVisualizations; // Make globally available
                     await this.realDataVisualizations.initialize();
                     console.log('Real data visualizations initialized');
                 }
@@ -75,6 +211,324 @@ class LiveDashboard {
         } catch (error) {
             console.error('Error initializing real data visualizations:', error);
         }
+    }
+
+    /**
+     * Initialize visualization detection system
+     */
+    initializeVisualizationDetection() {
+        try {
+            // Use global VisualizationDetector if available
+            if (window.VisualizationDetector) {
+                this.visualizationDetector = new window.VisualizationDetector();
+            } else {
+                console.warn('VisualizationDetector not available');
+                return;
+            }
+            
+            // Initialize visualization display
+            if (window.visualizationDisplay) {
+                window.visualizationDisplay.init('visualization-display');
+                console.log('Visualization display initialized');
+            }
+            
+            // Analyze existing sessions for visualizations
+            this.analyzeSessionsForVisualizations();
+            
+            console.log('Visualization detection system initialized');
+        } catch (error) {
+            console.error('Failed to initialize visualization detection:', error);
+        }
+    }
+
+    /**
+     * Initialize enhanced session modal with program slicing
+     */
+    async initializeEnhancedSessionModal() {
+        try {
+            // Use the global enhanced session modal instance
+            this.enhancedSessionModal = window.enhancedSessionModal;
+            
+            if (this.enhancedSessionModal) {
+                console.log('Enhanced session modal with program slicing initialized');
+            } else {
+                console.warn('Enhanced session modal not available');
+            }
+            
+        } catch (error) {
+            console.error('Failed to initialize enhanced session modal:', error);
+        }
+    }
+
+    /**
+     * Analyze sessions for visualizations
+     */
+    analyzeSessionsForVisualizations() {
+        if (!this.visualizationDetector || !this.sessions) return;
+        
+        this.sessions.forEach(session => {
+            this.analyzeSessionForVisualizations(session);
+        });
+    }
+
+    /**
+     * Analyze a single session for visualizations
+     */
+    analyzeSessionForVisualizations(session) {
+        if (!this.visualizationDetector || !session.codeDeltas) return;
+        
+        // Combine all code from the session
+        const sessionCode = session.codeDeltas
+            .map(delta => delta.content || delta.code || '')
+            .join('\n');
+        
+        if (!sessionCode.trim()) return;
+        
+        // Analyze the code for visualizations
+        const analysis = this.visualizationDetector.analyzeCode(sessionCode, session.id);
+        
+        if (analysis.visualizations.length > 0) {
+            console.log(`Found ${analysis.visualizations.length} visualizations in session ${session.id}`);
+            
+            // Store analysis results in session
+            session.visualizationAnalysis = analysis;
+        }
+    }
+
+    /**
+     * Generate HTML for visualizations tab
+     */
+    generateVisualizationsHTML(session) {
+        // Check if we have visualization analysis for this session
+        if (!session.visualizationAnalysis || !session.visualizationAnalysis.visualizations) {
+            // Try to analyze the session if we haven't already
+            this.analyzeSessionForVisualizations(session);
+        }
+
+        const visualizations = session.visualizationAnalysis?.visualizations || [];
+        
+        if (visualizations.length === 0) {
+            return `
+                <div class="no-visualizations">
+                    <div class="no-visualizations-icon"></div>
+                    <h3>No Visualizations Detected</h3>
+                    <p>This session doesn't appear to have generated any visualizations.</p>
+                    <p>Visualizations are detected from code that uses:</p>
+                    <ul>
+                        <li><code>plt.savefig()</code> (Matplotlib)</li>
+                        <li><code>fig.write_html()</code> (Plotly)</li>
+                        <li><code>sns.savefig()</code> (Seaborn)</li>
+                        <li>File output operations with image extensions</li>
+                    </ul>
+                </div>
+            `;
+        }
+
+        return `
+            <div class="session-visualizations">
+                <div class="visualizations-header">
+                    <h3>Generated Visualizations</h3>
+                    <span class="visualization-count">${visualizations.length} found</span>
+                </div>
+                
+                <div class="visualization-grid">
+                    ${visualizations.map(viz => this.renderVisualizationCard(viz)).join('')}
+                </div>
+            </div>
+        `;
+    }
+
+    /**
+     * Render a single visualization card
+     */
+    renderVisualizationCard(viz) {
+        const isImage = ['.png', '.jpg', '.jpeg', '.gif', '.svg'].includes(viz.extension);
+        const isHtml = viz.extension === '.html';
+        const isJson = viz.extension === '.json';
+        
+        return `
+            <div class="visualization-card" data-viz-id="${viz.id}">
+                <div class="visualization-preview">
+                    ${this.renderVisualizationPreview(viz, isImage, isHtml, isJson)}
+                </div>
+                
+                <div class="visualization-info">
+                    <h4 class="visualization-title">${this.generateVisualizationTitle(viz.path)}</h4>
+                    <p class="visualization-description">${this.generateVisualizationDescription(viz)}</p>
+                    
+                    <div class="visualization-meta">
+                        <span class="meta-item">
+                            <span class="meta-label">Type:</span>
+                            <span class="meta-value">${viz.type}</span>
+                        </span>
+                        <span class="meta-item">
+                            <span class="meta-label">Line:</span>
+                            <span class="meta-value">${viz.line}</span>
+                        </span>
+                        <span class="meta-item">
+                            <span class="meta-label">Extension:</span>
+                            <span class="meta-value">${viz.extension}</span>
+                        </span>
+                    </div>
+                    
+                    <div class="visualization-actions">
+                        <button class="btn btn-sm btn-primary" onclick="dashboard.viewVisualization('${viz.id}', '${viz.resolvedPath}', '${viz.extension}')">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                                <circle cx="12" cy="12" r="3"></circle>
+                            </svg>
+                            View
+                        </button>
+                        <button class="btn btn-sm btn-secondary" onclick="dashboard.downloadVisualization('${viz.resolvedPath}', '${this.generateVisualizationTitle(viz.path)}${viz.extension}')">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="7,10 12,15 17,10"></polyline>
+                            </svg>
+                            Download
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    /**
+     * Render preview for different file types
+     */
+    renderVisualizationPreview(viz, isImage, isHtml, isJson) {
+        if (isImage) {
+            return `
+                <div class="image-preview">
+                    <img src="${this.getVisualizationUrl(viz.resolvedPath)}" 
+                         alt="${this.generateVisualizationTitle(viz.path)}" 
+                         onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                    <div class="preview-error" style="display: none;">
+                        <div class="error-icon"></div>
+                        <p>Image not found</p>
+                    </div>
+                </div>
+            `;
+        } else if (isHtml) {
+            return `
+                <div class="html-preview">
+                    <div class="preview-icon">🌐</div>
+                    <p>HTML Visualization</p>
+                </div>
+            `;
+        } else if (isJson) {
+            return `
+                <div class="json-preview">
+                    <div class="preview-icon"></div>
+                    <p>JSON Data</p>
+                </div>
+            `;
+        } else {
+            return `
+                <div class="generic-preview">
+                    <div class="preview-icon"></div>
+                    <p>${viz.extension.toUpperCase()} File</p>
+                </div>
+            `;
+        }
+    }
+
+    /**
+     * Generate visualization title from path
+     */
+    generateVisualizationTitle(path) {
+        const filename = path.split('/').pop().split('\\').pop();
+        const nameWithoutExt = filename.replace(/\.[^/.]+$/, '');
+        
+        return nameWithoutExt
+            .replace(/[_-]/g, ' ')
+            .replace(/\b\w/g, l => l.toUpperCase());
+    }
+
+    /**
+     * Generate visualization description
+     */
+    generateVisualizationDescription(viz) {
+        const typeDescriptions = {
+            matplotlib: 'Matplotlib plot',
+            plotly: 'Plotly visualization',
+            seaborn: 'Seaborn plot',
+            fileOutput: 'Generated visualization file'
+        };
+        
+        return typeDescriptions[viz.type] || 'Generated visualization';
+    }
+
+    /**
+     * Get visualization URL for display
+     */
+    getVisualizationUrl(path) {
+        // Convert file path to URL
+        if (path.startsWith('/')) {
+            return `http://localhost:3000/static${path}`;
+        } else {
+            return `http://localhost:3000/static/${path}`;
+        }
+    }
+
+    /**
+     * View a visualization in a modal
+     */
+    viewVisualization(vizId, path, extension) {
+        const isImage = ['.png', '.jpg', '.jpeg', '.gif', '.svg'].includes(extension);
+        
+        const modal = document.createElement('div');
+        modal.className = 'modal-overlay visualization-modal';
+        modal.innerHTML = `
+            <div class="modal-content visualization-modal-content">
+                <div class="modal-header">
+                    <h3>Visualization</h3>
+                    <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="visualization-viewer">
+                        ${isImage ? `
+                            <img src="${this.getVisualizationUrl(path)}" 
+                                 alt="Visualization" 
+                                 style="max-width: 100%; max-height: 80vh; object-fit: contain;">
+                        ` : `
+                            <div class="file-info">
+                                <p><strong>File:</strong> ${path}</p>
+                                <p><strong>Type:</strong> ${extension}</p>
+                                <p>This file type cannot be previewed directly.</p>
+                            </div>
+                        `}
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-primary" onclick="dashboard.downloadVisualization('${path}', 'visualization${extension}')">
+                        Download
+                    </button>
+                    <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">
+                        Close
+                    </button>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+        
+        // Add click outside to close
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                modal.remove();
+            }
+        });
+    }
+
+    /**
+     * Download a visualization
+     */
+    downloadVisualization(path, filename) {
+        // Create download link
+        const link = document.createElement('a');
+        link.href = this.getVisualizationUrl(path);
+        link.download = filename;
+        link.click();
     }
 
     initializeWebSocket() {
@@ -102,6 +556,7 @@ class LiveDashboard {
                 console.log('Connected to main WebSocket server');
                 this.updateConnectionStatus(true);
                 this.showNotification('Connected to server', 'success');
+                this.resetReconnectionAttempts(); // Reset reconnection attempts on success
                 
                 // Request initial data
                 this.socket.emit('request-sessions');
@@ -125,8 +580,36 @@ class LiveDashboard {
                     this.showNotification(`${newSessions} new session${newSessions > 1 ? 's' : ''} detected`, 'info');
                 }
                 
-                this.renderCurrentView();
+                this.renderCurrentViewDebounced();
                 this.updateStatistics();
+            });
+            
+            // Real-time update handlers
+            this.socket.on('real-time-update', (update) => {
+                // Only log frequent updates occasionally to reduce spam
+                if (!['cursor-position', 'active-window', 'network-activity'].includes(update.type)) {
+                    console.log('📡 Real-time update received:', update.type);
+                }
+                this.handleRealtimeUpdate(update);
+            });
+            
+            this.socket.on('conversation-detected', (conversation) => {
+                console.log('💬 Conversation detected:', conversation.source);
+                this.handleConversationDetected(conversation);
+            });
+            
+            this.socket.on('file-change', (change) => {
+                console.log('File change detected:', change.filePath);
+                this.handleFileChange(change);
+            });
+            
+            this.socket.on('process-change', (process) => {
+                console.log('🔄 Process change:', process.displayName, process.isRunning ? 'started' : 'stopped');
+                this.handleProcessChange(process);
+            });
+            
+            this.socket.on('system-resources', (resources) => {
+                this.handleSystemResources(resources);
             });
             
             this.socket.on('session-updated', (session) => {
@@ -147,7 +630,7 @@ class LiveDashboard {
             this.socket.on('session-created', (session) => {
                 console.log('New session created:', session);
                 this.showNotification(`New session: ${session.intent || 'Unknown intent'}`, 'success');
-                this.loadSessions(); // Refresh to get the new session
+                this.loadSessionsDebounced(); // Refresh to get the new session
             });
 
             this.socket.on('error', (error) => {
@@ -197,10 +680,48 @@ class LiveDashboard {
                 console.error('WebSocket error:', error);
                 this.showError('WebSocket error: ' + error.message);
             });
+
+            this.socket.on('connect_error', (error) => {
+                console.error('WebSocket connection error:', error);
+                this.showNotification('Connection failed, retrying...', 'warning');
+                this.scheduleReconnection();
+            });
             
         } catch (error) {
-            console.error('Failed to initialize WebSocket:', error);
-            this.showError('Failed to connect to real-time updates');
+            console.error('Error initializing WebSocket:', error);
+            this.showError('Failed to initialize real-time connection');
+        }
+    }
+
+    /**
+     * Schedule WebSocket reconnection with exponential backoff
+     */
+    scheduleReconnection() {
+        if (this.reconnectTimeout) {
+            clearTimeout(this.reconnectTimeout);
+        }
+
+        const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts || 0), 30000);
+        this.reconnectAttempts = (this.reconnectAttempts || 0) + 1;
+
+        console.log(`Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})`);
+
+        this.reconnectTimeout = setTimeout(() => {
+            if (this.socket && !this.socket.connected) {
+                console.log('Attempting to reconnect...');
+                this.socket.connect();
+            }
+        }, delay);
+    }
+
+    /**
+     * Reset reconnection attempts on successful connection
+     */
+    resetReconnectionAttempts() {
+        this.reconnectAttempts = 0;
+        if (this.reconnectTimeout) {
+            clearTimeout(this.reconnectTimeout);
+            this.reconnectTimeout = null;
         }
     }
 
@@ -225,12 +746,31 @@ class LiveDashboard {
     }
 
     handleRealtimeUpdate(update) {
+        console.log('Handling real-time update:', update);
+        
+        // Update statistics in real-time
+        if (update.type === 'file-change' || update.type === 'conversation-detected') {
+            this.updateStatistics();
+        }
+        
+        // Trigger view updates
+        this.renderCurrentViewDebounced();
+        
         switch (update.type) {
             case 'file-change':
                 this.handleFileChange(update.data);
                 break;
             case 'prompt-captured':
                 this.handlePromptCaptured(update.data);
+                break;
+            case 'conversation-detected':
+                this.handleConversationDetected(update.data);
+                break;
+            case 'process-change':
+                this.handleProcessChange(update.data);
+                break;
+            case 'system-resources':
+                this.handleSystemResources(update.data);
                 break;
             default:
                 console.log('Unknown real-time update type:', update.type);
@@ -287,10 +827,267 @@ class LiveDashboard {
         // Show notification
         this.showNotification(`File updated: ${data.filePath.split('/').pop()}`, 'info');
     }
+    
+    handleConversationDetected(conversation) {
+        console.log('💬 New conversation detected:', conversation);
+        
+        // Add to conversations list
+        this.conversations = this.conversations || [];
+        this.conversations.push(conversation);
+        
+        // Show notification
+        this.showNotification(`New conversation from ${conversation.source}`, 'info');
+        
+        // Update statistics
+        this.updateStatistics();
+        
+        // Trigger view refresh
+        this.renderCurrentViewDebounced();
+    }
+    
+    handleProcessChange(process) {
+        console.log('🔄 Process change:', process);
+        
+        // Update connection status if it's Cursor
+        if (process.displayName && process.displayName.toLowerCase().includes('cursor')) {
+            this.updateConnectionStatus(process.isRunning);
+        }
+        
+        // Show notification
+        const status = process.isRunning ? 'started' : 'stopped';
+        this.showNotification(`${process.displayName || process.processName} ${status}`, 'info');
+    }
+    
+    handleSystemResources(resources) {
+        // Update system resource indicators if they exist
+        const resourceElement = document.getElementById('system-resources');
+        if (resourceElement) {
+            resourceElement.innerHTML = `
+                <div>CPU: ${Math.round(resources.cpuUsage.user / 1000000)}%</div>
+                <div>Memory: ${Math.round(resources.memoryUsage.heapUsed / 1024 / 1024)}MB</div>
+                <div>Uptime: ${Math.round(resources.uptime / 60)}min</div>
+            `;
+        }
+    }
 
     handlePromptCaptured(data) {
-        console.log('Prompt captured:', data.text);
-        this.showNotification('New prompt captured', 'success');
+        console.log('Enhanced prompt captured:', data);
+        
+        // Enhanced prompt processing with pattern matching
+        const enhancedPrompt = this.processPromptWithPatterns(data);
+        
+        // Add the enhanced prompt to the current session or create a new one
+        if (this.sessions.length > 0) {
+            const currentSession = this.sessions[0];
+            if (!currentSession.conversations) {
+                currentSession.conversations = [];
+            }
+            currentSession.conversations.push({
+                id: `prompt-${Date.now()}`,
+                sessionId: currentSession.id,
+                timestamp: data.timestamp || new Date().toISOString(),
+                role: 'user',
+                content: data.text || data.prompt || '',
+                context: data.context || '',
+                // Enhanced prompt metadata
+                intent: enhancedPrompt.intent,
+                complexity: enhancedPrompt.complexity,
+                keywords: enhancedPrompt.keywords,
+                patterns: enhancedPrompt.patterns,
+                semanticAnalysis: enhancedPrompt.semanticAnalysis
+            });
+        }
+        
+        // Show enhanced notification
+        this.showNotification(`New ${enhancedPrompt.intent} prompt captured`, 'success');
+        
+        // Refresh the display
+        this.renderCurrentView();
+    }
+
+    /**
+     * Enhanced prompt processing with comprehensive pattern matching
+     */
+    processPromptWithPatterns(data) {
+        const prompt = data.text || data.prompt || '';
+        const context = data.context || '';
+        
+        // Comprehensive prompt patterns from your technical overview
+        const promptPatterns = [
+            // Direct prompt patterns
+            { pattern: /(?:prompt|question|ask|request):\s*(.+?)(?:\n\n|\n$|$)/gi, type: 'direct_prompt' },
+            { pattern: /(?:user|you):\s*(.+?)(?:\n\n|\n$|$)/gi, type: 'user_directive' },
+            { pattern: /(?:please|can you|help me):\s*(.+?)(?:\n\n|\n$|$)/gi, type: 'request' },
+            
+            // Cursor-specific patterns
+            { pattern: /@cursor\s+(.+?)(?:\n\n|\n$|$)/gi, type: 'cursor_directive' },
+            { pattern: /@ai\s+(.+?)(?:\n\n|\n$|$)/gi, type: 'ai_directive' },
+            { pattern: /@assistant\s+(.+?)(?:\n\n|\n$|$)/gi, type: 'assistant_directive' },
+            
+            // Code comment patterns
+            { pattern: /\/\/\s*prompt:\s*(.+?)(?:\n|$)/gi, type: 'code_comment_prompt' },
+            { pattern: /#\s*prompt:\s*(.+?)(?:\n|$)/gi, type: 'python_comment_prompt' },
+            { pattern: /<!--\s*prompt:\s*(.+?)\s*-->/gi, type: 'html_comment_prompt' },
+            
+            // Conversation patterns
+            { pattern: /Human:\s*(.+?)(?:\n\n|\n$|$)/gi, type: 'conversation_human' },
+            { pattern: /User:\s*(.+?)(?:\n\n|\n$|$)/gi, type: 'conversation_user' },
+            { pattern: /Me:\s*(.+?)(?:\n\n|\n$|$)/gi, type: 'conversation_me' },
+            
+            // Task patterns
+            { pattern: /Task:\s*(.+?)(?:\n\n|\n$|$)/gi, type: 'task_definition' },
+            { pattern: /Goal:\s*(.+?)(?:\n\n|\n$|$)/gi, type: 'goal_definition' },
+            { pattern: /Objective:\s*(.+?)(?:\n\n|\n$|$)/gi, type: 'objective_definition' },
+        ];
+
+        // Extract patterns and analyze intent
+        const patterns = [];
+        const extractedContent = [];
+        
+        promptPatterns.forEach(({ pattern, type }) => {
+            const matches = [...prompt.matchAll(pattern)];
+            matches.forEach(match => {
+                patterns.push({
+                    type: type,
+                    content: match[1]?.trim(),
+                    fullMatch: match[0]
+                });
+                extractedContent.push(match[1]?.trim());
+            });
+        });
+
+        // Intent classification based on content analysis
+        const intent = this.classifyPromptIntent(prompt, context, patterns);
+        
+        // Complexity analysis
+        const complexity = this.analyzePromptComplexity(prompt);
+        
+        // Keyword extraction
+        const keywords = this.extractKeywords(prompt);
+        
+        // Semantic analysis
+        const semanticAnalysis = this.performSemanticAnalysis(prompt, context);
+
+        return {
+            intent,
+            complexity,
+            keywords,
+            patterns,
+            semanticAnalysis,
+            extractedContent,
+            originalPrompt: prompt,
+            context: context
+        };
+    }
+
+    /**
+     * Classify prompt intent based on content and patterns
+     */
+    classifyPromptIntent(prompt, context, patterns) {
+        const content = (prompt + ' ' + context).toLowerCase();
+        
+        // Intent classification patterns
+        const intentPatterns = {
+            'data_visualization': ['plot', 'chart', 'graph', 'visualize', 'matplotlib', 'seaborn', 'plotly', 'show'],
+            'data_analysis': ['analyze', 'analysis', 'data', 'dataset', 'pandas', 'numpy', 'statistics'],
+            'code_implementation': ['implement', 'create', 'build', 'write', 'function', 'class', 'method'],
+            'debugging': ['debug', 'error', 'bug', 'fix', 'issue', 'problem', 'troubleshoot'],
+            'optimization': ['optimize', 'performance', 'speed', 'efficient', 'improve', 'better'],
+            'documentation': ['document', 'comment', 'explain', 'readme', 'docstring', 'help'],
+            'testing': ['test', 'testing', 'unit test', 'assert', 'verify', 'check'],
+            'refactoring': ['refactor', 'restructure', 'reorganize', 'clean up', 'simplify']
+        };
+
+        let maxScore = 0;
+        let detectedIntent = 'general';
+
+        Object.entries(intentPatterns).forEach(([intent, keywords]) => {
+            const score = keywords.reduce((acc, keyword) => {
+                return acc + (content.includes(keyword) ? 1 : 0);
+            }, 0);
+            
+            if (score > maxScore) {
+                maxScore = score;
+                detectedIntent = intent;
+            }
+        });
+
+        // Check for pattern-based intent
+        if (patterns.length > 0) {
+            const patternTypes = patterns.map(p => p.type);
+            if (patternTypes.includes('cursor_directive') || patternTypes.includes('ai_directive')) {
+                detectedIntent = 'ai_assistance';
+            } else if (patternTypes.includes('task_definition') || patternTypes.includes('goal_definition')) {
+                detectedIntent = 'task_definition';
+            }
+        }
+
+        return detectedIntent;
+    }
+
+    /**
+     * Analyze prompt complexity
+     */
+    analyzePromptComplexity(prompt) {
+        const words = prompt.split(/\s+/).length;
+        const sentences = prompt.split(/[.!?]+/).length;
+        const technicalTerms = ['function', 'class', 'import', 'def', 'return', 'variable', 'array', 'dataframe', 'model', 'algorithm'];
+        const technicalTermCount = technicalTerms.filter(term => prompt.toLowerCase().includes(term)).length;
+        
+        let complexity = 'simple';
+        if (words > 50 || sentences > 3 || technicalTermCount > 3) {
+            complexity = 'complex';
+        } else if (words > 20 || sentences > 2 || technicalTermCount > 1) {
+            complexity = 'medium';
+        }
+        
+        return {
+            level: complexity,
+            wordCount: words,
+            sentenceCount: sentences,
+            technicalTermCount: technicalTermCount
+        };
+    }
+
+    /**
+     * Extract keywords from prompt
+     */
+    extractKeywords(prompt) {
+        const stopWords = ['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'is', 'are', 'was', 'were', 'be', 'been', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'can', 'this', 'that', 'these', 'those'];
+        
+        const words = prompt.toLowerCase()
+            .replace(/[^\w\s]/g, ' ')
+            .split(/\s+/)
+            .filter(word => word.length > 2 && !stopWords.includes(word));
+        
+        // Count word frequency
+        const wordCount = {};
+        words.forEach(word => {
+            wordCount[word] = (wordCount[word] || 0) + 1;
+        });
+        
+        // Return top keywords
+        return Object.entries(wordCount)
+            .sort(([,a], [,b]) => b - a)
+            .slice(0, 10)
+            .map(([word, count]) => ({ word, count }));
+    }
+
+    /**
+     * Perform semantic analysis on prompt
+     */
+    performSemanticAnalysis(prompt, context) {
+        const content = (prompt + ' ' + context).toLowerCase();
+        
+        return {
+            hasCodeRequest: /code|function|class|implement|write/.test(content),
+            hasDataRequest: /data|dataset|analysis|visualize/.test(content),
+            hasDebugRequest: /debug|error|bug|fix|issue/.test(content),
+            hasOptimizationRequest: /optimize|performance|speed|efficient/.test(content),
+            hasDocumentationRequest: /document|comment|explain|readme/.test(content),
+            urgency: /urgent|asap|quickly|immediately/.test(content) ? 'high' : 'normal',
+            complexity: this.analyzePromptComplexity(prompt).level
+        };
     }
 
     handleInitialCompanionData(data) {
@@ -391,6 +1188,13 @@ class LiveDashboard {
             if (data.success) {
                 this.sessions = data.sessions || [];
                 console.log(`Loaded ${this.sessions.length} sessions`);
+                
+                // Re-index sessions for search
+                this.indexSessionsForSearch();
+                
+                // Also reload conversations when sessions are refreshed
+                await this.loadConversations();
+                
                 this.renderCurrentView();
                 this.updateStatistics();
             } else {
@@ -410,6 +1214,285 @@ class LiveDashboard {
             this.isLoading = false;
             this.showLoading(false);
         }
+    }
+
+    async loadConversations() {
+        try {
+            console.log('Loading conversations...');
+            
+            // Show loading state on the conversations button
+            this.setConversationsButtonLoading(true);
+            
+            const response = await fetch('/api/conversations');
+            
+            if (response.ok) {
+                const data = await response.json();
+                this.conversations = data.conversations || [];
+                console.log(`Loaded ${this.conversations.length} conversations from API`);
+                console.log('Sample conversation:', this.conversations[0]);
+                console.log('Full conversations data:', this.conversations);
+                
+                // Link conversations to sessions
+                this.linkConversationsToSessions();
+                
+                // Update statistics after loading conversations
+                this.updateStatistics();
+                
+                // Re-render sessions to show conversations
+                this.renderCurrentView();
+                
+                // Show notification if conversations were loaded
+                if (this.conversations.length > 0) {
+                    this.showNotification(`Loaded ${this.conversations.length} conversations`, 'success');
+                } else {
+                    this.showNotification('No conversations found', 'info');
+                }
+            } else {
+                console.warn('Failed to load conversations:', response.status, response.statusText);
+                this.conversations = [];
+                this.showNotification('Failed to load conversations', 'error');
+            }
+        } catch (error) {
+            console.error('Error loading conversations:', error);
+            this.conversations = [];
+            this.showNotification('Error loading conversations: ' + error.message, 'error');
+        } finally {
+            // Always reset loading state
+            this.setConversationsButtonLoading(false);
+        }
+    }
+
+    /**
+     * Link conversations to their corresponding sessions
+     */
+    linkConversationsToSessions() {
+        if (!this.conversations || !this.sessions) {
+            return;
+        }
+
+        // Create a map of session IDs for quick lookup
+        const sessionMap = new Map();
+        this.sessions.forEach(session => {
+            sessionMap.set(session.id, session);
+            // Initialize conversations array if it doesn't exist
+            if (!session.conversations) {
+                session.conversations = [];
+            }
+        });
+
+        // Link conversations to sessions
+        let linkedCount = 0;
+        this.conversations.forEach(conversation => {
+            if (conversation.sessionId && sessionMap.has(conversation.sessionId)) {
+                const session = sessionMap.get(conversation.sessionId);
+                session.conversations.push(conversation);
+                linkedCount++;
+            }
+        });
+
+        console.log(`Linked ${linkedCount} conversations to sessions`);
+    }
+
+    async loadSessionConversations(sessionId) {
+        try {
+            console.log(`Loading conversations for session ${sessionId}...`);
+            const response = await fetch(`/api/session/${sessionId}/conversations`);
+            
+            if (response.ok) {
+                const data = await response.json();
+                const conversations = data.conversations || [];
+                
+                // Update the session with conversations
+                const session = this.sessions.find(s => s.id === sessionId);
+                if (session) {
+                    session.conversations = conversations;
+                    // Re-render the session detail if it's currently open
+                    this.renderCurrentView();
+                }
+                
+                console.log(`Loaded ${conversations.length} conversations for session ${sessionId}`);
+            } else {
+                console.warn(`Failed to load conversations for session ${sessionId}:`, response.status);
+            }
+        } catch (error) {
+            console.error(`Error loading conversations for session ${sessionId}:`, error);
+        }
+    }
+
+    getConversationsForSession(sessionId) {
+        // First try to find conversations in the global conversations array
+        const globalConversations = this.conversations.filter(conv => 
+            conv.sessionId === sessionId || conv.session_id === sessionId
+        );
+        
+        if (globalConversations.length > 0) {
+            return globalConversations;
+        }
+        
+        // Then try to find the session and return its conversations
+        const session = this.sessions.find(s => s.id === sessionId);
+        return session?.conversations || [];
+    }
+
+    getConversationSummary(session) {
+        // Try multiple data sources for conversations
+        let conversations = session.conversations || 
+                           session.conversationEvents || 
+                           session.messages || 
+                           session.prompts || 
+                           this.getConversationsForSession(session.id) || 
+                           [];
+
+        if (!conversations || conversations.length === 0) {
+            return null;
+        }
+
+        const conversationCount = conversations.length;
+        
+        // Calculate total tokens if available
+        const totalTokens = conversations.reduce((sum, conv) => sum + (conv.tokens || 0), 0);
+        
+        // Get the most recent conversation timestamp
+        const timestamps = conversations
+            .map(conv => conv.timestamp || conv.created_at || conv.time)
+            .filter(ts => ts)
+            .sort((a, b) => new Date(b) - new Date(a));
+        
+        const mostRecent = timestamps.length > 0 ? new Date(timestamps[0]) : null;
+        
+        // Create summary text
+        let summary = `${conversationCount} conversation${conversationCount > 1 ? 's' : ''}`;
+        
+        if (totalTokens > 0) {
+            summary += ` (${totalTokens.toLocaleString()} tokens)`;
+        }
+        
+        if (mostRecent) {
+            const timeAgo = this.getTimeAgo(mostRecent);
+            summary += ` • Last: ${timeAgo}`;
+        }
+        
+        return summary;
+    }
+
+    getTimeAgo(date) {
+        const now = new Date();
+        const diffMs = now - new Date(date);
+        const diffMins = Math.floor(diffMs / 60000);
+        const diffHours = Math.floor(diffMins / 60);
+        const diffDays = Math.floor(diffHours / 24);
+        
+        if (diffMins < 1) return 'just now';
+        if (diffMins < 60) return `${diffMins}m ago`;
+        if (diffHours < 24) return `${diffHours}h ago`;
+        if (diffDays < 7) return `${diffDays}d ago`;
+        return new Date(date).toLocaleDateString();
+    }
+
+    getConversationPreview(session) {
+        // Try multiple data sources for conversations
+        let conversations = session.conversations || 
+                           session.conversationEvents || 
+                           session.messages || 
+                           session.prompts || 
+                           this.getConversationsForSession(session.id) || 
+                           [];
+
+        if (!conversations || conversations.length === 0) {
+            return null;
+        }
+
+        // Get the most recent conversation
+        const sortedConversations = conversations
+            .filter(conv => conv.prompt || conv.userMessage || conv.content || conv.message)
+            .sort((a, b) => {
+                const timeA = new Date(a.timestamp || a.created_at || a.time || 0);
+                const timeB = new Date(b.timestamp || b.created_at || b.time || 0);
+                return timeB - timeA;
+            });
+
+        if (sortedConversations.length === 0) {
+            return null;
+        }
+
+        const mostRecent = sortedConversations[0];
+        const previewText = mostRecent.prompt || 
+                           mostRecent.userMessage || 
+                           mostRecent.content || 
+                           mostRecent.message || 
+                           'No preview available';
+
+        // Truncate and clean up the text
+        const cleanedText = previewText
+            .replace(/\n+/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+
+        return cleanedText.length > 80 ? cleanedText.substring(0, 80) + '...' : cleanedText;
+    }
+
+    showConversationDetail(sessionId, conversationIndex) {
+        const conversations = this.getConversationsForSession(sessionId);
+        if (conversations && conversations[conversationIndex]) {
+            const conversation = conversations[conversationIndex];
+            
+            // Create a modal to show full conversation details
+            const modal = document.createElement('div');
+            modal.className = 'modal active';
+            modal.innerHTML = `
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h3>Conversation Details</h3>
+                        <button class="modal-close" onclick="this.closest('.modal').remove()">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="conversation-detail">
+                            <div class="conversation-meta">
+                                <span>Session: ${sessionId}</span>
+                                <span>Index: #${conversationIndex + 1}</span>
+                                <span>Time: ${new Date(conversation.timestamp || conversation.created_at).toLocaleString()}</span>
+                            </div>
+                            <div class="conversation-full">
+                                <div class="conversation-prompt-full">
+                                    <h4>User Prompt:</h4>
+                                    <div class="conversation-content-full">${conversation.prompt || conversation.userMessage || conversation.content || conversation.message || 'No prompt recorded'}</div>
+                                </div>
+                                <div class="conversation-response-full">
+                                    <h4>AI Response:</h4>
+                                    <div class="conversation-content-full">${conversation.response || conversation.aiMessage || conversation.assistantMessage || 'No response recorded'}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button class="btn btn-primary" onclick="dashboard.copyConversation('${sessionId}', ${conversationIndex})">Copy Conversation</button>
+                        <button class="btn btn-secondary" onclick="this.closest('.modal').remove()">Close</button>
+                    </div>
+                </div>
+            `;
+            
+            document.body.appendChild(modal);
+        }
+    }
+
+    copyConversation(sessionId, conversationIndex) {
+        const conversations = this.getConversationsForSession(sessionId);
+        if (conversations && conversations[conversationIndex]) {
+            const conversation = conversations[conversationIndex];
+            const text = `User: ${conversation.prompt || conversation.userMessage || conversation.content || conversation.message || 'No prompt recorded'}\n\nAI: ${conversation.response || conversation.aiMessage || conversation.assistantMessage || 'No response recorded'}`;
+            
+            navigator.clipboard.writeText(text).then(() => {
+                this.showNotification('Conversation copied to clipboard', 'success');
+            }).catch(err => {
+                console.error('Failed to copy conversation:', err);
+                this.showNotification('Failed to copy conversation', 'error');
+            });
+        }
+    }
+
+    truncateText(text, maxLength) {
+        if (!text || text.length <= maxLength) return text;
+        return text.substring(0, maxLength) + '...';
     }
 
     renderSessions() {
@@ -462,6 +1545,17 @@ class LiveDashboard {
                             <span class="info-text">${session.codeDeltas.length} changes</span>
                         </div>
                         ` : ''}
+                        ${this.getConversationSummary(session) ? `
+                        <div class="info-item conversation-summary">
+                            <span class="info-icon"></span>
+                            <span class="info-text">${this.getConversationSummary(session)}</span>
+                            ${this.getConversationPreview(session) ? `
+                            <div class="conversation-preview">
+                                <span class="preview-text">${this.getConversationPreview(session)}</span>
+                            </div>
+                            ` : ''}
+                        </div>
+                        ` : ''}
                     </div>
                 </div>
                 <div class="session-actions">
@@ -472,11 +1566,15 @@ class LiveDashboard {
                         </svg>
                         View Details
                     </button>
-                    <button class="btn btn-sm btn-secondary" onclick="returnToContext('${session.id}')">
+                    <button class="btn btn-sm btn-secondary" onclick="generateNotebook('${session.id}')">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M19 12H5M12 19l-7-7 7-7"></path>
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                            <polyline points="14,2 14,8 20,8"></polyline>
+                            <line x1="16" y1="13" x2="8" y2="13"></line>
+                            <line x1="16" y1="17" x2="8" y2="17"></line>
+                            <polyline points="10,9 9,9 8,9"></polyline>
                         </svg>
-                        Return to Context
+                        Generate Notebook
                     </button>
                     <button class="btn btn-sm btn-success" onclick="generateNotebook('${session.id}')">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -502,33 +1600,43 @@ class LiveDashboard {
 
     updateStatistics() {
         const totalSessions = this.sessions.length;
-        const activeSessions = this.sessions.filter(s => 
-            s.outcome === 'in_progress' || 
-            s.outcome === 'IN_PROGRESS' || 
-            s.phase === 'IN_PROGRESS' ||
-            !s.outcome
-        ).length;
-        const completedSessions = this.sessions.filter(s => 
-            s.outcome === 'success' || 
-            s.outcome === 'SUCCESS' ||
-            s.outcome === 'completed' ||
-            s.outcome === 'COMPLETED'
-        ).length;
-        const failedSessions = this.sessions.filter(s => 
-            s.outcome === 'failed' || 
-            s.outcome === 'FAILED' ||
-            s.outcome === 'error' ||
-            s.outcome === 'ERROR'
-        ).length;
-
-        // Calculate additional statistics
+        
+        // Enhanced calculation of total changes
         const totalChanges = this.sessions.reduce((sum, session) => {
-            return sum + (session.codeDeltas ? session.codeDeltas.length : 0);
+            const codeDeltas = session.codeDeltas ? session.codeDeltas.length : 0;
+            const fileChanges = session.fileChanges ? session.fileChanges.length : 0;
+            return sum + codeDeltas + fileChanges;
         }, 0);
 
-        const totalConversations = this.sessions.reduce((sum, session) => {
+        // Enhanced calculation of total conversations
+        let totalConversations = 0;
+        
+        // Count conversations from global conversations array
+        if (this.conversations && this.conversations.length > 0) {
+            totalConversations += this.conversations.length;
+        }
+        
+        // Also count conversations stored directly in sessions
+        const sessionConversations = this.sessions.reduce((sum, session) => {
             return sum + (session.conversations ? session.conversations.length : 0);
         }, 0);
+
+        totalConversations += sessionConversations;
+
+        // Calculate unique files modified across all sessions
+        const allFileChanges = new Set();
+        this.sessions.forEach(session => {
+            if (session.fileChanges) {
+                session.fileChanges.forEach(fc => {
+                    if (fc.fileName) {
+                        allFileChanges.add(fc.fileName);
+                    } else if (fc.filePath) {
+                        allFileChanges.add(fc.filePath);
+                    }
+                });
+            }
+        });
+        const totalFilesModified = allFileChanges.size;
 
         const sessionsWithDuration = this.sessions.filter(s => s.duration && s.duration > 0);
         const avgDuration = sessionsWithDuration.length > 0 
@@ -538,11 +1646,9 @@ class LiveDashboard {
         // Update statistics display if elements exist
         const statsElements = {
             'totalSessions': totalSessions,
-            'activeSessions': activeSessions,
-            'completedSessions': completedSessions,
-            'failedSessions': failedSessions,
             'totalChanges': totalChanges,
             'totalConversations': totalConversations,
+            'totalFilesModified': totalFilesModified,
             'avg-duration': avgDuration > 0 ? this.formatDuration(avgDuration) : '-'
         };
 
@@ -550,10 +1656,399 @@ class LiveDashboard {
             const element = document.getElementById(id);
             if (element) {
                 element.textContent = value;
+                // Add visual feedback for updates
+                element.classList.add('updated');
+                setTimeout(() => element.classList.remove('updated'), 500);
+            } else {
+                console.warn(`Statistics element not found: ${id}`);
             }
         });
 
-        console.log(`Statistics updated: ${totalSessions} total, ${activeSessions} active, ${completedSessions} completed, ${failedSessions} failed, ${totalChanges} changes, ${totalConversations} conversations`);
+        // Only log statistics occasionally to reduce spam
+        if (Math.random() < 0.1) { // Log only 10% of the time
+            console.log(`Statistics updated: ${totalSessions} total, ${totalChanges} changes, ${totalConversations} conversations, ${totalFilesModified} files modified`);
+            console.log(`Conversations loaded: ${this.conversations ? this.conversations.length : 0} global conversations`);
+            console.log(`Session conversations: ${sessionConversations} conversations in sessions`);
+        }
+        
+        // Debug: Show sample session data
+        if (this.sessions.length > 0) {
+            const sampleSession = this.sessions[0];
+            console.log('Sample session data:', {
+                id: sampleSession.id,
+                hasCodeDeltas: !!sampleSession.codeDeltas,
+                codeDeltasCount: sampleSession.codeDeltas ? sampleSession.codeDeltas.length : 0,
+                hasFileChanges: !!sampleSession.fileChanges,
+                fileChangesCount: sampleSession.fileChanges ? sampleSession.fileChanges.length : 0,
+                hasConversations: !!sampleSession.conversations,
+                conversationsCount: sampleSession.conversations ? sampleSession.conversations.length : 0
+            });
+        }
+    }
+
+    /**
+     * Calculate comprehensive statistics for export
+     */
+    calculateStatistics() {
+        const totalSessions = this.sessions.length;
+        
+        // Define "active" as sessions with recent activity (within last 30 minutes)
+        const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
+        const activeSessions = this.sessions.filter(s => {
+            const sessionTime = new Date(s.timestamp || s.startTime || 0);
+            const isRecent = sessionTime > thirtyMinutesAgo;
+            
+            // Also consider sessions that are explicitly marked as in progress AND recent
+            const isInProgress = (s.outcome === 'in_progress' || 
+                                s.outcome === 'IN_PROGRESS' || 
+                                s.phase === 'IN_PROGRESS') && isRecent;
+            
+            return isInProgress;
+        }).length;
+
+        const totalChanges = this.sessions.reduce((sum, session) => {
+            return sum + (session.codeDeltas ? session.codeDeltas.length : 0);
+        }, 0);
+
+        const totalConversations = this.conversations.length;
+
+        const sessionsWithDuration = this.sessions.filter(s => s.duration && s.duration > 0);
+        const avgDuration = sessionsWithDuration.length > 0 
+            ? sessionsWithDuration.reduce((sum, s) => sum + s.duration, 0) / sessionsWithDuration.length
+            : 0;
+
+        // Calculate additional metrics
+        const sessionsByIntent = {};
+        const sessionsByPhase = {};
+        const fileTypes = {};
+        const totalTokens = this.conversations.reduce((sum, c) => sum + (c.tokens || 0), 0);
+
+        this.sessions.forEach(session => {
+            // Intent distribution
+            const intent = session.intent || 'unknown';
+            sessionsByIntent[intent] = (sessionsByIntent[intent] || 0) + 1;
+
+            // Phase distribution
+            const phase = session.phase || 'unknown';
+            sessionsByPhase[phase] = (sessionsByPhase[phase] || 0) + 1;
+
+            // File type analysis
+            if (session.currentFile) {
+                const ext = session.currentFile.split('.').pop() || 'no-extension';
+                fileTypes[ext] = (fileTypes[ext] || 0) + 1;
+            }
+        });
+
+        return {
+            totalSessions,
+            activeSessions,
+            totalChanges,
+            totalConversations,
+            totalTokens,
+            averageDuration: avgDuration,
+            sessionsByIntent,
+            sessionsByPhase,
+            fileTypes,
+            dataQuality: {
+                sessionsWithDuration: sessionsWithDuration.length,
+                sessionsWithIntent: Object.keys(sessionsByIntent).length,
+                sessionsWithFiles: Object.keys(fileTypes).length,
+                completenessScore: this.calculateCompletenessScore()
+            }
+        };
+    }
+
+    /**
+     * Calculate workflow insights
+     */
+    calculateWorkflowInsights() {
+        const insights = {
+            patterns: this.identifyWorkflowPatterns(),
+            recommendations: this.generateRecommendations(),
+            trends: this.analyzeTrends(),
+            productivity: this.calculateProductivityMetrics()
+        };
+
+        return insights;
+    }
+
+    /**
+     * Calculate completeness score
+     */
+    calculateCompletenessScore() {
+        if (this.sessions.length === 0) return 0;
+
+        let totalScore = 0;
+        this.sessions.forEach(session => {
+            let sessionScore = 0;
+            
+            // Check for essential data
+            if (session.intent) sessionScore += 0.2;
+            if (session.phase) sessionScore += 0.2;
+            if (session.currentFile) sessionScore += 0.2;
+            if (session.codeDeltas && session.codeDeltas.length > 0) sessionScore += 0.2;
+            if (session.duration && session.duration > 0) sessionScore += 0.2;
+
+            totalScore += sessionScore;
+        });
+
+        return totalScore / this.sessions.length;
+    }
+
+    /**
+     * Identify workflow patterns
+     */
+    identifyWorkflowPatterns() {
+        const patterns = {
+            commonIntents: this.getTopItems(this.sessions.map(s => s.intent).filter(Boolean), 5),
+            commonPhases: this.getTopItems(this.sessions.map(s => s.phase).filter(Boolean), 5),
+            commonFileTypes: this.getTopItems(
+                this.sessions
+                    .map(s => s.currentFile)
+                    .filter(Boolean)
+                    .map(f => f.split('.').pop())
+                    .filter(Boolean), 
+                5
+            ),
+            averageSessionLength: this.calculateAverageSessionLength(),
+            mostActiveTime: this.calculateMostActiveTime()
+        };
+
+        return patterns;
+    }
+
+    /**
+     * Generate recommendations
+     */
+    generateRecommendations() {
+        const recommendations = [];
+
+        // Analyze session duration patterns
+        const shortSessions = this.sessions.filter(s => s.duration && s.duration < 300); // Less than 5 minutes
+        if (shortSessions.length > this.sessions.length * 0.3) {
+            recommendations.push({
+                type: 'duration',
+                message: 'Consider longer focused sessions for better productivity',
+                priority: 'medium'
+            });
+        }
+
+        // Analyze file type diversity
+        const fileTypes = new Set(
+            this.sessions
+                .map(s => s.currentFile)
+                .filter(Boolean)
+                .map(f => f.split('.').pop())
+        );
+        if (fileTypes.size < 3) {
+            recommendations.push({
+                type: 'diversity',
+                message: 'Try working with different file types to broaden your skills',
+                priority: 'low'
+            });
+        }
+
+        // Analyze conversation patterns
+        if (this.conversations.length > 0) {
+            const avgTokensPerConversation = this.conversations.reduce((sum, c) => sum + (c.tokens || 0), 0) / this.conversations.length;
+            if (avgTokensPerConversation > 1000) {
+                recommendations.push({
+                    type: 'conversation',
+                    message: 'Consider breaking down complex conversations into smaller, focused sessions',
+                    priority: 'low'
+                });
+            }
+        }
+
+        return recommendations;
+    }
+
+    /**
+     * Analyze trends
+     */
+    analyzeTrends() {
+        const trends = {
+            sessionFrequency: this.calculateSessionFrequency(),
+            productivityTrend: this.calculateProductivityTrend(),
+            technologyUsage: this.analyzeTechnologyUsage()
+        };
+
+        return trends;
+    }
+
+    /**
+     * Calculate productivity metrics
+     */
+    calculateProductivityMetrics() {
+        const metrics = {
+            sessionsPerDay: this.calculateSessionsPerDay(),
+            averageChangesPerSession: this.calculateAverageChangesPerSession(),
+            codeVelocity: this.calculateCodeVelocity(),
+            conversationEfficiency: this.calculateConversationEfficiency()
+        };
+
+        return metrics;
+    }
+
+    /**
+     * Helper method to get top items
+     */
+    getTopItems(items, limit = 5) {
+        const counts = {};
+        items.forEach(item => {
+            counts[item] = (counts[item] || 0) + 1;
+        });
+
+        return Object.entries(counts)
+            .sort(([,a], [,b]) => b - a)
+            .slice(0, limit)
+            .map(([item, count]) => ({ item, count }));
+    }
+
+    /**
+     * Calculate average session length
+     */
+    calculateAverageSessionLength() {
+        const sessionsWithDuration = this.sessions.filter(s => s.duration && s.duration > 0);
+        if (sessionsWithDuration.length === 0) return 0;
+        
+        return sessionsWithDuration.reduce((sum, s) => sum + s.duration, 0) / sessionsWithDuration.length;
+    }
+
+    /**
+     * Calculate most active time
+     */
+    calculateMostActiveTime() {
+        const hourCounts = {};
+        this.sessions.forEach(session => {
+            if (session.timestamp) {
+                const hour = new Date(session.timestamp).getHours();
+                hourCounts[hour] = (hourCounts[hour] || 0) + 1;
+            }
+        });
+
+        const mostActiveHour = Object.entries(hourCounts)
+            .sort(([,a], [,b]) => b - a)[0];
+
+        return mostActiveHour ? {
+            hour: mostActiveHour[0],
+            count: mostActiveHour[1]
+        } : null;
+    }
+
+    /**
+     * Calculate session frequency
+     */
+    calculateSessionFrequency() {
+        const now = new Date();
+        const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        const oneMonthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+        const recentSessions = this.sessions.filter(s => 
+            s.timestamp && new Date(s.timestamp) > oneWeekAgo
+        );
+        const monthlySessions = this.sessions.filter(s => 
+            s.timestamp && new Date(s.timestamp) > oneMonthAgo
+        );
+
+        return {
+            last7Days: recentSessions.length,
+            last30Days: monthlySessions.length,
+            averagePerWeek: monthlySessions.length / 4.3
+        };
+    }
+
+    /**
+     * Calculate productivity trend
+     */
+    calculateProductivityTrend() {
+        // Simple trend analysis based on recent vs older sessions
+        const now = new Date();
+        const twoWeeksAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
+
+        const recentSessions = this.sessions.filter(s => 
+            s.timestamp && new Date(s.timestamp) > twoWeeksAgo
+        );
+        const olderSessions = this.sessions.filter(s => 
+            s.timestamp && new Date(s.timestamp) <= twoWeeksAgo
+        );
+
+        if (olderSessions.length === 0) return 'insufficient_data';
+
+        const recentAvgChanges = recentSessions.reduce((sum, s) => sum + (s.codeDeltas?.length || 0), 0) / Math.max(recentSessions.length, 1);
+        const olderAvgChanges = olderSessions.reduce((sum, s) => sum + (s.codeDeltas?.length || 0), 0) / Math.max(olderSessions.length, 1);
+
+        if (recentAvgChanges > olderAvgChanges * 1.1) return 'increasing';
+        if (recentAvgChanges < olderAvgChanges * 0.9) return 'decreasing';
+        return 'stable';
+    }
+
+    /**
+     * Analyze technology usage
+     */
+    analyzeTechnologyUsage() {
+        const fileTypes = {};
+        this.sessions.forEach(session => {
+            if (session.currentFile) {
+                const ext = session.currentFile.split('.').pop();
+                if (ext) {
+                    fileTypes[ext] = (fileTypes[ext] || 0) + 1;
+                }
+            }
+        });
+
+        return Object.entries(fileTypes)
+            .sort(([,a], [,b]) => b - a)
+            .slice(0, 10)
+            .map(([type, count]) => ({ type, count }));
+    }
+
+    /**
+     * Calculate sessions per day
+     */
+    calculateSessionsPerDay() {
+        const now = new Date();
+        const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        const recentSessions = this.sessions.filter(s => 
+            s.timestamp && new Date(s.timestamp) > oneWeekAgo
+        );
+
+        return recentSessions.length / 7;
+    }
+
+    /**
+     * Calculate average changes per session
+     */
+    calculateAverageChangesPerSession() {
+        if (this.sessions.length === 0) return 0;
+        
+        const totalChanges = this.sessions.reduce((sum, s) => sum + (s.codeDeltas?.length || 0), 0);
+        return totalChanges / this.sessions.length;
+    }
+
+    /**
+     * Calculate code velocity
+     */
+    calculateCodeVelocity() {
+        const sessionsWithDuration = this.sessions.filter(s => s.duration && s.duration > 0);
+        if (sessionsWithDuration.length === 0) return 0;
+
+        const totalChanges = this.sessions.reduce((sum, s) => sum + (s.codeDeltas?.length || 0), 0);
+        const totalDuration = sessionsWithDuration.reduce((sum, s) => sum + s.duration, 0);
+
+        return totalChanges / (totalDuration / 3600); // Changes per hour
+    }
+
+    /**
+     * Calculate conversation efficiency
+     */
+    calculateConversationEfficiency() {
+        if (this.conversations.length === 0) return 0;
+
+        const totalTokens = this.conversations.reduce((sum, c) => sum + (c.tokens || 0), 0);
+        const totalSessions = this.sessions.length;
+
+        return totalTokens / Math.max(totalSessions, 1); // Tokens per session
     }
 
     async viewSession(sessionId) {
@@ -566,10 +2061,18 @@ class LiveDashboard {
             }
             
             const data = await response.json();
+            console.log('Session data received:', data);
             
             if (data.success) {
-                // Display session details in a modal or new page
-                this.showSessionDetails(data.session);
+                // Display session details with enhanced program slicing analysis
+                if (this.enhancedSessionModal) {
+                    await this.enhancedSessionModal.showEnhancedSessionDetails(data.session);
+                    console.log('Enhanced session details modal with program slicing should be shown');
+                } else {
+                    // Fallback to basic session details
+                    this.showSessionDetails(data.session);
+                    console.log('Basic session details modal should be shown');
+                }
             } else {
                 throw new Error(data.error || 'Failed to load session details');
             }
@@ -579,33 +2082,6 @@ class LiveDashboard {
         }
     }
 
-    async returnToContext(sessionId) {
-        try {
-            console.log(`Returning to context for session: ${sessionId}`);
-            
-            const response = await fetch(`/api/session/${sessionId}/return-to-context`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                }
-            });
-            
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            
-            const data = await response.json();
-            
-            if (data.success) {
-                this.showSuccess('Session context restored in Cursor IDE');
-            } else {
-                throw new Error(data.error || 'Failed to restore context');
-            }
-        } catch (error) {
-            console.error('Error returning to context:', error);
-            this.showError('Failed to restore context: ' + error.message);
-        }
-    }
 
 
     showLoading(show) {
@@ -645,33 +2121,40 @@ class LiveDashboard {
     }
 
     showSessionDetails(session) {
+        console.log('showSessionDetails called with session:', session);
         const modal = document.getElementById('sessionModal');
         const title = document.getElementById('session-detail-title');
         const container = modal?.querySelector('.session-detail-container');
         
+        console.log('Modal elements found:', { modal: !!modal, title: !!title, container: !!container });
+        
         if (modal && title && container) {
             const projectName = this.extractProjectName(session.currentFile);
-            const eventType = this.getEventType(session);
+            const eventType = this.getEventTypeSync(session);
             const workflowMetrics = this.calculateWorkflowMetrics(session);
             
-            title.textContent = `Work Session: ${session.intent || 'Temporal Actions'}`;
+            title.textContent = `Work Session: ${this.formatIntent(session.intent)}`;
             container.innerHTML = `
                 <div class="session-detail-content">
                     <div class="session-header">
                         <div class="session-title-section">
-                            <h2 class="session-title">${session.intent || 'Work Session'}</h2>
+                            <h2 class="session-title">${this.formatIntent(session.intent)}</h2>
                             <div class="session-badges">
-                                <span class="event-type-badge ${eventType}">${eventType}</span>
+                                <span class="event-type-badge ${eventType}">${this.formatEventType(eventType)}</span>
                                 <span class="project-badge">${projectName}</span>
-                                <span class="status-badge ${session.outcome || 'in_progress'}">${session.outcome || 'In Progress'}</span>
+                                <span class="status-badge ${(session.outcome || 'in_progress').toLowerCase()}">${this.formatStatus(session.outcome)}</span>
                             </div>
                         </div>
                         <div class="session-actions">
-                            <button class="btn btn-primary btn-sm" onclick="dashboard.returnToContext('${session.id}')">
+                            <button class="btn btn-primary btn-sm" onclick="generateNotebook('${session.id}')">
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                    <polyline points="14,2 14,8 20,8"></polyline>
+                                    <line x1="16" y1="13" x2="8" y2="13"></line>
+                                    <line x1="16" y1="17" x2="8" y2="17"></line>
+                                    <polyline points="10,9 9,9 8,9"></polyline>
                                 </svg>
-                                Return to Context
+                                Generate Notebook
                             </button>
                         </div>
                     </div>
@@ -688,7 +2171,14 @@ class LiveDashboard {
                                 </div>
                                 <div class="metadata-item">
                                     <span class="metadata-label">Start Time</span>
-                                    <span class="metadata-value">${new Date(session.timestamp).toLocaleString()}</span>
+                                    <span class="metadata-value">${new Date(session.timestamp).toLocaleString('en-US', {
+                                        year: 'numeric',
+                                        month: 'short',
+                                        day: 'numeric',
+                                        hour: 'numeric',
+                                        minute: '2-digit',
+                                        hour12: true
+                                    })}</span>
                                 </div>
                                 <div class="metadata-item">
                                     <span class="metadata-label">Duration</span>
@@ -696,7 +2186,7 @@ class LiveDashboard {
                                 </div>
                                 <div class="metadata-item">
                                     <span class="metadata-label">Primary File</span>
-                                    <span class="metadata-value">${session.currentFile ? session.currentFile.split('/').pop() : 'Unknown'}</span>
+                                    <span class="metadata-value" title="${session.currentFile || 'Unknown'}">${session.currentFile ? session.currentFile.split('/').pop() : 'Unknown'}</span>
                                 </div>
                             </div>
                         </div>
@@ -717,10 +2207,6 @@ class LiveDashboard {
                                 <div class="metadata-item">
                                     <span class="metadata-label">Files Modified</span>
                                     <span class="metadata-value">${workflowMetrics.filesModified}</span>
-                                </div>
-                                <div class="metadata-item">
-                                    <span class="metadata-label">Productivity Score</span>
-                                    <span class="metadata-value">${workflowMetrics.productivityScore}/100</span>
                                 </div>
                             </div>
                         </div>
@@ -765,6 +2251,7 @@ class LiveDashboard {
                             <button class="tab-btn" onclick="dashboard.switchSessionTab('code')">Code Changes</button>
                             <button class="tab-btn" onclick="dashboard.switchSessionTab('files')">File Changes</button>
                             <button class="tab-btn" onclick="dashboard.switchSessionTab('conversations')">Conversations</button>
+                            <button class="tab-btn" onclick="dashboard.switchSessionTab('visualizations')">Visualizations</button>
                         </div>
                         
                         <div class="tab-content">
@@ -786,13 +2273,18 @@ class LiveDashboard {
                             </div>
                             
                             <div id="session-tab-conversations" class="tab-panel">
-                                ${session.conversations && session.conversations.length > 0 ? this.generateConversationsHTML(session) : '<p>No conversations recorded for this session.</p>'}
+                                ${this.getConversationsForSession(session.id) && this.getConversationsForSession(session.id).length > 0 ? this.generateConversationsHTML(session) : '<p>No conversations recorded for this session.</p>'}
+                            </div>
+                            
+                            <div id="session-tab-visualizations" class="tab-panel">
+                                ${this.generateVisualizationsHTML(session)}
                             </div>
                         </div>
                     </div>
                 </div>
             `;
             modal.classList.add('active');
+            console.log('Modal should now be visible with active class');
             
             // Add click-outside-to-close functionality (only if not already added)
             if (!modal.hasAttribute('data-click-listener-added')) {
@@ -836,31 +2328,269 @@ class LiveDashboard {
     }
 
     generateConversationsHTML(session) {
-        if (!session.conversations || session.conversations.length === 0) {
-            return '<p>No conversations recorded for this session.</p>';
+        // Try multiple data sources for conversations
+        let conversations = session.conversations || 
+                            session.conversationEvents || 
+                            session.messages || 
+                            session.prompts || 
+                            this.getConversationsForSession(session.id) || 
+                            [];
+
+        // If no conversations exist, try to generate them from available data
+        if (!conversations || conversations.length === 0) {
+            conversations = this.generateConversationsFromSessionData(session);
+        }
+
+        // Enhance existing conversations with prompt extraction
+        conversations = conversations.map(conv => this.enhanceConversationWithPromptExtraction(conv, session));
+
+        if (!conversations || conversations.length === 0) {
+            return `
+                <div class="no-conversations">
+                    <p>No conversations recorded for this session.</p>
+                    <div class="conversation-fallback">
+                        <button class="btn btn-small btn-primary" onclick="dashboard.loadSessionConversations('${session.id}')">
+                            Load Conversations
+                        </button>
+                    </div>
+                </div>
+            `;
         }
 
         return `
             <div class="conversations-list">
-                ${session.conversations.map((conv, index) => `
-                    <div class="conversation-item">
+                ${conversations.map((conv, index) => `
+                    <div class="conversation-item" onclick="dashboard.showConversationDetail('${session.id}', ${index})">
                         <div class="conversation-header">
                             <span class="conversation-index">#${index + 1}</span>
-                            <span class="conversation-timestamp">${new Date(conv.timestamp || session.timestamp).toLocaleTimeString()}</span>
+                            <span class="conversation-timestamp">${new Date(conv.timestamp || conv.created_at || session.timestamp).toLocaleTimeString()}</span>
+                            ${conv.extractedPrompts && conv.extractedPrompts.length > 0 ? `
+                                <span class="prompt-indicator" title="${conv.extractedPrompts.length} prompts extracted">
+                                    ${conv.extractedPrompts.length}
+                                </span>
+                            ` : ''}
+                            ${conv.intent ? `
+                                <span class="intent-badge intent-${conv.intent}">${this.formatIntent(conv.intent)}</span>
+                            ` : ''}
                         </div>
                         <div class="conversation-content">
                             <div class="conversation-prompt">
-                                <strong>User:</strong> ${conv.prompt || conv.userMessage || 'No prompt recorded'}
+                                <strong>User:</strong> ${this.truncateText(conv.prompt || conv.userMessage || conv.content || conv.message || 'No prompt recorded', 100)}
                             </div>
                             <div class="conversation-response">
-                                <strong>AI:</strong> ${conv.response || conv.aiMessage || 'No response recorded'}
+                                <strong>AI:</strong> ${this.truncateText(conv.response || conv.aiMessage || conv.assistantMessage || 'No response recorded', 100)}
                             </div>
+                            ${conv.extractedPrompts && conv.extractedPrompts.length > 0 ? `
+                                <div class="extracted-prompts-preview">
+                                    <strong>Extracted Prompts:</strong>
+                                    ${conv.extractedPrompts.slice(0, 2).map(prompt => `
+                                        <span class="prompt-tag prompt-${prompt.type}">${this.truncateText(prompt.content, 30)}</span>
+                                    `).join('')}
+                                    ${conv.extractedPrompts.length > 2 ? `<span class="more-prompts">+${conv.extractedPrompts.length - 2} more</span>` : ''}
+                                </div>
+                            ` : ''}
                         </div>
                         ${conv.tokens ? `<div class="conversation-meta">Tokens: ${conv.tokens}</div>` : ''}
+                        ${conv.complexity ? `<div class="conversation-meta">Complexity: ${conv.complexity.level}</div>` : ''}
+                        <div class="conversation-actions">
+                            <button class="btn btn-small" onclick="event.stopPropagation(); dashboard.copyConversation('${session.id}', ${index})">Copy</button>
+                            ${conv.extractedPrompts && conv.extractedPrompts.length > 0 ? `
+                                <button class="btn btn-small btn-secondary" onclick="event.stopPropagation(); dashboard.showPromptDetails('${session.id}', ${index})">Prompts</button>
+                            ` : ''}
+                        </div>
                     </div>
                 `).join('')}
             </div>
         `;
+    }
+
+
+    /**
+     * Enhance conversation with prompt extraction data
+     */
+    enhanceConversationWithPromptExtraction(conversation, session) {
+        const content = conversation.prompt || conversation.userMessage || conversation.content || conversation.message || '';
+        
+        if (!content || content === 'No prompt recorded') {
+            return conversation;
+        }
+        
+        // Extract prompts if not already done
+        if (!conversation.extractedPrompts) {
+            conversation.extractedPrompts = this.extractPromptsFromContent(content);
+        }
+        
+        // Add intent classification if not present
+        if (!conversation.intent && conversation.extractedPrompts.length > 0) {
+            conversation.intent = this.classifyIntent(content);
+        }
+        
+        // Add complexity analysis if not present
+        if (!conversation.complexity && conversation.extractedPrompts.length > 0) {
+            conversation.complexity = this.analyzeComplexity(content);
+        }
+        
+        return conversation;
+    }
+
+    /**
+     * Extract prompts from content using the enhanced system
+     */
+    extractPromptsFromContent(content) {
+        if (!content || typeof content !== 'string') return [];
+        
+        // Use the global prompt extractor if available
+        if (window.enhancedPromptExtractor) {
+            return window.enhancedPromptExtractor.extractPrompts(content);
+        }
+        
+        // Fallback to basic extraction
+        const prompts = [];
+        const patterns = [
+            { pattern: /(?:prompt|question|ask|request):\s*(.+?)(?:\n\n|\n$|$)/gi, type: 'direct_prompt' },
+            { pattern: /(?:user|you):\s*(.+?)(?:\n\n|\n$|$)/gi, type: 'user_directive' },
+            { pattern: /(?:please|can you|help me):\s*(.+?)(?:\n\n|\n$|$)/gi, type: 'request' },
+            { pattern: /@cursor\s+(.+?)(?:\n\n|\n$|$)/gi, type: 'cursor_directive' },
+            { pattern: /@ai\s+(.+?)(?:\n\n|\n$|$)/gi, type: 'ai_directive' }
+        ];
+        
+        patterns.forEach(({ pattern, type }) => {
+            const matches = [...content.matchAll(pattern)];
+            matches.forEach(match => {
+                prompts.push({
+                    type: type,
+                    content: match[1]?.trim(),
+                    fullMatch: match[0],
+                    timestamp: new Date().toISOString()
+                });
+            });
+        });
+        
+        return prompts;
+    }
+
+    /**
+     * Classify intent from content
+     */
+    classifyIntent(content) {
+        if (!content || typeof content !== 'string') return 'general';
+        
+        const text = content.toLowerCase();
+        const intentPatterns = {
+            'data_visualization': ['plot', 'chart', 'graph', 'visualize', 'matplotlib', 'seaborn', 'plotly', 'show'],
+            'data_analysis': ['analyze', 'analysis', 'data', 'dataset', 'pandas', 'numpy', 'statistics'],
+            'code_implementation': ['implement', 'create', 'build', 'write', 'function', 'class', 'method'],
+            'debugging': ['debug', 'error', 'bug', 'fix', 'issue', 'problem', 'troubleshoot'],
+            'optimization': ['optimize', 'performance', 'speed', 'efficient', 'improve', 'better'],
+            'documentation': ['document', 'comment', 'explain', 'readme', 'docstring', 'help'],
+            'testing': ['test', 'testing', 'unit test', 'assert', 'verify', 'check'],
+            'refactoring': ['refactor', 'restructure', 'reorganize', 'clean up', 'simplify']
+        };
+        
+        let maxScore = 0;
+        let detectedIntent = 'general';
+        
+        Object.entries(intentPatterns).forEach(([intent, keywords]) => {
+            const score = keywords.reduce((acc, keyword) => {
+                return acc + (text.includes(keyword) ? 1 : 0);
+            }, 0);
+            
+            if (score > maxScore) {
+                maxScore = score;
+                detectedIntent = intent;
+            }
+        });
+        
+        return detectedIntent;
+    }
+
+    /**
+     * Analyze complexity of content
+     */
+    analyzeComplexity(content) {
+        if (!content || typeof content !== 'string') return { level: 'simple', wordCount: 0 };
+        
+        const words = content.split(/\s+/).length;
+        const sentences = content.split(/[.!?]+/).length;
+        const technicalTerms = ['function', 'class', 'import', 'def', 'return', 'variable', 'array', 'dataframe', 'model', 'algorithm'];
+        const technicalTermCount = technicalTerms.filter(term => content.toLowerCase().includes(term)).length;
+        
+        let complexity = 'simple';
+        if (words > 50 || sentences > 3 || technicalTermCount > 3) {
+            complexity = 'complex';
+        } else if (words > 20 || sentences > 2 || technicalTermCount > 1) {
+            complexity = 'medium';
+        }
+        
+        return {
+            level: complexity,
+            wordCount: words,
+            sentenceCount: sentences,
+            technicalTermCount: technicalTermCount
+        };
+    }
+
+    /**
+     * Format intent for display
+     */
+    formatIntent(intent) {
+        return intent.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+    }
+
+
+    /**
+     * Show detailed prompt information
+     */
+    showPromptDetails(sessionId, conversationIndex) {
+        const session = this.sessions.find(s => s.id === sessionId);
+        if (!session || !session.conversations) return;
+        
+        const conversation = session.conversations[conversationIndex];
+        if (!conversation || !conversation.extractedPrompts) return;
+        
+        const modal = document.createElement('div');
+        modal.className = 'modal-overlay';
+        modal.innerHTML = `
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Extracted Prompts</h3>
+                    <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="prompts-list">
+                        ${conversation.extractedPrompts.map(prompt => `
+                            <div class="prompt-item" data-type="${prompt.type}">
+                                <div class="prompt-type">${this.getPromptTypeLabel(prompt.type)}</div>
+                                <div class="prompt-content">${prompt.content}</div>
+                                <div class="prompt-meta">
+                                    <span class="prompt-timestamp">${new Date(prompt.timestamp).toLocaleString()}</span>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+    }
+
+    /**
+     * Get user-friendly label for prompt type
+     */
+    getPromptTypeLabel(type) {
+        const labels = {
+            'direct_prompt': 'Direct Prompt',
+            'user_directive': 'User Directive',
+            'request': 'Request',
+            'cursor_directive': 'Cursor Directive',
+            'ai_directive': 'AI Directive',
+            'code_comment_prompt': 'Code Comment',
+            'python_comment_prompt': 'Python Comment',
+            'task_definition': 'Task Definition',
+            'goal_definition': 'Goal Definition'
+        };
+        return labels[type] || type;
     }
 
     async openPrivacyModal() {
@@ -873,6 +2603,15 @@ class LiveDashboard {
                 modalBody.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p>Loading privacy analysis...</p></div>';
             }
             modal.classList.add('active');
+            
+            // Add click-outside-to-close functionality
+            this.setupModalClickOutside(modal);
+            
+            // Add keyboard support (ESC key to close)
+            this.setupModalKeyboard(modal);
+            
+            // Prevent body scroll when modal is open
+            document.body.classList.add('modal-open');
             
             try {
                 // Load privacy analysis content
@@ -911,6 +2650,15 @@ class LiveDashboard {
         const modal = document.getElementById('privacyModal');
         if (modal) {
             modal.classList.remove('active');
+            
+            // Restore body scroll
+            document.body.classList.remove('modal-open');
+            
+            // Remove click-outside event listener
+            this.removeModalClickOutside(modal);
+            
+            // Remove keyboard event listener
+            this.removeModalKeyboard(modal);
         }
     }
 
@@ -918,6 +2666,63 @@ class LiveDashboard {
         const modal = document.getElementById('infoModal');
         if (modal) {
             modal.classList.remove('active');
+        }
+    }
+
+    /**
+     * Setup click-outside-to-close functionality for modal
+     */
+    setupModalClickOutside(modal) {
+        const clickOutsideHandler = (event) => {
+            // Only close if clicking on the modal backdrop (not the modal content)
+            if (event.target === modal) {
+                this.closePrivacyModal();
+            }
+        };
+
+        // Store the handler so we can remove it later
+        modal._clickOutsideHandler = clickOutsideHandler;
+        
+        // Add event listener with a small delay to prevent immediate closure
+        setTimeout(() => {
+            modal.addEventListener('click', clickOutsideHandler);
+        }, 100);
+    }
+
+    /**
+     * Remove click-outside event listener from modal
+     */
+    removeModalClickOutside(modal) {
+        if (modal._clickOutsideHandler) {
+            modal.removeEventListener('click', modal._clickOutsideHandler);
+            delete modal._clickOutsideHandler;
+        }
+    }
+
+    /**
+     * Setup keyboard support for modal (ESC key to close)
+     */
+    setupModalKeyboard(modal) {
+        const keyHandler = (event) => {
+            if (event.key === 'Escape') {
+                this.closePrivacyModal();
+            }
+        };
+
+        // Store the handler so we can remove it later
+        modal._keyHandler = keyHandler;
+        
+        // Add event listener
+        document.addEventListener('keydown', keyHandler);
+    }
+
+    /**
+     * Remove keyboard event listener from modal
+     */
+    removeModalKeyboard(modal) {
+        if (modal._keyHandler) {
+            document.removeEventListener('keydown', modal._keyHandler);
+            delete modal._keyHandler;
         }
     }
 
@@ -1048,7 +2853,19 @@ class LiveDashboard {
         try {
             const sessions = this.sessions || [];
             const totalSessions = sessions.length;
-            const activeSessions = sessions.filter(s => s.status === 'active').length;
+            
+            // Define "active" as sessions with recent activity (within last 30 minutes)
+            const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
+            const activeSessions = sessions.filter(s => {
+                const sessionTime = new Date(s.timestamp || s.startTime || 0);
+                const isRecent = sessionTime > thirtyMinutesAgo;
+                const isInProgress = (s.outcome === 'in_progress' || 
+                                    s.outcome === 'IN_PROGRESS' || 
+                                    s.phase === 'IN_PROGRESS' ||
+                                    s.status === 'active') && isRecent;
+                return isInProgress;
+            }).length;
+            
             const totalDuration = sessions.reduce((sum, s) => sum + (s.duration || 0), 0);
             
             container.innerHTML = `
@@ -1062,10 +2879,6 @@ class LiveDashboard {
                         <div class="stat-item">
                             <div class="stat-label">Total Sessions</div>
                             <div class="stat-value">${totalSessions}</div>
-                        </div>
-                        <div class="stat-item">
-                            <div class="stat-label">Active Sessions</div>
-                            <div class="stat-value">${activeSessions}</div>
                         </div>
                         <div class="stat-item">
                             <div class="stat-label">Total Duration</div>
@@ -1221,9 +3034,8 @@ class LiveDashboard {
 
     calculatePrivacyMetrics(sessions) {
         const totalSessions = sessions.length;
-        const totalConversations = sessions.reduce((sum, s) => sum + (s.conversations?.length || 0), 0);
-        const totalTokens = sessions.reduce((sum, s) => 
-            sum + (s.conversations?.reduce((convSum, c) => convSum + (c.tokens || 0), 0) || 0), 0);
+        const totalConversations = this.conversations.length;
+        const totalTokens = this.conversations.reduce((sum, c) => sum + (c.tokens || 0), 0);
         
         // Calculate sensitive file types
         const fileTypes = new Set();
@@ -1413,17 +3225,48 @@ class LiveDashboard {
 
     formatDuration(seconds) {
         if (!seconds) return '0s';
-        const hours = Math.floor(seconds / 3600);
+        
+        const days = Math.floor(seconds / 86400);
+        const hours = Math.floor((seconds % 86400) / 3600);
         const minutes = Math.floor((seconds % 3600) / 60);
         const secs = Math.floor(seconds % 60);
         
-        if (hours > 0) {
-            return `${hours}h ${minutes}m`;
-        } else if (minutes > 0) {
-            return `${minutes}m ${secs}s`;
-        } else {
-            return `${secs}s`;
+        // For very large durations (months/weeks)
+        if (days >= 30) {
+            const months = Math.floor(days / 30);
+            const remainingDays = days % 30;
+            if (months >= 12) {
+                const years = Math.floor(months / 12);
+                const remainingMonths = months % 12;
+                return remainingMonths > 0 ? `${years}y ${remainingMonths}mo` : `${years}y`;
+            }
+            return remainingDays > 0 ? `${months}mo ${remainingDays}d` : `${months}mo`;
         }
+        
+        // For large durations (weeks/days)
+        if (days >= 7) {
+            const weeks = Math.floor(days / 7);
+            const remainingDays = days % 7;
+            return remainingDays > 0 ? `${weeks}w ${remainingDays}d` : `${weeks}w`;
+        }
+        
+        // For medium durations (days/hours)
+        if (days > 0) {
+            return hours > 0 ? `${days}d ${hours}h` : `${days}d`;
+        }
+        
+        // For small durations (hours/minutes)
+        if (hours > 0) {
+            return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+        }
+        
+        // For very small durations (minutes/seconds)
+        if (minutes > 0) {
+            return secs > 0 ? `${minutes}m ${secs}s` : `${minutes}m`;
+        }
+        
+        // For tiny durations (seconds only)
+        return `${secs}s`;
     }
 
     formatStatus(status) {
@@ -1705,11 +3548,25 @@ class LiveDashboard {
     switchView(viewType) {
         console.log('Switching to view:', viewType);
         
+        // Ensure loading overlay is hidden and dashboard content is visible
+        const loadingOverlay = document.getElementById('loadingOverlay');
+        if (loadingOverlay) {
+            loadingOverlay.style.display = 'none';
+            loadingOverlay.classList.add('hidden');
+        }
+        
+        const dashboardContent = document.getElementById('dashboardContent');
+        if (dashboardContent) {
+            dashboardContent.style.display = 'block';
+            dashboardContent.style.visibility = 'visible';
+            dashboardContent.style.opacity = '1';
+        }
+        
         // Update current view
         this.currentView = viewType;
         
         // Remove active class from all view buttons
-        document.querySelectorAll('.view-btn').forEach(btn => {
+        document.querySelectorAll('.sidebar-link').forEach(btn => {
             btn.classList.remove('active');
         });
         
@@ -1720,6 +3577,18 @@ class LiveDashboard {
             console.log('Set active button for view:', viewType);
         } else {
             console.error('Button not found for view:', viewType);
+        }
+        
+        // Show/hide analysis section based on view - only show for projects-sessions
+        const analysisSection = document.getElementById('analysis-section');
+        if (analysisSection) {
+            if (viewType === 'projects-sessions') {
+                analysisSection.style.display = 'block';
+                console.log('Showing analysis section for projects-sessions view');
+            } else {
+                analysisSection.style.display = 'none';
+                console.log('Hiding analysis section for', viewType, 'view');
+            }
         }
         
         // Render the selected view
@@ -1760,6 +3629,9 @@ class LiveDashboard {
             case 'embeddings':
                 this.renderEmbeddings();
                 break;
+            case 'memory-management':
+                this.renderMemoryManagement();
+                break;
             default:
                 this.renderTimeline();
         }
@@ -1769,7 +3641,11 @@ class LiveDashboard {
         const container = document.getElementById('sessions-list');
         if (!container) return;
 
-        console.log(`Rendering timeline with ${this.sessions.length} events`);
+        // Use enhanced timeline if available
+        if (window.enhancedTimeline) {
+            window.enhancedTimeline.loadData();
+            return;
+        }
 
         if (this.sessions.length === 0) {
             container.innerHTML = '<div class="no-sessions">No events found</div>';
@@ -1824,6 +3700,27 @@ class LiveDashboard {
     }
 
     async renderProjectsSessions() {
+        // Ensure loading overlay is hidden and dashboard content is visible
+        const loadingOverlay = document.getElementById('loadingOverlay');
+        if (loadingOverlay) {
+            loadingOverlay.style.display = 'none';
+            loadingOverlay.classList.add('hidden');
+        }
+        
+        const dashboardContent = document.getElementById('dashboardContent');
+        if (dashboardContent) {
+            dashboardContent.style.display = 'block';
+            dashboardContent.style.visibility = 'visible';
+            dashboardContent.style.opacity = '1';
+        }
+        
+        // Show the analysis section for projects-sessions view
+        const analysisSection = document.getElementById('analysis-section');
+        if (analysisSection) {
+            analysisSection.style.display = 'block';
+            console.log('Showing analysis section for projects-sessions view');
+        }
+
         const container = document.getElementById('sessions-list');
         if (!container) {
             console.error('sessions-list container not found');
@@ -1850,19 +3747,39 @@ class LiveDashboard {
         }
 
         // Group sessions by project
-        const projects = this.groupSessionsByProject();
+        const projects = this.groupSessionsByProject(this.sessions);
         console.log('Grouped projects:', projects);
         
-        // Render projects and sessions
+        // Check if we have any projects
+        if (Object.keys(projects).length === 0) {
+            container.innerHTML = '<div class="no-data">No projects found. Sessions may not have valid file paths.</div>';
+            return;
+        }
+        
+        // Render projects and sessions with enhanced UI
         let html = '<div class="projects-sessions-view">';
+        html += '<div class="projects-header">';
         html += '<h2>Projects & Sessions</h2>';
+        html += '<div class="projects-summary">';
+        html += `<span class="summary-stat">${Object.keys(projects).length} Projects</span>`;
+        html += `<span class="summary-stat">${this.sessions.length} Total Sessions</span>`;
+        html += `<span class="summary-stat">${Object.values(projects).reduce((sum, p) => sum + p.activeSessions, 0)} Active</span>`;
+        html += '</div>';
+        html += '</div>';
         
         if (Object.keys(projects).length === 0) {
             html += '<div class="no-data">No projects found</div>';
         } else {
-            Object.entries(projects).forEach(([projectName, sessions]) => {
-                console.log(`Rendering project: ${projectName} with ${sessions.length} sessions`);
-                html += this.renderProjectCard(projectName, sessions);
+            // Sort projects by activity (most recent first)
+            const sortedProjects = Object.entries(projects).sort((a, b) => {
+                const aTime = a[1].lastActivity ? new Date(a[1].lastActivity) : new Date(0);
+                const bTime = b[1].lastActivity ? new Date(b[1].lastActivity) : new Date(0);
+                return bTime - aTime;
+            });
+            
+            sortedProjects.forEach(([projectName, projectData]) => {
+                console.log(`Rendering project: ${projectName} with ${projectData.sessions.length} sessions`);
+                html += this.renderEnhancedProjectCard(projectName, projectData);
             });
         }
         
@@ -1871,37 +3788,110 @@ class LiveDashboard {
         container.innerHTML = html;
     }
 
-    groupSessionsByProject() {
-        const projects = {};
+
+
+    renderEnhancedProjectCard(projectName, projectData) {
+        const { sessions, category, subproject, totalSessions, activeSessions, totalDuration, lastActivity, fileTypes } = projectData;
         
-        // Safety check for sessions
-        if (!this.sessions || !Array.isArray(this.sessions)) {
-            console.warn('No sessions available for grouping');
-            return projects;
-        }
+        // Format duration
+        const durationText = totalDuration > 60 ? 
+            `${Math.round(totalDuration / 60)}h ${Math.round(totalDuration % 60)}m` : 
+            `${Math.round(totalDuration)}m`;
         
-        this.sessions.forEach(session => {
-            const projectName = this.extractProjectName(session);
-            if (!projects[projectName]) {
-                projects[projectName] = [];
-            }
-            projects[projectName].push(session);
-        });
+        // Format last activity
+        const lastActivityText = lastActivity ? 
+            this.formatRelativeTime(lastActivity) : 'No recent activity';
         
-        return projects;
+        // Get category icon and color
+        const categoryInfo = this.getCategoryInfo(category);
+        
+        return `
+            <div class="enhanced-project-card" data-category="${category}">
+                <div class="project-header" onclick="toggleProject('${projectName}')">
+                    <div class="project-title-section">
+                        <div class="project-icon ${categoryInfo.class}">${categoryInfo.icon}</div>
+                        <div class="project-info">
+                            <h3 class="project-name">${projectName}</h3>
+                            ${subproject ? `<p class="project-subproject">${subproject}</p>` : ''}
+                            <p class="project-category">${categoryInfo.label}</p>
+                        </div>
+                    </div>
+                    <div class="project-metrics">
+                        <div class="metric-group">
+                            <span class="metric-value">${totalSessions}</span>
+                            <span class="metric-label">Sessions</span>
+                        </div>
+                        <div class="metric-group">
+                            <span class="metric-value active">${activeSessions}</span>
+                            <span class="metric-label">Active</span>
+                        </div>
+                        <div class="metric-group">
+                            <span class="metric-value">${durationText}</span>
+                            <span class="metric-label">Duration</span>
+                        </div>
+                    </div>
+                    <div class="project-toggle">▼</div>
+                </div>
+                <div class="project-details" id="project-${projectName.replace(/\s+/g, '-')}">
+                    <div class="project-meta">
+                        <div class="meta-item">
+                            <span class="meta-label">Last Activity:</span>
+                            <span class="meta-value">${lastActivityText}</span>
+                        </div>
+                        <div class="meta-item">
+                            <span class="meta-label">File Types:</span>
+                            <span class="meta-value">${fileTypes.slice(0, 5).join(', ')}${fileTypes.length > 5 ? '...' : ''}</span>
+                        </div>
+                    </div>
+                    <div class="project-sessions">
+                        ${sessions.slice(0, 5).map(session => this.renderSessionCard(session)).join('')}
+                        ${sessions.length > 5 ? `<div class="more-sessions">+${sessions.length - 5} more sessions</div>` : ''}
+                    </div>
+                </div>
+            </div>
+        `;
     }
 
-    extractProjectName(session) {
-        // Extract project name from file path or use a default
-        if (session.currentFile) {
-            const pathParts = session.currentFile.split('/');
-            return pathParts[pathParts.length - 2] || 'Unknown Project';
-        }
-        return session.intent || 'Unknown Project';
+    /**
+     * Get category information for styling
+     */
+    getCategoryInfo(category) {
+        const categories = {
+            'machine_learning': { icon: '🤖', label: 'Machine Learning', class: 'ml-category' },
+            'development_tools': { icon: '', label: 'Development Tools', class: 'dev-category' },
+            'experiments': { icon: '🧪', label: 'Experiments', class: 'exp-category' },
+            'maintenance': { icon: '', label: 'Maintenance', class: 'maint-category' },
+            'other': { icon: '📁', label: 'Other', class: 'other-category' }
+        };
+        return categories[category] || categories['other'];
+    }
+
+    /**
+     * Format relative time (e.g., "2 hours ago")
+     */
+    formatRelativeTime(date) {
+        const now = new Date();
+        const diffMs = now - date;
+        const diffMins = Math.floor(diffMs / (1000 * 60));
+        const diffHours = Math.floor(diffMins / 60);
+        const diffDays = Math.floor(diffHours / 24);
+        
+        if (diffMins < 1) return 'Just now';
+        if (diffMins < 60) return `${diffMins}m ago`;
+        if (diffHours < 24) return `${diffHours}h ago`;
+        if (diffDays < 7) return `${diffDays}d ago`;
+        return date.toLocaleDateString();
     }
 
     renderProjectCard(projectName, sessions) {
-        const activeSessions = sessions.filter(s => s.outcome === 'IN_PROGRESS' || s.phase === 'IN_PROGRESS').length;
+        // Legacy method - keeping for compatibility
+        const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
+        const activeSessions = sessions.filter(s => {
+            const sessionTime = new Date(s.timestamp || s.startTime || 0);
+            const isRecent = sessionTime > thirtyMinutesAgo;
+            const isInProgress = (s.outcome === 'IN_PROGRESS' || s.phase === 'IN_PROGRESS') && isRecent;
+            return isInProgress;
+        }).length;
         const totalSessions = sessions.length;
         
         return `
@@ -1922,7 +3912,7 @@ class LiveDashboard {
     }
 
     renderSessionCard(session) {
-        const statusClass = session.outcome === 'IN_PROGRESS' || session.phase === 'IN_PROGRESS' ? 'active' : 'completed';
+        const statusClass = session.outcome === 'IN_PROGRESS' || session.phase === 'IN_PROGRESS' ? 'active' : 'inactive';
         const changes = session.codeDeltas ? session.codeDeltas.length : 0;
         
         return `
@@ -1937,6 +3927,7 @@ class LiveDashboard {
                     <div class="session-stats">
                         <span>${changes} changes</span>
                         <span>${new Date(session.timestamp).toLocaleString()}</span>
+                        ${this.getConversationSummary(session) ? `<span class="conversation-indicator">${this.getConversationSummary(session)}</span>` : ''}
                     </div>
                 </div>
             </div>
@@ -2039,7 +4030,7 @@ class LiveDashboard {
                 </div>
                 <div class="notebook-actions">
                     <button class="btn btn-sm btn-primary" onclick="viewSession('${session.id}')">View Details</button>
-                    <button class="btn btn-sm btn-secondary" onclick="returnToContext('${session.id}')">Open in Cursor</button>
+                    <button class="btn btn-sm btn-secondary" onclick="generateNotebook('${session.id}')">Generate Notebook</button>
                 </div>
             </div>
         `).join('');
@@ -2081,6 +4072,26 @@ class LiveDashboard {
             if (clioResponse.status === 'fulfilled' && clioResponse.value.ok) {
                 clioData = await clioResponse.value.json();
                 console.log('Clio analysis data received:', clioData);
+            }
+
+            // Check if we have any data to display
+            if ((!kuraData || !kuraData.success) && (!clioData || !clioData.success)) {
+                container.innerHTML = `
+                    <div class="no-data-state">
+                        <div class="no-data-icon"></div>
+                        <h3>No Analysis Data Available</h3>
+                        <p>Start some coding sessions to see Kura clustering and Clio analysis insights.</p>
+                        <div class="no-data-actions">
+                            <button class="btn btn-primary" onclick="switchView('visualizations')">
+                                View Session Data
+                            </button>
+                            <button class="btn btn-secondary" onclick="location.reload()">
+                                Refresh Analysis
+                            </button>
+                        </div>
+                    </div>
+                `;
+                return;
             }
 
             // Render comprehensive workflow analysis
@@ -2190,49 +4201,86 @@ class LiveDashboard {
         if (!container) return;
         
         try {
-            const response = await fetch('/api/sessions/analyze-with-kura', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                }
-            });
-            const data = await response.json();
+            // Show loading state
+            container.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p>Analyzing workflows with Clio & Kura...</p></div>';
             
-            if (data.success && data.umap_coordinates) {
-                container.innerHTML = `
-                    <div class="embeddings-container">
-                        <div class="embeddings-info">
-                            <h3>UMAP Embeddings</h3>
-                            <p>${data.total_sessions} sessions mapped to 2D space</p>
-                            <p>Click "Enhanced Kura View" to see the interactive UMAP visualization</p>
-                        </div>
-                        <div class="embeddings-preview">
-                            <div class="embedding-stats">
-                                <div class="stat">
-                                    <span class="stat-value">${data.total_sessions}</span>
-                                    <span class="stat-label">Total Sessions</span>
-                                </div>
-                                <div class="stat">
-                                    <span class="stat-value">${data.clusters.length}</span>
-                                    <span class="stat-label">Clusters</span>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="embeddings-actions">
-                            <button class="btn btn-primary" onclick="switchView('visualizations')">
-                                View Workflow Analysis
-                            </button>
-                        </div>
-                    </div>
-                `;
-            } else {
-                container.innerHTML = '<div class="no-sessions">No embedding data available</div>';
-            }
+            // Initialize enhanced cluster map with procedural clustering
+            this.initializeEnhancedClusterMap(container);
+            
         } catch (error) {
             console.error('Error loading embeddings:', error);
-            container.innerHTML = '<div class="no-sessions">Error loading embeddings</div>';
+            container.innerHTML = '<div class="no-sessions">Error loading workflow analysis</div>';
         }
     }
+
+    /**
+     * Initialize enhanced cluster map with procedural clustering
+     */
+    async initializeEnhancedClusterMap(container) {
+        try {
+            // Create container for the enhanced cluster map
+            container.innerHTML = '<div id="enhanced-cluster-map-container"></div>';
+            
+            // Initialize the enhanced cluster map
+            if (typeof EnhancedClusterMap !== 'undefined') {
+                window.enhancedClusterMap = new EnhancedClusterMap();
+                await window.enhancedClusterMap.initialize('enhanced-cluster-map-container');
+                
+                console.log('Enhanced cluster map with procedural clustering initialized successfully');
+            } else {
+                throw new Error('EnhancedClusterMap not available');
+            }
+        } catch (error) {
+            console.error('Error initializing enhanced cluster map:', error);
+            container.innerHTML = '<div class="no-sessions">Error initializing enhanced cluster analysis</div>';
+        }
+    }
+
+    /**
+     * Render topic clustering visualization with OpenClio analysis
+     */
+    async renderTopicClusteringVisualization(kuraData, clioData) {
+        const container = document.getElementById('sessions-list');
+        if (!container) return;
+
+        try {
+            // Load the topic clustering visualization component
+            if (typeof TopicClusteringVisualization === 'undefined') {
+                // Load the script if not already loaded
+                const script = document.createElement('script');
+                script.src = 'components/topic-clustering-visualization.js';
+                script.onload = () => {
+                    this.initializeTopicClusteringVisualization(container);
+                };
+                document.head.appendChild(script);
+            } else {
+                this.initializeTopicClusteringVisualization(container);
+            }
+        } catch (error) {
+            console.error('Error rendering topic clustering visualization:', error);
+            container.innerHTML = '<div class="no-sessions">Error loading topic clustering analysis</div>';
+        }
+    }
+
+    /**
+     * Initialize the topic clustering visualization
+     */
+    async initializeTopicClusteringVisualization(container) {
+        try {
+            // Create container for the topic clustering visualization
+            container.innerHTML = '<div id="topic-clustering-container"></div>';
+            
+            // Initialize the topic clustering visualization
+            window.topicClusteringVisualization = new TopicClusteringVisualization();
+            await window.topicClusteringVisualization.initialize('topic-clustering-container');
+            
+            console.log('Topic clustering visualization initialized successfully');
+        } catch (error) {
+            console.error('Error initializing topic clustering visualization:', error);
+            container.innerHTML = '<div class="no-sessions">Error initializing topic clustering analysis</div>';
+        }
+    }
+
 
     // Helper methods for timeline and projects views
     groupSessionsByDate(sessions) {
@@ -2249,32 +4297,145 @@ class LiveDashboard {
 
     groupSessionsByProject(sessions) {
         const groups = {};
-        sessions.forEach(session => {
-            const projectName = this.extractProjectName(session.currentFile);
-            if (!groups[projectName]) {
-                groups[projectName] = [];
+        
+        // Safety check for sessions parameter
+        if (!sessions || !Array.isArray(sessions)) {
+            console.warn('groupSessionsByProject: sessions parameter is not a valid array:', sessions);
+            return groups;
+        }
+        
+        sessions.forEach((session, index) => {
+            try {
+                const projectInfo = this.extractProjectInfo(session.currentFile);
+                const projectName = projectInfo.project;
+                
+                if (!groups[projectName]) {
+                    groups[projectName] = {
+                        sessions: [],
+                        category: projectInfo.category,
+                        subproject: projectInfo.subproject,
+                        totalSessions: 0,
+                        activeSessions: 0,
+                        totalDuration: 0,
+                        lastActivity: null,
+                        fileTypes: new Set(),
+                        languages: new Set()
+                    };
+                }
+                
+                // Add session to project
+                groups[projectName].sessions.push(session);
+                groups[projectName].totalSessions++;
+                
+                // Calculate metrics
+                const sessionDuration = this.calculateSessionDuration(session);
+                groups[projectName].totalDuration += sessionDuration;
+                
+                // Track file types and languages
+                if (session.currentFile) {
+                    const ext = session.currentFile.split('.').pop();
+                    if (ext) groups[projectName].fileTypes.add(ext);
+                }
+                
+                // Track last activity
+                const sessionTime = new Date(session.timestamp || session.startTime || 0);
+                if (!groups[projectName].lastActivity || sessionTime > groups[projectName].lastActivity) {
+                    groups[projectName].lastActivity = sessionTime;
+                }
+                
+                // Check if session is active (recent activity)
+                const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
+                if (sessionTime > thirtyMinutesAgo) {
+                    groups[projectName].activeSessions++;
+                }
+                
+            } catch (error) {
+                console.warn(`Error processing session ${index}:`, error, session);
             }
-            groups[projectName].push(session);
         });
+        
+        // Convert Sets to Arrays for easier handling
+        Object.values(groups).forEach(project => {
+            project.fileTypes = Array.from(project.fileTypes);
+            project.languages = Array.from(project.languages);
+        });
+        
         return groups;
     }
 
     extractProjectName(filePath) {
         if (!filePath) return 'Unknown Project';
+        
+        // Use the sophisticated project extraction logic from the backend
+        const projectInfo = this.extractProjectInfo(filePath);
+        return projectInfo.project;
+    }
+
+    /**
+     * Extract detailed project information (integrated from backend logic)
+     */
+    extractProjectInfo(filePath) {
+        if (!filePath) return { project: 'Unknown', category: 'other', subproject: null };
+        
         const pathParts = filePath.split('/');
+        const homeIndex = pathParts.findIndex(part => part === 'hamidaho');
         
-        // Skip common directory names
-        const skipDirs = ['src', 'app', 'components', 'public', 'assets', 'css', 'js', 'node_modules'];
-        
-        // Try to find a meaningful project name from the path
-        for (let i = pathParts.length - 1; i >= 0; i--) {
-            const part = pathParts[i];
-            if (part && !skipDirs.includes(part) && !part.includes('.') && part.length > 1) {
-                // Clean up the project name
-                return part.replace(/[-_]/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-            }
+        if (homeIndex === -1) {
+            return { project: 'Unknown', category: 'other', subproject: null };
         }
-        return 'Root Project';
+        
+        // Extract project information from path structure
+        const projectPath = pathParts.slice(homeIndex + 1);
+        
+        if (projectPath.length === 0) {
+            return { project: 'Unknown', category: 'other', subproject: null };
+        }
+        
+        const topLevel = projectPath[0];
+        let project = topLevel;
+        let category = 'other';
+        let subproject = null;
+        
+        // Categorize projects
+        if (topLevel.includes('HF Project') || topLevel.includes('hf')) {
+            category = 'machine_learning';
+            project = 'Hugging Face Research';
+            if (projectPath.length > 1) {
+                subproject = projectPath[1];
+            }
+        } else if (topLevel.includes('cursor_dashboard')) {
+            category = 'development_tools';
+            project = 'PKL Extension Dashboard';
+            if (projectPath.length > 2) {
+                subproject = projectPath[2];
+            }
+        } else if (topLevel.includes('Desktop')) {
+            category = 'experiments';
+            project = 'Desktop Experiments';
+            if (projectPath.length > 1) {
+                subproject = projectPath[1];
+            }
+        } else if (topLevel.includes('updated_notebooks')) {
+            category = 'maintenance';
+            project = 'Notebook Maintenance';
+        } else {
+            category = 'other';
+            project = topLevel.replace(/_/g, ' ').replace(/-/g, ' ');
+        }
+        
+        return { project, category, subproject };
+    }
+
+    /**
+     * Calculate session duration in minutes
+     */
+    calculateSessionDuration(session) {
+        if (!session.timestamp && !session.startTime) return 0;
+        
+        const startTime = new Date(session.startTime || session.timestamp);
+        const endTime = session.endTime ? new Date(session.endTime) : new Date();
+        
+        return Math.max(0, (endTime - startTime) / (1000 * 60)); // Convert to minutes
     }
 
     formatDateHeader(dateString) {
@@ -2297,6 +4458,78 @@ class LiveDashboard {
         }
     }
 
+    formatEventType(eventType) {
+        if (typeof eventType !== 'string') {
+            return String(eventType || 'Unknown');
+        }
+        return eventType.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
+    }
+
+    getEventTypeDisplay(eventType) {
+        // Map event types to display names with fine-grained subtypes
+        const typeMap = {
+            // Data Science & Analysis
+            'data_exploration': 'Data Exploration',
+            'data_visualization': 'Data Visualization',
+            'machine_learning': 'Machine Learning',
+            
+            // Software Development
+            'implementation': 'Implementation',
+            'debugging': 'Debugging',
+            'testing': 'Testing',
+            
+            // Research & Documentation
+            'research': 'Research',
+            'documentation': 'Documentation',
+            
+            // Infrastructure & DevOps
+            'infrastructure': 'Infrastructure',
+            'devops': 'DevOps',
+            
+            // Communication & Collaboration
+            'communication': 'Communication',
+            
+            // Learning & Exploration
+            'learning': 'Learning',
+            
+            // Legacy types
+            'notebook': 'Notebook',
+            'code': 'Code',
+            'conversation': 'Chat',
+            'session': 'Session',
+            'data_analysis': 'Data Analysis',
+            'explore': 'Explore'
+        };
+        
+        return typeMap[eventType] || this.formatEventType(eventType);
+    }
+
+    /**
+     * Get detailed event type information including subtype
+     */
+    getEventTypeDetails(session) {
+        if (session.enhancedEventType) {
+            const { primary_type, subtype, confidence, alternative_types } = session.enhancedEventType;
+            
+            return {
+                primary: this.getEventTypeDisplay(primary_type),
+                subtype: subtype ? this.formatEventType(subtype) : null,
+                confidence: Math.round(confidence * 100),
+                alternatives: alternative_types.map(alt => ({
+                    type: this.getEventTypeDisplay(alt.type),
+                    confidence: Math.round(alt.confidence * 100)
+                }))
+            };
+        }
+        
+        return {
+            primary: this.getEventTypeDisplay(this.getEventType(session)),
+            subtype: null,
+            confidence: 50,
+            alternatives: []
+        };
+    }
+
     renderTimelineEvent(session) {
         const time = new Date(session.timestamp).toLocaleTimeString('en-US', { 
             hour: 'numeric', 
@@ -2306,23 +4539,42 @@ class LiveDashboard {
         const projectName = this.extractProjectName(session.currentFile);
         const eventType = this.getEventType(session);
         const actionCount = this.getActionCount(session);
+        const eventDetails = this.getEventTypeDetails(session);
+        
+        // Create enhanced event type display
+        let eventTypeDisplay = eventDetails.primary;
+        if (eventDetails.subtype) {
+            eventTypeDisplay += ` • ${eventDetails.subtype}`;
+        }
+        if (eventDetails.confidence > 70) {
+            eventTypeDisplay += ` (${eventDetails.confidence}%)`;
+        }
         
         return `
             <div class="timeline-event" onclick="viewSession('${session.id}')">
-                <div class="timeline-event-time">${time}</div>
-                <div class="timeline-event-dot ${eventType}"></div>
+                <div class="timeline-event-marker ${eventType}">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="3"></circle>
+                        <path d="M12 1v6m0 6v6m11-7h-6m-6 0H1"></path>
+                    </svg>
+                </div>
                 <div class="timeline-event-content">
                     <div class="timeline-event-header">
-                        <span class="timeline-event-type">${eventType}</span>
-                        <span class="timeline-event-project">${projectName}</span>
+                        <span class="timeline-event-type" title="${eventDetails.alternatives.map(alt => `${alt.type} (${alt.confidence}%)`).join(', ')}">${eventTypeDisplay}</span>
+                        <span class="timeline-event-time">${time}</span>
                     </div>
-                    <div class="timeline-event-title">${this.getSessionCellStages(session).primaryStage}</div>
-                    <div class="timeline-event-file">${session.currentFile ? session.currentFile.split('/').pop() : 'Unknown File'}</div>
-                    <div class="timeline-event-meta">
-                        <span class="timeline-event-outcome ${session.outcome || 'in_progress'}">${session.outcome || 'In Progress'}</span>
+                    <div class="timeline-event-description">
+                        ${session.currentFile ? session.currentFile.split('/').pop() : 'Unknown File'} • ${projectName}
                         ${session.codeDeltas && session.codeDeltas.length > 0 ? 
-                            `<span class="timeline-event-changes">${session.codeDeltas.length} changes</span>` : ''}
+                            ` • ${session.codeDeltas.length} changes` : ''}
                     </div>
+                    ${eventDetails.alternatives.length > 0 ? `
+                        <div class="timeline-event-alternatives">
+                            ${eventDetails.alternatives.slice(0, 2).map(alt => 
+                                `<span class="alternative-type" title="Alternative classification">${alt.type} (${alt.confidence}%)</span>`
+                            ).join(' • ')}
+                        </div>
+                    ` : ''}
                 </div>
             </div>
         `;
@@ -2350,8 +4602,16 @@ class LiveDashboard {
         `;
     }
 
-    getEventType(session) {
-        if (session.currentFile && session.currentFile.endsWith('.ipynb')) {
+    getEventTypeSync(session) {
+        // Use enhanced classification if available
+        if (session.enhancedEventType) {
+            return session.enhancedEventType.primary_type;
+        }
+        
+        // Use intent if available, otherwise determine from file type
+        if (session.intent) {
+            return session.intent;
+        } else if (session.currentFile && session.currentFile.endsWith('.ipynb')) {
             return 'notebook';
         } else if (session.codeDeltas && session.codeDeltas.length > 0) {
             return 'code';
@@ -2359,6 +4619,56 @@ class LiveDashboard {
             return 'conversation';
         } else {
             return 'session';
+        }
+    }
+
+    async getEventType(session) {
+        // Use enhanced classification if available
+        if (session.enhancedEventType) {
+            return session.enhancedEventType.primary_type;
+        }
+        
+        // Use intent if available, otherwise determine from file type
+        if (session.intent) {
+            return session.intent;
+        } else if (session.currentFile && session.currentFile.endsWith('.ipynb')) {
+            return 'notebook';
+        } else if (session.codeDeltas && session.codeDeltas.length > 0) {
+            return 'code';
+        } else if (session.conversations && session.conversations.length > 0) {
+            return 'conversation';
+        } else {
+            return 'session';
+        }
+    }
+
+    /**
+     * Enhanced event type classification using multi-modal analysis
+     */
+    async classifyEventTypeEnhanced(session, conversations = []) {
+        try {
+            // Import the enhanced classifier
+            const EnhancedEventTypeClassifier = require('../../intent-classification/enhanced-event-type-classifier');
+            const classifier = new EnhancedEventTypeClassifier();
+            
+            // Get enhanced classification
+            const classification = await classifier.classifyEventType(session, conversations);
+            
+            // Store the enhanced classification in the session
+            session.enhancedEventType = classification;
+            
+            return classification;
+        } catch (error) {
+            console.error('Enhanced event type classification failed:', error);
+            // Fallback to basic classification
+            return {
+                primary_type: this.getEventType(session),
+                subtype: null,
+                confidence: 0.5,
+                alternative_types: [],
+                analysis_details: { error: error.message },
+                metadata: { classification_method: 'fallback' }
+            };
         }
     }
 
@@ -2370,9 +4680,10 @@ class LiveDashboard {
             count += session.codeDeltas.length;
         }
         
-        // Count conversations
-        if (session.conversations && session.conversations.length > 0) {
-            count += session.conversations.length;
+        // Count conversations for this session
+        const sessionConversations = this.conversations.filter(c => c.sessionId === session.id);
+        if (sessionConversations.length > 0) {
+            count += sessionConversations.length;
         }
         
         // Count file changes
@@ -2474,22 +4785,50 @@ class LiveDashboard {
     }
 
     calculateWorkflowMetrics(session) {
+        // Enhanced calculation with better data handling
         const totalChanges = session.codeDeltas ? session.codeDeltas.length : 0;
-        const totalConversations = session.conversations ? session.conversations.length : 0;
-        const filesModified = session.fileChanges ? new Set(session.fileChanges.map(fc => fc.fileName)).size : 0;
         
-        // Calculate productivity score based on various factors
-        let productivityScore = 0;
-        if (totalChanges > 0) productivityScore += Math.min(totalChanges * 2, 50);
-        if (totalConversations > 0) productivityScore += Math.min(totalConversations * 5, 30);
-        if (filesModified > 0) productivityScore += Math.min(filesModified * 3, 20);
-        if (session.outcome === 'success' || session.outcome === 'completed') productivityScore += 10;
+        // Get conversations for this session - check both global conversations and session-specific
+        let sessionConversations = [];
+        if (this.conversations && this.conversations.length > 0) {
+            sessionConversations = this.conversations.filter(c => c.sessionId === session.id);
+        }
+        
+        // Also check if conversations are stored directly in the session
+        if (session.conversations && session.conversations.length > 0) {
+            sessionConversations = sessionConversations.concat(session.conversations);
+        }
+        
+        const totalConversations = sessionConversations.length;
+        
+        // Calculate unique files modified
+        let filesModified = 0;
+        if (session.fileChanges && session.fileChanges.length > 0) {
+            const uniqueFiles = new Set();
+            session.fileChanges.forEach(fc => {
+                if (fc.fileName) {
+                    uniqueFiles.add(fc.fileName);
+                } else if (fc.filePath) {
+                    uniqueFiles.add(fc.filePath);
+                }
+            });
+            filesModified = uniqueFiles.size;
+        }
+        
+        // Debug logging
+        console.log(`Session ${session.id} metrics:`, {
+            totalChanges,
+            totalConversations,
+            filesModified,
+            hasCodeDeltas: !!session.codeDeltas,
+            hasFileChanges: !!session.fileChanges,
+            hasConversations: !!session.conversations
+        });
         
         return {
             totalChanges,
             totalConversations,
-            filesModified,
-            productivityScore: Math.min(productivityScore, 100)
+            filesModified
         };
     }
 
@@ -2588,21 +4927,27 @@ class LiveDashboard {
                     <p>Comprehensive analysis of your development workflows using Clio & Kura</p>
                 </div>
                 
-                <div class="workflow-grid">
+                <!-- Main Dashboard Grid -->
+                <div class="workflow-dashboard-grid">
+                    <!-- Left Column: Metrics and Patterns -->
+                    <div class="workflow-left-column">
                     <div class="workflow-section">
                         <h3>Session Patterns</h3>
                         <div class="pattern-metrics">
-                            <div class="pattern-item">
+                                <div class="pattern-item" title="Average length of coding sessions - longer sessions often indicate deeper focus">
                                 <div class="pattern-value">${workflowInsights.avgSessionDuration}</div>
                                 <div class="pattern-label">Avg Session Duration</div>
+                                    <div class="evolution-description">Focus time indicator</div>
                             </div>
-                            <div class="pattern-item">
+                                <div class="pattern-item" title="Hour of day when you're most productive - helps identify optimal coding times">
                                 <div class="pattern-value">${workflowInsights.mostActiveHour}</div>
                                 <div class="pattern-label">Most Active Hour</div>
+                                    <div class="evolution-description">Peak productivity time</div>
                             </div>
-                            <div class="pattern-item">
+                                <div class="pattern-item" title="Trend in coding activity over time - shows if productivity is increasing, decreasing, or stable">
                                 <div class="pattern-value">${workflowInsights.productivityTrend}</div>
                                 <div class="pattern-label">Productivity Trend</div>
+                                    <div class="evolution-description">Activity trend over time</div>
                             </div>
                         </div>
                     </div>
@@ -2610,20 +4955,69 @@ class LiveDashboard {
                     <div class="workflow-section">
                         <h3>Code Evolution</h3>
                         <div class="evolution-metrics">
-                            <div class="evolution-item">
+                                <div class="evolution-item" title="Total number of lines of code that have been modified across all sessions">
                                 <div class="evolution-value">${workflowInsights.totalLinesChanged}</div>
                                 <div class="evolution-label">Lines Changed</div>
+                                    <div class="evolution-description">Total code modifications</div>
                             </div>
-                            <div class="evolution-item">
+                                <div class="evolution-item" title="Average number of files touched per coding session">
                                 <div class="evolution-value">${workflowInsights.filesPerSession}</div>
                                 <div class="evolution-label">Files per Session</div>
+                                    <div class="evolution-description">Average file scope</div>
                             </div>
-                            <div class="evolution-item">
-                                <div class="evolution-value">${workflowInsights.refactoringRate}</div>
-                                <div class="evolution-label">Refactoring Rate</div>
+                                <div class="evolution-item" title="Coding velocity - measures how many code changes you make per hour of active coding time. Higher values indicate more productive coding sessions.">
+                                    <div class="evolution-value">${workflowInsights.codeVelocity}/hr</div>
+                                    <div class="evolution-label">Changes per Hour</div>
+                                    <div class="evolution-description">Coding velocity (productivity measure)</div>
                             </div>
                         </div>
                     </div>
+                        
+                        <div class="workflow-section">
+                            <h3>Intent Analysis</h3>
+                            <div class="intent-breakdown">
+                                ${workflowInsights.intentBreakdown.map(intent => `
+                                    <div class="intent-item">
+                                        <div class="intent-name">${intent.name}</div>
+                                        <div class="intent-count">${intent.count}</div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Right Column: Visualizations -->
+                    <div class="workflow-right-column">
+                        ${kuraData && kuraData.success && kuraData.umap_coordinates ? `
+                            <div class="workflow-section umap-section">
+                                <h3>Session Clustering (UMAP)</h3>
+                                <div class="umap-container">
+                                    <div class="umap-plot" id="umap-plot"></div>
+                                    <div class="umap-info">
+                                        <div class="cluster-summary">
+                                            <div class="cluster-count">
+                                                <span class="cluster-count-value">${kuraData.clusters ? kuraData.clusters.length : 0}</span>
+                                                <span class="cluster-count-label">Clusters Identified</span>
+                                            </div>
+                                        </div>
+                                        ${kuraData.clusters && kuraData.clusters.length > 0 ? `
+                                            <div class="clusters-breakdown">
+                                                <h4>Cluster Details:</h4>
+                                                <div class="clusters-list">
+                                                    ${kuraData.clusters.map(cluster => `
+                                                        <div class="cluster-item">
+                                                            <span class="cluster-color" style="background-color: ${this.getClusterColor(cluster.name)};"></span>
+                                                            <span class="cluster-name">${cluster.name}</span>
+                                                            <span class="cluster-size">(${cluster.size} sessions)</span>
+                                                        </div>
+                                                    `).join('')}
+                                                </div>
+                                            </div>
+                                        ` : ''}
+                                    </div>
+                                </div>
+                            </div>
+                        ` : ''}
                     
                     <div class="workflow-section">
                         <h3>Project Distribution</h3>
@@ -2640,68 +5034,44 @@ class LiveDashboard {
                         </div>
                     </div>
                     
+                        ${kuraData && kuraData.success ? `
                     <div class="workflow-section">
-                        <h3>Intent Analysis</h3>
-                        <div class="intent-breakdown">
-                            ${workflowInsights.intentBreakdown.map(intent => `
-                                <div class="intent-item">
-                                    <div class="intent-name">${intent.name}</div>
-                                    <div class="intent-count">${intent.count}</div>
+                                <h3>Clustering Insights</h3>
+                                <div class="clustering-insights">
+                                    <div class="insight-item">
+                                        <div class="insight-value">${kuraData.clusters ? kuraData.clusters.length : 0}</div>
+                                        <div class="insight-label">Total Clusters</div>
                                 </div>
-                            `).join('')}
+                                    <div class="insight-item">
+                                        <div class="insight-value">${kuraData.total_sessions || 0}</div>
+                                        <div class="insight-label">Sessions Analyzed</div>
                         </div>
-                    </div>
-                </div>
-                
-                ${kuraData && kuraData.success ? `
-                    <div class="kura-integration">
-                        <h3>Kura Clustering Analysis</h3>
-                        <div class="kura-metrics">
-                            <div class="kura-metric">
-                                <div class="kura-value">${kuraData.clusters ? kuraData.clusters.length : 0}</div>
-                                <div class="kura-label">Identified Clusters</div>
+                                    <div class="insight-item">
+                                        <div class="insight-value">${kuraData.clusters ? Math.round(kuraData.total_sessions / kuraData.clusters.length) : 0}</div>
+                                        <div class="insight-label">Avg Sessions/Cluster</div>
                             </div>
                         </div>
                     </div>
                 ` : ''}
                 
                 ${clioData && clioData.success ? `
-                    <div class="clio-integration">
-                        <h3>Clio Notebook Analysis</h3>
-                        <div class="clio-metrics">
-                            <div class="clio-metric">
+                            <div class="workflow-section">
+                                <h3>Clio Analysis</h3>
+                                <div class="clio-insights">
+                                    <div class="clio-item">
                                 <div class="clio-value">${clioData.visualizations ? clioData.visualizations.length : 0}</div>
                                 <div class="clio-label">Notebook Visualizations</div>
                             </div>
                         </div>
                     </div>
                 ` : ''}
+                                    </div>
+                                    </div>
                 
-                ${kuraData && kuraData.success && kuraData.umap_coordinates ? `
-                    <div class="umap-visualization">
-                        <h3>Session Embeddings (UMAP)</h3>
-                        <div class="umap-container">
-                            <div class="umap-info">
-                                <p>${kuraData.total_sessions} sessions mapped to 2D space using UMAP dimensionality reduction</p>
-                                <div class="umap-legend">
-                                    <div class="legend-item">
-                                        <span class="legend-color" style="background-color: #3b82f6;"></span>
-                                        <span>Explore Sessions</span>
+                <!-- Additional Visualizations Row -->
+                <div class="workflow-additional-viz">
+                    ${this.generateAdditionalVisualizations(workflowInsights, kuraData, clioData)}
                                     </div>
-                                    <div class="legend-item">
-                                        <span class="legend-color" style="background-color: #10b981;"></span>
-                                        <span>Data Exploration</span>
-                                    </div>
-                                    <div class="legend-item">
-                                        <span class="legend-color" style="background-color: #f59e0b;"></span>
-                                        <span>Other Intents</span>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="umap-plot" id="umap-plot"></div>
-                        </div>
-                    </div>
-                ` : ''}
             </div>
         `;
 
@@ -2711,6 +5081,56 @@ class LiveDashboard {
         if (kuraData && kuraData.success && kuraData.umap_coordinates) {
             this.renderUMAPVisualization(kuraData.umap_coordinates, kuraData.clusters);
         }
+    }
+
+    getClusterColor(clusterName) {
+        const colorMap = {
+            'explore_tasks': '#3b82f6',
+            'data_exploration_tasks': '#10b981',
+            'explore': '#f59e0b',
+            'data_exploration': '#8b5cf6',
+            'analysis': '#ef4444',
+            'development': '#06b6d4',
+            'testing': '#84cc16',
+            'documentation': '#f97316'
+        };
+        
+        const normalizedName = clusterName.toLowerCase().replace(/\s+/g, '_');
+        return colorMap[normalizedName] || '#6b7280';
+    }
+
+    generateAdditionalVisualizations(workflowInsights, kuraData, clioData) {
+        let additionalHtml = '';
+        
+        // Session Timeline Visualization
+        if (this.sessions && this.sessions.length > 0) {
+            additionalHtml += `
+                <div class="workflow-section">
+                    <h3>Session Timeline</h3>
+                    <div class="timeline-viz" id="session-timeline-viz"></div>
+                </div>
+            `;
+        }
+        
+        // Productivity Heatmap
+        additionalHtml += `
+            <div class="workflow-section">
+                <h3>Productivity Heatmap</h3>
+                <div class="heatmap-viz" id="productivity-heatmap"></div>
+            </div>
+        `;
+        
+        // Code Complexity Analysis
+        if (workflowInsights.complexityData) {
+            additionalHtml += `
+                <div class="workflow-section">
+                    <h3>Code Complexity Trends</h3>
+                    <div class="complexity-viz" id="complexity-trends"></div>
+                </div>
+            `;
+        }
+        
+        return additionalHtml;
     }
 
     renderUMAPVisualization(umapCoordinates, clusters) {
@@ -2877,12 +5297,9 @@ class LiveDashboard {
                 d3.selectAll('.umap-tooltip').remove();
             })
             .on('click', function(event, d) {
-                // Find and show session details
-                const session = this.sessions?.find(s => s.id === d.session_id);
-                if (session) {
-                    this.showSessionDetails(session);
-                }
-            }.bind(this));
+                // Show detailed session information
+                showSessionDetails(d);
+            });
 
         // Add title
         svg.append('text')
@@ -2939,7 +5356,7 @@ class LiveDashboard {
                 productivityTrend: 'Stable',
                 totalLinesChanged: 0,
                 filesPerSession: 0,
-                refactoringRate: '0%',
+                codeVelocity: 0,
                 projectBreakdown: [],
                 intentBreakdown: []
             };
@@ -2976,9 +5393,8 @@ class LiveDashboard {
             ? sessions.reduce((sum, s) => sum + (s.fileChanges ? s.fileChanges.length : 0), 0) / sessions.length
             : 0;
 
-        // Calculate refactoring rate (simplified)
-        const refactoringSessions = sessions.filter(s => s.intent && s.intent.toLowerCase().includes('refactor')).length;
-        const refactoringRate = sessions.length > 0 ? Math.round((refactoringSessions / sessions.length) * 100) : 0;
+        // Calculate code velocity (changes per hour) - measures coding productivity
+        const codeVelocity = Math.round(this.calculateCodeVelocity());
 
         // Calculate project breakdown
         const projectGroups = this.groupSessionsByProject(sessions);
@@ -3005,7 +5421,7 @@ class LiveDashboard {
             productivityTrend,
             totalLinesChanged,
             filesPerSession: Math.round(filesPerSession * 10) / 10,
-            refactoringRate: `${refactoringRate}%`,
+            codeVelocity: codeVelocity,
             projectBreakdown,
             intentBreakdown
         };
@@ -3026,56 +5442,153 @@ class LiveDashboard {
     }
 
     /**
-     * Search sessions by query
+     * Initialize advanced search engine
+     */
+    async initializeSearchEngine() {
+        try {
+            // Check if AdvancedSearchEngine is available globally
+            if (typeof window !== 'undefined' && window.AdvancedSearchEngine) {
+                this.searchEngine = new window.AdvancedSearchEngine();
+                console.log('Advanced search engine initialized from global scope');
+            } else {
+                // Try to load the script dynamically
+                await this.loadSearchEngineScript();
+                if (window.AdvancedSearchEngine) {
+                    this.searchEngine = new window.AdvancedSearchEngine();
+                    console.log('Advanced search engine loaded and initialized');
+                } else {
+                    throw new Error('AdvancedSearchEngine not available after loading script');
+                }
+            }
+            
+            // Index existing sessions
+            this.indexSessionsForSearch();
+            
+        } catch (error) {
+            console.error('Error initializing search engine:', error);
+            console.log('Using fallback search functionality');
+            this.searchEngine = null;
+        }
+    }
+
+    async loadSearchEngineScript() {
+        return new Promise((resolve, reject) => {
+            // Check if script is already loaded
+            if (document.querySelector('script[src*="advanced-search-engine"]')) {
+                resolve();
+                return;
+            }
+
+            const script = document.createElement('script');
+            script.src = 'components/services/advanced-search-engine.js';
+            script.onload = () => {
+                console.log('Advanced search engine script loaded');
+                resolve();
+            };
+            script.onerror = (error) => {
+                console.error('Failed to load advanced search engine script:', error);
+                reject(error);
+            };
+            document.head.appendChild(script);
+        });
+    }
+
+    /**
+     * Index sessions for search
+     */
+    indexSessionsForSearch() {
+        if (!this.searchEngine) return;
+        
+        console.log('Indexing sessions for search...');
+        this.sessions.forEach(session => {
+            this.searchEngine.indexSession(session);
+        });
+        console.log(`Indexed ${this.sessions.length} sessions`);
+    }
+
+    /**
+     * Search sessions by query using advanced search engine
      */
     async searchSessions(query) {
-        console.log('searchSessions called with query:', query);
+        // Only log search queries occasionally to reduce spam
+        if (Math.random() < 0.1) {
+            console.log('searchSessions called with query:', query);
+        }
         
         if (!query || query.trim().length === 0) {
-            console.log('Empty query, reloading all sessions');
+            // Only log empty queries occasionally to reduce spam
+            if (Math.random() < 0.1) {
+                console.log('Empty query, reloading all sessions');
+            }
+            this.isSearchActive = false;
+            this.searchResults = [];
             this.loadSessions(); // Reload all sessions
             return;
         }
 
         try {
             console.log(`Searching sessions for: "${query}"`);
+            this.isSearchActive = true;
             
             // Show loading state
             this.showNotification('Searching sessions...', 'info');
             
-            // Search in current sessions first
-            const filteredSessions = this.sessions.filter(session => {
-                const searchTerm = query.toLowerCase();
-                return (
-                    (session.intent && session.intent.toLowerCase().includes(searchTerm)) ||
-                    (session.currentFile && session.currentFile.toLowerCase().includes(searchTerm)) ||
-                    (session.outcome && session.outcome.toLowerCase().includes(searchTerm)) ||
-                    (session.id && session.id.toLowerCase().includes(searchTerm)) ||
-                    (session.codeDeltas && session.codeDeltas.some(delta => 
-                        delta.content && delta.content.toLowerCase().includes(searchTerm)
-                    )) ||
-                    (session.fileChanges && session.fileChanges.some(change => 
-                        change.afterSnippet && change.afterSnippet.toLowerCase().includes(searchTerm)
-                    ))
-                );
-            });
-
-            if (filteredSessions.length > 0) {
-                this.sessions = filteredSessions;
-                this.renderCurrentView();
-                this.showNotification(`Found ${filteredSessions.length} matching sessions`, 'success');
+            let searchResults = null;
+            
+            // Use advanced search engine if available
+            if (this.searchEngine) {
+                searchResults = await this.searchEngine.search(query, {
+                    limit: 100,
+                    includeFTS: true,
+                    includeVectorSearch: true,
+                    boostRecent: true
+                });
+                
+                // Map search results back to session objects
+                const resultSessions = searchResults.results.map(result => {
+                    return this.sessions.find(session => session.id === result.docId);
+                }).filter(Boolean);
+                
+                this.sessions = resultSessions;
+                this.searchResults = searchResults.results;
+                
+                this.showNotification(`Found ${resultSessions.length} matching sessions (${searchResults.searchTime.toFixed(0)}ms)`, 'success');
             } else {
-                // If no local matches, try API search
-                const response = await fetch(`/api/sessions/search?q=${encodeURIComponent(query)}`);
-                if (response.ok) {
-                    const searchResults = await response.json();
-                    this.sessions = searchResults.sessions || [];
-                    this.renderCurrentView();
-                    this.showNotification(`Found ${this.sessions.length} matching sessions`, 'success');
+                // Fallback to basic search
+                const filteredSessions = this.sessions.filter(session => {
+                    const searchTerm = query.toLowerCase();
+                    return (
+                        (session.intent && session.intent.toLowerCase().includes(searchTerm)) ||
+                        (session.currentFile && session.currentFile.toLowerCase().includes(searchTerm)) ||
+                        (session.outcome && session.outcome.toLowerCase().includes(searchTerm)) ||
+                        (session.id && session.id.toLowerCase().includes(searchTerm)) ||
+                        (session.codeDeltas && session.codeDeltas.some(delta => 
+                            delta.content && delta.content.toLowerCase().includes(searchTerm)
+                        )) ||
+                        (session.fileChanges && session.fileChanges.some(change => 
+                            change.afterSnippet && change.afterSnippet.toLowerCase().includes(searchTerm)
+                        ))
+                    );
+                });
+
+                if (filteredSessions.length > 0) {
+                    this.sessions = filteredSessions;
+                    this.showNotification(`Found ${filteredSessions.length} matching sessions`, 'success');
                 } else {
-                    this.showNotification('No sessions found matching your search', 'warning');
+                    // If no local matches, try API search
+                    const response = await fetch(`/api/sessions/search?q=${encodeURIComponent(query)}`);
+                    if (response.ok) {
+                        const searchResults = await response.json();
+                        this.sessions = searchResults.sessions || [];
+                        this.showNotification(`Found ${this.sessions.length} matching sessions`, 'success');
+                    } else {
+                        this.showNotification('No sessions found matching your search', 'warning');
+                    }
                 }
             }
+            
+            this.renderCurrentView();
+            
         } catch (error) {
             console.error('Error searching sessions:', error);
             this.showNotification('Error searching sessions', 'error');
@@ -3402,6 +5915,7 @@ class LiveDashboard {
             if ((e.ctrlKey || e.metaKey) && e.key === 'r') {
                 e.preventDefault();
                 this.loadSessions();
+                this.loadConversations();
                 this.showNotification('Data refreshed', 'success');
             }
 
@@ -3519,12 +6033,804 @@ class LiveDashboard {
 
         document.body.appendChild(modal);
     }
+
+    /**
+     * Render Memory Management view
+     */
+    renderMemoryManagement() {
+        const container = document.getElementById('sessions-list');
+        if (!container) return;
+
+        console.log('Rendering Memory Management view');
+
+        container.innerHTML = `
+            <div class="memory-management-container">
+                <div class="memory-header">
+                    <h2 class="section-title">Memory Management</h2>
+                    <div class="memory-actions">
+                        <button class="btn btn-primary" onclick="window.dashboard.refreshMemories()">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path>
+                                <path d="M21 3v5h-5"></path>
+                                <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path>
+                                <path d="M3 21v-5h5"></path>
+                            </svg>
+                            Refresh
+                        </button>
+                        <button class="btn btn-success" onclick="window.dashboard.addMemory()">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="12" y1="5" x2="12" y2="19"></line>
+                                <line x1="5" y1="12" x2="19" y2="12"></line>
+                            </svg>
+                            Add Memory
+                        </button>
+                    </div>
+                </div>
+
+                <div class="memory-stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-value" id="total-memories">0</div>
+                        <div class="stat-label">Total Memories</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="executed-memories">0</div>
+                        <div class="stat-label">Executed</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="active-memories">0</div>
+                        <div class="stat-label">Active</div>
+                    </div>
+                </div>
+
+                <div class="memory-content">
+                    <div class="memory-filters">
+                        <div class="filter-group">
+                            <label for="memory-search">Search Memories</label>
+                            <input type="text" id="memory-search" class="search-input" placeholder="Search memories...">
+                        </div>
+                        <div class="filter-group">
+                            <label for="memory-category">Category</label>
+                            <select id="memory-category" class="filter-select">
+                                <option value="all">All Categories</option>
+                                <option value="code">Code</option>
+                                <option value="data">Data</option>
+                                <option value="workflow">Workflow</option>
+                                <option value="insight">Insight</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label for="memory-status">Status</label>
+                            <select id="memory-status" class="filter-select">
+                                <option value="all">All Status</option>
+                                <option value="active">Active</option>
+                                <option value="executed">Executed</option>
+                                <option value="archived">Archived</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="memory-list-container">
+                        <div id="memory-list" class="memory-list">
+                            <div class="no-data-state">
+                                <div class="no-data-icon">🧠</div>
+                                <h3>No memories found</h3>
+                                <p>Create your first memory to get started with intelligent session management.</p>
+                                <button class="btn btn-primary" onclick="window.dashboard.addMemory()">
+                                    Add First Memory
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        // Initialize memory management
+        this.initializeMemoryManagement();
+    }
+
+    /**
+     * Initialize memory management functionality
+     */
+    initializeMemoryManagement() {
+        // Load memories and update stats
+        this.loadMemories();
+        
+        // Setup event listeners
+        this.setupMemoryEventListeners();
+    }
+
+    /**
+     * Format memory date safely
+     */
+    formatMemoryDate(dateValue) {
+        if (!dateValue) {
+            return 'No date';
+        }
+        
+        try {
+            const date = new Date(dateValue);
+            if (isNaN(date.getTime())) {
+                return 'Invalid date';
+            }
+            return date.toLocaleDateString();
+        } catch (error) {
+            return 'Invalid date';
+        }
+    }
+
+    /**
+     * Load memories from API
+     */
+    async loadMemories() {
+        try {
+            const response = await fetch('/api/memories');
+            const data = await response.json();
+
+            if (data.success) {
+                // Handle nested memories structure from API and ensure it's an array
+                const memoriesData = data.memories?.memories || data.memories || [];
+                this.memories = Array.isArray(memoriesData) ? memoriesData : [];
+                this.updateMemoryStats();
+                this.renderMemoryList();
+            } else {
+                console.error('Failed to load memories:', data.error);
+                this.showMemoryError('Failed to load memories: ' + data.error);
+            }
+        } catch (error) {
+            console.error('Error loading memories:', error);
+            this.showMemoryError('Error loading memories: ' + error.message);
+        }
+    }
+
+    /**
+     * Update memory statistics
+     */
+    updateMemoryStats() {
+        // Ensure memories is an array
+        if (!Array.isArray(this.memories)) {
+            this.memories = [];
+        }
+        
+        const totalMemories = this.memories.length;
+        const executedMemories = this.memories.filter(m => m.status === 'executed').length;
+        const activeMemories = this.memories.filter(m => m.status === 'active' || !m.status).length;
+        
+        // Update DOM elements
+        const totalEl = document.getElementById('total-memories');
+        const executedEl = document.getElementById('executed-memories');
+        const activeEl = document.getElementById('active-memories');
+
+        if (totalEl) totalEl.textContent = totalMemories;
+        if (executedEl) executedEl.textContent = executedMemories;
+        if (activeEl) activeEl.textContent = activeMemories;
+    }
+
+    /**
+     * Render memory list
+     */
+    renderMemoryList() {
+        // Ensure memories is an array
+        if (!Array.isArray(this.memories)) {
+            this.memories = [];
+        }
+        
+        const container = document.getElementById('memory-list');
+        if (!container) return;
+
+        if (this.memories.length === 0) {
+            container.innerHTML = `
+                <div class="no-data-state">
+                    <div class="no-data-icon">🧠</div>
+                    <h3>No memories found</h3>
+                    <p>Create your first memory to get started with intelligent session management.</p>
+                    <button class="btn btn-primary" onclick="window.dashboard.addMemory()">
+                        Add First Memory
+                    </button>
+                </div>
+            `;
+            return;
+        }
+
+        const memoryHtml = this.memories.map(memory => `
+            <div class="memory-item" data-memory-id="${memory.id}">
+                <div class="memory-header">
+                    <h4 class="memory-title">${memory.title || 'Untitled Memory'}</h4>
+                    <div class="memory-meta">
+                        <span class="memory-status status-${memory.status || 'active'}">${memory.status || 'active'}</span>
+                        <span class="memory-date">${this.formatMemoryDate(memory.created || memory.createdAt || memory.timestamp || memory.date)}</span>
+                    </div>
+                </div>
+                <div class="memory-content">
+                    <p class="memory-description">${memory.description || 'No description available'}</p>
+                    <div class="memory-tags">
+                        ${(memory.tags || []).map(tag => `<span class="memory-tag">${tag}</span>`).join('')}
+                    </div>
+                </div>
+                <div class="memory-actions">
+                    <button class="btn btn-sm btn-primary" onclick="window.dashboard.executeMemory('${memory.id}')">
+                        Execute
+                    </button>
+                    <button class="btn btn-sm btn-secondary" onclick="window.dashboard.editMemory('${memory.id}')">
+                        Edit
+                    </button>
+                    <button class="btn btn-sm btn-danger" onclick="window.dashboard.deleteMemory('${memory.id}')">
+                        Delete
+                    </button>
+                </div>
+            </div>
+        `).join('');
+
+        container.innerHTML = memoryHtml;
+    }
+
+    /**
+     * Setup memory event listeners
+     */
+    setupMemoryEventListeners() {
+        // Search functionality
+        const searchInput = document.getElementById('memory-search');
+        if (searchInput) {
+            searchInput.addEventListener('input', (e) => {
+                this.filterMemories(e.target.value);
+            });
+        }
+
+        // Category filter
+        const categorySelect = document.getElementById('memory-category');
+        if (categorySelect) {
+            categorySelect.addEventListener('change', (e) => {
+                this.filterMemoriesByCategory(e.target.value);
+            });
+        }
+
+        // Status filter
+        const statusSelect = document.getElementById('memory-status');
+        if (statusSelect) {
+            statusSelect.addEventListener('change', (e) => {
+                this.filterMemoriesByStatus(e.target.value);
+            });
+        }
+    }
+
+    /**
+     * Filter memories by search query
+     */
+    filterMemories(query) {
+        // Ensure memories is an array
+        if (!Array.isArray(this.memories)) {
+            this.memories = [];
+        }
+        
+        const filteredMemories = this.memories.filter(memory => 
+            memory.title?.toLowerCase().includes(query.toLowerCase()) ||
+            memory.description?.toLowerCase().includes(query.toLowerCase()) ||
+            memory.tags?.some(tag => tag.toLowerCase().includes(query.toLowerCase()))
+        );
+        this.renderFilteredMemories(filteredMemories);
+    }
+
+    /**
+     * Filter memories by category
+     */
+    filterMemoriesByCategory(category) {
+        // Ensure memories is an array
+        if (!Array.isArray(this.memories)) {
+            this.memories = [];
+        }
+        
+        if (category === 'all') {
+            this.renderMemoryList();
+            return;
+        }
+        
+        const filteredMemories = this.memories.filter(memory => memory.category === category);
+        this.renderFilteredMemories(filteredMemories);
+    }
+
+    /**
+     * Filter memories by status
+     */
+    filterMemoriesByStatus(status) {
+        // Ensure memories is an array
+        if (!Array.isArray(this.memories)) {
+            this.memories = [];
+        }
+        
+        if (status === 'all') {
+            this.renderMemoryList();
+            return;
+        }
+        
+        const filteredMemories = this.memories.filter(memory => memory.status === status);
+        this.renderFilteredMemories(filteredMemories);
+    }
+
+    /**
+     * Render filtered memories
+     */
+    renderFilteredMemories(memories) {
+        const container = document.getElementById('memory-list');
+        if (!container) return;
+
+        if (memories.length === 0) {
+            container.innerHTML = `
+                <div class="no-data-state">
+                    <div class="no-data-icon"></div>
+                    <h3>No memories found</h3>
+                    <p>Try adjusting your search criteria or filters.</p>
+                </div>
+            `;
+            return;
+        }
+
+        const memoryHtml = memories.map(memory => `
+            <div class="memory-item" data-memory-id="${memory.id}">
+                <div class="memory-header">
+                    <h4 class="memory-title">${memory.title || 'Untitled Memory'}</h4>
+                    <div class="memory-meta">
+                        <span class="memory-status status-${memory.status || 'active'}">${memory.status || 'active'}</span>
+                        <span class="memory-date">${this.formatMemoryDate(memory.created || memory.createdAt || memory.timestamp || memory.date)}</span>
+                    </div>
+                </div>
+                <div class="memory-content">
+                    <p class="memory-description">${memory.description || 'No description available'}</p>
+                    <div class="memory-tags">
+                        ${(memory.tags || []).map(tag => `<span class="memory-tag">${tag}</span>`).join('')}
+                    </div>
+                </div>
+                <div class="memory-actions">
+                    <button class="btn btn-sm btn-primary" onclick="window.dashboard.executeMemory('${memory.id}')">
+                        Execute
+                    </button>
+                    <button class="btn btn-sm btn-secondary" onclick="window.dashboard.editMemory('${memory.id}')">
+                        Edit
+                    </button>
+                    <button class="btn btn-sm btn-danger" onclick="window.dashboard.deleteMemory('${memory.id}')">
+                        Delete
+                    </button>
+                </div>
+            </div>
+        `).join('');
+
+        container.innerHTML = memoryHtml;
+    }
+
+    /**
+     * Refresh memories
+     */
+    async refreshMemories() {
+        await this.loadMemories();
+        this.showNotification('Memories refreshed', 'success');
+    }
+
+    /**
+     * Add new memory
+     */
+    addMemory() {
+        this.showAddMemoryModal();
+    }
+
+    /**
+     * Show add memory modal
+     */
+    showAddMemoryModal() {
+        const modal = document.createElement('div');
+        modal.className = 'modal-overlay memory-modal';
+        modal.innerHTML = `
+            <div class="modal-content memory-modal-content">
+                <div class="modal-header">
+                    <h3>Add New Memory</h3>
+                    <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <form id="add-memory-form" class="memory-form">
+                        <div class="form-group">
+                            <label for="memory-title">Title *</label>
+                            <input type="text" id="memory-title" name="title" required 
+                                   placeholder="Enter memory title..." maxlength="100">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="memory-description">Description</label>
+                            <textarea id="memory-description" name="description" rows="4" 
+                                      placeholder="Describe what this memory represents..."></textarea>
+                        </div>
+                        
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="memory-category">Category</label>
+                                <select id="memory-category" name="category">
+                                    <option value="code">Code</option>
+                                    <option value="data">Data</option>
+                                    <option value="workflow">Workflow</option>
+                                    <option value="insight">Insight</option>
+                                    <option value="session">Session</option>
+                                    <option value="template">Template</option>
+                                </select>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="memory-type">Type</label>
+                                <select id="memory-type" name="type">
+                                    <option value="session">Session</option>
+                                    <option value="integration">Integration</option>
+                                    <option value="notebook">Notebook</option>
+                                    <option value="template">Template</option>
+                                    <option value="analysis">Analysis</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="memory-tags">Tags (comma-separated)</label>
+                            <input type="text" id="memory-tags" name="tags" 
+                                   placeholder="e.g., python, data-analysis, visualization">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="memory-content">Content *</label>
+                            <textarea id="memory-content" name="content" rows="6" required 
+                                      placeholder="Enter the memory content (code, notes, instructions, etc.)..."></textarea>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="memory-priority">Priority</label>
+                            <select id="memory-priority" name="priority">
+                                <option value="low">Low</option>
+                                <option value="medium" selected>Medium</option>
+                                <option value="high">High</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="memory-auto-execute" name="autoExecute">
+                                <span class="checkmark"></span>
+                                Auto-execute when conditions are met
+                            </label>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">
+                        Cancel
+                    </button>
+                    <button type="button" class="btn btn-primary" onclick="dashboard.submitAddMemory()">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="12" y1="5" x2="12" y2="19"></line>
+                            <line x1="5" y1="12" x2="19" y2="12"></line>
+                        </svg>
+                        Add Memory
+                    </button>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+        
+        // Add click outside to close
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                modal.remove();
+            }
+        });
+        
+        // Focus on title input
+        setTimeout(() => {
+            const titleInput = modal.querySelector('#memory-title');
+            if (titleInput) titleInput.focus();
+        }, 100);
+    }
+
+    /**
+     * Submit add memory form
+     */
+    async submitAddMemory() {
+        const form = document.getElementById('add-memory-form');
+        if (!form) return;
+        
+        const formData = new FormData(form);
+        const memoryData = {
+            title: formData.get('title')?.trim(),
+            description: formData.get('description')?.trim(),
+            category: formData.get('category'),
+            type: formData.get('type'),
+            tags: formData.get('tags')?.split(',').map(tag => tag.trim()).filter(tag => tag),
+            content: formData.get('content')?.trim(),
+            priority: formData.get('priority'),
+            autoExecute: formData.get('autoExecute') === 'on',
+            status: 'active'
+        };
+        
+        // Validate required fields
+        if (!memoryData.title || !memoryData.content) {
+            this.showNotification('Title and content are required', 'error');
+            return;
+        }
+        
+        try {
+            // Show loading state
+            const submitBtn = document.querySelector('.memory-modal .btn-primary');
+            const originalText = submitBtn.innerHTML;
+            submitBtn.innerHTML = `
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="spinning">
+                    <path d="M21 12a9 9 0 11-6.219-8.56"/>
+                </svg>
+                Adding...
+            `;
+            submitBtn.disabled = true;
+            
+            // Submit to API
+            const response = await fetch('/api/memories', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(memoryData)
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                this.showNotification('Memory added successfully!', 'success');
+                
+                // Close modal
+                const modal = document.querySelector('.memory-modal');
+                if (modal) modal.remove();
+                
+                // Refresh memory list
+                await this.loadMemories();
+                this.renderMemoryList();
+            } else {
+                throw new Error(result.error || 'Failed to add memory');
+            }
+            
+        } catch (error) {
+            console.error('Error adding memory:', error);
+            this.showNotification(`Failed to add memory: ${error.message}`, 'error');
+            
+            // Reset button
+            const submitBtn = document.querySelector('.memory-modal .btn-primary');
+            if (submitBtn) {
+                submitBtn.innerHTML = originalText;
+                submitBtn.disabled = false;
+            }
+        }
+    }
+
+    /**
+     * Execute memory
+     */
+    async executeMemory(memoryId) {
+        try {
+            // Show loading state
+            this.showNotification('Executing memory...', 'info');
+            
+            // Find the memory to get its details
+            const memory = this.memories.find(m => m.id === memoryId);
+            if (!memory) {
+                this.showNotification('Memory not found', 'error');
+                return;
+            }
+
+            // Call the API to execute the memory
+            const response = await fetch(`/api/memory/${memoryId}/execute`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    context: {
+                        timestamp: new Date().toISOString(),
+                        userAgent: navigator.userAgent,
+                        sessionId: this.getCurrentSessionId()
+                    }
+                })
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                // Update memory status to executed
+                memory.status = 'executed';
+                memory.lastExecuted = new Date().toISOString();
+                
+                // Update the display
+                this.updateMemoryStats();
+                this.renderMemoryList();
+                
+                // Show success notification with execution details
+                const executionDetails = result.execution;
+                let message = `Memory "${memory.title}" executed successfully!`;
+                
+                if (executionDetails.commands && executionDetails.commands.length > 0) {
+                    message += ` (${executionDetails.commands.length} commands executed)`;
+                }
+                
+                this.showNotification(message, 'success');
+                
+                // Log execution details for debugging
+                console.log('Memory execution result:', executionDetails);
+                
+                // If there are results, show them in a modal or notification
+                if (executionDetails.results && executionDetails.results.length > 0) {
+                    this.showExecutionResults(memory, executionDetails);
+                }
+                
+            } else {
+                this.showNotification(`Failed to execute memory: ${result.error}`, 'error');
+                console.error('Memory execution failed:', result.error);
+            }
+            
+        } catch (error) {
+            console.error('Error executing memory:', error);
+            this.showNotification(`Error executing memory: ${error.message}`, 'error');
+        }
+    }
+
+    /**
+     * Get current session ID
+     */
+    getCurrentSessionId() {
+        // Try to get from URL params or current session
+        const urlParams = new URLSearchParams(window.location.search);
+        return urlParams.get('sessionId') || 'current-session';
+    }
+
+    /**
+     * Set loading state for conversations refresh button
+     */
+    setConversationsButtonLoading(loading) {
+        const button = document.getElementById('refresh-conversations-btn');
+        if (!button) return;
+
+        if (loading) {
+            button.disabled = true;
+            button.classList.add('loading');
+            button.innerHTML = `
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="spinning">
+                    <path d="M21 12a9 9 0 1 1-6.219-8.56"></path>
+                </svg>
+                Loading...
+            `;
+        } else {
+            button.disabled = false;
+            button.classList.remove('loading');
+            button.innerHTML = `
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                </svg>
+                Conversations
+            `;
+        }
+    }
+
+    /**
+     * Show execution results in a modal
+     */
+    showExecutionResults(memory, executionDetails) {
+        const modal = document.createElement('div');
+        modal.className = 'modal-overlay';
+        modal.innerHTML = `
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Memory Execution Results</h3>
+                    <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="execution-summary">
+                        <h4>Memory: ${memory.title}</h4>
+                        <p><strong>Executed:</strong> ${new Date(executionDetails.executed).toLocaleString()}</p>
+                        <p><strong>Status:</strong> <span class="status-success">Success</span></p>
+                    </div>
+                    
+                    ${executionDetails.commands && executionDetails.commands.length > 0 ? `
+                        <div class="execution-commands">
+                            <h4>Commands Executed (${executionDetails.commands.length})</h4>
+                            <ul>
+                                ${executionDetails.commands.map(cmd => `<li><code>${cmd.type}</code>: ${cmd.description || 'No description'}</li>`).join('')}
+                            </ul>
+                        </div>
+                    ` : ''}
+                    
+                    ${executionDetails.results && executionDetails.results.length > 0 ? `
+                        <div class="execution-results">
+                            <h4>Results</h4>
+                            <div class="results-list">
+                                ${executionDetails.results.map(result => `
+                                    <div class="result-item">
+                                        <strong>${result.type || 'Result'}:</strong>
+                                        <pre>${JSON.stringify(result.data, null, 2)}</pre>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    ` : ''}
+                    
+                    ${executionDetails.errors && executionDetails.errors.length > 0 ? `
+                        <div class="execution-errors">
+                            <h4>Errors</h4>
+                            <ul>
+                                ${executionDetails.errors.map(error => `<li class="error-item">${error}</li>`).join('')}
+                            </ul>
+                        </div>
+                    ` : ''}
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-primary" onclick="this.closest('.modal-overlay').remove()">Close</button>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+        
+        // Add click outside to close
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                modal.remove();
+            }
+        });
+    }
+
+    /**
+     * Edit memory
+     */
+    editMemory(memoryId) {
+        this.showNotification('Edit memory functionality coming soon', 'info');
+    }
+
+    /**
+     * Delete memory
+     */
+    deleteMemory(memoryId) {
+        this.showNotification('Delete memory functionality coming soon', 'info');
+    }
+
+    /**
+     * Show memory error
+     */
+    showMemoryError(message) {
+        const container = document.getElementById('memory-list');
+        if (container) {
+            container.innerHTML = `
+                <div class="error-state">
+                    <div class="error-icon"></div>
+                    <h3>Error</h3>
+                    <p>${message}</p>
+                    <button class="btn btn-primary" onclick="window.dashboard.refreshMemories()">
+                        Try Again
+                    </button>
+                </div>
+            `;
+        }
+    }
 }
 
 // Initialize dashboard when DOM is loaded
 document.addEventListener('DOMContentLoaded', function() {
     console.log('DOM loaded, initializing dashboard...');
     window.dashboard = new LiveDashboard();
+    
+    // Initialize real-time search after dashboard is ready
+    setTimeout(() => {
+        if (typeof RealTimeSearch !== 'undefined' && window.dashboard.searchEngine) {
+            window.realTimeSearch = new RealTimeSearch({
+                container: document.getElementById('search-container'),
+                searchEngine: window.dashboard.searchEngine,
+                onResults: (results, searchData) => {
+                    console.log('Search results:', results);
+                    if (searchData && searchData.results) {
+                        window.dashboard.searchResults = searchData.results;
+                    }
+                },
+                onSuggestion: (suggestion) => {
+                    console.log('Search suggestion selected:', suggestion);
+                }
+            });
+            console.log('Real-time search initialized');
+        }
+    }, 1000); // Wait for search engine to be ready
     
     // Make functions globally available for HTML onclick handlers
     window.closeSessionDetail = function() {
@@ -3536,6 +6842,7 @@ document.addEventListener('DOMContentLoaded', function() {
     window.refreshData = function() {
         if (window.dashboard) {
             window.dashboard.loadSessions();
+            window.dashboard.loadConversations();
         }
     };
     
@@ -3568,11 +6875,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     };
     
-    window.returnToContext = function(sessionId) {
-        if (window.dashboard) {
-            window.dashboard.returnToContext(sessionId);
-        }
-    };
     
     window.toggleProject = function(projectName) {
         const projectId = 'project-' + projectName.replace(/\s+/g, '-');
@@ -3682,6 +6984,235 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log('Dashboard loaded:', !!window.dashboard);
         console.log('Dashboard instance:', window.dashboard);
         return window.dashboard;
+    };
+
+    // Cursor Integration helper functions
+    window.showAnalysisOptions = function() {
+        const options = [
+            'Comprehensive Analysis',
+            'Syntax Analysis', 
+            'Performance Analysis',
+            'Security Analysis',
+            'Style Analysis'
+        ];
+        
+        const choice = prompt('Select analysis type:\n' + options.map((opt, i) => `${i + 1}. ${opt}`).join('\n'));
+        const index = parseInt(choice) - 1;
+        
+        if (index >= 0 && index < options.length) {
+            const analysisTypes = ['comprehensive', 'syntax', 'performance', 'security', 'style'];
+            const filePath = prompt('Enter file path to analyze:');
+            
+            if (filePath && window.cursorCLI) {
+                window.cursorCLI.analyzeFile(filePath, analysisTypes[index])
+                    .then(result => {
+                        if (result) {
+                            alert('Analysis completed! Check console for details.');
+                            console.log('Analysis result:', result);
+                        } else {
+                            alert('Analysis failed. Check console for errors.');
+                        }
+                    });
+            }
+        }
+    };
+
+    window.showAutomationOptions = function() {
+        const options = [
+            'Auto-format on save',
+            'Auto-lint on change',
+            'Auto-analyze on change',
+            'Auto-generate tests',
+            'Auto-optimize code'
+        ];
+        
+        const choice = prompt('Select automation type:\n' + options.map((opt, i) => `${i + 1}. ${opt}`).join('\n'));
+        const index = parseInt(choice) - 1;
+        
+        if (index >= 0 && index < options.length) {
+            const filePath = prompt('Enter file path to monitor:');
+            
+            if (filePath && window.cursorCLI) {
+                const watchOptions = {
+                    autoFormat: index === 0,
+                    autoLint: index === 1,
+                    autoAnalyze: index === 2,
+                    autoGenerateTests: index === 3,
+                    autoOptimize: index === 4
+                };
+                
+                window.cursorCLI.watchFile(filePath, watchOptions)
+                    .then(success => {
+                        if (success) {
+                            alert('Automation configured successfully!');
+                            // Refresh the view to show updated monitoring
+                            if (window.dashboard) {
+                                window.dashboard.renderCurrentView();
+                            }
+                        } else {
+                            alert('Failed to configure automation.');
+                        }
+                    });
+            }
+        }
+    };
+
+    window.showTestGeneration = function() {
+        const options = [
+            'Unit Tests',
+            'Integration Tests',
+            'End-to-End Tests',
+            'All Test Types'
+        ];
+        
+        const choice = prompt('Select test type:\n' + options.map((opt, i) => `${i + 1}. ${opt}`).join('\n'));
+        const index = parseInt(choice) - 1;
+        
+        if (index >= 0 && index < options.length) {
+            const testTypes = ['unit', 'integration', 'e2e', 'all'];
+            const filePath = prompt('Enter file path to generate tests for:');
+            
+            if (filePath && window.cursorCLI) {
+                window.cursorCLI.generateTests(filePath, testTypes[index])
+                    .then(result => {
+                        if (result) {
+                            alert('Test generation completed! Check console for details.');
+                            console.log('Test generation result:', result);
+                        } else {
+                            alert('Test generation failed. Check console for errors.');
+                        }
+                    });
+            }
+        }
+    };
+
+    /**
+     * Show timeline view
+     */
+    window.showTimelineView = async function() {
+        try {
+            // Hide main dashboard content
+            const dashboardContent = document.getElementById('dashboardContent');
+            if (dashboardContent) {
+                dashboardContent.style.display = 'none';
+            }
+
+            // Show timeline container
+            let timelineContainer = document.getElementById('timeline-container');
+            if (!timelineContainer) {
+                // Create timeline container if it doesn't exist
+                timelineContainer = document.createElement('div');
+                timelineContainer.id = 'timeline-container';
+                timelineContainer.className = 'timeline-view';
+                
+                // Insert after the main dashboard content
+                if (dashboardContent && dashboardContent.parentNode) {
+                    dashboardContent.parentNode.insertBefore(timelineContainer, dashboardContent.nextSibling);
+                }
+            }
+
+            // Show timeline container
+            timelineContainer.style.display = 'block';
+
+            // Render timeline if not already rendered
+            if (window.realDataVisualizations && window.realDataVisualizations.renderSessionTimeline) {
+                await window.realDataVisualizations.renderSessionTimeline();
+            }
+
+            // Update sidebar active state
+            document.querySelectorAll('.sidebar-link').forEach(link => {
+                link.classList.remove('active');
+            });
+            const timelineBtn = document.getElementById('timeline-btn');
+            if (timelineBtn) {
+                timelineBtn.classList.add('active');
+            }
+
+        } catch (error) {
+            console.error('Error showing timeline view:', error);
+        }
+    };
+
+    /**
+     * Hide timeline view
+     */
+    window.hideTimelineView = function() {
+        try {
+            // Hide timeline container
+            const timelineContainer = document.getElementById('timeline-container');
+            if (timelineContainer) {
+                timelineContainer.style.display = 'none';
+            }
+
+            // Show main dashboard content
+            const dashboardContent = document.getElementById('dashboardContent');
+            if (dashboardContent) {
+                dashboardContent.style.display = 'block';
+            }
+
+            // Update sidebar active state
+            document.querySelectorAll('.sidebar-link').forEach(link => {
+                link.classList.remove('active');
+            });
+            const dashboardBtn = document.getElementById('dashboard-btn');
+            if (dashboardBtn) {
+                dashboardBtn.classList.add('active');
+            }
+
+        } catch (error) {
+            console.error('Error hiding timeline view:', error);
+        }
+    };
+
+    /**
+     * Switch between different views
+     */
+    window.switchView = async function(viewName) {
+        try {
+            // Update sidebar active state
+            document.querySelectorAll('.sidebar-link').forEach(link => {
+                link.classList.remove('active');
+            });
+            
+            const activeBtn = document.getElementById(`${viewName}-view-btn`) || 
+                             document.getElementById(`${viewName}-btn`);
+            if (activeBtn) {
+                activeBtn.classList.add('active');
+            }
+
+            // Handle different views
+            switch (viewName) {
+                case 'timeline':
+                    await window.showTimelineView();
+                    break;
+                case 'projects-sessions':
+                    window.hideTimelineView();
+                    // Show projects and sessions view
+                    break;
+                case 'notebooks':
+                    window.hideTimelineView();
+                    // Show notebooks view
+                    break;
+                case 'visualizations':
+                    window.hideTimelineView();
+                    // Show visualizations view
+                    break;
+                case 'embeddings':
+                    window.hideTimelineView();
+                    // Show embeddings view
+                    break;
+                case 'memory-management':
+                    window.hideTimelineView();
+                    // Show memory management view
+                    break;
+                default:
+                    window.hideTimelineView();
+                    break;
+            }
+
+        } catch (error) {
+            console.error('Error switching view:', error);
+        }
     };
 });
 

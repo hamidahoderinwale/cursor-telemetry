@@ -4,11 +4,12 @@ Cursor Telemetry SDK for Python
 Official Python SDK for the Cursor Telemetry Dashboard API.
 """
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 __author__ = "Cursor Telemetry Team"
 __email__ = "team@cursor-telemetry.com"
 
 from .client import CursorTelemetryAPI, create_client
+from .realtime import RealTimeClient, RealTimeManager, WebSocketEvent
 from .types import (
     CursorTelemetryConfig,
     Session,
@@ -42,6 +43,11 @@ __all__ = [
     # Main client
     "CursorTelemetryAPI",
     "create_client",
+    
+    # Real-time components
+    "RealTimeClient",
+    "RealTimeManager",
+    "WebSocketEvent",
     
     # Types
     "CursorTelemetryConfig",

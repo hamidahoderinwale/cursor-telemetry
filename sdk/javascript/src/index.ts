@@ -7,6 +7,8 @@ import { WebSocketClient } from './services/websocket-client';
 import { SessionsService } from './services/sessions';
 import { MemoryService } from './services/memory';
 import { AnalyticsService } from './services/analytics';
+import { PrivacyService } from './services/privacy';
+import { ActivityLoggerService } from './services/activity-logger';
 import {
   CursorTelemetryConfig,
   WebSocketConfig,
@@ -22,6 +24,8 @@ export class CursorTelemetryAPI {
   public sessions: SessionsService;
   public memory: MemoryService;
   public analytics: AnalyticsService;
+  public privacy: PrivacyService;
+  public activityLogger: ActivityLoggerService;
 
   constructor(config: CursorTelemetryConfig) {
     this.config = config;
@@ -36,6 +40,8 @@ export class CursorTelemetryAPI {
     this.sessions = new SessionsService(this.httpClient);
     this.memory = new MemoryService(this.httpClient);
     this.analytics = new AnalyticsService(this.httpClient);
+    this.privacy = new PrivacyService(this.httpClient, this.config);
+    this.activityLogger = new ActivityLoggerService(this.httpClient, this.config);
   }
 
   /**
@@ -192,6 +198,8 @@ export { WebSocketClient } from './services/websocket-client';
 export { SessionsService } from './services/sessions';
 export { MemoryService } from './services/memory';
 export { AnalyticsService } from './services/analytics';
+export { PrivacyService } from './services/privacy';
+export { ActivityLoggerService } from './services/activity-logger';
 
 // Default export
 export default CursorTelemetryAPI;

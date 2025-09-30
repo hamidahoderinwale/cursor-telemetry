@@ -46,12 +46,12 @@
                 }
                 
                 const totalEntries = await db.entries.count();
-                results.innerHTML += `<h2>📊 Database Status</h2>`;
+                results.innerHTML += `<h2>Database Status</h2>`;
                 results.innerHTML += `<p>Total entries in database: ${totalEntries}</p>`;
                 
                 // Show latest entries
                 const latestEntries = await db.entries.orderBy('timestamp').reverse().limit(5).toArray();
-                results.innerHTML += `<h2>📋 Latest Entries</h2>`;
+                results.innerHTML += `<h2>Latest Entries</h2>`;
                 latestEntries.forEach(entry => {
                     results.innerHTML += `<div style="border: 1px solid #ccc; padding: 10px; margin: 5px;">
                         <strong>${entry.file_path}</strong><br>

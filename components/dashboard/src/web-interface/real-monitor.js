@@ -43,16 +43,47 @@ class RealMonitor {
     if (!duration) return '0s';
     
     const seconds = Math.floor(duration / 1000);
-    const minutes = Math.floor(seconds / 60);
-    const hours = Math.floor(minutes / 60);
+    const days = Math.floor(seconds / 86400);
+    const hours = Math.floor((seconds % 86400) / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
     
-    if (hours > 0) {
-      return `${hours}h ${minutes % 60}m`;
-    } else if (minutes > 0) {
-      return `${minutes}m ${seconds % 60}s`;
-    } else {
-      return `${seconds}s`;
+    // For very large durations (months/weeks)
+    if (days >= 30) {
+      const months = Math.floor(days / 30);
+      const remainingDays = days % 30;
+      if (months >= 12) {
+        const years = Math.floor(months / 12);
+        const remainingMonths = months % 12;
+        return remainingMonths > 0 ? `${years}y ${remainingMonths}mo` : `${years}y`;
+      }
+      return remainingDays > 0 ? `${months}mo ${remainingDays}d` : `${months}mo`;
     }
+    
+    // For large durations (weeks/days)
+    if (days >= 7) {
+      const weeks = Math.floor(days / 7);
+      const remainingDays = days % 7;
+      return remainingDays > 0 ? `${weeks}w ${remainingDays}d` : `${weeks}w`;
+    }
+    
+    // For medium durations (days/hours)
+    if (days > 0) {
+      return hours > 0 ? `${days}d ${hours}h` : `${days}d`;
+    }
+    
+    // For small durations (hours/minutes)
+    if (hours > 0) {
+      return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+    }
+    
+    // For very small durations (minutes/seconds)
+    if (minutes > 0) {
+      return secs > 0 ? `${minutes}m ${secs}s` : `${minutes}m`;
+    }
+    
+    // For tiny durations (seconds only)
+    return `${secs}s`;
   }
 
   setBroadcastCallback(callback) {

@@ -686,7 +686,7 @@ class RepositoryParser:
         with open(output_path, 'w') as f:
             json.dump(self.parsed_data, f, indent=2, default=str)
         
-        print(f"📁 Repository analysis saved to {output_path}")
+        print(f"Repository analysis saved to {output_path}")
 
     def save_integration_spec(self, output_file: str = "pkl_integration_spec.json"):
         """Save PKL integration specification to file"""

@@ -1,87 +1,89 @@
-@import url('https://fonts.googleapis.com/css2?family=Funnel+Sans:wght@300;400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@300;400;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap');
 
 :root {
-  /* High-Contrast Color Palette */
-  --primary-color: #2563eb;        /* Blue - more modern and accessible */
-  --primary-hover: #1d4ed8;
-  --primary-color-dark: #1e40af;
-  --secondary-color: #6b7280;      /* Gray - more modern */
-  --secondary-hover: #4b5563;
-  --secondary-color-dark: #374151;
-  --accent-color: #7c3aed;         /* Purple accent */
-  --accent-hover: #6d28d9;
-  --danger-color: #CC0000;
-  --danger-hover: #AA0000;
-  --warning-color: #CC6600;
-  --warning-hover: #AA5500;
-  --success-color: #006600;
-  --info-color: #0066CC;
+  /* Dataset State Historian Color Palette */
+  --primary-color: #006D77;        /* Deep teal - professional but distinct */
+  --primary-hover: #008A94;        /* Lighter teal for hover states */
+  --primary-color-dark: #004D54;   /* Darker teal for active states */
+  --secondary-color: #6A6F73;      /* Muted gray for labels/meta */
+  --secondary-hover: #555555;
+  --secondary-color-dark: #333333;
+  --accent-color: #006D77;         /* Deep teal accent */
+  --accent-hover: #008A94;
+  --danger-color: #D7263D;         /* Red for high severity */
+  --danger-hover: #B91C2C;
+  --warning-color: #FFB400;        /* Amber for medium severity */
+  --warning-hover: #E6A200;
+  --success-color: #2A9D8F;        /* Teal green for low severity */
+  --info-color: #006D77;
   
-  /* High-Contrast Neutral Colors */
-  --background-primary: #FFFFFF;
-  --background-secondary: #F8F8F8;
-  --background-tertiary: #F0F0F0;
+  /* Historian Background Colors */
+  --background-primary: #F8F9FA;        /* Light neutral gray */
+  --background-secondary: #FFFFFF;       /* White */
+  --background-tertiary: #F1F3F4;        /* Very light gray */
   --background-hover: #E8E8E8;
   --background-modal: rgba(0, 0, 0, 0.6);
   
-  --text-primary: #000000;
-  --text-secondary: #333333;
-  --text-tertiary: #666666;
+  --text-primary: #222222;       /* Almost black, high contrast */
+  --text-secondary: #6A6F73;     /* Muted gray for labels/meta */
+  --text-tertiary: #9AA0A6;      /* Light gray for disabled text */
   --text-inverse: #FFFFFF;
   
-  --border-color: #CCCCCC;
-  --border-hover: #999999;
+  --border-color: #E0E0E0;       /* 1px neutral border */
+  --border-hover: #D0D0D0;       /* Medium border */
   --border-focus: var(--primary-color);
   
-  /* High-Contrast Status Colors */
-  --status-success: #006600;
-  --status-warning: #CC6600;
-  --status-error: #CC0000;
-  --status-info: #0066CC;
-  --status-pending: #666666;
-  --status-success-bg: #E8F5E8;
-  --status-warning-bg: #FFF4E6;
-  --status-error-bg: #FFE6E6;
+  /* Historian Status Colors */
+  --status-success: #2A9D8F;      /* Teal green for active */
+  --status-warning: #FFB400;      /* Amber for medium severity */
+  --status-error: #D7263D;        /* Red for high severity */
+  --status-info: #006D77;         /* Deep teal for info */
+  --status-pending: #9AA0A6;      /* Light gray for pending */
+  --status-success-bg: rgba(42, 157, 143, 0.1);
+  --status-warning-bg: rgba(255, 180, 0, 0.1);
+  --status-error-bg: rgba(215, 38, 61, 0.1);
   
-  /* Enhanced Button Colors with Proper Contrast */
-  --btn-primary-bg: #000000;
+  /* Historian Button Colors */
+  --btn-primary-bg: #006D77;      /* Deep teal */
   --btn-primary-text: #FFFFFF;
-  --btn-primary-hover: #333333;
-  --btn-secondary-bg: #F8F8F8;
-  --btn-secondary-text: #000000;
-  --btn-secondary-hover: #E8E8E8;
-  --btn-success-bg: #006600;
+  --btn-primary-hover: #008A94;   /* Lighter teal */
+  --btn-secondary-bg: #FFFFFF;    /* White */
+  --btn-secondary-text: #6A6F73;  /* Muted gray */
+  --btn-secondary-hover: #F1F3F4; /* Very light gray */
+  --btn-success-bg: #2A9D8F;      /* Teal green */
   --btn-success-text: #FFFFFF;
-  --btn-success-hover: #004400;
-  --btn-info-bg: #0066CC;
+  --btn-success-hover: #21867A;
+  --btn-info-bg: #006D77;         /* Deep teal */
   --btn-info-text: #FFFFFF;
-  --btn-info-hover: #004499;
-  --btn-warning-bg: #CC6600;
+  --btn-info-hover: #008A94;
+  --btn-warning-bg: #FFB400;      /* Amber */
   --btn-warning-text: #FFFFFF;
-  --btn-warning-hover: #AA5500;
-  --btn-danger-bg: #CC0000;
+  --btn-warning-hover: #E6A200;
+  --btn-danger-bg: #D7263D;       /* Red */
   --btn-danger-text: #FFFFFF;
-  --btn-danger-hover: #AA0000;
+  --btn-danger-hover: #B91C2C;
   
-  /* High-Contrast Intent Colors - Meaningful Color Scheme */
-  --intent-explore: #2563eb;        /* Blue - exploration/discovery */
-  --intent-explore-hover: #1d4ed8;
-  --intent-implement: #059669;      /* Green - implementation/building */
-  --intent-implement-hover: #047857;
-  --intent-debug: #dc2626;          /* Red - debugging/fixing */
-  --intent-debug-hover: #b91c1c;
-  --intent-refactor: #7c3aed;       /* Purple - refactoring/improving */
-  --intent-refactor-hover: #6d28d9;
-  --intent-data-exploration: #ea580c; /* Orange - data analysis */
-  --intent-data-exploration-hover: #c2410c;
-  --intent-unknown: #6b7280;        /* Gray - unknown/uncertain */
-  --intent-unknown-hover: #4b5563;
+  /* Historian Intent Colors */
+  --intent-explore: #006D77;        /* Deep teal - exploration/discovery */
+  --intent-explore-hover: #008A94;
+  --intent-implement: #2A9D8F;      /* Teal green - implementation/building */
+  --intent-implement-hover: #21867A;
+  --intent-debug: #D7263D;          /* Red - debugging/fixing */
+  --intent-debug-hover: #B91C2C;
+  --intent-refactor: #FFB400;       /* Amber - refactoring/improving */
+  --intent-refactor-hover: #E6A200;
+  --intent-data-exploration: #6A6F73; /* Muted gray - data analysis */
+  --intent-data-exploration-hover: #555555;
+  --intent-unknown: #9AA0A6;        /* Light gray - unknown/uncertain */
+  --intent-unknown-hover: #888888;
   --primary-color-bg: #F8F8F8;
   
-  /* Typography - Funnel Sans */
-  --font-family-base: 'Funnel Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --font-family-primary: 'Funnel Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --font-family-mono: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', monospace;
+  /* Typography - Historian Design System */
+  --font-family-base: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-family-primary: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-family-mono: 'JetBrains Mono', 'SF Mono', 'Monaco', 'Inconsolata', monospace;
   
   --font-size-xs: 0.8rem;
   --font-size-sm: 1rem;

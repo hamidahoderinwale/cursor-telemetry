@@ -1,7 +1,7 @@
 #!/bin/bash
 # Cursor Dashboard API Server Startup Script
 
-echo "🚀 Starting Cursor Dashboard API Server..."
+echo "Starting Cursor Dashboard API Server..."
 
 # Check if Python 3 is available
 if ! command -v python3 &> /dev/null; then
@@ -24,7 +24,7 @@ if [ -f "requirements.txt" ]; then
         exit 1
     fi
 else
-    echo "⚠️  requirements.txt not found. Installing basic dependencies..."
+    echo "requirements.txt not found. Installing basic dependencies..."
     pip3 install Flask Flask-CORS pandas python-dateutil Werkzeug
 fi
 
@@ -40,10 +40,10 @@ chmod +x api_server.py
 echo "✅ Dependencies installed successfully!"
 echo ""
 echo "🌐 Starting API server on http://localhost:5000"
-echo "📚 API Documentation: http://localhost:5000/api/docs"
-echo "🔍 Health Check: http://localhost:5000/api/health"
+echo "API Documentation: http://localhost:5000/api/docs"
+echo "Health Check: http://localhost:5000/api/health"
 echo ""
-echo "📊 Available endpoints:"
+echo "Available endpoints:"
 echo "  - GET  /api/workspaces          - Get all workspaces"
 echo "  - GET  /api/workspaces/{id}     - Get workspace details"
 echo "  - GET  /api/telemetry           - Get telemetry data (with filters)"
@@ -53,7 +53,7 @@ echo "  - GET  /api/analytics           - Get comprehensive analytics"
 echo "  - GET  /api/stats               - Get basic statistics"
 echo "  - POST /api/refresh             - Refresh data from source"
 echo ""
-echo "💡 Press Ctrl+C to stop the server"
+echo "Press Ctrl+C to stop the server"
 echo ""
 
 # Start the API server

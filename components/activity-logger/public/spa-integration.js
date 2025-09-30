@@ -16,7 +16,7 @@ class CompanionIntegration {
     // Check if companion is available
     const isAvailable = await this.checkCompanionHealth();
     if (!isAvailable) {
-      console.warn('⚠️ Companion service not available, falling back to direct detection');
+      console.warn('Companion service not available, falling back to direct detection');
       return false;
     }
 
@@ -71,7 +71,7 @@ class CompanionIntegration {
       }
 
       if (data.events && data.events.length > 0) {
-        console.log(`📊 Received ${data.events.length} events from companion`);
+        console.log(`Received ${data.events.length} events from companion`);
         await this.processEvents(data.events);
       }
 

@@ -2,7 +2,7 @@
 # PKL-Dash Startup Script
 # Comprehensive startup for the enhanced PKL Extension with OpenClio & Kura integration
 
-echo "🚀 Starting PKL-Dash - Enhanced Procedural Knowledge Library"
+echo "Starting PKL-Dash - Enhanced Procedural Knowledge Library"
 echo "============================================================="
 
 # Colors for output
@@ -18,8 +18,8 @@ if [ ! -f "cursor-pkl-extension/package.json" ]; then
     exit 1
 fi
 
-echo -e "${BLUE}📁 Current directory: $(pwd)${NC}"
-echo -e "${BLUE}🔧 Setting up environment...${NC}"
+echo -e "${BLUE}Current directory: $(pwd)${NC}"
+echo -e "${BLUE}Setting up environment...${NC}"
 
 # Navigate to the main project directory
 cd cursor-pkl-extension
@@ -46,7 +46,7 @@ else
 fi
 
 # Generate sample data if needed
-echo -e "${YELLOW}📊 Preparing sample data...${NC}"
+echo -e "${YELLOW}Preparing sample data...${NC}"
 if [ ! -f "temp_sessions.json" ]; then
     echo -e "${YELLOW}Creating sample PKL sessions...${NC}"
     cat > temp_sessions.json << 'EOF'
@@ -173,7 +173,7 @@ else
 fi
 
 # Start the web server for the dashboard
-echo -e "${BLUE}🎨 Starting enhanced dashboard...${NC}"
+echo -e "${BLUE}Starting enhanced dashboard...${NC}"
 if ! pgrep -f "web-server.js" > /dev/null; then
     nohup node web-server.js > web-server.log 2>&1 &
     WEB_PID=$!
@@ -184,30 +184,30 @@ else
 fi
 
 echo ""
-echo -e "${GREEN}🎉 PKL-Dash is now running!${NC}"
+echo -e "${GREEN}PKL-Dash is now running!${NC}"
 echo "=============================================="
 echo ""
-echo -e "${BLUE}📊 Available Interfaces:${NC}"
-echo -e "  🌐 Main Dashboard:      ${YELLOW}http://localhost:8080${NC}"
+echo -e "${BLUE}Available Interfaces:${NC}"
+echo -e "  Main Dashboard:      ${YELLOW}http://localhost:8080${NC}"
 echo -e "  🔬 Enhanced Dashboard:  ${YELLOW}http://localhost:8080/kura-enhanced-dashboard.html${NC}"
-echo -e "  📡 API Endpoint:        ${YELLOW}http://localhost:3001${NC}"
-echo -e "  📈 Live Monitor:        ${YELLOW}http://localhost:8080/live-dashboard-clean.html${NC}"
+echo -e "  API Endpoint:        ${YELLOW}http://localhost:3001${NC}"
+echo -e "  Live Monitor:        ${YELLOW}http://localhost:8080/live-dashboard-clean.html${NC}"
 echo ""
-echo -e "${BLUE}📁 Generated Analysis Files:${NC}"
-echo -e "  📊 Repository Analysis:    ${YELLOW}repository_analysis.json${NC}"
-echo -e "  🔧 Integration Spec:       ${YELLOW}pkl_integration_spec.json${NC}"
-echo -e "  🧬 Native PKL Analysis:    ${YELLOW}native_pkl_output/native_pkl_analysis.json${NC}"
-echo -e "  🎨 Dashboard Config:       ${YELLOW}native_pkl_output/enhanced_dashboard_config.json${NC}"
+echo -e "${BLUE}Generated Analysis Files:${NC}"
+echo -e "  Repository Analysis:    ${YELLOW}repository_analysis.json${NC}"
+echo -e "  Integration Spec:       ${YELLOW}pkl_integration_spec.json${NC}"
+echo -e "  Native PKL Analysis:    ${YELLOW}native_pkl_output/native_pkl_analysis.json${NC}"
+echo -e "  Dashboard Config:       ${YELLOW}native_pkl_output/enhanced_dashboard_config.json${NC}"
 echo ""
-echo -e "${BLUE}🔧 Key Features Available:${NC}"
-echo -e "  ✅ OpenClio faceted analysis (6 PKL-specific facets)"
+echo -e "${BLUE}Key Features Available:${NC}"
+echo -e "  OpenClio faceted analysis (6 PKL-specific facets)"
 echo -e "  ✅ Kura hierarchical clustering with UMAP visualization"
 echo -e "  ✅ Native PKL conversation processing"
 echo -e "  ✅ Automated procedure template generation"
 echo -e "  ✅ Real-time session monitoring"
 echo -e "  ✅ Interactive cluster exploration"
 echo ""
-echo -e "${YELLOW}💡 Quick Start:${NC}"
+echo -e "${YELLOW}Quick Start:${NC}"
 echo -e "  1. Open ${YELLOW}http://localhost:8080/kura-enhanced-dashboard.html${NC}"
 echo -e "  2. Explore the hierarchical clusters in the left panel"
 echo -e "  3. Click on UMAP points to see session details"
@@ -216,4 +216,4 @@ echo ""
 echo -e "${YELLOW}🛑 To stop all services:${NC}"
 echo -e "  Run: ${YELLOW}pkill -f 'kura-api-endpoint\\|web-server'${NC}"
 echo ""
-echo -e "${GREEN}Ready for data science procedural knowledge capture! 🚀${NC}"
+echo -e "${GREEN}Ready for data science procedural knowledge capture!${NC}"

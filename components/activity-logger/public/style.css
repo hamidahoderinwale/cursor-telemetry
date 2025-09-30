@@ -1,5 +1,5 @@
 /* ================================
-   🎨 Theme Variables
+   Theme Variables
    ================================ */
 :root {
   /* Colors */
@@ -49,7 +49,7 @@ html, body {
 }
 
 /* ================================
-   ✍️ Typography
+   Typography
    ================================ */
 h1, h2 {
   margin: 0 0 var(--space-md) 0;
@@ -238,7 +238,7 @@ code, pre {
 }
 
 /* ================================
-   ⚙️ Buttons & Controls
+   Buttons & Controls
    ================================ */
 button {
   background: var(--color-bg);
@@ -270,7 +270,7 @@ button:active {
 }
 
 /* ================================
-   🔍 Search & Status
+   Search & Status
    ================================ */
 .search-section {
   margin-bottom: var(--space-lg);
@@ -359,7 +359,7 @@ button:active {
 }
 
 /* ================================
-   🎯 Specific Components
+   Specific Components
    ================================ */
 
 /* Header */
@@ -1160,7 +1160,7 @@ button:active {
 }
 
 /* ================================
-   🎯 Enhanced Dashboard Styles
+   Enhanced Dashboard Styles
    ================================ */
 
 .dashboard-container {

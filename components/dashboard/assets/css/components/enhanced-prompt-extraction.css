@@ -1,0 +1,639 @@
+/**
+ * Enhanced Prompt Extraction Component Styles
+ * Integrates with the comprehensive prompt extraction system
+ */
+
+:root {
+  /* Prompt extraction specific colors */
+  --prompt-bg: var(--background-secondary);
+  --prompt-border: var(--border-color);
+  --prompt-accent: var(--primary-color);
+  --prompt-text: var(--text-primary);
+  --prompt-muted: var(--text-muted);
+  
+  /* Prompt type colors */
+  --prompt-direct: #3b82f6;
+  --prompt-cursor: #8b5cf6;
+  --prompt-ai: #10b981;
+  --prompt-task: #f59e0b;
+  --prompt-comment: #6b7280;
+}
+
+/* Enhanced prompt extraction container */
+.extracted-prompts {
+  margin-top: var(--space-4);
+  padding: var(--space-4);
+  background: var(--prompt-bg);
+  border: 1px solid var(--prompt-border);
+  border-radius: var(--border-radius);
+  box-shadow: var(--shadow-sm);
+}
+
+.prompts-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-3);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--prompt-border);
+}
+
+.prompts-title {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--prompt-text);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.prompts-title::before {
+  content: "";
+  font-size: var(--font-size-base);
+}
+
+/* Prompt items list */
+.prompts-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.prompt-item {
+  padding: var(--space-3);
+  background: var(--background-primary);
+  border: 1px solid var(--prompt-border);
+  border-radius: var(--border-radius);
+  transition: all var(--transition-fast);
+  position: relative;
+}
+
+.prompt-item:hover {
+  border-color: var(--prompt-accent);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+
+.prompt-item[data-type="direct_prompt"] {
+  border-left: 3px solid var(--prompt-direct);
+}
+
+.prompt-item[data-type="cursor_directive"] {
+  border-left: 3px solid var(--prompt-cursor);
+}
+
+.prompt-item[data-type="ai_directive"] {
+  border-left: 3px solid var(--prompt-ai);
+}
+
+.prompt-item[data-type="task_definition"],
+.prompt-item[data-type="goal_definition"] {
+  border-left: 3px solid var(--prompt-task);
+}
+
+.prompt-item[data-type*="comment"] {
+  border-left: 3px solid var(--prompt-comment);
+}
+
+/* Prompt type label */
+.prompt-type {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--prompt-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: var(--space-2);
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.prompt-type::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.prompt-item[data-type="direct_prompt"] .prompt-type::before {
+  background: var(--prompt-direct);
+}
+
+.prompt-item[data-type="cursor_directive"] .prompt-type::before {
+  background: var(--prompt-cursor);
+}
+
+.prompt-item[data-type="ai_directive"] .prompt-type::before {
+  background: var(--prompt-ai);
+}
+
+.prompt-item[data-type="task_definition"] .prompt-type::before,
+.prompt-item[data-type="goal_definition"] .prompt-type::before {
+  background: var(--prompt-task);
+}
+
+.prompt-item[data-type*="comment"] .prompt-type::before {
+  background: var(--prompt-comment);
+}
+
+/* Prompt content */
+.prompt-content {
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-relaxed);
+  color: var(--prompt-text);
+  margin-bottom: var(--space-3);
+  padding: var(--space-2);
+  background: var(--background-secondary);
+  border-radius: var(--border-radius-sm);
+  border: 1px solid var(--border-color);
+  font-family: var(--font-mono);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Prompt actions */
+.prompt-actions {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.prompt-actions .btn {
+  font-size: var(--font-size-xs);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--border-radius-sm);
+  transition: all var(--transition-fast);
+}
+
+.prompt-actions .btn-primary {
+  background: var(--prompt-accent);
+  border-color: var(--prompt-accent);
+  color: white;
+}
+
+.prompt-actions .btn-primary:hover {
+  background: var(--primary-hover);
+  border-color: var(--primary-hover);
+  transform: translateY(-1px);
+}
+
+/* Enhanced search integration */
+.search-input-container .extracted-prompts {
+  margin-top: var(--space-3);
+  border-top: 2px solid var(--prompt-accent);
+}
+
+/* Real-time prompt extraction indicators */
+.prompt-extraction-indicator {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--success-color);
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(1.2);
+  }
+}
+
+/* Prompt complexity indicators */
+.prompt-complexity {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--font-size-xs);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--border-radius-sm);
+  background: var(--background-secondary);
+  border: 1px solid var(--border-color);
+}
+
+.prompt-complexity.simple {
+  color: var(--success-color);
+  border-color: var(--success-color);
+}
+
+.prompt-complexity.medium {
+  color: var(--warning-color);
+  border-color: var(--warning-color);
+}
+
+.prompt-complexity.complex {
+  color: var(--error-color);
+  border-color: var(--error-color);
+}
+
+/* Intent classification badges */
+.intent-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--border-radius-sm);
+  background: var(--background-secondary);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+}
+
+.intent-badge.data_visualization {
+  background: rgba(59, 130, 246, 0.1);
+  border-color: var(--prompt-direct);
+  color: var(--prompt-direct);
+}
+
+.intent-badge.data_analysis {
+  background: rgba(16, 185, 129, 0.1);
+  border-color: var(--prompt-ai);
+  color: var(--prompt-ai);
+}
+
+.intent-badge.code_implementation {
+  background: rgba(139, 92, 246, 0.1);
+  border-color: var(--prompt-cursor);
+  color: var(--prompt-cursor);
+}
+
+.intent-badge.debugging {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: var(--error-color);
+  color: var(--error-color);
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .extracted-prompts {
+    margin-top: var(--space-3);
+    padding: var(--space-3);
+  }
+  
+  .prompt-item {
+    padding: var(--space-2);
+  }
+  
+  .prompt-content {
+    font-size: var(--font-size-xs);
+    padding: var(--space-1);
+  }
+  
+  .prompt-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .prompt-actions .btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 480px) {
+  .prompts-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-2);
+  }
+  
+  .prompt-item {
+    border-left-width: 2px;
+  }
+  
+  .prompt-type {
+    font-size: 10px;
+  }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --prompt-bg: rgba(255, 255, 255, 0.05);
+    --prompt-border: rgba(255, 255, 255, 0.1);
+  }
+  
+  .prompt-content {
+    background: rgba(255, 255, 255, 0.02);
+    border-color: rgba(255, 255, 255, 0.1);
+  }
+  
+  .prompt-complexity,
+  .intent-badge {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.1);
+  }
+}
+
+/* Animation for new prompt extraction */
+.prompt-item.new-prompt {
+  animation: slideInFromTop 0.3s ease-out;
+}
+
+@keyframes slideInFromTop {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Loading state for prompt extraction */
+.prompts-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  color: var(--prompt-muted);
+  font-size: var(--font-size-sm);
+}
+
+.prompts-loading::before {
+  content: "";
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--prompt-border);
+  border-top-color: var(--prompt-accent);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-right: var(--space-2);
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Enhanced conversation display styles */
+.conversation-fallback {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.conversation-fallback .btn {
+  flex: 1;
+  text-align: center;
+}
+
+.prompt-indicator {
+  background: var(--primary-color);
+  color: white;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: bold;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.intent-badge {
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.intent-badge.intent-data_visualization {
+  background: rgba(59, 130, 246, 0.1);
+  color: var(--prompt-direct);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+}
+
+.intent-badge.intent-data_analysis {
+  background: rgba(16, 185, 129, 0.1);
+  color: var(--prompt-ai);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+}
+
+.intent-badge.intent-code_implementation {
+  background: rgba(139, 92, 246, 0.1);
+  color: var(--prompt-cursor);
+  border: 1px solid rgba(139, 92, 246, 0.2);
+}
+
+.intent-badge.intent-debugging {
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--error-color);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+.intent-badge.intent-optimization {
+  background: rgba(245, 158, 11, 0.1);
+  color: var(--prompt-task);
+  border: 1px solid rgba(245, 158, 11, 0.2);
+}
+
+.intent-badge.intent-documentation {
+  background: rgba(107, 114, 128, 0.1);
+  color: var(--prompt-comment);
+  border: 1px solid rgba(107, 114, 128, 0.2);
+}
+
+.intent-badge.intent-testing {
+  background: rgba(34, 197, 94, 0.1);
+  color: #22c55e;
+  border: 1px solid rgba(34, 197, 94, 0.2);
+}
+
+.intent-badge.intent-refactoring {
+  background: rgba(168, 85, 247, 0.1);
+  color: #a855f7;
+  border: 1px solid rgba(168, 85, 247, 0.2);
+}
+
+.intent-badge.intent-general {
+  background: rgba(107, 114, 128, 0.1);
+  color: var(--text-secondary);
+  border: 1px solid rgba(107, 114, 128, 0.2);
+}
+
+/* Extracted prompts preview in conversations */
+.extracted-prompts-preview {
+  margin-top: var(--space-2);
+  padding: var(--space-2);
+  background: var(--background-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-sm);
+}
+
+.extracted-prompts-preview strong {
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  display: block;
+  margin-bottom: var(--space-1);
+}
+
+.prompt-tag {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 500;
+  margin-right: var(--space-1);
+  margin-bottom: var(--space-1);
+  border: 1px solid var(--border-color);
+  background: var(--background-primary);
+  color: var(--text-primary);
+}
+
+.prompt-tag.prompt-direct_prompt {
+  background: rgba(59, 130, 246, 0.1);
+  color: var(--prompt-direct);
+  border-color: rgba(59, 130, 246, 0.2);
+}
+
+.prompt-tag.prompt-cursor_directive {
+  background: rgba(139, 92, 246, 0.1);
+  color: var(--prompt-cursor);
+  border-color: rgba(139, 92, 246, 0.2);
+}
+
+.prompt-tag.prompt-ai_directive {
+  background: rgba(16, 185, 129, 0.1);
+  color: var(--prompt-ai);
+  border-color: rgba(16, 185, 129, 0.2);
+}
+
+.prompt-tag.prompt-task_definition,
+.prompt-tag.prompt-goal_definition {
+  background: rgba(245, 158, 11, 0.1);
+  color: var(--prompt-task);
+  border-color: rgba(245, 158, 11, 0.2);
+}
+
+.prompt-tag.prompt-code_comment_prompt,
+.prompt-tag.prompt-python_comment_prompt {
+  background: rgba(107, 114, 128, 0.1);
+  color: var(--prompt-comment);
+  border-color: rgba(107, 114, 128, 0.2);
+}
+
+.more-prompts {
+  font-size: 10px;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+/* Conversation meta information */
+.conversation-meta {
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  margin-top: var(--space-1);
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.conversation-meta span {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.conversation-meta span::before {
+  content: "";
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--text-secondary);
+}
+
+/* Enhanced conversation actions */
+.conversation-actions {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border-color);
+}
+
+.conversation-actions .btn {
+  font-size: var(--font-size-xs);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--border-radius-sm);
+  transition: all var(--transition-fast);
+}
+
+.conversation-actions .btn:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+/* No conversations state */
+.no-conversations {
+  text-align: center;
+  padding: var(--space-6);
+  color: var(--text-secondary);
+  border: 2px dashed var(--border-color);
+  border-radius: var(--border-radius);
+  background: var(--background-secondary);
+}
+
+.no-conversations p {
+  margin: 0 0 var(--space-4) 0;
+  font-size: var(--font-size-sm);
+}
+
+.no-conversations .btn {
+  margin: 0 var(--space-1);
+}
+
+/* Responsive conversation display */
+@media (max-width: 768px) {
+  .conversation-fallback {
+    flex-direction: column;
+  }
+  
+  .conversation-actions {
+    flex-direction: column;
+  }
+  
+  .conversation-actions .btn {
+    width: 100%;
+    justify-content: center;
+  }
+  
+  .extracted-prompts-preview {
+    padding: var(--space-1);
+  }
+  
+  .prompt-tag {
+    font-size: 9px;
+    padding: 1px 4px;
+  }
+}
+
+@media (max-width: 480px) {
+  .conversation-meta {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-1);
+  }
+  
+  .intent-badge {
+    font-size: 9px;
+    padding: 1px 4px;
+  }
+  
+  .prompt-indicator {
+    font-size: 9px;
+    padding: 1px 4px;
+  }
+}

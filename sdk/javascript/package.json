@@ -1,7 +1,7 @@
 {
   "name": "@cursor-telemetry/sdk",
-  "version": "1.0.0",
-  "description": "Official JavaScript/TypeScript SDK for Cursor Telemetry API",
+  "version": "1.1.0",
+  "description": "Official JavaScript/TypeScript SDK for Cursor Telemetry API with Privacy Controls and Activity Logger Integration",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
@@ -34,7 +34,11 @@
     "jupyter",
     "notebook",
     "data-science",
-    "typescript"
+    "typescript",
+    "privacy",
+    "activity-logger",
+    "real-time",
+    "monitoring"
   ],
   "author": "Cursor Telemetry Team <team@cursor-telemetry.com>",
   "license": "MIT",

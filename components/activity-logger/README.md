@@ -1,17 +1,17 @@
-# 🎯 Cursor Activity Dashboard
+# Cursor Activity Dashboard
 
 A modern, intuitive dashboard for monitoring and visualizing all your Cursor IDE activity data.
 
-## ✨ Features
+## Features
 
-- **📊 Real-time Statistics** - Live counts of sessions, entries, events, and code changes
-- **🔍 Smart Filtering** - Filter by source (filewatcher, clipboard, DOM, MCP) or type
-- **💻 Code Change Visualization** - Side-by-side before/after code diffs
-- **📝 Content Display** - Full prompts, responses, and notes with syntax highlighting
-- **🔄 Auto-refresh** - Automatically polls companion service for new data
+- **Real-time Statistics** - Live counts of sessions, entries, events, and code changes
+- **Smart Filtering** - Filter by source (filewatcher, clipboard, DOM, MCP) or type
+- **Code Change Visualization** - Side-by-side before/after code diffs
+- **Content Display** - Full prompts, responses, and notes with syntax highlighting
+- **Auto-refresh** - Automatically polls companion service for new data
 - **🐛 Debug Tools** - Built-in debugging and connection testing
 
-## 🚀 Quick Start
+## Quick Start
 
 1. **Start the Companion Service** (if not already running):
    ```bash
@@ -30,7 +30,7 @@ A modern, intuitive dashboard for monitoring and visualizing all your Cursor IDE
    - Go to `http://localhost:8000`
    - Click "Open Dashboard" to access the full interface
 
-## 📱 Dashboard Interface
+## Dashboard Interface
 
 ### Header Section
 - **Statistics Cards**: Shows total sessions, entries, events, and code changes
@@ -54,7 +54,7 @@ Each activity item shows:
 - **Full Content** (prompts, responses, code diffs)
 - **Tags** (if any)
 
-## 🔧 Debug Tools
+## Debug Tools
 
 ### Debug Database
 Click "🐛 Debug" to see:
@@ -68,7 +68,7 @@ Click "🔗 Test Connection" to:
 - See raw data being received
 - Verify data format
 
-## 📊 Data Sources
+## Data Sources
 
 The dashboard connects to your companion service and displays:
 
@@ -78,7 +78,7 @@ The dashboard connects to your companion service and displays:
 4. **MCP Data** - Model Context Protocol entries
 5. **System Events** - Logging and status events
 
-## 🎨 Modern UI Features
+## Modern UI Features
 
 - **Gradient Backgrounds** - Beautiful visual design
 - **Glass Morphism** - Modern frosted glass effects
@@ -125,8 +125,8 @@ public/
 └── style.css          # Original styles (legacy)
 ```
 
-## 🎯 Next Steps
+## Next Steps
 
 The dashboard is now ready to use! It will automatically display all your Cursor activity data in a beautiful, modern interface. The companion service handles all the data capture, and the dashboard provides an intuitive way to view and explore that data.
 
-Enjoy monitoring your Cursor activity! 🚀
+Enjoy monitoring your Cursor activity!

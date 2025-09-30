@@ -3,7 +3,7 @@
 # Cursor Dashboard Quick Start Script
 # Starts all necessary services for the dashboard
 
-echo "🚀 Starting Cursor Dashboard System"
+echo "Starting Cursor Dashboard System"
 echo "=================================="
 echo ""
 
@@ -36,22 +36,22 @@ kill_port() {
 }
 
 # Check and kill existing processes
-echo "🔍 Checking for existing processes..."
+echo "Checking for existing processes..."
 
 if check_port 43918; then
-    echo "   ⚠️  Port 43918 is in use (Companion Service)"
+    echo "   Port 43918 is in use (Companion Service)"
     kill_port 43918
 fi
 
 if check_port 9000; then
-    echo "   ⚠️  Port 9000 is in use (Dashboard Service)"
+    echo "   Port 9000 is in use (Dashboard Service)"
     kill_port 9000
 fi
 
 echo ""
 
 # Start Companion Service
-echo "🔧 Starting Companion Service..."
+echo "Starting Companion Service..."
 cd cursor-activity-logger/companion
 if [ ! -f "src/index.js" ]; then
     echo "   ❌ Error: src/index.js not found"
@@ -68,11 +68,11 @@ echo "   ⏳ Waiting for companion service to initialize..."
 sleep 5
 
 # Test companion service
-echo "   🔍 Testing companion service..."
+echo "   Testing companion service..."
 if curl -s http://localhost:43918/health > /dev/null 2>&1; then
     echo "   ✅ Companion Service is responding"
 else
-    echo "   ⚠️  Companion Service may not be ready yet"
+    echo "   Companion Service may not be ready yet"
 fi
 
 # Start Dashboard Service
@@ -87,33 +87,33 @@ echo "   ⏳ Waiting for dashboard service to initialize..."
 sleep 3
 
 # Test dashboard service
-echo "   🔍 Testing dashboard service..."
+echo "   Testing dashboard service..."
 if curl -s http://localhost:9000/cursor_dashboard_final.html > /dev/null 2>&1; then
     echo "   ✅ Dashboard Service is responding"
 else
-    echo "   ⚠️  Dashboard Service may not be ready yet"
+    echo "   Dashboard Service may not be ready yet"
 fi
 
 echo ""
-echo "🎉 Dashboard System Started Successfully!"
+echo "Dashboard System Started Successfully!"
 echo "========================================"
 echo ""
-echo "📊 Main Dashboard:"
+echo "Main Dashboard:"
 echo "   http://localhost:9000/cursor_dashboard_final.html"
 echo ""
-echo "📈 Analytics Dashboard:"
+echo "Analytics Dashboard:"
 echo "   http://localhost:9000/analytics_dashboard.html"
 echo ""
-echo "🔧 Companion Service:"
+echo "Companion Service:"
 echo "   http://localhost:43918/health"
 echo ""
-echo "📋 System Status:"
+echo "System Status:"
 echo "   Run: python3 monitor_system.py"
 echo ""
 echo "🛑 To stop all services:"
 echo "   kill $COMPANION_PID $DASHBOARD_PID"
 echo ""
-echo "✨ Your Cursor Dashboard is ready to use!"
+echo "Your Cursor Dashboard is ready to use!"
 
 # Save PIDs for easy cleanup
 echo "$COMPANION_PID $DASHBOARD_PID" > .dashboard_pids

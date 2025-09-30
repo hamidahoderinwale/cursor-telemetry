@@ -24,7 +24,7 @@ setup(
     version=get_version(),
     author="Cursor Telemetry Team",
     author_email="team@cursor-telemetry.com",
-    description="Official Python SDK for Cursor Telemetry API",
+    description="Official Python SDK for Cursor Telemetry API with Privacy Controls and Activity Logger Integration",
     long_description=read_readme(),
     long_description_content_type="text/markdown",
     url="https://github.com/cursor-telemetry/sdk",
@@ -112,5 +112,9 @@ setup(
         "data-science",
         "development",
         "monitoring",
+        "privacy",
+        "activity-logger",
+        "real-time",
+        "privacy-controls",
     ],
 )

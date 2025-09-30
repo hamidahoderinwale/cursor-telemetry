@@ -12,7 +12,7 @@ class IdleDetector {
 
   start() {
     if (this.isRunning) {
-      console.log('�️ Idle detector already running');
+      console.log('�Idle detector already running');
       return;
     }
 
@@ -42,7 +42,7 @@ class IdleDetector {
     // If we were idle and now have activity, resume logging
     if (this.isIdle) {
       this.isIdle = false;
-      console.log('��️ Activity resumed - logging enabled');
+      console.log('��Activity resumed - logging enabled');
       
       queue.addEvent({
         type: 'resume_logging',
@@ -60,7 +60,7 @@ class IdleDetector {
     
     if (timeSinceActivity >= this.idleThreshold && !this.isIdle) {
       this.isIdle = true;
-      console.log('��️ User idle - pausing logging');
+      console.log('��User idle - pausing logging');
       
       queue.addEvent({
         type: 'pause_logging',

@@ -10,8 +10,8 @@ CURSOR_DATA_DIR="/Users/hamidaho/Library/Application Support/Cursor"
 EXPORT_DIR="/Users/hamidaho/cursor_export_$(date +%Y%m%d_%H%M%S)"
 TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
 
-echo "🚀 Starting Cursor Data Export at $TIMESTAMP"
-echo "📁 Export directory: $EXPORT_DIR"
+echo " Starting Cursor Data Export at $TIMESTAMP"
+echo " Export directory: $EXPORT_DIR"
 
 # Create export directory
 mkdir -p "$EXPORT_DIR"
@@ -21,16 +21,16 @@ safe_copy() {
     local source="$1"
     local dest="$2"
     if [ -e "$source" ]; then
-        echo "📋 Copying: $source"
-        cp -r "$source" "$dest" 2>/dev/null || echo "⚠️  Warning: Could not copy $source"
+        echo " Copying: $source"
+        cp -r "$source" "$dest" 2>/dev/null || echo "  Warning: Could not copy $source"
     else
-        echo "⚠️  Not found: $source"
+        echo "  Not found: $source"
     fi
 }
 
 # Export core user data
 echo ""
-echo "📊 Exporting Core User Data..."
+echo " Exporting Core User Data..."
 mkdir -p "$EXPORT_DIR/User"
 safe_copy "$CURSOR_DATA_DIR/User/settings.json" "$EXPORT_DIR/User/"
 safe_copy "$CURSOR_DATA_DIR/User/keybindings.json" "$EXPORT_DIR/User/"
@@ -38,7 +38,7 @@ safe_copy "$CURSOR_DATA_DIR/User/snippets" "$EXPORT_DIR/User/"
 
 # Export workspace storage (project-specific settings)
 echo ""
-echo "📁 Exporting Workspace Storage..."
+echo " Exporting Workspace Storage..."
 mkdir -p "$EXPORT_DIR/User/workspaceStorage"
 safe_copy "$CURSOR_DATA_DIR/User/workspaceStorage" "$EXPORT_DIR/User/"
 
@@ -66,20 +66,20 @@ safe_copy "$CURSOR_DATA_DIR/User/History" "$EXPORT_DIR/User/"
 
 # Export application preferences
 echo ""
-echo "⚙️  Exporting Application Preferences..."
+echo "  Exporting Application Preferences..."
 mkdir -p "$EXPORT_DIR/AppData"
 safe_copy "$CURSOR_DATA_DIR/Preferences" "$EXPORT_DIR/AppData/"
 safe_copy "$CURSOR_DATA_DIR/languagepacks.json" "$EXPORT_DIR/AppData/"
 
 # Export logs (optional - can be large)
 echo ""
-echo "📝 Exporting Logs..."
+echo " Exporting Logs..."
 mkdir -p "$EXPORT_DIR/logs"
 safe_copy "$CURSOR_DATA_DIR/logs" "$EXPORT_DIR/"
 
 # Create a summary report
 echo ""
-echo "📋 Creating Export Summary..."
+echo " Creating Export Summary..."
 cat > "$EXPORT_DIR/EXPORT_SUMMARY.md" << EOF
 # Cursor Data Export Summary
 
@@ -124,19 +124,19 @@ EOF
 
 # Calculate and display file sizes
 echo ""
-echo "📊 Calculating Export Sizes..."
+echo " Calculating Export Sizes..."
 du -sh "$EXPORT_DIR"/* >> "$EXPORT_DIR/EXPORT_SUMMARY.md" 2>/dev/null || true
 
 # Create a compressed archive
 echo ""
-echo "🗜️  Creating Compressed Archive..."
+echo "  Creating Compressed Archive..."
 cd "$(dirname "$EXPORT_DIR")"
 tar -czf "cursor_export_$(date +%Y%m%d_%H%M%S).tar.gz" "$(basename "$EXPORT_DIR")"
 
 echo ""
 echo "✅ Export Complete!"
-echo "📁 Export directory: $EXPORT_DIR"
-echo "📦 Compressed archive: $(dirname "$EXPORT_DIR")/cursor_export_$(date +%Y%m%d_%H%M%S).tar.gz"
-echo "📋 Summary report: $EXPORT_DIR/EXPORT_SUMMARY.md"
+echo " Export directory: $EXPORT_DIR"
+echo " Compressed archive: $(dirname "$EXPORT_DIR")/cursor_export_$(date +%Y%m%d_%H%M%S).tar.gz"
+echo " Summary report: $EXPORT_DIR/EXPORT_SUMMARY.md"
 echo ""
-echo "💡 Tip: The compressed archive is ready for backup or transfer to another machine."
+echo " Tip: The compressed archive is ready for backup or transfer to another machine."

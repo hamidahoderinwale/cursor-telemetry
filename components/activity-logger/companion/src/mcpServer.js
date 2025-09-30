@@ -12,7 +12,7 @@ class MCPServer {
 
   start() {
     if (this.isRunning) {
-      console.log('�️ MCP server already running');
+      console.log('�MCP server already running');
       return;
     }
 
@@ -80,7 +80,7 @@ class MCPServer {
         this.handleSetConfig(params, id);
         break;
       default:
-        console.warn(`�️ Unknown MCP method: ${method}`);
+        console.warn(`�Unknown MCP method: ${method}`);
     }
   }
 

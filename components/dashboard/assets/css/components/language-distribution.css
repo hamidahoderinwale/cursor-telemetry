@@ -1,0 +1,142 @@
+/**
+ * Language Distribution Component Styles
+ */
+
+.language-distribution-card {
+    background: var(--background-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: var(--shadow-sm);
+    transition: all 0.3s ease;
+    grid-column: 1 / -1; /* Span full width in grid */
+    margin-top: 20px;
+}
+
+.language-distribution-card:hover {
+    box-shadow: var(--shadow-md);
+    transform: translateY(-2px);
+}
+
+.language-distribution-header {
+    margin-bottom: 16px;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 12px;
+}
+
+.language-distribution-header h3 {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.language-distribution-header h3::before {
+    content: "";
+    font-size: 1.2rem;
+}
+
+.language-distribution-content {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.language-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: var(--background-secondary);
+    border-radius: 8px;
+    border-left: 3px solid var(--primary-color);
+    transition: all 0.2s ease;
+}
+
+.language-item:hover {
+    background: var(--background-hover);
+    transform: translateX(4px);
+}
+
+.language-name {
+    font-weight: 500;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+}
+
+.language-percentage {
+    font-weight: 600;
+    color: var(--primary-color);
+    font-size: 0.9rem;
+    background: var(--primary-color-light);
+    padding: 2px 8px;
+    border-radius: 12px;
+    min-width: 50px;
+    text-align: center;
+}
+
+/* Color coding for different languages */
+.language-item:nth-child(1) { border-left-color: #f7df1e; } /* JavaScript - Yellow */
+.language-item:nth-child(2) { border-left-color: #3178c6; } /* TypeScript - Blue */
+.language-item:nth-child(3) { border-left-color: #3776ab; } /* Python - Blue */
+.language-item:nth-child(4) { border-left-color: #e34c26; } /* HTML - Red */
+.language-item:nth-child(5) { border-left-color: #1572b6; } /* CSS - Blue */
+.language-item:nth-child(6) { border-left-color: #89e051; } /* Shell - Green */
+.language-item:nth-child(7) { border-left-color: #f37626; } /* Jupyter - Orange */
+
+/* Responsive design */
+@media (max-width: 768px) {
+    .language-distribution-card {
+        padding: 16px;
+        margin-top: 16px;
+    }
+    
+    .language-item {
+        padding: 6px 10px;
+    }
+    
+    .language-name,
+    .language-percentage {
+        font-size: 0.85rem;
+    }
+}
+
+/* Dark mode adjustments */
+@media (prefers-color-scheme: dark) {
+    .language-item {
+        background: var(--background-tertiary);
+    }
+    
+    .language-item:hover {
+        background: var(--background-hover);
+    }
+}
+
+/* Animation for loading state */
+.language-distribution-content.loading {
+    opacity: 0.6;
+}
+
+.language-distribution-content.loading .language-item {
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+/* No data state */
+.language-distribution-content .no-data {
+    text-align: center;
+    color: var(--text-secondary);
+    font-style: italic;
+    padding: 20px;
+    background: var(--background-secondary);
+    border-radius: 8px;
+    border: 1px dashed var(--border-color);
+}
+

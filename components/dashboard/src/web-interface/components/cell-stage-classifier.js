@@ -1194,6 +1194,447 @@ class CellStageClassifier {
             ...info
         }));
     }
+
+    /**
+     * Generate stage distribution for all sessions
+     */
+    generateStageDistribution(sessions) {
+        console.log('generateStageDistribution called with', sessions.length, 'sessions');
+        
+        if (!sessions || sessions.length === 0) {
+            return {
+                globalDistribution: {},
+                sessionBreakdowns: {},
+                totalCells: 0,
+                globalInsights: [],
+                complexityMetrics: { average: 0, min: 0, max: 0 },
+                facetAnalysis: { facetScores: {}, dominantFacet: null }
+            };
+        }
+
+        const globalStageCounts = {};
+        const sessionStageBreakdowns = {};
+        const globalInsights = [];
+        const complexityScores = [];
+        const facetScores = {};
+
+        // Process each session
+        sessions.forEach((session, sessionIndex) => {
+            console.log(`Processing session ${sessionIndex + 1}/${sessions.length}:`, session.id);
+            
+            const sessionAnalysis = this.analyzeSessionStages(session);
+            sessionStageBreakdowns[session.id] = sessionAnalysis;
+            
+            // Aggregate global stage counts
+            Object.entries(sessionAnalysis.stageDistribution || {}).forEach(([stage, count]) => {
+                globalStageCounts[stage] = (globalStageCounts[stage] || 0) + count;
+            });
+            
+            // Collect complexity scores
+            if (sessionAnalysis.complexityMetrics) {
+                complexityScores.push(sessionAnalysis.complexityMetrics.average);
+            }
+            
+            // Collect facet scores
+            if (sessionAnalysis.facetAnalysis) {
+                Object.entries(sessionAnalysis.facetAnalysis.facetScores || {}).forEach(([facet, score]) => {
+                    if (!facetScores[facet]) {
+                        facetScores[facet] = [];
+                    }
+                    facetScores[facet].push(score);
+                });
+            }
+            
+            // Collect insights
+            if (sessionAnalysis.insights) {
+                globalInsights.push(...sessionAnalysis.insights);
+            }
+        });
+
+        // Calculate average facet scores
+        const avgFacetScores = {};
+        Object.entries(facetScores).forEach(([facet, scores]) => {
+            avgFacetScores[facet] = scores.reduce((sum, score) => sum + score, 0) / scores.length;
+        });
+
+        // Calculate complexity metrics
+        const complexityMetrics = {
+            average: complexityScores.length > 0 ? complexityScores.reduce((sum, score) => sum + score, 0) / complexityScores.length : 0,
+            min: complexityScores.length > 0 ? Math.min(...complexityScores) : 0,
+            max: complexityScores.length > 0 ? Math.max(...complexityScores) : 0
+        };
+
+        // Generate global insights
+        const globalInsightsSummary = this.generateGlobalInsights(globalInsights, complexityMetrics, avgFacetScores);
+
+        console.log('Generated stage distribution:', {
+            totalSessions: sessions.length,
+            totalCells: Object.values(globalStageCounts).reduce((sum, count) => sum + count, 0),
+            stageCount: Object.keys(globalStageCounts).length,
+            complexityMetrics,
+            facetScores: Object.keys(avgFacetScores).length
+        });
+
+        return {
+            globalDistribution: globalStageCounts,
+            sessionBreakdowns: sessionStageBreakdowns,
+            totalCells: Object.values(globalStageCounts).reduce((sum, count) => sum + count, 0),
+            globalInsights: globalInsightsSummary,
+            complexityMetrics: complexityMetrics,
+            facetAnalysis: {
+                facetScores: avgFacetScores,
+                dominantFacet: Object.entries(avgFacetScores)
+                    .sort((a, b) => b[1] - a[1])[0]?.[0] || null
+            }
+        };
+    }
+
+    /**
+     * Analyze stages for a single session
+     */
+    analyzeSessionStages(session) {
+        console.log('analyzeSessionStages called for session:', session.id);
+        
+        const stageCounts = {};
+        const stageProgression = [];
+        const insights = [];
+        const complexityScores = [];
+        const facetScores = {};
+
+        // Extract cells from session data
+        const cells = this.extractCellsFromSession(session);
+        console.log(`Extracted ${cells.length} cells from session ${session.id}`);
+
+        if (cells.length === 0) {
+            // Fallback to session-level analysis
+            const sessionStage = this.analyzeSessionContent(session);
+            stageCounts[sessionStage.stage] = 1;
+            stageProgression.push({
+                step: 1,
+                stage: sessionStage.stage,
+                confidence: sessionStage.confidence,
+                content: session.intent || 'Unknown',
+                timestamp: session.timestamp
+            });
+            
+            return {
+                primaryStage: sessionStage.stage,
+                stages: [{
+                    index: 0,
+                    stage: sessionStage.stage,
+                    confidence: sessionStage.confidence,
+                    stageInfo: sessionStage.stageInfo,
+                    content: session.intent || 'Unknown',
+                    timestamp: session.timestamp,
+                    source: 'session-level'
+                }],
+                stageDistribution: stageCounts,
+                stageProgression: stageProgression,
+                totalCells: 1,
+                complexityMetrics: { average: 1, min: 1, max: 1 },
+                facetAnalysis: { facetScores: {}, dominantFacet: null },
+                insights: insights
+            };
+        }
+
+        // Analyze each cell
+        cells.forEach((cell, index) => {
+            const cellAnalysis = this.analyzeCellContent(cell);
+            
+            // Count stages
+            stageCounts[cellAnalysis.stage] = (stageCounts[cellAnalysis.stage] || 0) + 1;
+            
+            // Track progression
+            stageProgression.push({
+                step: index + 1,
+                stage: cellAnalysis.stage,
+                confidence: cellAnalysis.confidence,
+                content: cell.content?.substring(0, 100) || '',
+                timestamp: cell.timestamp || session.timestamp
+            });
+            
+            // Collect complexity scores
+            if (cellAnalysis.complexity) {
+                complexityScores.push(cellAnalysis.complexity);
+            }
+            
+            // Collect facet scores
+            if (cellAnalysis.facetScores) {
+                Object.entries(cellAnalysis.facetScores).forEach(([facet, score]) => {
+                    if (!facetScores[facet]) {
+                        facetScores[facet] = [];
+                    }
+                    facetScores[facet].push(score);
+                });
+            }
+            
+            // Collect insights
+            if (cellAnalysis.insights) {
+                insights.push(...cellAnalysis.insights);
+            }
+        });
+
+        // Determine primary stage
+        const primaryStage = Object.entries(stageCounts)
+            .sort((a, b) => b[1] - a[1])[0]?.[0] || 'unknown';
+
+        // Calculate complexity metrics
+        const complexityMetrics = {
+            average: complexityScores.length > 0 ? complexityScores.reduce((sum, score) => sum + score, 0) / complexityScores.length : 1,
+            min: complexityScores.length > 0 ? Math.min(...complexityScores) : 1,
+            max: complexityScores.length > 0 ? Math.max(...complexityScores) : 1
+        };
+
+        // Calculate average facet scores
+        const avgFacetScores = {};
+        Object.entries(facetScores).forEach(([facet, scores]) => {
+            avgFacetScores[facet] = scores.reduce((sum, score) => sum + score, 0) / scores.length;
+        });
+
+        return {
+            primaryStage: primaryStage,
+            stages: cells.map((cell, index) => ({
+                index: index,
+                stage: this.analyzeCellContent(cell).stage,
+                confidence: this.analyzeCellContent(cell).confidence,
+                stageInfo: this.analyzeCellContent(cell).stageInfo,
+                content: cell.content?.substring(0, 100) || '',
+                timestamp: cell.timestamp || session.timestamp,
+                source: 'cell-level'
+            })),
+            stageDistribution: stageCounts,
+            stageProgression: stageProgression,
+            totalCells: cells.length,
+            complexityMetrics: complexityMetrics,
+            facetAnalysis: {
+                facetScores: avgFacetScores,
+                dominantFacet: Object.entries(avgFacetScores)
+                    .sort((a, b) => b[1] - a[1])[0]?.[0] || null
+            },
+            insights: insights
+        };
+    }
+
+    /**
+     * Extract cells from session data
+     */
+    extractCellsFromSession(session) {
+        const cells = [];
+        
+        // Try to extract cells from various possible data structures
+        if (session.cells && Array.isArray(session.cells)) {
+            // Direct cells array
+            cells.push(...session.cells);
+        } else if (session.codeDeltas && Array.isArray(session.codeDeltas)) {
+            // Extract from code deltas
+            session.codeDeltas.forEach((delta, index) => {
+                if (delta.afterContent || delta.content) {
+                    cells.push({
+                        content: delta.afterContent || delta.content,
+                        timestamp: delta.timestamp || session.timestamp,
+                        type: 'code',
+                        index: index
+                    });
+                }
+            });
+        } else if (session.fileChanges && Array.isArray(session.fileChanges)) {
+            // Extract from file changes
+            session.fileChanges.forEach((change, index) => {
+                if (change.content) {
+                    cells.push({
+                        content: change.content,
+                        timestamp: change.timestamp || session.timestamp,
+                        type: 'code',
+                        index: index
+                    });
+                }
+            });
+        } else if (session.content) {
+            // Single content block
+            cells.push({
+                content: session.content,
+                timestamp: session.timestamp,
+                type: 'code',
+                index: 0
+            });
+        } else if (session.intent) {
+            // Fallback to intent as content
+            cells.push({
+                content: session.intent,
+                timestamp: session.timestamp,
+                type: 'intent',
+                index: 0
+            });
+        }
+        
+        return cells;
+    }
+
+    /**
+     * Analyze session content for stage classification
+     */
+    analyzeSessionContent(session) {
+        const content = session.intent || session.summary || session.description || 'Unknown';
+        const analysis = this.analyzeCellContent({ content: content, type: 'session' });
+        
+        return {
+            stage: analysis.stage,
+            confidence: analysis.confidence,
+            stageInfo: analysis.stageInfo
+        };
+    }
+
+    /**
+     * Analyze individual cell content
+     */
+    analyzeCellContent(cell) {
+        if (!cell || !cell.content) {
+            return {
+                stage: 'unknown',
+                confidence: 0,
+                stageInfo: this.cellStages.unknown || { name: 'Unknown', description: 'Unknown stage' },
+                complexity: 1,
+                facetScores: {},
+                insights: []
+            };
+        }
+
+        const content = cell.content;
+        const normalizedContent = content.toLowerCase();
+        
+        // Enhanced stage classification with more detailed analysis
+        const stageScores = {};
+        const insights = [];
+        
+        // Score each stage based on content analysis
+        Object.entries(this.cellStages).forEach(([stageKey, stageInfo]) => {
+            let score = 0;
+            let matches = 0;
+            
+            // Keyword matching
+            stageInfo.keywords.forEach(keyword => {
+                const regex = new RegExp(`\\b${keyword}\\b`, 'gi');
+                const matches_found = (content.match(regex) || []).length;
+                if (matches_found > 0) {
+                    score += matches_found * 0.3;
+                    matches += matches_found;
+                }
+            });
+            
+            // Content type analysis
+            if (stageKey === 'import' && /^(import|from)\s+/.test(content)) {
+                score += 0.8;
+                matches += 1;
+            }
+            
+            if (stageKey === 'data_loading' && /(read_csv|read_json|load|fetch|download|pd\.read|np\.load)/.test(normalizedContent)) {
+                score += 0.7;
+                matches += 1;
+            }
+            
+            if (stageKey === 'data_visualization' && /(plot|chart|graph|visualize|matplotlib|seaborn|plotly|show|plt\.)/.test(normalizedContent)) {
+                score += 0.8;
+                matches += 1;
+            }
+            
+            if (stageKey === 'machine_learning' && /(fit|predict|train|model|sklearn|tensorflow|pytorch|xgboost|ml)/.test(normalizedContent)) {
+                score += 0.8;
+                matches += 1;
+            }
+            
+            if (stageKey === 'statistical_analysis' && /(ttest|anova|chi2|regression|correlation|pvalue|statistical|stats)/.test(normalizedContent)) {
+                score += 0.7;
+                matches += 1;
+            }
+            
+            if (stageKey === 'data_preprocessing' && /(clean|preprocess|transform|fillna|dropna|encode|normalize|scale)/.test(normalizedContent)) {
+                score += 0.7;
+                matches += 1;
+            }
+            
+            if (stageKey === 'exploratory_analysis' && /(describe|info|head|tail|shape|dtypes|value_counts|corr)/.test(normalizedContent)) {
+                score += 0.6;
+                matches += 1;
+            }
+            
+            if (stageKey === 'documentation' && /(comment|docstring|markdown|explain|note|todo|#)/.test(normalizedContent)) {
+                score += 0.5;
+                matches += 1;
+            }
+            
+            if (stageKey === 'testing' && /(test|assert|validate|check|verify|unittest|pytest)/.test(normalizedContent)) {
+                score += 0.6;
+                matches += 1;
+            }
+            
+            if (stageKey === 'interactive_viz' && /(interactive|dashboard|widget|streamlit|dash|bokeh)/.test(normalizedContent)) {
+                score += 0.7;
+                matches += 1;
+            }
+            
+            if (stageKey === 'results_interpretation' && /(conclusion|interpret|result|finding|insight|summary)/.test(normalizedContent)) {
+                score += 0.6;
+                matches += 1;
+            }
+            
+            if (stageKey === 'utility' && /(function|def|helper|utility|tool|method)/.test(normalizedContent)) {
+                score += 0.5;
+                matches += 1;
+            }
+            
+            if (stageKey === 'configuration' && /(config|setting|parameter|env|constant|variable)/.test(normalizedContent)) {
+                score += 0.4;
+                matches += 1;
+            }
+            
+            stageScores[stageKey] = { score, matches, stageInfo };
+        });
+        
+        // Find the best matching stage
+        const bestStage = Object.entries(stageScores)
+            .sort((a, b) => b[1].score - a[1].score)[0];
+        
+        const finalStage = bestStage ? bestStage[0] : 'unknown';
+        const confidence = bestStage ? Math.min(bestStage[1].score, 1.0) : 0.1;
+        const stageInfo = bestStage ? bestStage[1].stageInfo : this.cellStages.unknown;
+        
+        // Calculate complexity
+        const complexity = this.calculateBasicComplexity(content);
+        
+        // Generate insights
+        if (confidence < 0.3) {
+            insights.push({
+                type: 'classification',
+                message: 'Low confidence in stage classification',
+                severity: 'warning'
+            });
+        }
+        
+        if (complexity > 10) {
+            insights.push({
+                type: 'complexity',
+                message: 'High complexity detected',
+                severity: 'warning'
+            });
+        }
+        
+        if (bestStage && bestStage[1].matches > 0) {
+            insights.push({
+                type: 'classification',
+                message: `Strong match with ${finalStage} stage`,
+                severity: 'success'
+            });
+        }
+        
+        return {
+            stage: finalStage,
+            confidence: confidence,
+            stageInfo: stageInfo,
+            complexity: complexity,
+            facetScores: { [finalStage]: confidence },
+            insights: insights
+        };
+    }
 }
 
 // Make it globally available

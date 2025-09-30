@@ -2,7 +2,7 @@
 
 Official SDK for the Cursor Telemetry Dashboard API - providing programmatic access to all monitoring, analysis, and integration capabilities.
 
-## 🚀 Quick Start
+## Quick Start
 
 ### JavaScript/TypeScript
 
@@ -46,14 +46,14 @@ sessions = api.sessions.get_all()
 notebook = api.sessions.generate_notebook("session-id")
 ```
 
-## 📚 Documentation
+## Documentation
 
 - [API Reference](https://docs.cursor-telemetry.com/api)
 - [SDK Guide](https://docs.cursor-telemetry.com/sdk)
 - [Examples](https://docs.cursor-telemetry.com/examples)
 - [Changelog](https://docs.cursor-telemetry.com/changelog)
 
-## 🔧 Features
+## Features
 
 - **Real-time Monitoring**: WebSocket support for live updates
 - **Session Management**: Create, retrieve, and analyze development sessions
@@ -64,21 +64,21 @@ notebook = api.sessions.generate_notebook("session-id")
 - **TypeScript Support**: Full type definitions
 - **Error Handling**: Comprehensive error handling and retry logic
 
-## 📦 Packages
+## Packages
 
 - **JavaScript/TypeScript**: `@cursor-telemetry/sdk`
 - **Python**: `cursor-telemetry-sdk`
 - **CLI**: `@cursor-telemetry/cli`
 
-## 🤝 Contributing
+## Contributing
 
 We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
 
-## 📄 License
+## License
 
 MIT License - see [LICENSE](LICENSE) for details.
 
-## 🆘 Support
+## Support
 
 - [GitHub Issues](https://github.com/cursor-telemetry/sdk/issues)
 - [Discord Community](https://discord.gg/cursor-telemetry)

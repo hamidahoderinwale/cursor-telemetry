@@ -12,6 +12,7 @@ import { nanoid } from 'nanoid';
 export class CursorDBParser {
   private db: Database.Database | null = null;
   private dbPath: string | null;
+  private availableTables: string[] = [];
 
   constructor(dbPath?: string) {
     this.dbPath = dbPath || this.findCursorDB();
@@ -100,17 +101,40 @@ export class CursorDBParser {
     if (!this.db) throw new Error('Database not connected');
 
     try {
-      // Check for common Cursor database tables
-      const tables = this.db.prepare(`
+      // Get all tables in the database
+      const allTables = this.db.prepare(`
         SELECT name FROM sqlite_master 
-        WHERE type='table' AND name IN ('conversations', 'messages', 'file_contexts', 'sessions')
+        WHERE type='table'
       `).all() as { name: string }[];
 
-      if (tables.length === 0) {
-        throw new Error('No recognized Cursor database tables found');
+      console.log('Available tables in Cursor database:', allTables.map(t => t.name));
+
+      // Check for various possible table names and structures
+      const possibleTableNames = [
+        'conversations', 'messages', 'file_contexts', 'sessions',
+        'chat_history', 'ai_conversations', 'cursor_chat', 'workspace_data',
+        'ItemTable', 'KeyValueTable', 'ExtensionHostProfiler', 'ExtensionHostProcess',
+        'workspaceStorage', 'globalStorage', 'state', 'logs'
+      ];
+
+      const foundTables = allTables.filter(table => 
+        possibleTableNames.some(name => table.name.toLowerCase().includes(name.toLowerCase()))
+      );
+
+      if (foundTables.length === 0) {
+        console.log('No recognized Cursor database tables found, but database is accessible');
+        // Don't throw error - continue with alternative data collection
+        return;
       }
+
+      console.log('Found relevant tables:', foundTables.map(t => t.name));
+      
+      // Store table information for later use
+      this.availableTables = foundTables.map(t => t.name);
+      
     } catch (error) {
-      throw new Error(`Database schema validation failed: ${error}`);
+      console.log(`Database schema validation failed: ${error}`);
+      // Don't throw error - continue with alternative data collection
     }
   }
 
@@ -212,23 +236,105 @@ export class CursorDBParser {
     if (!this.db) return [];
 
     try {
+      // Get all tables that might contain messages
       const tables = this.db.prepare(`
         SELECT name FROM sqlite_master 
-        WHERE type='table' AND name LIKE '%message%'
+        WHERE type='table' AND (
+          name LIKE '%message%' OR 
+          name LIKE '%chat%' OR 
+          name LIKE '%conversation%' OR
+          name LIKE '%prompt%' OR
+          name LIKE '%response%'
+        )
       `).all() as { name: string }[];
 
       if (tables.length === 0) return [];
 
-      const tableName = tables[0].name;
-      return this.db.prepare(`
-        SELECT * FROM ${tableName} 
-        WHERE conversation_id = ? OR session_id = ?
-        ORDER BY timestamp ASC
-      `).all(conversationId, conversationId);
+      let allMessages: any[] = [];
+
+      // Try each table to find messages
+      for (const table of tables) {
+        try {
+          const tableName = table.name;
+          
+          // Get table schema to understand the structure
+          const schema = this.db.prepare(`PRAGMA table_info(${tableName})`).all() as any[];
+          const columns = schema.map(col => col.name);
+          
+          // Build query based on available columns
+          let whereClause = '';
+          let params: any[] = [];
+          
+          if (columns.includes('conversation_id')) {
+            whereClause = 'conversation_id = ?';
+            params = [conversationId];
+          } else if (columns.includes('session_id')) {
+            whereClause = 'session_id = ?';
+            params = [conversationId];
+          } else if (columns.includes('chat_id')) {
+            whereClause = 'chat_id = ?';
+            params = [conversationId];
+          } else if (columns.includes('id') && columns.includes('content')) {
+            // Try to find messages by content patterns
+            whereClause = 'content IS NOT NULL AND content != ""';
+            params = [];
+          }
+          
+          if (whereClause) {
+            const messages = this.db.prepare(`
+              SELECT * FROM ${tableName} 
+              WHERE ${whereClause}
+              ORDER BY ${columns.includes('timestamp') ? 'timestamp' : columns.includes('created_at') ? 'created_at' : 'id'} ASC
+            `).all(...params);
+            
+            // Normalize message structure
+            const normalizedMessages = messages.map(msg => this.normalizeMessage(msg, tableName));
+            allMessages = allMessages.concat(normalizedMessages);
+          }
+        } catch (tableError) {
+          console.warn(`Error querying table ${table.name}:`, tableError);
+        }
+      }
+
+      // Remove duplicates and sort by timestamp
+      const uniqueMessages = this.deduplicateMessages(allMessages);
+      return uniqueMessages.sort((a, b) => {
+        const timeA = new Date(a.timestamp || a.created_at || 0).getTime();
+        const timeB = new Date(b.timestamp || b.created_at || 0).getTime();
+        return timeA - timeB;
+      });
     } catch (error) {
       console.error('Error getting messages:', error);
       return [];
     }
+  }
+
+  private normalizeMessage(message: any, tableName: string): any {
+    // Normalize different message formats to a common structure
+    return {
+      id: message.id || message.message_id || message.msg_id,
+      conversation_id: message.conversation_id || message.session_id || message.chat_id,
+      timestamp: message.timestamp || message.created_at || message.time,
+      content: message.content || message.text || message.message || message.prompt || message.response,
+      role: this.determineMessageRole(message),
+      type: message.type || message.message_type || 'text',
+      metadata: {
+        table_source: tableName,
+        original_data: message
+      }
+    };
+  }
+
+  private deduplicateMessages(messages: any[]): any[] {
+    const seen = new Set();
+    return messages.filter(msg => {
+      const key = `${msg.id}-${msg.content}-${msg.timestamp}`;
+      if (seen.has(key)) {
+        return false;
+      }
+      seen.add(key);
+      return true;
+    });
   }
 
   private analyzeConversation(messages: any[]): {
@@ -516,17 +622,53 @@ export class CursorDBParser {
   }
 
   private determineMessageRole(message: any): 'user' | 'assistant' {
-    // Determine if message is from user or assistant based on Cursor's structure
+    // Check explicit role field first
     if (message.role) {
-      return message.role === 'user' ? 'user' : 'assistant';
+      const role = message.role.toLowerCase();
+      if (role === 'user' || role === 'human') return 'user';
+      if (role === 'assistant' || role === 'ai' || role === 'bot' || role === 'system') return 'assistant';
     }
     
-    // Fallback: check content patterns
-    const content = (message.content || message.text || '').toLowerCase();
-    if (content.includes('assistant:') || content.includes('ai:')) {
+    // Check for common boolean flags
+    if (message.is_user || message.user_message || message.from_user || message.is_human) {
+      return 'user';
+    }
+    
+    if (message.is_assistant || message.assistant_message || message.from_assistant || message.is_ai || message.is_bot) {
       return 'assistant';
     }
     
+    // Check content patterns
+    const content = (message.content || message.text || message.message || '').toLowerCase();
+    
+    // User message patterns
+    if (content.includes('user:') || content.includes('human:') || content.includes('prompt:')) {
+      return 'user';
+    }
+    
+    // Assistant message patterns
+    if (content.includes('assistant:') || content.includes('ai:') || content.includes('bot:') || content.includes('response:')) {
+      return 'assistant';
+    }
+    
+    // Check message type
+    if (message.type) {
+      const type = message.type.toLowerCase();
+      if (type === 'user' || type === 'human' || type === 'prompt') return 'user';
+      if (type === 'assistant' || type === 'ai' || type === 'response') return 'assistant';
+    }
+    
+    // Check for code blocks (often assistant responses)
+    if (content.includes('```') || content.includes('def ') || content.includes('import ')) {
+      return 'assistant';
+    }
+    
+    // Check message length (assistant responses are typically longer)
+    if (content.length > 100) {
+      return 'assistant';
+    }
+    
+    // Default to user if uncertain
     return 'user';
   }
 
