@@ -568,8 +568,22 @@ function getEventTitle(event) {
   if (event.type === 'file_change' || event.type === 'code_change') {
     try {
       const details = typeof event.details === 'string' ? JSON.parse(event.details) : event.details;
-      const path = details?.file_path || event.file_path || '';
-      return path.split('/').pop() || 'File changed';
+      const path = details?.file_path || event.file_path || event.path || '';
+      
+      // Skip if it looks like a Git object hash (40 hex chars)
+      if (/^[a-f0-9]{40}$/i.test(path)) {
+        return 'Git object change';
+      }
+      
+      // Extract filename from path
+      const fileName = path.split('/').pop() || '';
+      
+      // If filename is empty or looks like a hash, try to use a better description
+      if (!fileName || /^[a-f0-9]{32,}$/i.test(fileName)) {
+        return details?.change_type || event.type || 'File changed';
+      }
+      
+      return fileName;
     } catch {
       return 'File changed';
     }

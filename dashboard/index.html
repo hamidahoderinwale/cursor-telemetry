@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Cursor Activity Dashboard</title>
-    <link rel="stylesheet" href="dashboard.css">
+    <link rel="stylesheet" href="new-dashboard.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -168,15 +168,59 @@
         </div>
     </div>
 
+    <!-- Search Command Palette -->
+    <div id="searchPalette" class="search-palette">
+        <div class="search-palette-overlay" onclick="closeSearchPalette()"></div>
+        <div class="search-palette-content">
+            <div class="search-palette-header">
+                <div class="search-input-wrapper">
+                    <svg class="search-icon" width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor">
+                        <circle cx="8" cy="8" r="6" stroke-width="2"/>
+                        <path d="M13 13l4 4" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                    <input 
+                        type="text" 
+                        id="searchInput" 
+                        class="search-input" 
+                        placeholder="Search events, prompts, files... (try 'type:prompt' or 'date:today')"
+                        autocomplete="off"
+                        spellcheck="false"
+                    />
+                    <kbd class="search-kbd">esc</kbd>
+                </div>
+            </div>
+            <div class="search-palette-body">
+                <div id="searchResults" class="search-results">
+                    <!-- Results will be rendered here -->
+                </div>
+                <div id="searchSuggestions" class="search-suggestions">
+                    <!-- Suggestions will be rendered here -->
+                </div>
+            </div>
+            <div class="search-palette-footer">
+                <div class="search-hint">
+                    <span><kbd>↑</kbd><kbd>↓</kbd> navigate</span>
+                    <span><kbd>↵</kbd> select</span>
+                    <span><kbd>esc</kbd> close</span>
+                </div>
+                <div class="search-filters">
+                    <span class="search-filter-hint">Filters: <code>type:</code> <code>workspace:</code> <code>date:</code> <code>mode:</code></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Scripts -->
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://unpkg.com/lunr/lunr.js"></script>
     <script src="persistent-storage.js"></script>
     <script src="analytics-aggregator.js"></script>
     <script src="data-synchronizer.js"></script>
     <script src="file-graph-visualizer.js"></script>
-    <script src="dashboard.js"></script>
+    <script src="search-engine.js"></script>
+    <script src="new-dashboard.js"></script>
 </body>
 </html>
 
