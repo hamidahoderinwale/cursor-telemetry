@@ -3210,45 +3210,80 @@ function renderModelUsageChart() {
     const time = now - (hours - i) * 60 * 60 * 1000;
     return {
       timestamp: time,
-      agent: 0,    // Auto/Agent mode (likely Claude Sonnet)
-      chat: 0,     // Chat mode
-      edit: 0,     // Edit mode (CMD+K)
-      composer: 0, // Composer mode
-      unknown: 0   // Unknown mode
+      models: {}  // Track actual model names dynamically
     };
   });
   
-  // Aggregate prompts into buckets by mode
+  // Track all unique models seen
+  const allModels = new Set();
+  
+  // Aggregate prompts into buckets by model name
   prompts.forEach(prompt => {
     const promptTime = new Date(prompt.timestamp).getTime();
     const bucketIndex = Math.floor((promptTime - (now - hours * 60 * 60 * 1000)) / (60 * 60 * 1000));
     
     if (bucketIndex >= 0 && bucketIndex < hours) {
-      const mode = (prompt.mode || prompt.modelType || 'unknown').toLowerCase();
+      // Get model name (inferred from mode if not explicitly set)
+      let modelName = prompt.modelName || 'claude-4.5-sonnet';
+      const mode = (prompt.mode || prompt.modelType || '').toLowerCase();
       
-      // Map mode to bucket category
+      // Add mode suffix for clarity if model is the same across modes
       if (mode === 'agent' || prompt.isAuto) {
-        buckets[bucketIndex].agent += 1;
+        modelName = 'Claude Sonnet (Agent)';
       } else if (mode === 'chat') {
-        buckets[bucketIndex].chat += 1;
+        modelName = 'Claude Sonnet (Chat)';
       } else if (mode === 'edit') {
-        buckets[bucketIndex].edit += 1;
-      } else if (mode === 'composer' || prompt.source === 'composer') {
-        buckets[bucketIndex].composer += 1;
-      } else {
-        buckets[bucketIndex].unknown += 1;
+        modelName = 'Claude Sonnet (Edit)';
+      } else if (prompt.source === 'composer') {
+        modelName = 'Claude Sonnet (Composer)';
       }
+      
+      // Track this model
+      allModels.add(modelName);
+      
+      // Increment count for this model in this bucket
+      if (!buckets[bucketIndex].models[modelName]) {
+        buckets[bucketIndex].models[modelName] = 0;
+      }
+      buckets[bucketIndex].models[modelName] += 1;
     }
   });
   
+  // Convert to array and sort for consistent coloring
+  const modelNames = Array.from(allModels).sort();
+  
   // Check if we have any data
-  if (buckets.every(b => b.agent === 0 && b.chat === 0 && b.edit === 0 && b.composer === 0 && b.unknown === 0)) {
+  if (modelNames.length === 0) {
     ctx.font = '14px Inter';
     ctx.fillStyle = '#666';
     ctx.textAlign = 'center';
     ctx.fillText('No model usage data available', canvas.width / 2, canvas.height / 2);
     return;
   }
+
+  // Color mapping for different modes (using the same colors as before)
+  const colorMap = {
+    'Claude Sonnet (Agent)': { bg: 'rgba(139, 92, 246, 0.8)', border: '#8b5cf6' },
+    'Claude Sonnet (Chat)': { bg: 'rgba(59, 130, 246, 0.8)', border: '#3b82f6' },
+    'Claude Sonnet (Edit)': { bg: 'rgba(16, 185, 129, 0.8)', border: '#10b981' },
+    'Claude Sonnet (Composer)': { bg: 'rgba(245, 158, 11, 0.8)', border: '#f59e0b' }
+  };
+
+  // Create datasets for each model
+  const datasets = modelNames.map(modelName => {
+    const colors = colorMap[modelName] || { 
+      bg: 'rgba(100, 116, 139, 0.8)', 
+      border: '#64748b' 
+    };
+    
+    return {
+      label: modelName,
+      data: buckets.map(b => b.models[modelName] || 0),
+      backgroundColor: colors.bg,
+      borderColor: colors.border,
+      borderWidth: 1
+    };
+  });
 
   createChart('modelUsageChart', {
     type: 'bar',
@@ -3257,36 +3292,7 @@ function renderModelUsageChart() {
         const date = new Date(b.timestamp);
         return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       }),
-      datasets: [
-        {
-          label: 'Agent/Auto (Claude Sonnet)',
-          data: buckets.map(b => b.agent),
-          backgroundColor: 'rgba(139, 92, 246, 0.8)',  // Purple for Agent mode
-          borderColor: '#8b5cf6',
-          borderWidth: 1
-        },
-        {
-          label: 'Chat',
-          data: buckets.map(b => b.chat),
-          backgroundColor: 'rgba(59, 130, 246, 0.8)',  // Blue for Chat
-          borderColor: '#3b82f6',
-          borderWidth: 1
-        },
-        {
-          label: 'Edit (CMD+K)',
-          data: buckets.map(b => b.edit),
-          backgroundColor: 'rgba(16, 185, 129, 0.8)',  // Green for Edit
-          borderColor: '#10b981',
-          borderWidth: 1
-        },
-        {
-          label: 'Composer',
-          data: buckets.map(b => b.composer),
-          backgroundColor: 'rgba(245, 158, 11, 0.8)',  // Orange for Composer
-          borderColor: '#f59e0b',
-          borderWidth: 1
-        }
-      ]
+      datasets: datasets
     },
     options: {
       responsive: true,
@@ -3318,7 +3324,7 @@ function renderModelUsageChart() {
             afterBody: function(context) {
               const index = context[0].dataIndex;
               const bucket = buckets[index];
-              const total = bucket.agent + bucket.chat + bucket.edit + bucket.composer + bucket.unknown;
+              const total = Object.values(bucket.models).reduce((sum, count) => sum + count, 0);
               return total > 0 ? `\nTotal: ${total} prompt${total !== 1 ? 's' : ''}` : '';
             }
           }
