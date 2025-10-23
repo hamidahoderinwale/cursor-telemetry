@@ -945,11 +945,22 @@ function renderAnalyticsView(container) {
         </div>
       </div>
 
-      <!-- Model Usage Over Time -->
+      <!-- AI Interface Usage Over Time -->
       <div class="card">
         <div class="card-header">
-          <h3 class="card-title">AI Model Usage Over Time</h3>
-          <p class="card-subtitle">Distribution of AI modes (Agent/Auto, Chat, Edit) used over the last 24 hours</p>
+          <h3 class="card-title">AI Interface Usage Over Time</h3>
+          <p class="card-subtitle">How you interact with AI: Composer, CMD+K (inline edit), Chat panel, or Agent (autonomous)</p>
+        </div>
+        <div class="card-body">
+          <canvas id="interfaceUsageChart" style="max-height: 250px;"></canvas>
+        </div>
+      </div>
+
+      <!-- Model Distribution Over Time -->
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">AI Model Distribution Over Time</h3>
+          <p class="card-subtitle">Which AI models were used (Claude Sonnet 4.5, GPT-4, etc.)</p>
         </div>
         <div class="card-body">
           <canvas id="modelUsageChart" style="max-height: 250px;"></canvas>
@@ -996,6 +1007,7 @@ function renderAnalyticsView(container) {
   setTimeout(() => {
     renderAIActivityChart();
     renderPromptTokensChart();
+    renderInterfaceUsageChart();
     renderModelUsageChart();
     renderActivityChart();
     renderFileTypesChart();
@@ -3194,13 +3206,177 @@ function renderPromptTokensChart() {
   });
 }
 
+function renderInterfaceUsageChart() {
+  const canvas = document.getElementById('interfaceUsageChart');
+  if (!canvas) return;
+  
+  const ctx = canvas.getContext('2d');
+  
+  // Extract prompt data with interface/mode information
+  const prompts = state.data.prompts || [];
+  
+  // Group prompts by time buckets (hourly for last 24 hours)
+  const now = Date.now();
+  const hours = 24;
+  const buckets = Array.from({ length: hours }, (_, i) => {
+    const time = now - (hours - i) * 60 * 60 * 1000;
+    return {
+      timestamp: time,
+      agent: 0,      // Agent/Auto mode (autonomous)
+      composer: 0,   // Composer interface
+      edit: 0,       // CMD+K inline edit
+      chat: 0,       // Chat panel
+      unknown: 0     // Unknown interface
+    };
+  });
+  
+  // Aggregate prompts into buckets by interface
+  prompts.forEach(prompt => {
+    const promptTime = new Date(prompt.timestamp).getTime();
+    const bucketIndex = Math.floor((promptTime - (now - hours * 60 * 60 * 1000)) / (60 * 60 * 1000));
+    
+    if (bucketIndex >= 0 && bucketIndex < hours) {
+      const mode = (prompt.mode || prompt.modelType || '').toLowerCase();
+      const source = (prompt.source || '').toLowerCase();
+      
+      // Determine interface based on mode and source
+      if (mode === 'agent' || prompt.isAuto) {
+        buckets[bucketIndex].agent += 1;
+      } else if (source === 'composer' || mode === 'composer') {
+        buckets[bucketIndex].composer += 1;
+      } else if (mode === 'edit') {
+        buckets[bucketIndex].edit += 1;
+      } else if (mode === 'chat') {
+        buckets[bucketIndex].chat += 1;
+      } else {
+        buckets[bucketIndex].unknown += 1;
+      }
+    }
+  });
+  
+  // Check if we have any data
+  if (buckets.every(b => b.agent === 0 && b.composer === 0 && b.edit === 0 && b.chat === 0 && b.unknown === 0)) {
+    ctx.font = '14px Inter';
+    ctx.fillStyle = '#666';
+    ctx.textAlign = 'center';
+    ctx.fillText('No interface usage data available', canvas.width / 2, canvas.height / 2);
+    return;
+  }
+
+  createChart('interfaceUsageChart', {
+    type: 'bar',
+    data: {
+      labels: buckets.map(b => {
+        const date = new Date(b.timestamp);
+        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      }),
+      datasets: [
+        {
+          label: 'Agent (Autonomous)',
+          data: buckets.map(b => b.agent),
+          backgroundColor: 'rgba(139, 92, 246, 0.8)',  // Purple
+          borderColor: '#8b5cf6',
+          borderWidth: 1
+        },
+        {
+          label: 'Composer',
+          data: buckets.map(b => b.composer),
+          backgroundColor: 'rgba(245, 158, 11, 0.8)',  // Orange
+          borderColor: '#f59e0b',
+          borderWidth: 1
+        },
+        {
+          label: 'CMD+K (Inline Edit)',
+          data: buckets.map(b => b.edit),
+          backgroundColor: 'rgba(16, 185, 129, 0.8)',  // Green
+          borderColor: '#10b981',
+          borderWidth: 1
+        },
+        {
+          label: 'Chat Panel',
+          data: buckets.map(b => b.chat),
+          backgroundColor: 'rgba(59, 130, 246, 0.8)',  // Blue
+          borderColor: '#3b82f6',
+          borderWidth: 1
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      interaction: {
+        mode: 'index',
+        intersect: false
+      },
+      plugins: {
+        legend: { 
+          display: true,
+          position: 'top',
+          align: 'end',
+          labels: {
+            usePointStyle: true,
+            padding: 10,
+            font: { size: 11 }
+          }
+        },
+        tooltip: {
+          backgroundColor: 'rgba(0, 0, 0, 0.8)',
+          padding: 10,
+          callbacks: {
+            label: function(context) {
+              const label = context.dataset.label || '';
+              const value = context.parsed.y;
+              return `${label}: ${value} prompt${value !== 1 ? 's' : ''}`;
+            },
+            afterBody: function(context) {
+              const index = context[0].dataIndex;
+              const bucket = buckets[index];
+              const total = bucket.agent + bucket.composer + bucket.edit + bucket.chat + bucket.unknown;
+              return total > 0 ? `\nTotal: ${total} prompt${total !== 1 ? 's' : ''}` : '';
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          stacked: true,
+          grid: {
+            display: false
+          },
+          ticks: {
+            maxRotation: 45,
+            minRotation: 0,
+            autoSkip: true,
+            maxTicksLimit: 12
+          }
+        },
+        y: {
+          stacked: true,
+          beginAtZero: true,
+          title: {
+            display: true,
+            text: 'Number of Prompts',
+            font: { size: 11 }
+          },
+          ticks: {
+            precision: 0,
+            callback: function(value) {
+              return Math.floor(value);
+            }
+          }
+        }
+      }
+    }
+  });
+}
+
 function renderModelUsageChart() {
   const canvas = document.getElementById('modelUsageChart');
   if (!canvas) return;
   
   const ctx = canvas.getContext('2d');
   
-  // Extract prompt data with model/mode information
+  // Extract prompt data with model information
   const prompts = state.data.prompts || [];
   
   // Group prompts by time buckets (hourly for last 24 hours)
@@ -3217,25 +3393,26 @@ function renderModelUsageChart() {
   // Track all unique models seen
   const allModels = new Set();
   
-  // Aggregate prompts into buckets by model name
+  // Aggregate prompts into buckets by ACTUAL model name (not interface)
   prompts.forEach(prompt => {
     const promptTime = new Date(prompt.timestamp).getTime();
     const bucketIndex = Math.floor((promptTime - (now - hours * 60 * 60 * 1000)) / (60 * 60 * 1000));
     
     if (bucketIndex >= 0 && bucketIndex < hours) {
-      // Get model name (inferred from mode if not explicitly set)
-      let modelName = prompt.modelName || 'claude-4.5-sonnet';
-      const mode = (prompt.mode || prompt.modelType || '').toLowerCase();
+      // Get the actual AI model name (default to inferred Claude Sonnet 4.5)
+      let modelName = prompt.modelName || 'Claude Sonnet 4.5';
       
-      // Add mode suffix for clarity if model is the same across modes
-      if (mode === 'agent' || prompt.isAuto) {
-        modelName = 'Claude Sonnet (Agent)';
-      } else if (mode === 'chat') {
-        modelName = 'Claude Sonnet (Chat)';
-      } else if (mode === 'edit') {
-        modelName = 'Claude Sonnet (Edit)';
-      } else if (prompt.source === 'composer') {
-        modelName = 'Claude Sonnet (Composer)';
+      // Normalize model names for consistency
+      if (modelName.toLowerCase().includes('claude') && modelName.toLowerCase().includes('sonnet')) {
+        modelName = 'Claude Sonnet 4.5';
+      } else if (modelName.toLowerCase().includes('gpt-4')) {
+        modelName = 'GPT-4';
+      } else if (modelName.toLowerCase().includes('gpt-3.5')) {
+        modelName = 'GPT-3.5';
+      } else if (modelName.toLowerCase().includes('claude') && modelName.toLowerCase().includes('opus')) {
+        modelName = 'Claude Opus';
+      } else if (modelName.toLowerCase().includes('claude') && modelName.toLowerCase().includes('haiku')) {
+        modelName = 'Claude Haiku';
       }
       
       // Track this model
@@ -3261,19 +3438,20 @@ function renderModelUsageChart() {
     return;
   }
 
-  // Color mapping for different modes (using the same colors as before)
+  // Color mapping for different AI models
   const colorMap = {
-    'Claude Sonnet (Agent)': { bg: 'rgba(139, 92, 246, 0.8)', border: '#8b5cf6' },
-    'Claude Sonnet (Chat)': { bg: 'rgba(59, 130, 246, 0.8)', border: '#3b82f6' },
-    'Claude Sonnet (Edit)': { bg: 'rgba(16, 185, 129, 0.8)', border: '#10b981' },
-    'Claude Sonnet (Composer)': { bg: 'rgba(245, 158, 11, 0.8)', border: '#f59e0b' }
+    'Claude Sonnet 4.5': { bg: 'rgba(204, 120, 92, 0.8)', border: '#cc785c' },  // Anthropic orange
+    'Claude Opus': { bg: 'rgba(180, 100, 82, 0.8)', border: '#b46452' },
+    'Claude Haiku': { bg: 'rgba(224, 140, 112, 0.8)', border: '#e08c70' },
+    'GPT-4': { bg: 'rgba(16, 163, 127, 0.8)', border: '#10a37f' },  // OpenAI green
+    'GPT-3.5': { bg: 'rgba(46, 193, 157, 0.8)', border: '#2ec19d' }
   };
 
   // Create datasets for each model
-  const datasets = modelNames.map(modelName => {
+  const datasets = modelNames.map((modelName, index) => {
     const colors = colorMap[modelName] || { 
-      bg: 'rgba(100, 116, 139, 0.8)', 
-      border: '#64748b' 
+      bg: `rgba(${100 + index * 30}, ${116 + index * 20}, ${139 + index * 10}, 0.8)`, 
+      border: `rgb(${100 + index * 30}, ${116 + index * 20}, ${139 + index * 10})` 
     };
     
     return {
