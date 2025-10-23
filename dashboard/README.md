@@ -1,165 +1,242 @@
 # Cursor Activity Dashboard
 
-A modern, real-time dashboard for monitoring Cursor IDE activity, AI interactions, code changes, and development analytics.
+A comprehensive, real-time dashboard for monitoring Cursor IDE activity, AI interactions, and development metrics.
 
 ## Features
 
-- **Real-time Activity Feed**: Track file changes, AI interactions, and prompts
-- **Analytics**: View trends over time for code changes, AI usage, and system resources
-- **File Relationship Graph**: Visualize semantic connections between files using TF-IDF analysis
-- **Persistent Storage**: IndexedDB-based local storage for historical data
-- **Workspace Management**: Track activity across multiple workspaces
-- **System Monitoring**: Monitor memory, CPU, and git status
+- **Activity Timeline**: Real-time file changes, AI prompts, and code modifications
+- **Analytics**: Context usage tracking, prompt analysis, and productivity metrics
+- **File Relationship Graph**: TF-IDF semantic analysis and file co-occurrence visualization
+- **System Monitoring**: Memory, CPU, and IDE state tracking
+- **Persistent Storage**: IndexedDB-based local storage with historical data retention
+- **AI Context Tracking**: Monitor AI model usage and context window utilization
 
-## Files
+## Quick Start
 
-- `index.html` - Main dashboard HTML
-- `dashboard.css` - Styles and design system
-- `dashboard.js` - Core dashboard logic and UI rendering
-- `persistent-storage.js` - IndexedDB wrapper for local data persistence
-- `analytics-aggregator.js` - Analytics computation and aggregation
-- `data-synchronizer.js` - Data sync orchestration between Cursor databases and companion service
+### Prerequisites
 
-## Requirements
+1. The Cursor telemetry companion service must be running
+2. Modern web browser with JavaScript enabled
 
-- Companion service running on `http://localhost:43917`
-- Modern web browser with ES6+ support
-- IndexedDB support for persistent storage
+### Running the Dashboard
 
-## Usage
+1. Start the companion service:
+   ```bash
+   cd ../components/activity-logger/companion
+   npm install
+   npm start
+   ```
 
-### Local Development
-
-Simply open `index.html` in a web browser, or serve via the companion service:
-
-```bash
-# The companion service automatically serves the dashboard
-cd ../components/activity-logger/companion
-npm start
-```
-
-Then navigate to: `http://localhost:43917/new-dashboard.html`
-
-### Standalone
-
-You can also serve this dashboard independently:
-
-```bash
-# Using Python
-python -m http.server 8080
-
-# Using Node.js (with http-server)
-npx http-server -p 8080
-```
-
-Then navigate to: `http://localhost:8080/index.html`
-
-## Configuration
-
-The dashboard connects to the companion service at `http://localhost:43917` by default. To change this, modify the `CONFIG` object in `dashboard.js`:
-
-```javascript
-const CONFIG = {
-  API_BASE: 'http://localhost:43917',
-  WS_URL: 'ws://localhost:43917',
-  REFRESH_INTERVAL: 30000
-};
-```
-
-## Data Sources
-
-The dashboard pulls data from:
-
-1. **Companion Service APIs**:
-   - `/api/activity` - File changes and events
-   - `/api/workspaces` - Workspace information
-   - `/api/ide-state` - Current IDE state
-   - `/raw-data/system-resources` - System metrics
-   - `/raw-data/git` - Git status
-   - `/api/cursor-database` - Cursor database extracts
-
-2. **Cursor Databases** (via companion service):
-   - `state.vscdb` - Global state and conversations
-   - `workspace.vscdb` - Workspace-specific data
-   - Composer sessions and AI interactions
-
-3. **Local IndexedDB**:
-   - Historical events
-   - Cached prompts
-   - Analytics data
-   - Time series metrics
-
-## Views
-
-### Overview
-- Quick stats and recent activity
-- Activity timeline with both events and prompts
-- Workspace switcher
-
-### Activity
-- Unified timeline of all events and AI interactions
-- Filterable by workspace, type, and time
-- Click any item to see detailed information
-
-### Analytics
-- Continuous activity timeline (auto-scaling granularity)
-- Recent activity by 15-minute intervals
-- AI activity & code output over time
-- Git status tracking
-- System resource monitoring
-
-### File Graph
-- Interactive force-directed graph
-- TF-IDF-based semantic similarity
-- File type filtering
-- Adjustable similarity threshold
-- Detailed file information on click
-
-### System
-- Real-time system metrics (Memory, CPU, Load)
-- Git repository status
-- Editor state (open tabs, current file)
-
-### Workspace
-- List of all workspaces
-- Activity stats per workspace
-- Quick navigation
+2. Open the dashboard:
+   ```
+   http://localhost:43917/dashboard/
+   ```
 
 ## Architecture
 
+### Core Files
+
+- **`index.html`**: Main dashboard structure and layout
+- **`dashboard.js`**: Core functionality, views, charts, and interactions
+- **`dashboard.css`**: Modern design system with dark theme
+- **`persistent-storage.js`**: IndexedDB wrapper for local data persistence
+- **`analytics-aggregator.js`**: Time-series aggregation and metrics computation
+- **`data-synchronizer.js`**: Orchestrates data loading from Cursor DB and companion service
+
+### Data Sources
+
+1. **Cursor Internal Databases** (Historical):
+   - `state.vscdb`: Workspace-specific AI conversations and composer data
+   - `workspace.json`: Workspace metadata and paths
+   - Extracted fields: prompts, context usage %, model modes, lines changed
+
+2. **Companion Service** (Real-time):
+   - File system monitoring via Chokidar
+   - Git status and commit tracking
+   - System resource monitoring (memory, CPU, load)
+   - IDE state capture via AppleScript (macOS)
+   - SQLite persistence for file contents and events
+
+## Key Metrics Tracked
+
+### Header Stats
+- **Active Sessions**: Unique development sessions
+- **File Changes**: Total file modification events
+- **AI Interactions**: Composer sessions + direct AI prompts
+- **Code Changed**: Aggregate lines/characters modified
+- **Avg Context Used**: Average AI context window utilization
+
+### Analytics Page
+
+#### Context Usage Over Time
+- Real-time tracking of AI context window utilization
+- Dual-axis chart showing character count and context percentage
+- Data sourced from Cursor's `contextUsagePercent` field
+
+#### AI Activity & Code Output
+- Prompt frequency and code generation volume
+- Lines added/removed per interaction
+
+#### Continuous Activity Timeline
+- Granular activity view (1-min to daily intervals)
+- Auto-scaling based on data span
+
+#### File Changes by Type
+- Language distribution of modified files
+
+#### Recent Activity (15-min intervals)
+- Last 12 hours of development activity
+
+### File Graph Page
+
+#### Semantic Analysis
+- **TF-IDF**: Term frequency-inverse document frequency for code similarity
+- **Co-occurrence**: Files modified together
+- **Temporal Proximity**: Files changed around the same time
+
+#### Visualization Controls
+- **Layout**: Force-directed, circular, radial
+- **Node Size**: By change count, file size, or recency
+- **Overlay**: AI prompts, activity heat
+- **Threshold**: Similarity filtering (0.0 - 1.0)
+- **File Type Filter**: Multi-select by extension
+
+#### Embeddings Visualization
+- 2D/3D prompt embeddings using PCA, t-SNE, or MDS
+- Color-coded by timestamp (older = purple, newer = yellow/green)
+- Top terms and phrases extraction
+
+## Data Flow
+
 ```
-┌─────────────────┐
-│   index.html    │
-│  (Dashboard UI) │
-└────────┬────────┘
-         │
-         ├──────────────┬──────────────┬──────────────┐
-         │              │              │              │
-    ┌────▼─────┐   ┌───▼────┐   ┌────▼─────┐   ┌────▼─────┐
-    │dashboard │   │persist │   │analytics │   │data-sync │
-    │   .js    │◄──┤storage │◄──┤aggregator│◄──┤   .js    │
-    │          │   │  .js   │   │   .js    │   │          │
-    └──────────┘   └───┬────┘   └──────────┘   └────┬─────┘
-                       │                             │
-                   ┌───▼─────┐                  ┌────▼─────────┐
-                   │IndexedDB│                  │  Companion   │
-                   │(Browser)│                  │   Service    │
-                   └─────────┘                  │  (Backend)   │
-                                                └──────────────┘
+Cursor IDE
+    ├── state.vscdb (Workspace DB)
+    │   └── composer.composerData (AI sessions)
+    │       ├── contextUsagePercent
+    │       ├── totalLinesAdded/Removed
+    │       ├── unifiedMode (agent/chat/edit)
+    │       └── timestamps
+    │
+    └── File Changes
+        └── Chokidar Watcher
+            └── Companion Service
+                ├── SQLite (persistent-db.js)
+                │   ├── events table
+                │   ├── entries table
+                │   └── file contents
+                │
+                └── HTTP API (:43917)
+                    ├── /api/activity
+                    ├── /api/workspaces
+                    ├── /api/prompts
+                    ├── /api/cursor-database
+                    ├── /api/file-contents
+                    └── /raw-data/*
+
+Dashboard (Browser)
+    ├── IndexedDB (persistent-storage.js)
+    │   ├── events store
+    │   ├── prompts store
+    │   ├── analytics store
+    │   └── timeSeries store
+    │
+    └── Data Synchronizer
+        ├── Initial: Load from IndexedDB (instant display)
+        ├── Background: Fetch from companion service
+        └── Periodic: Sync every 30s
 ```
 
-## Browser Support
+## API Reference
 
-- Chrome/Edge: ✅ Full support
-- Firefox: ✅ Full support
-- Safari: ✅ Full support
-- Opera: ✅ Full support
+### Companion Service Endpoints
 
-## Privacy
+- `GET /api/activity` - Historical file change events
+- `GET /api/workspaces` - All detected workspaces with metadata
+- `GET /api/prompts` - AI prompts from Cursor database
+- `GET /api/cursor-database` - Raw Cursor database conversations
+- `GET /api/file-contents` - Full file contents for TF-IDF analysis
+- `GET /raw-data/system-resources` - Memory, CPU, load average
+- `GET /raw-data/git` - Git status, branch, commits
+- `GET /ide-state` - Current editor state (tabs, file, position)
 
-All data is stored locally in your browser's IndexedDB. No data is sent to external servers. The dashboard only communicates with the local companion service running on your machine.
+## Context Tracking Implementation
+
+### What's Tracked
+
+1. **Context Usage Percentage**: Extracted from Cursor's `contextUsagePercent` field
+   - Shows how much of the AI model's context window is utilized
+   - Displayed in timeline badges, modals, and analytics charts
+
+2. **Model Information**: Mode type (Agent/Chat/Edit) and auto-detection
+   - Agent mode = Auto-completion
+   - Chat mode = Direct conversation
+   - Edit mode = Inline code editing
+
+### What's NOT Available
+
+- **Actual Token Counts**: Cursor doesn't store raw token counts in local databases
+- **Token Cost**: Billing information is handled server-side
+- **Context Window Size**: Model-specific limits aren't exposed
+
+The dashboard shows **character count** as a proxy metric with clear labeling.
+
+## Browser Compatibility
+
+- Chrome/Edge 90+
+- Firefox 88+
+- Safari 14+
+
+Requires:
+- ES6+ JavaScript support
+- IndexedDB API
+- Fetch API
+- Chart.js 4.x
+- D3.js v7
+
+## Development
+
+### Adding New Metrics
+
+1. Add data collection in companion service (`companion/src/index.js`)
+2. Update API endpoint or add new route
+3. Modify `dashboard.js` to fetch and process data
+4. Create visualization function (use Chart.js or D3.js)
+5. Add to appropriate view (Overview, Analytics, File Graph)
+
+### Modifying the Design
+
+All styles are in `dashboard.css` with CSS custom properties:
+```css
+:root {
+  --color-bg: #0f0f0f;
+  --color-text: #e5e7eb;
+  --color-primary: #6366f1;
+  /* ... */
+}
+```
+
+## Troubleshooting
+
+### Dashboard shows "Connecting..."
+- Ensure companion service is running on port 43917
+- Check browser console for errors
+- Verify firewall isn't blocking localhost connections
+
+### No AI Interactions showing
+- Cursor must have active composer sessions
+- Check that `state.vscdb` exists in workspace storage
+- Verify workspace detection in companion service logs
+
+### Context usage shows 0%
+- Context data only available for composer sessions
+- Older conversations may not have this field
+- Try creating a new AI conversation in Cursor
+
+### File Graph shows 0 files
+- Companion service needs time to index files
+- Make some file changes to trigger indexing
+- Check `/api/file-contents` endpoint directly
 
 ## License
 
 Part of the Cursor Telemetry project.
-

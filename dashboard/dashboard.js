@@ -296,11 +296,23 @@ function calculateStats() {
     } catch {}
   });
 
+  // Calculate average context usage
+  let totalContextUsage = 0;
+  let contextUsageCount = 0;
+  (state.data.prompts || []).forEach(p => {
+    if (p.contextUsage && p.contextUsage > 0) {
+      totalContextUsage += p.contextUsage;
+      contextUsageCount++;
+    }
+  });
+  const avgContextUsage = contextUsageCount > 0 ? (totalContextUsage / contextUsageCount) : 0;
+
   state.stats = {
     sessions: sessions.size,
     fileChanges: fileChanges,
     aiInteractions: aiInteractions,
-    codeChanged: (totalChars / 1024).toFixed(1) // KB
+    codeChanged: (totalChars / 1024).toFixed(1), // KB
+    avgContext: avgContextUsage.toFixed(1) // percentage
   };
 
   updateStatsDisplay();
@@ -344,6 +356,7 @@ function updateStatsDisplay() {
   document.getElementById('statFileChanges').textContent = state.stats.fileChanges;
   document.getElementById('statAIInteractions').textContent = state.stats.aiInteractions;
   document.getElementById('statCodeChanged').textContent = `${state.stats.codeChanged} KB`;
+  document.getElementById('statAvgContext').textContent = `${state.stats.avgContext}%`;
 }
 
 function updateWorkspaceSelector() {
@@ -502,6 +515,7 @@ function renderPromptTimelineItem(prompt) {
           <span class="badge badge-prompt">${source}</span>
           ${prompt.workspaceName ? `<span class="badge">${prompt.workspaceName}</span>` : prompt.workspaceId ? `<span class="badge">${prompt.workspaceId.substring(0, 8)}</span>` : ''}
           ${prompt.composerId ? `<span class="badge">Composer</span>` : ''}
+          ${prompt.contextUsage > 0 ? `<span class="badge" style="background: var(--color-warning); color: white;">${prompt.contextUsage.toFixed(1)}% context</span>` : ''}
         </div>
       </div>
     </div>
@@ -906,11 +920,11 @@ function renderAnalyticsView(container) {
         </div>
       </div>
 
-      <!-- Prompt Tokens Over Time -->
+      <!-- Context Usage Over Time -->
       <div class="card">
         <div class="card-header">
-          <h3 class="card-title">Prompt Tokens Over Time</h3>
-          <p class="card-subtitle">Token usage and context size tracking</p>
+          <h3 class="card-title">Context Usage Over Time</h3>
+          <p class="card-subtitle">AI context window utilization percentage (from Cursor's internal tracking)</p>
         </div>
         <div class="card-body">
           <canvas id="promptTokensChart" style="max-height: 250px;"></canvas>
@@ -2978,8 +2992,9 @@ function renderPromptTokensChart() {
     const time = now - (hours - i) * 60 * 60 * 1000;
     return {
       timestamp: time,
-      tokens: 0,
-      contextUsed: 0,
+      charCount: 0,
+      contextUsage: 0,
+      contextCount: 0,
       count: 0
     };
   });
@@ -2990,26 +3005,34 @@ function renderPromptTokensChart() {
     const bucketIndex = Math.floor((promptTime - (now - hours * 60 * 60 * 1000)) / (60 * 60 * 1000));
     
     if (bucketIndex >= 0 && bucketIndex < hours) {
-      // Estimate tokens (rough approximation: ~4 chars per token)
+      // Track character count (not actual tokens, which aren't available)
       const text = prompt.text || prompt.prompt || prompt.preview || '';
-      const estimatedTokens = Math.ceil(text.length / 4);
+      const charCount = text.length;
       
-      // Extract context usage if available
-      const contextUsed = prompt.contextUsed || prompt.context_used || 0;
+      // Extract context usage percentage if available (from Cursor's tracking)
+      const contextUsage = prompt.contextUsage || 0;
       
-      buckets[bucketIndex].tokens += estimatedTokens;
-      buckets[bucketIndex].contextUsed += contextUsed;
+      buckets[bucketIndex].charCount += charCount;
+      if (contextUsage > 0) {
+        buckets[bucketIndex].contextUsage += contextUsage;
+        buckets[bucketIndex].contextCount += 1;
+      }
       buckets[bucketIndex].count += 1;
     }
   });
   
-  if (buckets.every(b => b.tokens === 0)) {
+  if (buckets.every(b => b.count === 0)) {
     ctx.font = '14px Inter';
     ctx.fillStyle = '#666';
     ctx.textAlign = 'center';
     ctx.fillText('No prompt data available', canvas.width / 2, canvas.height / 2);
     return;
   }
+
+  // Calculate average context usage per bucket
+  const avgContextUsage = buckets.map(b => 
+    b.contextCount > 0 ? b.contextUsage / b.contextCount : 0
+  );
 
   new Chart(ctx, {
     type: 'line',
@@ -3020,10 +3043,10 @@ function renderPromptTokensChart() {
       }),
       datasets: [
         {
-          label: 'Estimated Tokens',
-          data: buckets.map(b => b.tokens),
-          borderColor: CONFIG.CHART_COLORS.primary,
-          backgroundColor: CONFIG.CHART_COLORS.primary + '20',
+          label: 'Prompt Length (chars)',
+          data: buckets.map(b => b.charCount),
+          borderColor: '#94a3b8',
+          backgroundColor: 'rgba(148, 163, 184, 0.1)',
           tension: 0.4,
           fill: true,
           borderWidth: 2,
@@ -3032,10 +3055,10 @@ function renderPromptTokensChart() {
           yAxisID: 'y'
         },
         {
-          label: 'Context Used',
-          data: buckets.map(b => b.contextUsed),
-          borderColor: CONFIG.CHART_COLORS.secondary,
-          backgroundColor: CONFIG.CHART_COLORS.secondary + '20',
+          label: 'Context Usage %',
+          data: avgContextUsage,
+          borderColor: '#f59e0b',
+          backgroundColor: 'rgba(245, 158, 11, 0.1)',
           tension: 0.4,
           fill: true,
           borderWidth: 2,
@@ -3070,8 +3093,10 @@ function renderPromptTokensChart() {
             label: function(context) {
               const label = context.dataset.label || '';
               const value = context.parsed.y;
-              if (label === 'Estimated Tokens') {
-                return `${label}: ${value.toLocaleString()} tokens`;
+              if (label === 'Prompt Length (chars)') {
+                return `${label}: ${value.toLocaleString()} characters`;
+              } else if (label === 'Context Usage %') {
+                return `${label}: ${value.toFixed(1)}%`;
               } else {
                 return `${label}: ${value.toLocaleString()}`;
               }
@@ -3092,7 +3117,7 @@ function renderPromptTokensChart() {
           beginAtZero: true,
           title: {
             display: true,
-            text: 'Tokens',
+            text: 'Characters',
             font: { size: 11 }
           },
           ticks: {
@@ -3106,10 +3131,16 @@ function renderPromptTokensChart() {
           display: true,
           position: 'right',
           beginAtZero: true,
+          max: 100,
           title: {
             display: true,
-            text: 'Context',
+            text: 'Context %',
             font: { size: 11 }
+          },
+          ticks: {
+            callback: function(value) {
+              return value.toFixed(0) + '%';
+            }
           },
           grid: {
             drawOnChartArea: false
@@ -3559,6 +3590,20 @@ function showPromptInModal(prompt, modal, title, body) {
               <span style="color: var(--color-text); font-family: var(--font-mono); font-size: var(--text-xs);">${prompt.workspaceName || prompt.workspaceId.substring(0, 16)}</span>
             </div>
           ` : ''}
+          ${prompt.mode || prompt.modelType ? `
+            <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
+              <span style="color: var(--color-text-muted);">AI Mode:</span>
+              <span class="badge" style="background: ${(prompt.mode === 'agent' || prompt.isAuto) ? 'var(--color-accent)' : prompt.mode === 'chat' ? 'var(--color-info)' : 'var(--color-secondary)'}; color: white; font-weight: 600;">
+                ${(prompt.mode || prompt.modelType || 'unknown').toUpperCase()}${prompt.isAuto ? ' (AUTO)' : ''}
+              </span>
+            </div>
+          ` : ''}
+          ${prompt.contextUsage && prompt.contextUsage > 0 ? `
+            <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
+              <span style="color: var(--color-text-muted);">Context Usage:</span>
+              <span style="color: var(--color-warning); font-weight: 600; font-size: var(--text-lg);">${prompt.contextUsage.toFixed(1)}%</span>
+            </div>
+          ` : ''}
         </div>
       </div>
 
@@ -3580,8 +3625,12 @@ function showPromptInModal(prompt, modal, title, body) {
                 <div style="font-size: var(--text-sm); color: var(--color-text);">${metadata.lastUpdated || 'Unknown'}</div>
               </div>
               <div>
-                <div style="font-size: var(--text-xs); color: var(--color-text-muted);">Mode</div>
-                <div style="font-size: var(--text-sm); color: var(--color-text);"><code>${metadata.mode}</code></div>
+                <div style="font-size: var(--text-xs); color: var(--color-text-muted);">Model Mode</div>
+                <div style="font-size: var(--text-sm); color: var(--color-text);">
+                  <span class="badge" style="background: ${metadata.mode === 'agent' ? 'var(--color-accent)' : metadata.mode === 'chat' ? 'var(--color-info)' : 'var(--color-secondary)'}; color: white; font-weight: 600;">
+                    ${metadata.mode.toUpperCase()}${metadata.mode === 'agent' ? ' (AUTO)' : ''}
+                  </span>
+                </div>
               </div>
               <div>
                 <div style="font-size: var(--text-xs); color: var(--color-text-muted);">Composer ID</div>
