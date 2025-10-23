@@ -232,6 +232,19 @@
     <!-- Scripts -->
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <!-- Chat Widget -->
+    <script>
+        // Include chat widget HTML
+        fetch('chat-widget.html')
+            .then(response => response.text())
+            .then(html => {
+                const container = document.createElement('div');
+                container.innerHTML = html;
+                document.body.appendChild(container);
+            })
+            .catch(err => console.warn('Chat widget not loaded:', err));
+    </script>
+    
     <script src="https://d3js.org/d3.v7.min.js"></script>
     <script src="https://unpkg.com/lunr/lunr.js"></script>
     <script src="persistent-storage.js"></script>
@@ -240,6 +253,7 @@
     <script src="file-graph-visualizer.js"></script>
     <script src="search-engine.js"></script>
     <script src="new-dashboard.js"></script>
+    <script src="chat-widget.js"></script>
 </body>
 </html>
 

@@ -588,6 +588,7 @@ export class CursorDBParser {
         // Convert each message to a ConversationEvent
         for (const message of messages) {
           const msg = message as any;
+          const modelInfo = this.extractModelInfo(msg);
           const event: ConversationEvent = {
             id: msg.id || nanoid(),
             sessionId: conv.id,
@@ -598,7 +599,8 @@ export class CursorDBParser {
               conversationId: conv.id,
               messageId: msg.id,
               fileContext: this.extractFileContext(msg),
-              cellIndex: this.extractCellIndex(msg)
+              cellIndex: this.extractCellIndex(msg),
+              modelInfo: modelInfo
             },
             referencedFiles: this.extractReferencedFiles(msg.content || msg.text || ''),
             codeBlocks: this.extractCodeBlocks(msg.content || msg.text || '')
@@ -670,6 +672,61 @@ export class CursorDBParser {
     
     // Default to user if uncertain
     return 'user';
+  }
+
+  /**
+   * Extract model information from message metadata
+   */
+  private extractModelInfo(message: any): {
+    model: string;
+    mode: string;
+    provider: string;
+    isAuto: boolean;
+  } {
+    const modelInfo = {
+      model: 'Unknown',
+      mode: 'Unknown',
+      provider: 'Unknown',
+      isAuto: false
+    };
+
+    // Check for explicit model fields
+    if (message.model) {
+      modelInfo.model = message.model;
+    } else if (message.ai_model) {
+      modelInfo.model = message.ai_model;
+    } else if (message.assistant_model) {
+      modelInfo.model = message.assistant_model;
+    }
+
+    // Check for mode information
+    if (message.mode) {
+      modelInfo.mode = message.mode;
+    } else if (message.assistant_mode) {
+      modelInfo.mode = message.assistant_mode;
+    }
+
+    // Detect Auto mode
+    if (modelInfo.mode.toLowerCase().includes('auto') || 
+        modelInfo.model.toLowerCase().includes('auto') ||
+        message.auto_mode === true ||
+        message.is_auto === true) {
+      modelInfo.isAuto = true;
+      modelInfo.mode = 'Auto';
+    }
+
+    // Detect provider from model name
+    if (modelInfo.model.toLowerCase().includes('gpt') || modelInfo.model.toLowerCase().includes('openai')) {
+      modelInfo.provider = 'OpenAI';
+    } else if (modelInfo.model.toLowerCase().includes('claude') || modelInfo.model.toLowerCase().includes('anthropic')) {
+      modelInfo.provider = 'Anthropic';
+    } else if (modelInfo.model.toLowerCase().includes('gemini') || modelInfo.model.toLowerCase().includes('google')) {
+      modelInfo.provider = 'Google';
+    } else if (modelInfo.isAuto) {
+      modelInfo.provider = 'Auto';
+    }
+
+    return modelInfo;
   }
 
   private extractFileContext(message: any): string | undefined {

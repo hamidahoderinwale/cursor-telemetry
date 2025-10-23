@@ -4,99 +4,707 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Cursor Activity Dashboard</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="icon" href="favicon.ico" type="image/x-icon">
     <link rel="stylesheet" href="dashboard.css">
 </head>
 <body>
     <div class="container">
-        <div class="header">
-            <h1>Cursor Activity Dashboard</h1>
+        <header class="header">
+            <div class="header-top">
+                <div class="header-title-section">
+                    <h1>Cursor Activity Dashboard</h1>
+                    <div class="status-group">
+                        <span class="status-indicator" id="connectionStatus"></span>
+                        <span id="connectionText">Connecting...</span>
+                    </div>
+                </div>
+                
+                <div class="header-controls">
+                    <!-- Search Bar -->
+                    <div class="search-bar-container">
+                        <input type="text" 
+                               id="quickSearchInput" 
+                               class="search-bar" 
+                               placeholder="🔍 Search events, files, or workspaces..."
+                               aria-label="Search activities"
+                               onkeyup="handleQuickSearch(event)">
+                        <button class="search-bar-btn" onclick="openSearchModal()" title="Advanced Search" aria-label="Open advanced search">
+                            ⚙️
+                        </button>
+                    </div>
+                    
+                    <!-- Control Buttons -->
+                    <div class="control-buttons">
+                        <button class="control-btn" onclick="exportJSON()" title="Export Data" aria-label="Export data to JSON">
+                            <span class="btn-icon">💾</span>
+                            <span class="btn-label">Export</span>
+                        </button>
+                        <button class="control-btn" onclick="dashboard.renderActivityFeed()" title="Refresh" aria-label="Refresh activity feed">
+                            <span class="btn-icon">↻</span>
+                            <span class="btn-label">Refresh</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
             
+
             <div class="stats-grid">
                 <div class="stat-card">
-                    <div class="stat-number" id="totalSessions">0</div>
-                    <div class="stat-label">Sessions</div>
+                    <div class="stat-icon">⏱️</div>
+                    <div class="stat-content">
+                        <div class="stat-number" id="totalSessions">0</div>
+                        <div class="stat-label">Active Sessions</div>
+                    </div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-number" id="totalEntries">0</div>
-                    <div class="stat-label">Entries</div>
+                    <div class="stat-icon">📄</div>
+                    <div class="stat-content">
+                        <div class="stat-number" id="totalEvents">0</div>
+                        <div class="stat-label">File Changes</div>
+                    </div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-number" id="totalEvents">0</div>
-                    <div class="stat-label">Events</div>
+                    <div class="stat-icon">🤖</div>
+                    <div class="stat-content">
+                        <div class="stat-number" id="totalPrompts">0</div>
+                        <div class="stat-label">AI Interactions</div>
+                    </div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-number" id="totalCodeChanges">0</div>
-                    <div class="stat-label">Code Changes</div>
+                    <div class="stat-icon">💾</div>
+                    <div class="stat-content">
+                        <div class="stat-number" id="totalBytes">0</div>
+                        <div class="stat-label">Code Changed</div>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <nav class="navigation" role="tablist" aria-label="Dashboard navigation">
+            <button class="nav-item active" data-tab="activity" role="tab" aria-selected="true" aria-controls="activity">Activity</button>
+            <button class="nav-item" data-tab="analytics" role="tab" aria-selected="false" aria-controls="analytics">Analytics</button>
+            <button class="nav-item" data-tab="semantic" role="tab" aria-selected="false" aria-controls="semantic">Semantic</button>
+            <button class="nav-item" data-tab="performance" role="tab" aria-selected="false" aria-controls="performance">Performance</button>
+            <button class="nav-item" data-tab="system" role="tab" aria-selected="false" aria-controls="system">System</button>
+        </nav>
+
+        <main class="dashboard">
+            <!-- Unified Activity Tab -->
+            <div id="activity" class="tab-content active" role="tabpanel" aria-labelledby="activity-tab">
+                <!-- Streamlined Activity Controls -->
+                <div class="activity-controls">
+                    <div class="control-row">
+                        <select id="timeRange" class="control-select" onchange="updateTimeRange(this.value)">
+                            <option value="1h">Last Hour</option>
+                            <option value="6h">Last 6 Hours</option>
+                            <option value="24h" selected>Last 24 Hours</option>
+                            <option value="7d">Last 7 Days</option>
+                            <option value="30d">Last 30 Days</option>
+                            <option value="all">All Time</option>
+                        </select>
+                        
+                        <select id="granularity" class="control-select" onchange="updateGranularity(this.value)">
+                            <option value="minute">By Minute</option>
+                            <option value="hour" selected>By Hour</option>
+                            <option value="day">By Day</option>
+                        </select>
+                        
+                        <div class="filter-group">
+                            <button class="filter-btn active" onclick="setEventFilter('all')" data-filter="all">All</button>
+                            <button class="filter-btn" onclick="setEventFilter('file_change')" data-filter="file_change">Files</button>
+                            <button class="filter-btn" onclick="setEventFilter('session')" data-filter="session">Sessions</button>
+                            <button class="filter-btn" onclick="setEventFilter('ai')" data-filter="ai">AI</button>
+                        </div>
+                        
+                        <div class="view-group">
+                            <button class="view-btn active" onclick="setViewMode('timeline')" data-view="timeline" title="Timeline">📅</button>
+                            <button class="view-btn" onclick="setViewMode('list')" data-view="list" title="List">☰</button>
+                            <button class="view-btn" onclick="setViewMode('grid')" data-view="grid" title="Grid">⊞</button>
+                        </div>
+                    </div>
+                </div>
+
+
+                <!-- Activity Visualization -->
+                <div class="activity-visualization">
+                    <!-- Timeline View -->
+                    <div id="timelineView" class="view-content active">
+                        <div class="timeline-container">
+                            <div id="activityTimeline" class="activity-timeline"></div>
+                        </div>
+                    </div>
+
+                    <!-- List View -->
+                    <div id="listView" class="view-content">
+                        <div class="activity-list">
+                            <div id="activityList" class="activity-items"></div>
+                        </div>
+                    </div>
+
+                    <!-- Grid View -->
+                    <div id="gridView" class="view-content">
+                        <div class="activity-grid">
+                            <div id="activityGrid" class="activity-cards"></div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            <div class="controls">
-                <div class="control-group">
-                    <button class="btn btn-primary" onclick="refreshData()">🔄 Refresh</button>
-                    <button class="btn btn-secondary" onclick="debugDatabase()">🐛 Debug</button>
-                    <button class="btn btn-secondary" onclick="debugPromptData()">💬 Debug Prompts</button>
-                    <button class="btn btn-secondary" onclick="testCompanion()">🔗 Test</button>
+            <!-- Analytics Tab -->
+            <div id="analytics" class="tab-content">
+                <!-- Analytics Controls -->
+                <div class="analytics-controls">
+                    <div class="analytics-workspace-selector">
+                        <label for="analyticsWorkspaceSelect">Analyze Workspace:</label>
+                        <select id="analyticsWorkspaceSelect" onchange="setAnalyticsWorkspace(this.value)">
+                            <option value="all">All Workspaces</option>
+                        </select>
+                    </div>
+                    <div class="analytics-time-range">
+                        <label for="analyticsTimeRange">Time Range:</label>
+                        <select id="analyticsTimeRange" onchange="setAnalyticsTimeRange(this.value)">
+                            <option value="all" selected>All Time</option>
+                            <option value="24h">Last 24 Hours</option>
+                            <option value="7d">Last 7 Days</option>
+                            <option value="30d">Last 30 Days</option>
+                        </select>
+                    </div>
+                    <div class="analytics-refresh">
+                        <button onclick="refreshAnalytics()" class="refresh-btn">
+                            <span class="refresh-icon">↻</span>
+                            Refresh Analytics
+                        </button>
+                    </div>
                 </div>
-                <div class="control-group">
-                    <button class="btn btn-secondary" onclick="exportJSON()">JSON</button>
-                    <button class="btn btn-secondary" onclick="exportMarkdown()">MD</button>
-                </div>
-                <div class="control-group status-group">
-                    <span class="status-indicator" id="connectionStatus"></span>
-                    <span id="connectionText">Connecting...</span>
+                
+                <!-- Analytics Grid Layout -->
+                <div class="analytics-grid">
+                    <!-- Time Series Charts -->
+                    <div class="analytics-section">
+                        <h2 class="section-title">Time Series Analysis</h2>
+                        <div class="analytics-grid-2">
+                            <div class="analytics-card">
+                                <h3>Changes Over Time</h3>
+                                <div id="changesOverTimeChart" class="chart-container"></div>
+                            </div>
+                            <div class="analytics-card">
+                                <h3>Activity Heatmap</h3>
+                                <div id="activityHeatmap" class="chart-container"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Development Activity Section -->
+                    <div class="analytics-section">
+                        <h2 class="section-title">Development Activity</h2>
+                        <div class="analytics-grid-2">
+                            <div class="analytics-card">
+                                <h3>Code Patterns</h3>
+                                <div id="codePatterns" class="chart-container"></div>
+                            </div>
+                            <div class="analytics-card">
+                                <h3>Language Distribution</h3>
+                                <div id="languageDistribution" class="chart-container"></div>
+                            </div>
+                        </div>
+                        <div class="analytics-grid-2">
+                            <div class="analytics-card">
+                                <h3>File Activity Heatmap</h3>
+                                <div id="fileHeatmap" class="chart-container"></div>
+                            </div>
+                            <div class="analytics-card">
+                                <h3>Session Timeline</h3>
+                                <div id="sessionTimeline" class="chart-container"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- AI & Prompts Section -->
+                    <div class="analytics-section">
+                        <h2 class="section-title">AI & Prompts</h2>
+                        <div class="analytics-grid-4">
+                            <div class="analytics-card">
+                                <h3>Total Prompts</h3>
+                                <div class="stat-value" id="totalPrompts">0</div>
+                            </div>
+                            <div class="analytics-card">
+                                <h3>Avg Complexity</h3>
+                                <div class="stat-value" id="avgComplexity">0</div>
+                            </div>
+                            <div class="analytics-card">
+                                <h3>Response Quality</h3>
+                                <div class="stat-value" id="responseQuality">0</div>
+                            </div>
+                            <div class="analytics-card">
+                                <h3>Avg Response Time</h3>
+                                <div class="stat-value" id="avgResponseTime">0ms</div>
+                            </div>
+                        </div>
+                        <div class="analytics-grid-2">
+                            <div class="analytics-card">
+                                <h3>Prompt Categories</h3>
+                                <div id="promptCategories" class="chart-container"></div>
+                            </div>
+                            <div class="analytics-card">
+                                <h3>Recent Prompts</h3>
+                                <div id="promptTimeline" class="chart-container"></div>
+                            </div>
+                        </div>
+                        <div class="analytics-grid-2">
+                            <div class="analytics-card">
+                                <h3>Model Distribution</h3>
+                                <div id="modelDistributionChart" class="chart-container"></div>
+                            </div>
+                            <div class="analytics-card">
+                                <h3>Auto vs Manual Mode</h3>
+                                <div id="autoManualModeChart" class="chart-container"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- System & Environment section moved to System tab -->
+
+                    <!-- Workspace Analytics Section -->
+                    <div class="analytics-section">
+                        <h2 class="section-title">🗂️ Workspace Analytics</h2>
+                        <div class="analytics-card full-width">
+                            <h3>Workspace Comparison</h3>
+                            <div id="workspaceComparison" class="chart-container"></div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            <div class="filters">
-                <button class="filter-btn active" onclick="setFilter('all')">All</button>
-                <button class="filter-btn" onclick="setFilter('cursor')">Cursor</button>
-                <button class="filter-btn" onclick="setFilter('app')">App</button>
-                <button class="filter-btn" onclick="setFilter('filewatcher')">File Changes</button>
-                <button class="filter-btn" onclick="setFilter('clipboard')">Clipboard</button>
-                <button class="filter-btn" onclick="setFilter('dom')">DOM</button>
-                <button class="filter-btn" onclick="setFilter('mcp')">MCP</button>
-                <button class="filter-btn" onclick="setFilter('events')">Events</button>
-            </div>
-        </div>
+            <!-- System Tab -->
+            <div id="system" class="tab-content">
+                <div class="system-section">
+                    <h2 class="section-title">System & Environment</h2>
+                    
+                    <div class="analytics-grid-3">
+                        <!-- System Resources Card -->
+                        <div class="analytics-card">
+                            <h3>System Resources</h3>
+                            <div id="systemMetrics" class="metric-display"></div>
+                        </div>
+                        
+                        <!-- Git Repository Card -->
+                        <div class="analytics-card">
+                            <h3>Git Repository</h3>
+                            <div id="gitMetrics" class="metric-display"></div>
+                        </div>
+                        
+                        <!-- IDE State Card -->
+                        <div class="analytics-card">
+                            <h3>Editor State</h3>
+                            <div id="ideStateActivityChart" class="metric-display"></div>
+                        </div>
+                    </div>
 
-        <div class="dashboard">
-            <div id="activityFeed">
-                <div class="loading">Loading activity data...</div>
+                </div>
             </div>
-        </div>
+
+            <!-- Semantic Analysis Tab -->
+            <div id="semantic" class="tab-content">
+                <div class="semantic-analysis">
+                    <div class="semantic-header">
+                        <h3>Semantic Analysis</h3>
+                        <p class="semantic-description">Automatic analysis of code structure, relationships, and patterns</p>
+                    </div>
+                    
+                    <div class="semantic-grid">
+                        <!-- File Graph Section -->
+                        <div class="semantic-section file-graph-section">
+                            <h4>File Relationship Graph</h4>
+                            <div class="graph-controls">
+                                <div class="control-group">
+                                    <label>Visualization Mode:</label>
+                                    <select id="vizMode">
+                                        <option value="network">Semantic Network</option>
+                                        <option value="cluster">2D Clustering</option>
+                                        <option value="3d">3D Point Cloud</option>
+                                    </select>
+                                </div>
+                                <div class="control-group">
+                                    <label>Layout Algorithm:</label>
+                                    <select id="layout-algorithm">
+                                        <option value="force">Force-Directed</option>
+                                        <option value="circular">Circular</option>
+                                        <option value="hierarchical">Hierarchical</option>
+                                    </select>
+                                </div>
+                                <div class="control-group">
+                                    <label>Metric:</label>
+                                    <select id="graphMetric">
+                                        <option value="similarity">Semantic Similarity</option>
+                                        <option value="co-occurrence">Co-occurrence</option>
+                                        <option value="dependency">Dependencies</option>
+                                    </select>
+                                </div>
+                                <div class="control-group">
+                                    <label>Reduction:</label>
+                                    <select id="reductionMethod">
+                                        <option value="pca">PCA (Fast)</option>
+                                        <option value="tsne">t-SNE (Quality)</option>
+                                        <option value="umap">UMAP (Balance)</option>
+                                    </select>
+                                </div>
+                                <div class="control-group">
+                                    <label>Clustering:</label>
+                                    <select id="clusteringAlgorithm">
+                                        <option value="none">No Clustering</option>
+                                        <option value="kmeans">K-Means</option>
+                                        <option value="hierarchical">Hierarchical</option>
+                                        <option value="density">Density-Based</option>
+                                    </select>
+                                </div>
+                                <div class="control-group">
+                                    <label>Similarity Threshold:</label>
+                                    <input type="range" id="similarityThreshold" min="0" max="1" step="0.1" value="0.3">
+                                    <span id="threshold-value">0.3</span>
+                                </div>
+                                <div class="control-group">
+                                    <label>File Type Filter:</label>
+                                    <select id="file-type-filter" multiple>
+                                        <option value="javascript">JavaScript</option>
+                                        <option value="typescript">TypeScript</option>
+                                        <option value="python">Python</option>
+                                        <option value="html">HTML</option>
+                                        <option value="css">CSS</option>
+                                        <option value="json">JSON</option>
+                                        <option value="markdown">Markdown</option>
+                                    </select>
+                                </div>
+                                <div class="control-group">
+                                    <button id="apply-filters" class="btn btn-small">Apply Filters</button>
+                                    <button id="reset-network" class="btn btn-small">Reset</button>
+                                </div>
+                            </div>
+                            <div id="fileGraph" class="graph-container">
+                                <div class="loading-text">Analyzing file relationships...</div>
+                            </div>
+                        </div>
+
+                        <!-- Embeddings Section -->
+                        <div class="semantic-section embeddings-section">
+                            <div id="codeEmbeddings">
+                                <div class="loading-text">Analyzing code embeddings...</div>
+                            </div>
+                        </div>
+
+                        <!-- TF-IDF Section -->
+                        <div class="semantic-section tfidf-section">
+                            <div id="termFrequency">
+                                <div class="loading-text">Calculating term frequencies...</div>
+                            </div>
+                        </div>
+                        
+                        <!-- Semantic Insights Section -->
+                        <div class="semantic-section insights-section">
+                            <div id="semanticInsights">
+                                <div class="loading-text">Generating semantic insights...</div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+
+            <!-- Performance Tab -->
+            <div id="performance" class="tab-content">
+                <div class="performance-section">
+                    <h2 class="section-title">Performance Analytics</h2>
+                    
+                    <!-- Git Commits Timeline -->
+                    <div class="analytics-section">
+                        <h3>Git Activity</h3>
+                        <div class="analytics-grid">
+                            <div class="analytics-card">
+                                <h4>Commits Over Time</h4>
+                                <div id="commitsTimelineChart" class="chart-container">
+                                    <div class="chart-placeholder">Commits timeline will be displayed here</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Memory Analytics -->
+                    <div class="analytics-section">
+                        <h3>Memory Usage</h3>
+                        <div class="analytics-grid">
+                            <div class="analytics-card">
+                                <h4>Memory Over Time</h4>
+                                <div id="memoryUsageChart" class="chart-container">
+                                    <div class="chart-placeholder">Memory usage timeline will be displayed here</div>
+                                </div>
+                            </div>
+                            
+                            <div class="analytics-card">
+                                <h4>Memory Statistics</h4>
+                                <div id="memoryStatsContent" class="memory-stats-content">
+                                    <div class="memory-stat-item">
+                                        <span class="memory-stat-label">Current Usage:</span>
+                                        <span id="memoryCurrentUsage" class="memory-stat-value">Loading...</span>
+                                    </div>
+                                    <div class="memory-stat-item">
+                                        <span class="memory-stat-label">Peak Usage:</span>
+                                        <span id="memoryPeakUsage" class="memory-stat-value">Loading...</span>
+                                    </div>
+                                    <div class="memory-stat-item">
+                                        <span class="memory-stat-label">Average Usage:</span>
+                                        <span id="memoryAverageUsage" class="memory-stat-value">Loading...</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Performance Metrics -->
+                    <div class="analytics-section">
+                        <h3 class="analytics-title">Performance Metrics</h3>
+                        <div class="analytics-grid">
+                            <div class="analytics-card">
+                                <h4>CPU Usage Over Time</h4>
+                                <div id="cpuUsageChart" class="chart-container">
+                                    <div class="chart-placeholder">CPU usage timeline will be displayed here</div>
+                                </div>
+                            </div>
+                            
+                            <div class="analytics-card">
+                                <h4>Load Average Over Time</h4>
+                                <div id="loadAverageChart" class="chart-container">
+                                    <div class="chart-placeholder">Load average timeline will be displayed here</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Workspaces Tab -->
+            <div id="workspaces" class="tab-content">
+                <div class="workspaces-container">
+                    <div class="workspaces-header">
+                        <h2>Workspaces</h2>
+                        <p class="workspaces-description">Manage and compare your development workspaces</p>
+                    </div>
+                    
+                    <div class="workspace-list-section">
+                        <div id="workspaceList"></div>
+                    </div>
+                    
+                    <div class="workspace-comparison-section">
+                        <div id="workspaceComparison"></div>
+                    </div>
+                </div>
+            </div>
+        </main>
     </div>
 
-    <!-- Code Diff Modal -->
+    <!-- Enhanced Code Diff Modal -->
     <div id="diffModal" class="modal">
-        <div class="modal-content">
+        <div class="modal-content diff-modal">
             <div class="modal-header">
-                <h2>Code Changes</h2>
-                <button class="close-btn" onclick="closeDiffModal()">&times;</button>
+                <div class="modal-title-section">
+                    <h2>Code Changes</h2>
+                    <div class="file-info">
+                        <span id="diffFilePath" class="file-path"></span>
+                        <span id="diffTimestamp" class="timestamp"></span>
+                    </div>
+                </div>
+                <div class="modal-actions">
+                    <button class="action-btn" onclick="copyDiffContent()" title="Copy diff">
+                        <span>📋</span> Copy
+                    </button>
+                    <button class="action-btn" onclick="downloadDiff()" title="Download diff">
+                        <span>💾</span> Download
+                    </button>
+                    <button class="close-btn" onclick="closeDiffModal()">&times;</button>
+                </div>
             </div>
             <div class="modal-body">
-                <div class="file-info">
-                    <span id="diffFilePath" class="file-path"></span>
-                    <span id="diffTimestamp" class="timestamp"></span>
+                <!-- Diff Statistics -->
+                <div class="diff-stats">
+                    <div class="stat-item">
+                        <span class="stat-label">Lines Added:</span>
+                        <span id="linesAdded" class="stat-value added">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Lines Removed:</span>
+                        <span id="linesRemoved" class="stat-value removed">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Files Changed:</span>
+                        <span id="filesChanged" class="stat-value">1</span>
+                    </div>
                 </div>
+
+                <!-- Enhanced Diff Container -->
                 <div class="diff-container">
                     <div class="diff-side">
-                        <div class="diff-header">Before</div>
-                        <pre id="diffBefore" class="diff-code"></pre>
+                        <div class="diff-header">
+                            <span class="diff-label">Before</span>
+                            <span class="diff-meta" id="beforeMeta"></span>
+                        </div>
+                        <div class="diff-content">
+                            <pre id="diffBefore" class="diff-code"></pre>
+                        </div>
                     </div>
                     <div class="diff-side">
-                        <div class="diff-header">After</div>
-                        <pre id="diffAfter" class="diff-code"></pre>
+                        <div class="diff-header">
+                            <span class="diff-label">After</span>
+                            <span class="diff-meta" id="afterMeta"></span>
+                        </div>
+                        <div class="diff-content">
+                            <pre id="diffAfter" class="diff-code"></pre>
+                        </div>
                     </div>
+                </div>
+
+                <!-- Unified Diff View -->
+                <div class="unified-diff-container" style="display: none;">
+                    <div class="diff-header">
+                        <span class="diff-label">Unified Diff</span>
+                        <button class="toggle-btn" onclick="toggleDiffView()">Switch to Side-by-Side</button>
+                    </div>
+                    <div class="diff-content">
+                        <pre id="unifiedDiff" class="diff-code unified"></pre>
+                    </div>
+                </div>
+
+                <!-- Diff Controls -->
+                <div class="diff-controls">
+                    <button class="control-btn" onclick="toggleDiffView()">
+                        <span>🔄</span> Toggle View
+                    </button>
+                    <button class="control-btn" onclick="toggleLineNumbers()">
+                        <span>🔢</span> Line Numbers
+                    </button>
+                    <button class="control-btn" onclick="toggleSyntaxHighlighting()">
+                        <span>🎨</span> Syntax Highlight
+                    </button>
+                    <button class="control-btn" onclick="toggleWhitespace()">
+                        <span>⚪</span> Show Whitespace
+                    </button>
                 </div>
             </div>
         </div>
     </div>
 
-    <script src="https://unpkg.com/dexie@latest/dist/dexie.js"></script>
-    <script src="https://unpkg.com/minisearch@latest/dist/umd/index.js"></script>
-    <script src="app.js"></script>
+    <!-- D3.js for network visualization -->
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <!-- Three.js for 3D visualization -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- Socket.IO for real-time updates -->
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js" onerror="console.warn('Socket.IO failed to load, real-time updates will be disabled')"></script>
+    
+    <!-- Prompt Display System -->
+    <link rel="stylesheet" href="prompt-display.css">
+    <script src="prompt-display-system.js"></script>
+    
+    <script src="./lib/d3.v6.min.js"></script>
+    
+    <!-- Search Modal -->
+    <div id="searchModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Search Activity Data</h3>
+                <button class="modal-close" onclick="closeSearchModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="search-container">
+                    <input type="text" id="searchInput" placeholder="Search sessions, files, prompts, code..." 
+                           class="search-input" autocomplete="off">
+                    <div id="searchResults" class="search-results"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+            <!-- Enhanced Event Modal -->
+            <div id="eventModal" class="modal">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <div class="modal-title-section">
+                            <span id="eventIcon" class="event-modal-icon">📄</span>
+                            <h2 id="eventModalTitle">Event Details</h2>
+                        </div>
+                        <div class="modal-header-meta">
+                            <span id="eventModalTimestamp" class="timestamp">Timestamp</span>
+                            <span id="eventModalWorkspace" class="workspace">Workspace</span>
+                        </div>
+                        <button class="modal-close" onclick="closeModal('eventModal')">×</button>
+                    </div>
+                    
+                    <div class="modal-body">
+                        <div class="event-details-grid">
+                            <div class="event-details-section">
+                                <h3>Event Overview</h3>
+                                <div id="eventOverviewContent" class="event-overview-content">
+                                    <div class="event-detail">
+                                        <span class="detail-label">Type:</span>
+                                        <span id="eventTypeDetail" class="detail-value">Unknown</span>
+                                    </div>
+                                    <div class="event-detail">
+                                        <span class="detail-label">Source:</span>
+                                        <span id="eventSourceDetail" class="detail-value">Unknown</span>
+                                    </div>
+                                    <div class="event-detail">
+                                        <span class="detail-label">Session:</span>
+                                        <span id="eventSessionDetail" class="detail-value">Unknown</span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="event-details-section">
+                                <h3>File Context</h3>
+                                <div id="eventFileContext" class="event-file-context">
+                                    <div class="event-detail">
+                                        <span class="detail-label">File Path:</span>
+                                        <span id="eventFilePathDetail" class="detail-value">Unknown</span>
+                                    </div>
+                                    <div class="event-detail">
+                                        <span class="detail-label">Language:</span>
+                                        <span id="eventLanguageDetail" class="detail-value">Unknown</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="event-content-section">
+                            <h3>Event Content</h3>
+                            <div id="eventContent" class="event-content">
+                                <!-- Dynamic content will be inserted here -->
+                            </div>
+                        </div>
+                        
+                        <!-- Removed redundant sections - content is now generated dynamically -->
+                    </div>
+                    
+                    <div class="modal-footer">
+                        <button class="btn btn-secondary" onclick="copyEventDetails()">Copy Details</button>
+                        <button class="btn btn-primary" onclick="openInEditor()">Open in Editor</button>
+                    </div>
+                </div>
+            </div>
+
+    <!-- Session Detail Modal (Legacy) -->
+    <div id="sessionModal" class="modal" style="display: none;">
+        <div class="modal-content session-modal">
+            <div class="modal-header">
+                <h3 id="sessionModalTitle">Session Details</h3>
+                <button class="modal-close" onclick="closeSessionModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="sessionModalContent"></div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="./semantic-analysis-engine.js"></script>
+    <script src="./prompt-analytics-engine.js"></script>
+    <script src="./time-series-visualizer.js"></script>
+    <script src="./ui-enhancements.js"></script>
+    <script src="./dashboard.js"></script>
 </body>
 </html>

@@ -313,6 +313,395 @@ paths:
         '500':
           $ref: '#/components/responses/ServerError'
 
+  /conversations:
+    get:
+      summary: Get all conversations
+      description: Retrieve all conversations across sessions
+      tags: [Conversations]
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+        - name: session_id
+          in: query
+          schema:
+            type: string
+          description: Filter by session ID
+      responses:
+        '200':
+          description: List of conversations
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Conversation'
+                  timestamp:
+                    type: string
+                    format: date-time
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+    post:
+      summary: Create conversation
+      description: Create a new conversation
+      tags: [Conversations]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConversationInput'
+      responses:
+        '201':
+          description: Conversation created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Conversation'
+                  timestamp:
+                    type: string
+                    format: date-time
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /conversations/{id}:
+    get:
+      summary: Get conversation by ID
+      description: Retrieve specific conversation details
+      tags: [Conversations]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Conversation ID
+      responses:
+        '200':
+          description: Conversation details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Conversation'
+                  timestamp:
+                    type: string
+                    format: date-time
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+    put:
+      summary: Update conversation
+      description: Update an existing conversation
+      tags: [Conversations]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Conversation ID
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConversationInput'
+      responses:
+        '200':
+          description: Conversation updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Conversation'
+                  timestamp:
+                    type: string
+                    format: date-time
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+    delete:
+      summary: Delete conversation
+      description: Delete a conversation
+      tags: [Conversations]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Conversation ID
+      responses:
+        '200':
+          description: Conversation deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                  timestamp:
+                    type: string
+                    format: date-time
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /conversations/search:
+    get:
+      summary: Search conversations
+      description: Search conversations by content or metadata
+      tags: [Conversations]
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Search query
+        - name: session_id
+          in: query
+          schema:
+            type: string
+          description: Filter by session ID
+        - name: role
+          in: query
+          schema:
+            type: string
+            enum: [user, assistant, system]
+          description: Filter by role
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Conversation'
+                  timestamp:
+                    type: string
+                    format: date-time
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /prompts:
+    get:
+      summary: Get all prompts
+      description: Retrieve all prompts across sessions
+      tags: [Prompts]
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+        - name: session_id
+          in: query
+          schema:
+            type: string
+          description: Filter by session ID
+        # Removed intent filter - no longer needed
+      responses:
+        '200':
+          description: List of prompts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Prompt'
+                  timestamp:
+                    type: string
+                    format: date-time
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+    post:
+      summary: Create prompt
+      description: Create a new prompt entry
+      tags: [Prompts]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PromptInput'
+      responses:
+        '201':
+          description: Prompt created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Prompt'
+                  timestamp:
+                    type: string
+                    format: date-time
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /prompts/{id}:
+    get:
+      summary: Get prompt by ID
+      description: Retrieve specific prompt details
+      tags: [Prompts]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Prompt ID
+      responses:
+        '200':
+          description: Prompt details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Prompt'
+                  timestamp:
+                    type: string
+                    format: date-time
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /prompts/analytics:
+    get:
+      summary: Get prompt analytics
+      description: Get analytics and insights about prompts
+      tags: [Prompts, Analytics]
+      parameters:
+        - name: session_id
+          in: query
+          schema:
+            type: string
+          description: Filter by session ID
+        - name: date_range
+          in: query
+          schema:
+            type: string
+            enum: [today, week, month, year, all]
+            default: month
+          description: Date range filter
+      responses:
+        '200':
+          description: Prompt analytics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/PromptAnalytics'
+                  timestamp:
+                    type: string
+                    format: date-time
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /conversations/analytics:
+    get:
+      summary: Get conversation analytics
+      description: Get analytics and insights about conversations
+      tags: [Conversations, Analytics]
+      parameters:
+        - name: session_id
+          in: query
+          schema:
+            type: string
+          description: Filter by session ID
+        - name: date_range
+          in: query
+          schema:
+            type: string
+            enum: [today, week, month, year, all]
+            default: month
+          description: Date range filter
+      responses:
+        '200':
+          description: Conversation analytics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/ConversationAnalytics'
+                  timestamp:
+                    type: string
+                    format: date-time
+        '500':
+          $ref: '#/components/responses/ServerError'
+
   /health:
     get:
       summary: Health check
@@ -350,6 +739,379 @@ paths:
                   timestamp:
                     type: string
                     format: date-time
+
+  /raw-data/system-resources:
+    get:
+      summary: Get system resource data
+      description: Retrieve system resource monitoring data including CPU, memory, and process information
+      tags: [Raw Data]
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+        - name: since
+          in: query
+          schema:
+            type: integer
+            description: Unix timestamp to filter data from
+      responses:
+        '200':
+          description: System resource data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SystemResourceData'
+                  count:
+                    type: integer
+                  total:
+                    type: integer
+
+  /raw-data/git:
+    get:
+      summary: Get git repository data
+      description: Retrieve git status, branch information, and commit history
+      tags: [Raw Data]
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+        - name: since
+          in: query
+          schema:
+            type: integer
+            description: Unix timestamp to filter data from
+      responses:
+        '200':
+          description: Git repository data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/GitData'
+                  count:
+                    type: integer
+                  total:
+                    type: integer
+
+  /raw-data/cursor-database:
+    get:
+      summary: Get Cursor database information
+      description: Retrieve Cursor IDE database tables and structure information
+      tags: [Raw Data]
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: since
+          in: query
+          schema:
+            type: integer
+            description: Unix timestamp to filter data from
+      responses:
+        '200':
+          description: Cursor database information
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CursorDatabaseData'
+                  count:
+                    type: integer
+                  total:
+                    type: integer
+
+  /raw-data/apple-script:
+    get:
+      summary: Get AppleScript application state
+      description: Retrieve Cursor application state via AppleScript integration
+      tags: [Raw Data]
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+        - name: since
+          in: query
+          schema:
+            type: integer
+            description: Unix timestamp to filter data from
+      responses:
+        '200':
+          description: AppleScript application state
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AppleScriptData'
+                  count:
+                    type: integer
+                  total:
+                    type: integer
+
+  /raw-data/logs:
+    get:
+      summary: Get log file information
+      description: Retrieve Cursor IDE log files and metadata
+      tags: [Raw Data]
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+        - name: since
+          in: query
+          schema:
+            type: integer
+            description: Unix timestamp to filter data from
+      responses:
+        '200':
+          description: Log file information
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/LogData'
+                  count:
+                    type: integer
+                  total:
+                    type: integer
+
+  /raw-data/all:
+    get:
+      summary: Get all raw data
+      description: Retrieve all raw data types in a single request
+      tags: [Raw Data]
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+        - name: since
+          in: query
+          schema:
+            type: integer
+            description: Unix timestamp to filter data from
+      responses:
+        '200':
+          description: All raw data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      systemResources:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/SystemResourceData'
+                      gitData:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/GitData'
+                      cursorDatabase:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/CursorDatabaseData'
+                      appleScript:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/AppleScriptData'
+                      logs:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/LogData'
+                  counts:
+                    type: object
+                    properties:
+                      systemResources:
+                        type: integer
+                      gitData:
+                        type: integer
+                      cursorDatabase:
+                        type: integer
+                      appleScript:
+                        type: integer
+                      logs:
+                        type: integer
+
+  /ide-state:
+    get:
+      summary: Get current IDE state
+      description: Retrieve comprehensive IDE state including editor, workspace, and debug information
+      tags: [IDE State]
+      responses:
+        '200':
+          description: Current IDE state
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/IDEState'
+                  timestamp:
+                    type: integer
+
+  /ide-state/history:
+    get:
+      summary: Get IDE state history
+      description: Retrieve historical IDE state data
+      tags: [IDE State]
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+        - name: since
+          in: query
+          schema:
+            type: integer
+            description: Unix timestamp to filter data from
+      responses:
+        '200':
+          description: IDE state history
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/IDEState'
+                  count:
+                    type: integer
+                  total:
+                    type: integer
+
+  /ide-state/editor:
+    get:
+      summary: Get editor state
+      description: Retrieve current editor state including tabs, layout, and panels
+      tags: [IDE State]
+      responses:
+        '200':
+          description: Editor state
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/EditorState'
+                  timestamp:
+                    type: integer
+
+  /ide-state/workspace:
+    get:
+      summary: Get workspace state
+      description: Retrieve workspace information including git status and extensions
+      tags: [IDE State]
+      responses:
+        '200':
+          description: Workspace state
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/WorkspaceState'
+                  timestamp:
+                    type: integer
+
+  /ide-state/debug:
+    get:
+      summary: Get debug state
+      description: Retrieve debug session information including breakpoints and watch expressions
+      tags: [IDE State]
+      responses:
+        '200':
+          description: Debug state
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/DebugState'
+                  timestamp:
+                    type: integer
+
+  /ide-state/cursor:
+    get:
+      summary: Get Cursor-specific state
+      description: Retrieve Cursor IDE specific state including AI chat and code completion
+      tags: [IDE State]
+      responses:
+        '200':
+          description: Cursor-specific state
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/CursorSpecificState'
+                  timestamp:
+                    type: integer
 
 components:
   schemas:
@@ -529,6 +1291,295 @@ components:
               format: date
           description: Date range filter
 
+    Conversation:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique conversation identifier
+        sessionId:
+          type: string
+          description: Associated session ID
+        timestamp:
+          type: string
+          format: date-time
+          description: Conversation timestamp
+        role:
+          type: string
+          enum: [user, assistant, system]
+          description: Conversation role
+        content:
+          type: string
+          description: Conversation content
+        metadata:
+          type: object
+          additionalProperties: true
+          description: Conversation metadata
+        referencedFiles:
+          type: array
+          items:
+            type: string
+          description: Files referenced in conversation
+        codeBlocks:
+          type: array
+          items:
+            $ref: '#/components/schemas/CodeBlock'
+          description: Code blocks in conversation
+        # Removed intent field - no longer needed
+        complexity:
+          type: string
+          enum: [low, medium, high]
+          description: Complexity level
+        keywords:
+          type: array
+          items:
+            type: string
+          description: Extracted keywords
+      required: [id, sessionId, timestamp, role, content]
+
+    ConversationInput:
+      type: object
+      properties:
+        sessionId:
+          type: string
+          description: Associated session ID
+        role:
+          type: string
+          enum: [user, assistant, system]
+          description: Conversation role
+        content:
+          type: string
+          description: Conversation content
+        metadata:
+          type: object
+          additionalProperties: true
+          description: Conversation metadata
+        referencedFiles:
+          type: array
+          items:
+            type: string
+          description: Files referenced in conversation
+        codeBlocks:
+          type: array
+          items:
+            $ref: '#/components/schemas/CodeBlock'
+          description: Code blocks in conversation
+      required: [sessionId, role, content]
+
+    Prompt:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique prompt identifier
+        sessionId:
+          type: string
+          description: Associated session ID
+        timestamp:
+          type: string
+          format: date-time
+          description: Prompt timestamp
+        content:
+          type: string
+          description: Prompt content
+        response:
+          type: string
+          description: AI response to prompt
+        filePath:
+          type: string
+          description: File path context
+        # Removed intent field - no longer needed
+        complexity:
+          type: string
+          enum: [low, medium, high]
+          description: Complexity level
+        keywords:
+          type: array
+          items:
+            type: string
+          description: Extracted keywords
+        patterns:
+          type: array
+          items:
+            type: string
+          description: Detected patterns
+        metadata:
+          type: object
+          additionalProperties: true
+          description: Prompt metadata
+        source:
+          type: string
+          enum: [clipboard, mcp, manual, dom]
+          description: Prompt source
+      required: [id, sessionId, timestamp, content]
+
+    PromptInput:
+      type: object
+      properties:
+        sessionId:
+          type: string
+          description: Associated session ID
+        content:
+          type: string
+          description: Prompt content
+        response:
+          type: string
+          description: AI response to prompt
+        filePath:
+          type: string
+          description: File path context
+        metadata:
+          type: object
+          additionalProperties: true
+          description: Prompt metadata
+        source:
+          type: string
+          enum: [clipboard, mcp, manual, dom]
+          description: Prompt source
+      required: [sessionId, content]
+
+    CodeBlock:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Code block identifier
+        language:
+          type: string
+          description: Programming language
+        content:
+          type: string
+          description: Code content
+        lineRange:
+          type: object
+          properties:
+            start:
+              type: integer
+            end:
+              type: integer
+          description: Line range in file
+      required: [id, language, content]
+
+    PromptAnalytics:
+      type: object
+      properties:
+        totalPrompts:
+          type: integer
+          description: Total number of prompts
+        averageComplexity:
+          type: string
+          enum: [low, medium, high]
+          description: Average complexity level
+        topIntents:
+          type: array
+          items:
+            type: object
+            properties:
+              intent:
+                type: string
+              count:
+                type: integer
+          description: Removed intent analytics - no longer needed
+        promptTrends:
+          type: array
+          items:
+            type: object
+            properties:
+              date:
+                type: string
+                format: date
+              count:
+                type: integer
+          description: Prompt trends over time
+        complexityDistribution:
+          type: object
+          properties:
+            low:
+              type: integer
+            medium:
+              type: integer
+            high:
+              type: integer
+          description: Complexity distribution
+        topKeywords:
+          type: array
+          items:
+            type: object
+            properties:
+              keyword:
+                type: string
+              frequency:
+                type: integer
+          description: Most frequent keywords
+        sourceDistribution:
+          type: object
+          properties:
+            clipboard:
+              type: integer
+            mcp:
+              type: integer
+            manual:
+              type: integer
+            dom:
+              type: integer
+          description: Source distribution
+      required: [totalPrompts, averageComplexity, topIntents]
+
+    ConversationAnalytics:
+      type: object
+      properties:
+        totalConversations:
+          type: integer
+          description: Total number of conversations
+        averageConversationLength:
+          type: number
+          description: Average conversation length
+        roleDistribution:
+          type: object
+          properties:
+            user:
+              type: integer
+            assistant:
+              type: integer
+            system:
+              type: integer
+          description: Role distribution
+        conversationTrends:
+          type: array
+          items:
+            type: object
+            properties:
+              date:
+                type: string
+                format: date
+              count:
+                type: integer
+          description: Conversation trends over time
+        topReferencedFiles:
+          type: array
+          items:
+            type: object
+            properties:
+              file:
+                type: string
+              count:
+                type: integer
+          description: Most referenced files
+        averageCodeBlocks:
+          type: number
+          description: Average code blocks per conversation
+        conversationComplexity:
+          type: object
+          properties:
+            low:
+              type: integer
+            medium:
+              type: integer
+            high:
+              type: integer
+          description: Conversation complexity distribution
+      required: [totalConversations, averageConversationLength, roleDistribution]
+
   responses:
     BadRequest:
       description: Bad request
@@ -580,6 +1631,554 @@ components:
                 type: string
                 format: date-time
 
+    SystemResourceData:
+      type: object
+      properties:
+        timestamp:
+          type: integer
+          description: Unix timestamp
+        memory:
+          type: object
+          properties:
+            rss:
+              type: integer
+            heapTotal:
+              type: integer
+            heapUsed:
+              type: integer
+            external:
+              type: integer
+            arrayBuffers:
+              type: integer
+        cpu:
+          type: object
+          properties:
+            user:
+              type: integer
+            system:
+              type: integer
+        system:
+          type: object
+          properties:
+            loadAverage:
+              type: array
+              items:
+                type: number
+            freeMemory:
+              type: integer
+            totalMemory:
+              type: integer
+            uptime:
+              type: number
+            platform:
+              type: string
+            arch:
+              type: string
+
+    GitData:
+      type: object
+      properties:
+        timestamp:
+          type: integer
+          description: Unix timestamp
+        branch:
+          type: string
+        status:
+          type: array
+          items:
+            type: string
+        recentCommits:
+          type: array
+          items:
+            type: string
+
+    CursorDatabaseData:
+      type: object
+      properties:
+        timestamp:
+          type: integer
+          description: Unix timestamp
+        path:
+          type: string
+        tables:
+          type: array
+          items:
+            type: string
+        size:
+          type: integer
+
+    AppleScriptData:
+      type: object
+      properties:
+        timestamp:
+          type: integer
+          description: Unix timestamp
+        isActive:
+          type: boolean
+        windowCount:
+          type: integer
+        processName:
+          type: string
+
+    LogData:
+      type: object
+      properties:
+        timestamp:
+          type: integer
+          description: Unix timestamp
+        path:
+          type: string
+        size:
+          type: integer
+        modified:
+          type: string
+          format: date-time
+        name:
+          type: string
+
+    IDEState:
+      type: object
+      properties:
+        timestamp:
+          type: integer
+          description: Unix timestamp
+        editorState:
+          $ref: '#/components/schemas/EditorState'
+        workspaceState:
+          $ref: '#/components/schemas/WorkspaceState'
+        editorConfiguration:
+          $ref: '#/components/schemas/EditorConfiguration'
+        debugState:
+          $ref: '#/components/schemas/DebugState'
+        cursorSpecificState:
+          $ref: '#/components/schemas/CursorSpecificState'
+        systemState:
+          $ref: '#/components/schemas/SystemState'
+
+    EditorState:
+      type: object
+      properties:
+        activeTabs:
+          type: array
+          items:
+            $ref: '#/components/schemas/Tab'
+        openFiles:
+          type: array
+          items:
+            type: string
+        editorLayout:
+          $ref: '#/components/schemas/EditorLayout'
+        panelStates:
+          type: array
+          items:
+            $ref: '#/components/schemas/PanelState'
+        sidebarState:
+          $ref: '#/components/schemas/SidebarState'
+
+    WorkspaceState:
+      type: object
+      properties:
+        workspaceRoot:
+          type: string
+        gitBranch:
+          type: string
+        gitStatus:
+          $ref: '#/components/schemas/GitStatus'
+        activeExtensions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Extension'
+        themeSettings:
+          $ref: '#/components/schemas/ThemeSettings'
+
+    EditorConfiguration:
+      type: object
+      properties:
+        languageMode:
+          type: string
+        indentationSettings:
+          $ref: '#/components/schemas/IndentationSettings'
+        editorSettings:
+          $ref: '#/components/schemas/EditorSettings'
+        keybindings:
+          type: array
+          items:
+            $ref: '#/components/schemas/Keybinding'
+
+    DebugState:
+      type: object
+      properties:
+        breakpoints:
+          type: array
+          items:
+            $ref: '#/components/schemas/Breakpoint'
+        debugSession:
+          $ref: '#/components/schemas/DebugSession'
+        watchExpressions:
+          type: array
+          items:
+            $ref: '#/components/schemas/WatchExpression'
+
+    CursorSpecificState:
+      type: object
+      properties:
+        aiChat:
+          $ref: '#/components/schemas/AIChatState'
+        codeCompletion:
+          $ref: '#/components/schemas/CodeCompletionState'
+        suggestions:
+          $ref: '#/components/schemas/SuggestionState'
+        contextWindow:
+          $ref: '#/components/schemas/ContextWindowState'
+
+    SystemState:
+      type: object
+      properties:
+        processes:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProcessInfo'
+        resources:
+          $ref: '#/components/schemas/ResourceUsage'
+        environment:
+          $ref: '#/components/schemas/EnvironmentInfo'
+
+    Tab:
+      type: object
+      properties:
+        id:
+          type: string
+        filePath:
+          type: string
+        isActive:
+          type: boolean
+        isDirty:
+          type: boolean
+        lastAccessed:
+          type: integer
+        viewColumn:
+          type: integer
+        group:
+          type: integer
+
+    EditorLayout:
+      type: object
+      properties:
+        activeEditor:
+          type: string
+        editorGroups:
+          type: array
+          items:
+            type: object
+        panelLayout:
+          type: object
+        sidebarLayout:
+          type: object
+        statusBar:
+          type: object
+
+    PanelState:
+      type: object
+      properties:
+        id:
+          type: string
+        isVisible:
+          type: boolean
+        isActive:
+          type: boolean
+        height:
+          type: integer
+        position:
+          type: string
+          enum: [left, right, bottom]
+        content:
+          type: string
+
+    SidebarState:
+      type: object
+      properties:
+        isVisible:
+          type: boolean
+        activeView:
+          type: string
+        expandedSections:
+          type: array
+          items:
+            type: string
+        width:
+          type: integer
+
+    GitStatus:
+      type: object
+      properties:
+        branch:
+          type: string
+        isDirty:
+          type: boolean
+        stagedFiles:
+          type: array
+          items:
+            type: string
+        unstagedFiles:
+          type: array
+          items:
+            type: string
+        untrackedFiles:
+          type: array
+          items:
+            type: string
+        lastCommit:
+          $ref: '#/components/schemas/GitCommit'
+
+    Extension:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        version:
+          type: string
+        isActive:
+          type: boolean
+        isEnabled:
+          type: boolean
+        activationEvents:
+          type: array
+          items:
+            type: string
+
+    ThemeSettings:
+      type: object
+      properties:
+        colorTheme:
+          type: string
+        iconTheme:
+          type: string
+        fontFamily:
+          type: string
+        fontSize:
+          type: integer
+        fontWeight:
+          type: string
+
+    IndentationSettings:
+      type: object
+      properties:
+        insertSpaces:
+          type: boolean
+        tabSize:
+          type: integer
+        detectIndentation:
+          type: boolean
+
+    EditorSettings:
+      type: object
+      properties:
+        wordWrap:
+          type: string
+        lineNumbers:
+          type: string
+        minimap:
+          type: boolean
+        scrollBeyondLastLine:
+          type: boolean
+        cursorBlinking:
+          type: string
+        cursorStyle:
+          type: string
+
+    Keybinding:
+      type: object
+      properties:
+        key:
+          type: string
+        command:
+          type: string
+        when:
+          type: string
+        args:
+          type: object
+
+    Breakpoint:
+      type: object
+      properties:
+        id:
+          type: string
+        filePath:
+          type: string
+        line:
+          type: integer
+        column:
+          type: integer
+        enabled:
+          type: boolean
+        condition:
+          type: string
+        hitCount:
+          type: integer
+
+    DebugSession:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+        isActive:
+          type: boolean
+        configuration:
+          type: object
+        variables:
+          type: array
+          items:
+            type: object
+        callStack:
+          type: array
+          items:
+            type: object
+
+    WatchExpression:
+      type: object
+      properties:
+        id:
+          type: string
+        expression:
+          type: string
+        value:
+          type: string
+        type:
+          type: string
+        hasChildren:
+          type: boolean
+
+    AIChatState:
+      type: object
+      properties:
+        isOpen:
+          type: boolean
+        messageCount:
+          type: integer
+        lastMessage:
+          type: string
+        conversationHistory:
+          type: array
+          items:
+            type: object
+        contextFiles:
+          type: array
+          items:
+            type: string
+
+    CodeCompletionState:
+      type: object
+      properties:
+        isActive:
+          type: boolean
+        suggestions:
+          type: array
+          items:
+            type: object
+        acceptedSuggestions:
+          type: integer
+        rejectedSuggestions:
+          type: integer
+        completionRate:
+          type: number
+
+    SuggestionState:
+      type: object
+      properties:
+        activeSuggestions:
+          type: array
+          items:
+            type: object
+        acceptedCount:
+          type: integer
+        rejectedCount:
+          type: integer
+        partialAcceptance:
+          type: array
+          items:
+            type: object
+
+    ContextWindowState:
+      type: object
+      properties:
+        isOpen:
+          type: boolean
+        content:
+          type: string
+        referencedFiles:
+          type: array
+          items:
+            type: string
+        selectedText:
+          type: string
+        cursorPosition:
+          type: object
+          properties:
+            line:
+              type: integer
+            character:
+              type: integer
+
+    ProcessInfo:
+      type: object
+      properties:
+        pid:
+          type: integer
+        name:
+          type: string
+        cpuUsage:
+          type: number
+        memoryUsage:
+          type: number
+        timestamp:
+          type: integer
+
+    ResourceUsage:
+      type: object
+      properties:
+        cpuUsage:
+          type: number
+        memoryUsage:
+          type: number
+        diskUsage:
+          type: number
+        networkUsage:
+          type: number
+
+    EnvironmentInfo:
+      type: object
+      properties:
+        platform:
+          type: string
+        arch:
+          type: string
+        nodeVersion:
+          type: string
+        cursorVersion:
+          type: string
+
+    GitCommit:
+      type: object
+      properties:
+        hash:
+          type: string
+        message:
+          type: string
+        author:
+          type: string
+        timestamp:
+          type: integer
+        files:
+          type: array
+          items:
+            type: string
+
   securitySchemes:
     ApiKeyAuth:
       type: apiKey
@@ -601,5 +2200,9 @@ tags:
     description: Memory generation and management
   - name: Export
     description: Data export and download
+  - name: Conversations
+    description: Conversation management and analysis
+  - name: Prompts
+    description: Prompt management and analytics
   - name: System
     description: System health and status

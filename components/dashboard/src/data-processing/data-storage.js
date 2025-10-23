@@ -212,6 +212,44 @@ class DataStorage {
     return await this.loadConversations();
   }
 
+  async updateConversation(id, updates) {
+    try {
+      const conversations = await this.loadConversations();
+      const index = conversations.findIndex(conv => conv.id === id);
+      
+      if (index === -1) {
+        return null;
+      }
+      
+      conversations[index] = { ...conversations[index], ...updates };
+      await this.saveToFile(this.conversationsFile, conversations);
+      
+      return conversations[index];
+    } catch (error) {
+      console.error('Error updating conversation:', error);
+      return null;
+    }
+  }
+
+  async deleteConversation(id) {
+    try {
+      const conversations = await this.loadConversations();
+      const index = conversations.findIndex(conv => conv.id === id);
+      
+      if (index === -1) {
+        return false;
+      }
+      
+      conversations.splice(index, 1);
+      await this.saveToFile(this.conversationsFile, conversations);
+      
+      return true;
+    } catch (error) {
+      console.error('Error deleting conversation:', error);
+      return false;
+    }
+  }
+
   async getConversationsForSession(sessionId) {
     try {
       const conversations = await this.loadConversations();

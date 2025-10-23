@@ -253,19 +253,87 @@ class IDEStateCapture {
 
   // AppleScript integration methods
   async getActiveTabs() {
-    console.warn('Could not get active tabs via AppleScript (temporarily disabled).');
-    return [];
+    try {
+      // AppleScript to get open tabs/files from Cursor
+      const script = `
+        tell application "System Events"
+          tell process "Cursor"
+            try
+              set windowTitle to name of front window
+              return windowTitle
+            on error
+              return ""
+            end try
+          end tell
+        end tell
+      `;
+      
+      const { stdout } = await execAsync(`osascript -e '${script.replace(/'/g, "'\\''")}'`);
+      const windowTitle = stdout.trim();
+      
+      if (windowTitle && windowTitle !== "") {
+        // Parse window title to extract file information
+        // Cursor window titles typically show: "filename — workspace" or "filename - workspace - Cursor"
+        // Remove the workspace suffix (everything after — or after second -)
+        let fileName = windowTitle;
+        
+        // Try splitting by em-dash first
+        if (windowTitle.includes(' — ')) {
+          fileName = windowTitle.split(' — ')[0];
+        } else if (windowTitle.includes(' - ')) {
+          const parts = windowTitle.split(' - ');
+          fileName = parts[0] || '';
+        }
+        
+        // Get the working directory to construct full path
+        const workspaceRoot = await this.getWorkspaceRoot();
+        
+        // Construct full path if not absolute
+        const filePath = fileName.includes('/') ? fileName : (fileName ? path.join(workspaceRoot, fileName) : '');
+        
+        return [{
+          title: windowTitle,
+          fileName: fileName,
+          filePath: filePath,
+          isActive: true,
+          isDirty: windowTitle.includes('●') || windowTitle.includes('•'),
+          lineNumber: 1,
+          columnNumber: 1
+        }];
+      }
+      
+      return [];
+    } catch (error) {
+      console.warn('Could not get active tabs via AppleScript:', error.message);
+      return [];
+    }
   }
   
   async getEditorLayout() {
-    console.warn('Could not get editor layout via AppleScript (temporarily disabled).');
-    return {
-      activeEditor: '',
-      editorGroups: [],
-      panelLayout: { panels: [] },
-      sidebarLayout: { sections: [] },
-      statusBar: { items: [] }
-    };
+    try {
+      const activeTabs = await this.getActiveTabs();
+      const activeEditor = activeTabs.length > 0 ? activeTabs[0].filePath : '';
+      
+      return {
+        activeEditor,
+        editorGroups: activeTabs.length > 0 ? [{
+          viewColumn: 1,
+          editors: activeTabs
+        }] : [],
+        panelLayout: { panels: [] },
+        sidebarLayout: { sections: [] },
+        statusBar: { items: [] }
+      };
+    } catch (error) {
+      console.warn('Could not get editor layout:', error.message);
+      return {
+        activeEditor: '',
+        editorGroups: [],
+        panelLayout: { panels: [] },
+        sidebarLayout: { sections: [] },
+        statusBar: { items: [] }
+      };
+    }
   }
   
   async getPanelStates() {
@@ -423,18 +491,72 @@ class IDEStateCapture {
   }
 
   async getLanguageMode() {
-    console.warn('Could not get language mode via AppleScript (temporarily disabled).');
-    return '';
+    try {
+      const activeTabs = await this.getActiveTabs();
+      if (activeTabs.length > 0 && activeTabs[0].filePath) {
+        const ext = path.extname(activeTabs[0].filePath).substring(1);
+        const languageMap = {
+          'js': 'javascript',
+          'ts': 'typescript',
+          'py': 'python',
+          'rb': 'ruby',
+          'go': 'go',
+          'rs': 'rust',
+          'java': 'java',
+          'cpp': 'cpp',
+          'c': 'c',
+          'html': 'html',
+          'css': 'css',
+          'json': 'json',
+          'md': 'markdown',
+          'sh': 'shell'
+        };
+        return languageMap[ext] || ext || '';
+      }
+      return '';
+    } catch (error) {
+      console.warn('Could not get language mode:', error.message);
+      return '';
+    }
   }
 
   async getIndentationSettings() {
-    console.warn('Could not get indentation settings (temporarily disabled).');
-    return { insertSpaces: true, tabSize: 2, detectIndentation: true };
+    try {
+      const settingsPath = path.join(os.homedir(), 'Library/Application Support/Cursor/User/settings.json');
+      if (fs.existsSync(settingsPath)) {
+        const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+        return {
+          insertSpaces: settings['editor.insertSpaces'] !== false,
+          tabSize: settings['editor.tabSize'] || 2,
+          detectIndentation: settings['editor.detectIndentation'] !== false
+        };
+      }
+      return { insertSpaces: true, tabSize: 2, detectIndentation: true };
+    } catch (error) {
+      console.warn('Could not get indentation settings:', error.message);
+      return { insertSpaces: true, tabSize: 2, detectIndentation: true };
+    }
   }
 
   async getEditorSettings() {
-    console.warn('Could not get editor settings (temporarily disabled).');
-    return { wordWrap: 'off', lineNumbers: 'on', minimap: true, scrollBeyondLastLine: false, cursorBlinking: 'blink', cursorStyle: 'line' };
+    try {
+      const settingsPath = path.join(os.homedir(), 'Library/Application Support/Cursor/User/settings.json');
+      if (fs.existsSync(settingsPath)) {
+        const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+        return {
+          wordWrap: settings['editor.wordWrap'] || 'off',
+          lineNumbers: settings['editor.lineNumbers'] || 'on',
+          minimap: settings['editor.minimap.enabled'] !== false,
+          scrollBeyondLastLine: settings['editor.scrollBeyondLastLine'] !== false,
+          cursorBlinking: settings['editor.cursorBlinking'] || 'blink',
+          cursorStyle: settings['editor.cursorStyle'] || 'line'
+        };
+      }
+      return { wordWrap: 'off', lineNumbers: 'on', minimap: true, scrollBeyondLastLine: false, cursorBlinking: 'blink', cursorStyle: 'line' };
+    } catch (error) {
+      console.warn('Could not get editor settings:', error.message);
+      return { wordWrap: 'off', lineNumbers: 'on', minimap: true, scrollBeyondLastLine: false, cursorBlinking: 'blink', cursorStyle: 'line' };
+    }
   }
 
   async getKeybindings() {

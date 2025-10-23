@@ -335,6 +335,68 @@ export class CursorTelemetryAPI extends EventEmitter {
     }
   };
 
+  // Conversations API
+  conversations = {
+    getAll: async (params?: { limit?: number; offset?: number; session_id?: string }): Promise<any[]> => {
+      const response = await this.http.get<APIResponse<any[]>>('/conversations', { params });
+      return this.handleResponse(response);
+    },
+
+    getById: async (id: string): Promise<any> => {
+      const response = await this.http.get<APIResponse<any>>(`/conversations/${id}`);
+      return this.handleResponse(response);
+    },
+
+    create: async (conversation: any): Promise<any> => {
+      const response = await this.http.post<APIResponse<any>>('/conversations', conversation);
+      return this.handleResponse(response);
+    },
+
+    update: async (id: string, conversation: any): Promise<any> => {
+      const response = await this.http.put<APIResponse<any>>(`/conversations/${id}`, conversation);
+      return this.handleResponse(response);
+    },
+
+    delete: async (id: string): Promise<void> => {
+      await this.http.delete(`/conversations/${id}`);
+    },
+
+    search: async (query: string, params?: { session_id?: string; role?: string }): Promise<any[]> => {
+      const response = await this.http.get<APIResponse<any[]>>('/conversations/search', {
+        params: { q: query, ...params }
+      });
+      return this.handleResponse(response);
+    },
+
+    getAnalytics: async (params?: { session_id?: string; date_range?: string }): Promise<any> => {
+      const response = await this.http.get<APIResponse<any>>('/conversations/analytics', { params });
+      return this.handleResponse(response);
+    }
+  };
+
+  // Prompts API
+  prompts = {
+    getAll: async (params?: { limit?: number; offset?: number; session_id?: string; intent?: string }): Promise<any[]> => {
+      const response = await this.http.get<APIResponse<any[]>>('/prompts', { params });
+      return this.handleResponse(response);
+    },
+
+    getById: async (id: string): Promise<any> => {
+      const response = await this.http.get<APIResponse<any>>(`/prompts/${id}`);
+      return this.handleResponse(response);
+    },
+
+    create: async (prompt: any): Promise<any> => {
+      const response = await this.http.post<APIResponse<any>>('/prompts', prompt);
+      return this.handleResponse(response);
+    },
+
+    getAnalytics: async (params?: { session_id?: string; date_range?: string }): Promise<any> => {
+      const response = await this.http.get<APIResponse<any>>('/prompts/analytics', { params });
+      return this.handleResponse(response);
+    }
+  };
+
   // Health check
   async healthCheck(): Promise<boolean> {
     try {

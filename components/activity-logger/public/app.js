@@ -2525,7 +2525,7 @@ function showCaptureIndicator(type = 'content') {
         position: fixed;
         top: 20px;
         right: 20px;
-        background: #4caf50;
+        background: #333333;
         color: white;
         padding: 12px 20px;
         border-radius: 6px;
@@ -2602,7 +2602,7 @@ function showNotification(message, type = 'success') {
         top: 20px;
         right: 20px;
         padding: 12px 16px;
-        background: ${type === 'error' ? '#d32f2f' : '#000'};
+        background: ${type === 'error' ? '#666666' : '#000'};
         color: #fff;
         border-radius: 4px;
         font-size: 14px;

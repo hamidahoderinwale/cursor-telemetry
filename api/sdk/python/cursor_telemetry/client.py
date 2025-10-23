@@ -241,6 +241,63 @@ class CursorTelemetryAPI:
         """Update privacy configuration"""
         self._make_request('POST', '/privacy/config', json=config)
     
+    # Conversations API
+    def get_conversations(self, **params) -> List[Dict[str, Any]]:
+        """Get all conversations"""
+        response = self._make_request('GET', '/conversations', params=params)
+        return response.data
+    
+    def get_conversation(self, conversation_id: str) -> Dict[str, Any]:
+        """Get specific conversation by ID"""
+        response = self._make_request('GET', f'/conversations/{conversation_id}')
+        return response.data
+    
+    def create_conversation(self, conversation: Dict[str, Any]) -> Dict[str, Any]:
+        """Create a new conversation"""
+        response = self._make_request('POST', '/conversations', json=conversation)
+        return response.data
+    
+    def update_conversation(self, conversation_id: str, conversation: Dict[str, Any]) -> Dict[str, Any]:
+        """Update an existing conversation"""
+        response = self._make_request('PUT', f'/conversations/{conversation_id}', json=conversation)
+        return response.data
+    
+    def delete_conversation(self, conversation_id: str) -> None:
+        """Delete a conversation"""
+        self._make_request('DELETE', f'/conversations/{conversation_id}')
+    
+    def search_conversations(self, query: str, **params) -> List[Dict[str, Any]]:
+        """Search conversations by content or metadata"""
+        response = self._make_request('GET', '/conversations/search', 
+                                    params={'q': query, **params})
+        return response.data
+    
+    def get_conversation_analytics(self, **params) -> Dict[str, Any]:
+        """Get conversation analytics"""
+        response = self._make_request('GET', '/conversations/analytics', params=params)
+        return response.data
+    
+    # Prompts API
+    def get_prompts(self, **params) -> List[Dict[str, Any]]:
+        """Get all prompts"""
+        response = self._make_request('GET', '/prompts', params=params)
+        return response.data
+    
+    def get_prompt(self, prompt_id: str) -> Dict[str, Any]:
+        """Get specific prompt by ID"""
+        response = self._make_request('GET', f'/prompts/{prompt_id}')
+        return response.data
+    
+    def create_prompt(self, prompt: Dict[str, Any]) -> Dict[str, Any]:
+        """Create a new prompt"""
+        response = self._make_request('POST', '/prompts', json=prompt)
+        return response.data
+    
+    def get_prompt_analytics(self, **params) -> Dict[str, Any]:
+        """Get prompt analytics"""
+        response = self._make_request('GET', '/prompts/analytics', params=params)
+        return response.data
+    
     # Health check
     def health_check(self) -> bool:
         """Check API health"""

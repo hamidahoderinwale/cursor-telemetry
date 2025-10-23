@@ -88,6 +88,9 @@ class SimpleDatabase {
 const RealMonitor = require('./real-monitor');
 const DataStorage = require('../data-processing/data-storage');
 const ExportService = require('../data-processing/export-service');
+
+// Import security components
+const SecurityAPI = require('../security/security-api');
 // AppleScript service for macOS integration with Cursor IDE
 const AppleScriptService = {
   executeScript: (script) => {
@@ -590,7 +593,7 @@ const io = new Server(server, {
     methods: ["GET", "POST"]
   }
 });
-const port = 3000;
+const port = 8001;
 
 // Initialize WebSocket server with optimization manager
 server.on('listening', async () => {
@@ -602,6 +605,9 @@ server.on('listening', async () => {
 // Initialize components
 const realMonitor = new RealMonitor();
 const dataStorage = new DataStorage();
+
+// Initialize security API
+const securityAPI = new SecurityAPI();
 const exportService = new ExportService();
 const privacyService = new PrivacyService();
 const procedureService = new ProcedurePatternService();
@@ -1752,6 +1758,140 @@ app.get('/api/conversations/code-analytics', async (req, res) => {
   }
 });
 
+// Raw data API endpoints - proxy to companion service
+app.get('/api/raw-data/system-resources', async (req, res) => {
+  try {
+    const response = await fetch(`http://localhost:43918/raw-data/system-resources?${new URLSearchParams(req.query)}`);
+    const data = await response.json();
+    res.json(data);
+  } catch (error) {
+    console.error('Error fetching system resources:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/raw-data/git', async (req, res) => {
+  try {
+    const response = await fetch(`http://localhost:43918/raw-data/git?${new URLSearchParams(req.query)}`);
+    const data = await response.json();
+    res.json(data);
+  } catch (error) {
+    console.error('Error fetching git data:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/raw-data/cursor-database', async (req, res) => {
+  try {
+    const response = await fetch(`http://localhost:43918/raw-data/cursor-database?${new URLSearchParams(req.query)}`);
+    const data = await response.json();
+    res.json(data);
+  } catch (error) {
+    console.error('Error fetching cursor database data:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/raw-data/apple-script', async (req, res) => {
+  try {
+    const response = await fetch(`http://localhost:43918/raw-data/apple-script?${new URLSearchParams(req.query)}`);
+    const data = await response.json();
+    res.json(data);
+  } catch (error) {
+    console.error('Error fetching AppleScript data:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/raw-data/logs', async (req, res) => {
+  try {
+    const response = await fetch(`http://localhost:43918/raw-data/logs?${new URLSearchParams(req.query)}`);
+    const data = await response.json();
+    res.json(data);
+  } catch (error) {
+    console.error('Error fetching log data:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/raw-data/all', async (req, res) => {
+  try {
+    const response = await fetch(`http://localhost:43918/raw-data/all?${new URLSearchParams(req.query)}`);
+    const data = await response.json();
+    res.json(data);
+  } catch (error) {
+    console.error('Error fetching all raw data:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// IDE state API endpoints - proxy to companion service
+app.get('/api/ide-state', async (req, res) => {
+  try {
+    const response = await fetch(`http://localhost:43918/ide-state?${new URLSearchParams(req.query)}`);
+    const data = await response.json();
+    res.json(data);
+  } catch (error) {
+    console.error('Error fetching IDE state:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/ide-state/history', async (req, res) => {
+  try {
+    const response = await fetch(`http://localhost:43918/ide-state/history?${new URLSearchParams(req.query)}`);
+    const data = await response.json();
+    res.json(data);
+  } catch (error) {
+    console.error('Error fetching IDE state history:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/ide-state/editor', async (req, res) => {
+  try {
+    const response = await fetch(`http://localhost:43918/ide-state/editor?${new URLSearchParams(req.query)}`);
+    const data = await response.json();
+    res.json(data);
+  } catch (error) {
+    console.error('Error fetching editor state:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/ide-state/workspace', async (req, res) => {
+  try {
+    const response = await fetch(`http://localhost:43918/ide-state/workspace?${new URLSearchParams(req.query)}`);
+    const data = await response.json();
+    res.json(data);
+  } catch (error) {
+    console.error('Error fetching workspace state:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/ide-state/debug', async (req, res) => {
+  try {
+    const response = await fetch(`http://localhost:43918/ide-state/debug?${new URLSearchParams(req.query)}`);
+    const data = await response.json();
+    res.json(data);
+  } catch (error) {
+    console.error('Error fetching debug state:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/ide-state/cursor', async (req, res) => {
+  try {
+    const response = await fetch(`http://localhost:43918/ide-state/cursor?${new URLSearchParams(req.query)}`);
+    const data = await response.json();
+    res.json(data);
+  } catch (error) {
+    console.error('Error fetching Cursor-specific state:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Auto-create memories from session insights
 app.post('/api/session/:id/auto-create-memories', async (req, res) => {
   try {
@@ -2630,13 +2770,368 @@ app.get('/api/session/:id/conversations', async (req, res) => {
 // Get all conversations
 app.get('/api/conversations', async (req, res) => {
   try {
-    const conversations = await dataStorage.getAllConversations();
-    res.json({ success: true, conversations, count: conversations.length });
+    const { limit = 100, offset = 0, session_id } = req.query;
+    let conversations = await dataStorage.getAllConversations();
+    
+    // Filter by session_id if provided
+    if (session_id) {
+      conversations = conversations.filter(conv => conv.sessionId === session_id);
+    }
+    
+    // Apply pagination
+    const paginatedConversations = conversations.slice(offset, offset + parseInt(limit));
+    
+    res.json({ 
+      success: true, 
+      data: paginatedConversations,
+      pagination: {
+        total: conversations.length,
+        limit: parseInt(limit),
+        offset: parseInt(offset)
+      }
+    });
   } catch (error) {
     console.error('Error getting all conversations:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
+
+// Get conversation by ID
+app.get('/api/conversations/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const conversations = await dataStorage.getAllConversations();
+    const conversation = conversations.find(conv => conv.id === id);
+    
+    if (!conversation) {
+      return res.status(404).json({ success: false, error: 'Conversation not found' });
+    }
+    
+    res.json({ success: true, data: conversation });
+  } catch (error) {
+    console.error('Error loading conversation:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Update conversation
+app.put('/api/conversations/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updates = req.body;
+    
+    // Update conversation in storage
+    const updated = await dataStorage.updateConversation(id, updates);
+    
+    if (!updated) {
+      return res.status(404).json({ success: false, error: 'Conversation not found' });
+    }
+    
+    res.json({ success: true, data: updated });
+  } catch (error) {
+    console.error('Error updating conversation:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Delete conversation
+app.delete('/api/conversations/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const deleted = await dataStorage.deleteConversation(id);
+    
+    if (!deleted) {
+      return res.status(404).json({ success: false, error: 'Conversation not found' });
+    }
+    
+    res.json({ success: true, message: 'Conversation deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting conversation:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Search conversations
+app.get('/api/conversations/search', async (req, res) => {
+  try {
+    const { q: query, session_id, role } = req.query;
+    
+    if (!query) {
+      return res.status(400).json({ success: false, error: 'Search query is required' });
+    }
+    
+    let conversations = await dataStorage.getAllConversations();
+    
+    // Filter by session_id if provided
+    if (session_id) {
+      conversations = conversations.filter(conv => conv.sessionId === session_id);
+    }
+    
+    // Filter by role if provided
+    if (role) {
+      conversations = conversations.filter(conv => conv.role === role);
+    }
+    
+    // Search in content
+    const searchResults = conversations.filter(conv => 
+      conv.content && conv.content.toLowerCase().includes(query.toLowerCase())
+    );
+    
+    res.json({ success: true, data: searchResults });
+  } catch (error) {
+    console.error('Error searching conversations:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get conversation analytics
+app.get('/api/conversations/analytics', async (req, res) => {
+  try {
+    const { session_id, date_range = 'month' } = req.query;
+    
+    let conversations = await dataStorage.getAllConversations();
+    
+    // Filter by session_id if provided
+    if (session_id) {
+      conversations = conversations.filter(conv => conv.sessionId === session_id);
+    }
+    
+    // Calculate analytics
+    const analytics = {
+      totalConversations: conversations.length,
+      averageConversationLength: conversations.reduce((sum, conv) => 
+        sum + (conv.content ? conv.content.length : 0), 0) / conversations.length || 0,
+      roleDistribution: {
+        user: conversations.filter(conv => conv.role === 'user').length,
+        assistant: conversations.filter(conv => conv.role === 'assistant').length,
+        system: conversations.filter(conv => conv.role === 'system').length
+      },
+      conversationTrends: [], // TODO: Implement trend analysis
+      topReferencedFiles: [], // TODO: Implement file analysis
+      averageCodeBlocks: conversations.reduce((sum, conv) => 
+        sum + (conv.codeBlocks ? conv.codeBlocks.length : 0), 0) / conversations.length || 0,
+      conversationComplexity: {
+        low: conversations.filter(conv => conv.complexity === 'low').length,
+        medium: conversations.filter(conv => conv.complexity === 'medium').length,
+        high: conversations.filter(conv => conv.complexity === 'high').length
+      }
+    };
+    
+    res.json({ success: true, data: analytics });
+  } catch (error) {
+    console.error('Error getting conversation analytics:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// PROMPT API ENDPOINTS
+
+// Get all prompts
+app.get('/api/prompts', async (req, res) => {
+  try {
+    const { limit = 100, offset = 0, session_id, intent } = req.query;
+    
+    // Get all conversations and extract prompts
+    let conversations = await dataStorage.getAllConversations();
+    let prompts = [];
+    
+    // Extract prompts from conversations
+    conversations.forEach(conv => {
+      if (conv.role === 'user' && conv.content) {
+        prompts.push({
+          id: conv.id,
+          sessionId: conv.sessionId,
+          timestamp: conv.timestamp,
+          content: conv.content,
+          response: conv.response || '',
+          filePath: conv.metadata?.filePath || '',
+          intent: conv.metadata?.intent || 'unknown',
+          complexity: conv.complexity || 'medium',
+          keywords: conv.keywords || [],
+          patterns: conv.patterns || [],
+          metadata: conv.metadata || {},
+          source: conv.metadata?.source || 'conversation'
+        });
+      }
+    });
+    
+    // Filter by session_id if provided
+    if (session_id) {
+      prompts = prompts.filter(prompt => prompt.sessionId === session_id);
+    }
+    
+    // Filter by intent if provided
+    if (intent) {
+      prompts = prompts.filter(prompt => prompt.intent === intent);
+    }
+    
+    // Apply pagination
+    const paginatedPrompts = prompts.slice(offset, offset + parseInt(limit));
+    
+    res.json({ 
+      success: true, 
+      data: paginatedPrompts,
+      pagination: {
+        total: prompts.length,
+        limit: parseInt(limit),
+        offset: parseInt(offset)
+      }
+    });
+  } catch (error) {
+    console.error('Error getting prompts:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get prompt by ID
+app.get('/api/prompts/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const conversations = await dataStorage.getAllConversations();
+    const conversation = conversations.find(conv => conv.id === id && conv.role === 'user');
+    
+    if (!conversation) {
+      return res.status(404).json({ success: false, error: 'Prompt not found' });
+    }
+    
+    const prompt = {
+      id: conversation.id,
+      sessionId: conversation.sessionId,
+      timestamp: conversation.timestamp,
+      content: conversation.content,
+      response: conversation.response || '',
+      filePath: conversation.metadata?.filePath || '',
+      intent: conversation.metadata?.intent || 'unknown',
+      complexity: conversation.complexity || 'medium',
+      keywords: conversation.keywords || [],
+      patterns: conversation.patterns || [],
+      metadata: conversation.metadata || {},
+      source: conversation.metadata?.source || 'conversation'
+    };
+    
+    res.json({ success: true, data: prompt });
+  } catch (error) {
+    console.error('Error loading prompt:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Create prompt
+app.post('/api/prompts', async (req, res) => {
+  try {
+    const promptData = req.body;
+    
+    // Create conversation entry for the prompt
+    const conversation = {
+      id: `prompt-${Date.now()}`,
+      sessionId: promptData.sessionId,
+      timestamp: new Date().toISOString(),
+      role: 'user',
+      content: promptData.content,
+      response: promptData.response || '',
+      metadata: {
+        ...promptData.metadata,
+        filePath: promptData.filePath,
+        intent: promptData.intent,
+        source: promptData.source || 'manual'
+      },
+      complexity: promptData.complexity || 'medium',
+      keywords: promptData.keywords || [],
+      patterns: promptData.patterns || []
+    };
+    
+    // Save conversation
+    await dataStorage.saveConversation(conversation);
+    
+    res.status(201).json({ success: true, data: conversation });
+  } catch (error) {
+    console.error('Error creating prompt:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get prompt analytics
+app.get('/api/prompts/analytics', async (req, res) => {
+  try {
+    const { session_id, date_range = 'month' } = req.query;
+    
+    // Get all conversations and extract prompts
+    let conversations = await dataStorage.getAllConversations();
+    let prompts = conversations.filter(conv => conv.role === 'user' && conv.content);
+    
+    // Filter by session_id if provided
+    if (session_id) {
+      prompts = prompts.filter(prompt => prompt.sessionId === session_id);
+    }
+    
+    // Calculate analytics
+    const analytics = {
+      totalPrompts: prompts.length,
+      averageComplexity: calculateAverageComplexity(prompts),
+      topIntents: getTopIntents(prompts),
+      promptTrends: [], // TODO: Implement trend analysis
+      complexityDistribution: {
+        low: prompts.filter(p => p.complexity === 'low').length,
+        medium: prompts.filter(p => p.complexity === 'medium').length,
+        high: prompts.filter(p => p.complexity === 'high').length
+      },
+      topKeywords: getTopKeywords(prompts),
+      sourceDistribution: {
+        clipboard: prompts.filter(p => p.metadata?.source === 'clipboard').length,
+        mcp: prompts.filter(p => p.metadata?.source === 'mcp').length,
+        manual: prompts.filter(p => p.metadata?.source === 'manual').length,
+        dom: prompts.filter(p => p.metadata?.source === 'dom').length
+      }
+    };
+    
+    res.json({ success: true, data: analytics });
+  } catch (error) {
+    console.error('Error getting prompt analytics:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Helper functions for analytics
+function calculateAverageComplexity(prompts) {
+  const complexityValues = { low: 1, medium: 2, high: 3 };
+  const total = prompts.reduce((sum, prompt) => {
+    return sum + (complexityValues[prompt.complexity] || 2);
+  }, 0);
+  const average = total / prompts.length || 0;
+  
+  if (average <= 1.3) return 'low';
+  if (average <= 2.3) return 'medium';
+  return 'high';
+}
+
+function getTopIntents(prompts, limit = 5) {
+  const intentCounts = {};
+  prompts.forEach(prompt => {
+    const intent = prompt.metadata?.intent || 'unknown';
+    intentCounts[intent] = (intentCounts[intent] || 0) + 1;
+  });
+  
+  return Object.entries(intentCounts)
+    .sort(([,a], [,b]) => b - a)
+    .slice(0, limit)
+    .map(([intent, count]) => ({ intent, count }));
+}
+
+function getTopKeywords(prompts, limit = 10) {
+  const keywordCounts = {};
+  prompts.forEach(prompt => {
+    const keywords = prompt.keywords || [];
+    keywords.forEach(keyword => {
+      keywordCounts[keyword] = (keywordCounts[keyword] || 0) + 1;
+    });
+  });
+  
+  return Object.entries(keywordCounts)
+    .sort(([,a], [,b]) => b - a)
+    .slice(0, limit)
+    .map(([keyword, frequency]) => ({ keyword, frequency }));
+}
 
 // Comprehensive data analysis endpoint for enhanced dashboard with diverse clustering
 app.post('/api/sessions/analyze-with-kura', async (req, res) => {
@@ -3822,7 +4317,7 @@ app.delete('/api/privacy/delete-session/:sessionId', async (req, res) => {
     
     // Delete from companion service
     try {
-      await fetch(`http://localhost:43917/privacy/delete-session/${sessionId}`, {
+      await fetch(`http://localhost:43918/privacy/delete-session/${sessionId}`, {
         method: 'DELETE'
       });
     } catch (error) {
@@ -3843,7 +4338,7 @@ app.delete('/api/privacy/delete-all', async (req, res) => {
     
     // Delete from companion service
     try {
-      await fetch('http://localhost:43917/privacy/delete-all', {
+      await fetch('http://localhost:43918/privacy/delete-all', {
         method: 'DELETE'
       });
     } catch (error) {
@@ -3870,7 +4365,7 @@ app.post('/api/privacy/delete-sensitive', async (req, res) => {
     
     // Delete from companion service
     try {
-      const companionResponse = await fetch('http://localhost:43917/privacy/delete-sensitive', {
+      const companionResponse = await fetch('http://localhost:43918/privacy/delete-sensitive', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ patterns })
@@ -5729,6 +6224,69 @@ function detectProgrammingLanguage(code) {
     return 'unknown';
   }
 }
+
+// Security Analytics Endpoints
+app.get('/api/security/analytics', async (req, res) => {
+  try {
+    const analytics = await securityAPI.getSecurityAnalytics();
+    res.json({ success: true, data: analytics });
+  } catch (error) {
+    console.error('Error getting security analytics:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/security/issues/:type', async (req, res) => {
+  try {
+    const { type } = req.params;
+    const issues = await securityAPI.getIssuesByType(type);
+    res.json({ success: true, data: issues });
+  } catch (error) {
+    console.error(`Error getting issues by type ${type}:`, error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/security/critical', async (req, res) => {
+  try {
+    const criticalIssues = await securityAPI.getCriticalIssues();
+    res.json({ success: true, data: criticalIssues });
+  } catch (error) {
+    console.error('Error getting critical issues:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/security/trends', async (req, res) => {
+  try {
+    const { timeRange = '7d' } = req.query;
+    const trends = await securityAPI.getSecurityTrends(timeRange);
+    res.json({ success: true, data: trends });
+  } catch (error) {
+    console.error('Error getting security trends:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/security/recommendations', async (req, res) => {
+  try {
+    const recommendations = await securityAPI.getSecurityRecommendations();
+    res.json({ success: true, data: recommendations });
+  } catch (error) {
+    console.error('Error getting security recommendations:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/security/risk-assessment', async (req, res) => {
+  try {
+    const assessment = await securityAPI.getRiskAssessment();
+    res.json({ success: true, data: assessment });
+  } catch (error) {
+    console.error('Error getting risk assessment:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
 
 process.on('SIGINT', () => {
   console.log('\nShutting down server...');

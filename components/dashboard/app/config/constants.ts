@@ -38,14 +38,7 @@ export const CONFIG = {
     COMPREHENSIVE: 'comprehensive'
   } as const,
   
-  // Intent classification keywords
-  INTENT_KEYWORDS: {
-    debug: ['fix', 'error', 'traceback', 'fail', 'debug', 'bug', 'issue'],
-    implement: ['implement', 'add', 'create', 'build', 'write', 'code'],
-    explore: ['explore', 'try', 'can i', 'how do i', 'what is', 'investigate'],
-    refactor: ['refactor', 'rename', 'clean', 'optimize', 'improve', 'restructure'],
-    document: ['doc', 'comment', 'explain', 'what does', 'describe', 'documentation']
-  },
+  // Removed intent classification keywords - no longer needed
   
   // Outcome detection patterns
   SUCCESS_PATTERNS: [
@@ -94,4 +87,3 @@ export const CONFIG = {
 
 export type DataCollectionLevel = typeof CONFIG.DATA_COLLECTION_LEVELS[keyof typeof CONFIG.DATA_COLLECTION_LEVELS];
 export type ExportFormat = typeof CONFIG.EXPORT_FORMATS[keyof typeof CONFIG.EXPORT_FORMATS];
-export type IntentType = keyof typeof CONFIG.INTENT_KEYWORDS;

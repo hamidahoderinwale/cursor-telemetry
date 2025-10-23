@@ -1,4 +1,4 @@
-import { IntentType } from './constants';
+// Removed IntentType import - no longer needed
 
 /**
  * Core data model interfaces for PKL Extension
@@ -9,10 +9,8 @@ export interface PKLSession {
   id: string;
   timestamp: Date;
   endTime?: Date;
-  intent: IntentType;
   phase: 'start' | 'middle' | 'success' | 'stuck';
   outcome?: 'success' | 'stuck' | 'in-progress';
-  confidence: number;
   
   // Context data
   currentFile?: string;
@@ -103,7 +101,6 @@ export interface Position {
 }
 
 export interface SearchFilters {
-  intent?: string;
   outcome?: string;
   dateRange?: string;
   filePath?: string;

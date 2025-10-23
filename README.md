@@ -401,16 +401,182 @@ cursor-telemetry/
 - **Compression**: Efficient data storage
 - **Background Processing**: Non-blocking analysis
 
+## Data Capture & Information Types
+
+The Cursor Telemetry Dashboard captures comprehensive information about your development activities through multiple monitoring mechanisms. Understanding what data is captured is crucial for privacy and security.
+
+### Data Capture Sources
+
+#### 1. **Clipboard Monitoring**
+- **What's Captured**: Complete clipboard content when copied
+- **Frequency**: Every 10 seconds (configurable)
+- **Data Types**: 
+  - Code snippets, prompts, responses
+  - API keys, passwords, tokens
+  - Personal information, file paths
+  - Any text copied to clipboard
+- **Storage**: Raw text stored in database
+- **Privacy**: No filtering applied by default
+
+#### 2. **MCP (Model Context Protocol) Integration**
+- **What's Captured**: Direct communication from Cursor IDE
+- **Data Types**:
+  - Complete prompt/response pairs
+  - File paths and context
+  - Code changes (before/after)
+  - Session information
+- **Storage**: Full conversation history
+- **Privacy**: No redaction applied
+
+#### 3. **File System Monitoring**
+- **What's Captured**: File changes and modifications
+- **Data Types**:
+  - Complete file contents (before/after)
+  - File paths (including usernames)
+  - Code diffs and changes
+  - Configuration files
+- **Storage**: Full file content snapshots
+- **Privacy**: No path anonymization
+
+#### 4. **DOM Monitoring**
+- **What's Captured**: Web page content and interactions
+- **Data Types**:
+  - Form inputs and selections
+  - Page content and structure
+  - User interactions
+- **Storage**: HTML content and metadata
+- **Privacy**: No content filtering
+
+### Information Types Captured
+
+#### **Code & Development Data**
+```javascript
+{
+  "file_path": "/Users/john.smith/projects/auth/src/auth.js",
+  "before_code": "const auth = require('auth');",
+  "after_code": "const jwt = require('jsonwebtoken');\nconst auth = require('auth');",
+  "prompt": "How do I implement JWT authentication?",
+  "response": "Here's how to implement JWT authentication...",
+  "timestamp": "2024-01-15T10:30:00Z"
+}
+```
+
+#### **Sensitive Information**
+- **API Keys**: GitHub tokens, AWS credentials, Stripe keys
+- **Passwords**: Database passwords, service credentials
+- **Personal Data**: Names, emails, phone numbers
+- **Business Information**: Company names, project details
+- **System Information**: Usernames, file paths, directory structure
+
+#### **Security & Privacy Data**
+- **Authentication Tokens**: JWT secrets, OAuth tokens
+- **Database Credentials**: Connection strings, passwords
+- **Private Keys**: SSH keys, encryption keys
+- **Environment Variables**: Complete .env file contents
+- **Configuration Files**: API keys, secrets, credentials
+
+### Data Storage & Retention
+
+#### **Storage Format**
+- **Database**: SQLite with full text storage
+- **Format**: Plain text (no encryption)
+- **Retention**: Indefinite (no automatic cleanup)
+- **Access**: No authentication required
+
+#### **Data Volume**
+- **Per Session**: 10-50MB of raw data
+- **Clipboard Entries**: 50-200 per session
+- **File Changes**: 20-100 per session
+- **MCP Entries**: 30-150 per session
+
+### Security Detection & Analytics
+
+The system includes advanced security detection capabilities:
+
+#### **Secret Detection Patterns**
+- **GitHub Tokens**: `ghp_`, `gho_`, `ghu_`, `ghs_`, `ghr_`
+- **AWS Credentials**: Access keys, secret keys
+- **Database URLs**: PostgreSQL, MySQL, MongoDB
+- **JWT Secrets**: Authentication tokens
+- **Private Keys**: RSA, DSA, EC, OpenSSH
+- **API Keys**: Google, Stripe, Slack, etc.
+
+#### **Security Analytics**
+```bash
+# Get security analytics
+curl "http://localhost:3000/api/security/analytics"
+
+# Get JWT secret count
+curl "http://localhost:3000/api/security/issues/jwt_secret"
+
+# Get critical issues
+curl "http://localhost:3000/api/security/critical"
+```
+
+#### **Risk Assessment**
+- **Risk Scoring**: 0-100 scale based on detected secrets
+- **Severity Levels**: Critical, High, Medium, Low
+- **Recommendations**: Actionable security advice
+- **Trend Analysis**: Security posture over time
+
+### Privacy Controls
+
+#### **Current Limitations**
+- **No Default Protection**: All data captured without filtering
+- **No Encryption**: Plain text storage
+- **No Access Controls**: Open API endpoints
+- **No Retention Limits**: Indefinite storage
+
+#### **Available Controls**
+```javascript
+// Privacy configuration (optional)
+const privacyConfig = {
+  enabled: false,              // DISABLED by default
+  redactNames: false,         // NO name redaction
+  redactNumbers: false,       // NO number redaction
+  redactEmails: false,        // NO email redaction
+  redactFilePaths: false      // NO path redaction
+};
+```
+
+#### **Security Recommendations**
+1. **Enable Privacy Controls**: Configure data redaction
+2. **Regular Security Audits**: Use security analytics API
+3. **Data Cleanup**: Implement retention policies
+4. **Access Controls**: Secure API endpoints
+5. **Encryption**: Implement data encryption
+
+### Data Export & Analysis
+
+#### **Export Capabilities**
+```bash
+# Export all data
+curl "http://localhost:3000/api/export/json"
+
+# Export security report
+curl "http://localhost:3000/api/security/analytics" > security-report.json
+
+# Export conversations
+curl "http://localhost:3000/api/conversations"
+```
+
+#### **Analytics Endpoints**
+- **Security Analytics**: `/api/security/analytics`
+- **Conversation Analytics**: `/api/conversations/analytics`
+- **Prompt Analytics**: `/api/prompts/analytics`
+- **Risk Assessment**: `/api/security/risk-assessment`
+
 ## Privacy Considerations
 
-**Important**: The current privacy controls are not connected to data capture. To properly protect your data:
+**Critical**: The system captures sensitive data with no privacy protection by default:
 
-1. **Review privacy settings** in the dashboard UI
-2. **Understand limitations**: Privacy controls only affect display, not capture
-3. **Consider data deletion**: Use the privacy API to remove sensitive data
-4. **Monitor activity**: Check what data is being captured by the companion service
+1. **Review Captured Data**: Check what information is being stored
+2. **Enable Privacy Controls**: Configure data redaction and filtering
+3. **Monitor Security Issues**: Use security analytics to identify risks
+4. **Implement Data Policies**: Set retention limits and access controls
+5. **Regular Audits**: Review captured data for sensitive information
 
-See `PRIVACY_CONTROLS_ANALYSIS.md` for detailed privacy recommendations.
+**Security Warning**: The system captures API keys, passwords, personal information, and business data in plain text with no encryption or access controls.
 
 ## Related Projects
 
@@ -430,4 +596,4 @@ For questions, issues, or contributions, please:
 
 **Note**: This dashboard is designed specifically for data science workflows and provides specialized insights into Jupyter notebook-based development patterns. The system is optimized for macOS, Cursor IDE integration, and requires .ipynb files for full functionality.
 
-**Privacy Warning**: The current privacy controls are not connected to data capture. All data is captured regardless of privacy settings. See `PRIVACY_CONTROLS_ANALYSIS.md` for details.
+**Privacy Warning**: The current privacy controls are not connected to data capture. All data is captured regardless of privacy settings. See `PRIVACY_CONTROLS_ANALYSIS.md` for details.// Test change for companion service

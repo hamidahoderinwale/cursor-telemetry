@@ -30,6 +30,9 @@ const CursorDatabaseParser = require('./cursor-db-parser.js');
 // Import persistent database
 const PersistentDB = require('./persistent-db.js');
 
+// Import reasoning engine
+const { ReasoningEngine } = require('./reasoning-engine.js');
+
 // Initialize persistent database
 const persistentDB = new PersistentDB();
 
@@ -1467,6 +1470,43 @@ app.get('/api/file-contents', async (req, res) => {
   } catch (error) {
     console.error('Error fetching file contents:', error);
     res.status(500).json({ error: 'Failed to fetch file contents' });
+  }
+});
+
+// Chat query endpoint with reasoning engine
+const reasoningEngine = new ReasoningEngine();
+
+app.post('/api/chat/query', async (req, res) => {
+  try {
+    const { query } = req.body;
+    
+    if (!query || typeof query !== 'string') {
+      return res.status(400).json({ error: 'Query is required' });
+    }
+    
+    console.log('💬 Chat query:', query);
+    
+    // Gather telemetry data
+    const telemetryData = {
+      events: await persistentDB.getAllEntries(),
+      prompts: db.prompts || [],
+      sessions: Object.keys(sessions).map(id => ({ id, ...sessions[id] })),
+      files: db.entries || []
+    };
+    
+    // Process query with reasoning engine
+    const response = await reasoningEngine.query(query, telemetryData);
+    
+    console.log('✅ Generated response with', response.confidence, 'confidence');
+    
+    res.json(response);
+    
+  } catch (error) {
+    console.error('❌ Chat endpoint error:', error);
+    res.status(500).json({ 
+      error: 'Failed to process query',
+      details: error.message 
+    });
   }
 });
 

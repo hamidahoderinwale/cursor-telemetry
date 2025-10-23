@@ -51,10 +51,8 @@ export class SessionDatabase {
       CREATE TABLE IF NOT EXISTS sessions (
         id TEXT PRIMARY KEY,
         timestamp INTEGER NOT NULL,
-        intent TEXT NOT NULL,
         phase TEXT NOT NULL,
         outcome TEXT,
-        confidence REAL NOT NULL,
         current_file TEXT,
         cursor_line INTEGER,
         cursor_character INTEGER,
@@ -127,7 +125,7 @@ export class SessionDatabase {
     // Create indexes for better performance
     this.db.exec(`
       CREATE INDEX IF NOT EXISTS idx_sessions_timestamp ON sessions (timestamp);
-      CREATE INDEX IF NOT EXISTS idx_sessions_intent ON sessions (intent);
+      // Removed intent index - no longer needed
       CREATE INDEX IF NOT EXISTS idx_sessions_outcome ON sessions (outcome);
       CREATE INDEX IF NOT EXISTS idx_sessions_current_file ON sessions (current_file);
       CREATE INDEX IF NOT EXISTS idx_file_changes_session_id ON file_changes (session_id);
@@ -147,17 +145,15 @@ export class SessionDatabase {
       // Insert session
       this.db!.prepare(`
         INSERT OR REPLACE INTO sessions (
-          id, timestamp, intent, phase, outcome, confidence, current_file,
+          id, timestamp, phase, outcome, current_file,
           cursor_line, cursor_character, selected_text, privacy_mode,
           user_consent, data_retention, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%s', 'now'))
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%s', 'now'))
       `).run(
         session.id,
         session.timestamp.getTime(),
-        session.intent,
         session.phase,
         session.outcome || null,
-        session.confidence,
         session.currentFile || null,
         session.cursorPosition?.line || null,
         session.cursorPosition?.character || null,
@@ -266,7 +262,6 @@ export class SessionDatabase {
    * Retrieve sessions with filters
    */
   async getSessions(filters: {
-    intent?: string;
     outcome?: string;
     phase?: string;
     startDate?: Date;
@@ -277,11 +272,6 @@ export class SessionDatabase {
 
     let query = 'SELECT * FROM sessions WHERE 1=1';
     const params: any[] = [];
-
-    if (filters.intent) {
-      query += ' AND intent = ?';
-      params.push(filters.intent);
-    }
 
     if (filters.outcome) {
       query += ' AND outcome = ?';
@@ -328,11 +318,7 @@ export class SessionDatabase {
 
     const total = this.db.prepare('SELECT COUNT(*) as count FROM sessions').get() as { count: number };
     
-    const byIntent = this.db.prepare(`
-      SELECT intent, COUNT(*) as count 
-      FROM sessions 
-      GROUP BY intent
-    `).all() as Array<{ intent: string; count: number }>;
+    // Removed intent analytics - no longer needed
 
     const byOutcome = this.db.prepare(`
       SELECT outcome, COUNT(*) as count 
@@ -355,7 +341,6 @@ export class SessionDatabase {
 
     return {
       total: total.count,
-      byIntent: Object.fromEntries(byIntent.map(item => [item.intent, item.count])),
       byOutcome: Object.fromEntries(byOutcome.map(item => [item.outcome, item.count])),
       byPhase: Object.fromEntries(byPhase.map(item => [item.phase, item.count])),
       recentCount: recentCount.count
@@ -391,10 +376,8 @@ export class SessionDatabase {
     return {
       id: dbSession.id,
       timestamp: new Date(dbSession.timestamp),
-      intent: dbSession.intent as any,
       phase: dbSession.phase as any,
       outcome: dbSession.outcome as any,
-      confidence: dbSession.confidence,
       currentFile: dbSession.current_file,
       cursorPosition: dbSession.cursor_line !== null ? {
         line: dbSession.cursor_line,

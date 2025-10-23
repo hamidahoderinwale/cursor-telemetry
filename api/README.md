@@ -55,6 +55,12 @@ const notebook = await api.sessions.generateNotebook('session-id');
 
 // Get real-time analytics
 const analytics = await api.analytics.getLive();
+
+// Get conversations for a session
+const conversations = await api.conversations.getAll({ session_id: 'session-id' });
+
+// Get prompt analytics
+const promptAnalytics = await api.prompts.getAnalytics({ date_range: 'month' });
 ```
 
 ### Python SDK
@@ -75,6 +81,12 @@ notebook = api.sessions.generate_notebook("session-id")
 
 # Get analytics
 analytics = api.analytics.get_live()
+
+# Get conversations for a session
+conversations = api.get_conversations(session_id='session-id')
+
+# Get prompt analytics
+prompt_analytics = api.get_prompt_analytics(date_range='month')
 ```
 
 ## API Categories
@@ -117,6 +129,21 @@ analytics = api.analytics.get_live()
 ### 7. Privacy API
 - `POST /privacy/analyze` - Privacy analysis
 - `POST /privacy/config` - Update privacy config
+
+### 8. Conversations API
+- `GET /conversations` - List all conversations
+- `GET /conversations/{id}` - Get conversation by ID
+- `POST /conversations` - Create conversation
+- `PUT /conversations/{id}` - Update conversation
+- `DELETE /conversations/{id}` - Delete conversation
+- `GET /conversations/search` - Search conversations
+- `GET /conversations/analytics` - Get conversation analytics
+
+### 9. Prompts API
+- `GET /prompts` - List all prompts
+- `GET /prompts/{id}` - Get prompt by ID
+- `POST /prompts` - Create prompt
+- `GET /prompts/analytics` - Get prompt analytics
 
 ## WebSocket Events
 
