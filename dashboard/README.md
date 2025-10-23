@@ -191,6 +191,235 @@ When clicking a node, displays:
 - Multi-modal search (combines full-text + semantic)
 - Click results to view details in modal
 
+## Backend Architecture (Companion Service)
+
+The companion service is a Node.js application that runs alongside Cursor to capture telemetry data.
+
+### Core Components
+
+#### 1. **Main Service** (`index.js`)
+- Express.js HTTP server (port 43917)
+- WebSocket support via Socket.IO
+- REST API endpoints for data access
+- In-memory database with SQLite persistence
+- Session management and workspace detection
+- File watching orchestration
+
+**Key APIs**:
+- `GET /api/activity` - File change events with diffs
+- `GET /api/workspaces` - All detected workspaces
+- `GET /api/prompts` - AI prompts from Cursor DB
+- `GET /api/cursor-database` - Raw conversation data
+- `GET /api/file-contents` - Full file contents for TF-IDF
+- `GET /raw-data/system-resources` - Memory, CPU metrics
+- `GET /raw-data/git` - Git status and commits
+- `GET /ide-state` - Current editor state
+
+#### 2. **Cursor Database Parser** (`cursor-db-parser.js`) ⭐ NEW
+**Purpose**: Extract AI conversations and prompts from Cursor's internal SQLite databases
+
+**Features**:
+- Queries `state.vscdb` files in workspace storage
+- Extracts composer sessions with metadata:
+  - Conversation titles and timestamps
+  - Lines added/removed per session
+  - Context usage percentage
+  - AI mode (agent/chat/edit)
+  - Model information inference
+- Resolves workspace IDs to actual folder paths
+- Parses `workspace.json` for friendly names
+- Monitors global and workspace-specific databases
+- 10-second update interval
+
+**Data Extracted**:
+```javascript
+{
+  text: "Conversation title",
+  workspaceId: "62376d09",
+  workspacePath: "/Users/username/project",
+  workspaceName: "my-project",
+  composerId: "uuid",
+  timestamp: 1234567890,
+  contextUsage: 74.3,
+  mode: "agent",
+  modelName: "claude-4.5-sonnet",  // Inferred
+  linesAdded: 150,
+  linesRemoved: 20
+}
+```
+
+#### 3. **Persistent Database** (`persistent-db.js`) ⭐ NEW
+**Purpose**: SQLite persistence for companion service data
+
+**Tables**:
+- `entries` - File change records with before/after code
+- `events` - Activity events with metadata
+- `prompts` - Captured AI prompts and responses
+
+**Features**:
+- Automatic table creation
+- CRUD operations for all data types
+- Stores full file contents for TF-IDF analysis
+- Survives service restarts
+- Statistics queries
+- Transaction support
+
+**Database Schema**:
+```sql
+CREATE TABLE entries (
+  id INTEGER PRIMARY KEY,
+  session_id TEXT,
+  workspace_path TEXT,
+  file_path TEXT,
+  before_code TEXT,
+  after_code TEXT,
+  timestamp TEXT
+);
+
+CREATE TABLE events (
+  id INTEGER PRIMARY KEY,
+  type TEXT,
+  details TEXT,
+  timestamp TEXT
+);
+
+CREATE TABLE prompts (
+  id INTEGER PRIMARY KEY,
+  text TEXT,
+  workspace_id TEXT,
+  timestamp TEXT,
+  mode TEXT,
+  model_name TEXT
+);
+```
+
+#### 4. **IDE State Capture** (`ide-state-capture.js`)
+**Purpose**: Capture current Cursor editor state via AppleScript
+
+**Capabilities**:
+- Active window title parsing
+- Open tabs detection
+- Current file and cursor position
+- Language mode detection
+- Editor settings from `settings.json`
+
+**AppleScript Integration**:
+```applescript
+tell application "System Events" to tell process "Cursor"
+  set windowTitle to name of window 1
+  return windowTitle
+end tell
+```
+
+**Limitations**: macOS only, requires accessibility permissions
+
+#### 5. **File Watcher** (`fileWatcher.js`)
+**Purpose**: Real-time file system monitoring
+
+**Technology**: Chokidar
+- Watches workspace directories
+- Ignores patterns from config
+- Debouncing (300ms stabilization)
+- Captures file content before/after changes
+- Calculates diffs (lines/chars added/removed)
+
+#### 6. **Diff Engine** (`diffEngine.js`)
+**Purpose**: Calculate code differences
+
+**Features**:
+- Line-by-line diff computation
+- Character-level changes
+- Before/after content capture
+- Statistics generation (lines added/removed)
+
+#### 7. **Queue System** (`queue.js`)
+**Purpose**: Event queuing and processing
+
+**Features**:
+- In-memory event queue
+- Pending prompts tracking
+- Event acknowledgment
+- WebSocket broadcasting
+
+#### 8. **Clipboard Monitor** (`clipboardMonitor.js`)
+**Purpose**: Capture AI prompts from clipboard
+
+**Features**:
+- 10-second polling interval
+- Prompt pattern detection
+- Duplicate filtering
+- 30-second minimum interval between captures
+
+#### 9. **Prompt Capture System** (`prompt-capture-system.js`)
+**Purpose**: Multi-method prompt capture
+
+**Methods**:
+- Clipboard monitoring
+- File system watching
+- MCP (Model Context Protocol) integration
+- Manual capture endpoint
+
+### Data Flow
+
+```
+File System Changes
+    ↓
+Chokidar Watcher → Diff Engine → Queue → SQLite
+                                    ↓
+                                WebSocket → Dashboard
+
+Cursor Database (state.vscdb)
+    ↓
+SQLite Queries → Parser → Workspace Resolution → Queue
+                                                    ↓
+                                                Dashboard
+
+System Resources
+    ↓
+Node.js os module → Periodic Collection (2s) → HTTP API
+                                                  ↓
+                                            Dashboard
+
+AppleScript (macOS)
+    ↓
+IDE State Capture → Periodic Polling (2s) → HTTP API
+                                               ↓
+                                         Dashboard
+```
+
+### Recent Backend Additions
+
+1. **`cursor-db-parser.js`** - Complete Cursor database mining
+2. **`persistent-db.js`** - SQLite persistence layer
+3. **Model name inference** - Maps AI modes to models
+4. **Enhanced diff calculation** - Full before/after content
+5. **Workspace resolution** - ID → path → friendly name
+6. **File contents API** - `/api/file-contents` for TF-IDF
+7. **Context usage tracking** - Extracts `contextUsagePercent`
+8. **Session-based similarity** - Tracks co-modified files
+
+### Configuration
+
+**File**: `config.json`
+```json
+{
+  "workspace_roots": ["/path/to/projects"],
+  "auto_detect_workspaces": true,
+  "ignore": ["node_modules", ".git"],
+  "enable_clipboard": true,
+  "port": 43917
+}
+```
+
+### Dependencies
+
+- `express` - HTTP server
+- `socket.io` - WebSocket support
+- `chokidar` - File watching
+- `sqlite3` - Database persistence
+- `lunr` - Search indexing
+- `cors` - CORS support
+
 ## Data Capture Techniques
 
 This project employs multiple sophisticated data capture methods to provide comprehensive telemetry without requiring Cursor modifications:
