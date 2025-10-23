@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
+    "reasoning-server": "node src/reasoning-server.js",
     "test": "node --test src/**/*.test.js"
   },
   "dependencies": {
@@ -18,6 +19,7 @@
     "node-cron": "^3.0.3",
     "node-fetch": "^3.3.2",
     "socket.io": "^4.8.1",
+    "sqlite3": "^5.1.7",
     "uuid": "^9.0.1"
   },
   "devDependencies": {
