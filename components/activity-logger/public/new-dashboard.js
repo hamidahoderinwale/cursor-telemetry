@@ -3502,6 +3502,7 @@ function computeLatentLayout(files) {
   
   // Create feature vectors
   const vectors = files.map(file => createFeatureVector(file));
+  console.log(`📊 Created ${vectors.length} feature vectors, avg dimensions: ${vectors[0]?.length || 0}`);
   
   // Compute pairwise distances
   const distances = [];
@@ -3565,10 +3566,21 @@ function createFeatureVector(file) {
 
 function detectLatentClusters(nodes, links) {
   // Use k-means clustering on latent positions
-  const k = Math.min(5, Math.ceil(nodes.length / 10));
+  // More aggressive clustering: aim for 3-8 clusters based on file count
+  let k;
+  if (nodes.length < 6) {
+    k = Math.max(1, Math.floor(nodes.length / 2)); // 2-3 nodes per cluster for small sets
+  } else if (nodes.length < 20) {
+    k = Math.min(5, Math.max(3, Math.ceil(nodes.length / 4))); // 3-5 clusters
+  } else {
+    k = Math.min(8, Math.max(4, Math.ceil(nodes.length / 8))); // 4-8 clusters for larger sets
+  }
+  
   const clusters = [];
   
   if (nodes.length === 0) return clusters;
+  
+  console.log(`🎯 Detecting ${k} latent clusters from ${nodes.length} files`);
   
   // Initialize centroids randomly
   const centroids = [];
