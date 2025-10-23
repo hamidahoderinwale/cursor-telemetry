@@ -14,7 +14,7 @@ const { clipboardMonitor } = require('./clipboardMonitor.js');
 
 // Enhanced raw data capture modules
 const os = require('os');
-const { exec } = require('child_process');
+const { exec, execSync } = require('child_process');
 const { promisify } = require('util');
 const execAsync = promisify(exec);
 
@@ -1303,6 +1303,75 @@ app.get('/api/cursor-database', async (req, res) => {
   }
 });
 
+// Helper to resolve Git object hash to actual content/name
+function resolveGitObject(hash, filePath) {
+  if (!hash || hash.length !== 40) return null;
+  
+  try {
+    // Try to get the type and content of the Git object
+    const typeResult = execSync(`git cat-file -t ${hash} 2>/dev/null`, { 
+      encoding: 'utf-8',
+      cwd: process.cwd(),
+      stdio: ['pipe', 'pipe', 'ignore']
+    }).trim();
+    
+    if (typeResult === 'blob') {
+      // It's a file - try to find its name from git show
+      const showResult = execSync(`git show --name-only --format="" ${hash} 2>/dev/null || echo ""`, {
+        encoding: 'utf-8',
+        cwd: process.cwd(),
+        stdio: ['pipe', 'pipe', 'ignore']
+      }).trim();
+      
+      if (showResult) {
+        return showResult.split('\n')[0]; // First line is the filename
+      }
+    } else if (typeResult === 'commit') {
+      // It's a commit - get the commit message subject
+      const commitMsg = execSync(`git log --format=%s -n 1 ${hash} 2>/dev/null || echo ""`, {
+        encoding: 'utf-8',
+        cwd: process.cwd(),
+        stdio: ['pipe', 'pipe', 'ignore']
+      }).trim();
+      
+      return commitMsg ? `Commit: ${commitMsg}` : `Commit ${hash.substring(0, 7)}`;
+    } else if (typeResult === 'tree') {
+      return `Tree ${hash.substring(0, 7)}`;
+    }
+  } catch (error) {
+    // Git command failed, object doesn't exist in repo
+    return null;
+  }
+  
+  return null;
+}
+
+// Helper to decode git ref files
+function decodeGitRef(filePath, content) {
+  // For files like .git/refs/heads/master or .git/HEAD
+  if (filePath.includes('.git/refs/heads/')) {
+    const branch = filePath.split('.git/refs/heads/').pop();
+    return `Branch ref: ${branch}`;
+  }
+  if (filePath.includes('.git/refs/remotes/')) {
+    const remote = filePath.split('.git/refs/remotes/').pop();
+    return `Remote ref: ${remote}`;
+  }
+  if (filePath.endsWith('.git/HEAD')) {
+    // Parse HEAD content
+    const match = content.match(/ref: refs\/heads\/(\w+)/);
+    if (match) {
+      return `HEAD -> ${match[1]}`;
+    }
+  }
+  if (filePath.endsWith('.git/ORIG_HEAD') || filePath.endsWith('.git/FETCH_HEAD')) {
+    const type = filePath.split('/').pop();
+    return `Git ${type}`;
+  }
+  
+  return null;
+}
+
 // API endpoint for file contents (for TF-IDF analysis)
 app.get('/api/file-contents', async (req, res) => {
   try {
@@ -1318,32 +1387,58 @@ app.get('/api/file-contents', async (req, res) => {
       const filePath = entry.file_path;
       if (!filePath) return;
       
-      // Filter out Git internal files
-      if (filePath.includes('.git/objects/')) return;
-      if (filePath.includes('.git/logs/')) return;
-      if (filePath.endsWith('.pack')) return;
-      if (filePath.endsWith('.idx')) return;
-      
-      const fileName = filePath.split('/').pop();
-      
-      // Filter out Git object hashes as filenames
-      if (isGitObjectHash(fileName)) return;
-      
-      // Filter out Git refs that are just hashes
-      if (filePath.includes('.git/refs/') && isGitObjectHash(fileName)) return;
-      
       // Use after_code as the most recent content
       const content = entry.after_code || entry.after_content || '';
       if (!content) return;
       
-      // Skip very small files (likely Git metadata)
-      if (content.length < 10) return;
+      // Skip very small files (likely Git metadata) unless they're known Git files
+      if (content.length < 10 && !filePath.includes('.git/')) return;
       
+      const fileName = filePath.split('/').pop();
+      let displayName = fileName;
+      let fileType = 'file';
+      
+      // Try to decode Git-specific files
+      if (filePath.includes('.git/')) {
+        // Check if filename is a Git object hash
+        if (isGitObjectHash(fileName)) {
+          const resolved = resolveGitObject(fileName, filePath);
+          if (resolved) {
+            displayName = resolved;
+            fileType = 'git-object';
+          } else {
+            // Skip unknown Git objects
+            return;
+          }
+        }
+        // Check if it's a Git ref file
+        else if (filePath.includes('.git/refs/') || filePath.endsWith('.git/HEAD') || 
+                 filePath.endsWith('.git/ORIG_HEAD') || filePath.endsWith('.git/FETCH_HEAD')) {
+          const decoded = decodeGitRef(filePath, content);
+          if (decoded) {
+            displayName = decoded;
+            fileType = 'git-ref';
+          }
+        }
+        // Filter out pack files and logs
+        else if (filePath.includes('.git/objects/pack/') || filePath.includes('.git/logs/')) {
+          return;
+        }
+        // Keep known Git config files
+        else if (fileName === 'index' || fileName === 'config' || fileName === 'COMMIT_EDITMSG') {
+          displayName = `Git ${fileName}`;
+          fileType = 'git-meta';
+        }
+      }
+      
+      // Create or update file entry
       if (!fileContents.has(filePath)) {
         fileContents.set(filePath, {
           path: filePath,
-          name: fileName,
+          name: displayName,
+          originalName: fileName,
           ext: filePath.split('.').pop()?.toLowerCase(),
+          type: fileType,
           content: content,
           lastModified: entry.timestamp,
           changes: 1,
