@@ -24,7 +24,16 @@ const IDEStateCapture = require('./ide-state-capture.js');
 // Import prompt capture system
 const PromptCaptureSystem = require('./prompt-capture-system.js');
 
-// Simple in-memory database for companion service (replacing Dexie/IndexedDB)
+// Import Cursor database parser
+const CursorDatabaseParser = require('./cursor-db-parser.js');
+
+// Import persistent database
+const PersistentDB = require('./persistent-db.js');
+
+// Initialize persistent database
+const persistentDB = new PersistentDB();
+
+// Simple in-memory database for companion service (with persistent backup)
 const db = {
     _entries: [],
     _prompts: [],
@@ -39,6 +48,18 @@ const db = {
     async add(table, data) {
         const item = { ...data, id: this.nextId++ };
         this[table].push(item);
+        
+        // Persist to disk
+        try {
+            if (table === 'entries') {
+                await persistentDB.saveEntry(item);
+            } else if (table === 'prompts') {
+                await persistentDB.savePrompt(item);
+            }
+        } catch (error) {
+            console.error(`Error persisting ${table} item:`, error);
+        }
+        
         return item;
     },
     
@@ -46,6 +67,18 @@ const db = {
         const index = this[table].findIndex(item => item.id === id);
         if (index >= 0) {
             this[table][index] = { ...this[table][index], ...updates };
+            
+            // Persist to disk
+            try {
+                if (table === 'entries') {
+                    await persistentDB.updateEntry(id, updates);
+                } else if (table === 'prompts') {
+                    await persistentDB.updatePrompt(id, updates);
+                }
+            } catch (error) {
+                console.error(`Error updating ${table} item:`, error);
+            }
+            
             return this[table][index];
         }
         return null;
@@ -74,8 +107,16 @@ function broadcastUpdate(type, data) {
 app.use(cors({ origin: '*' })); // Explicitly allow all origins
 app.use(express.json());
 
+// Serve static files from public directory
+const publicPath = path.join(__dirname, '../../public');
+app.use(express.static(publicPath));
+console.log(`📁 Serving static files from: ${publicPath}`);
+
 let ideStateCapture = new IDEStateCapture(); // Changed from const to let
 ideStateCapture.start(); // Start capturing IDE state
+
+// Initialize Cursor database parser
+let cursorDbParser = new CursorDatabaseParser();
 
 // Add new endpoint for IDE state
 app.get('/ide-state', (req, res) => {
@@ -325,6 +366,10 @@ function enqueue(kind, payload) {
     entries.push(payload);
   } else if (kind === 'event') {
     events.push(payload);
+    // Persist events to disk
+    persistentDB.saveEvent(payload).catch(err => 
+      console.error('Error persisting event:', err.message)
+    );
   }
   
   console.log(`� Enqueued ${kind} #${sequence}: ${payload.id || payload.type}`);
@@ -795,15 +840,70 @@ app.get('/queue', (req, res) => {
 });
 
 // Multi-workspace API endpoints
-app.get('/api/workspaces', (req, res) => {
-  const workspaces = Array.from(workspaceData.entries()).map(([path, data]) => ({
-    path,
-    entries: data.entries.length,
-    events: data.events.length,
-    lastActivity: data.lastActivity,
-    sessionId: workspaceSessions.get(path)
-  }));
-  res.json(workspaces);
+app.get('/api/workspaces', async (req, res) => {
+  try {
+    // Get ALL workspaces from Cursor (including old/stale ones)
+    const allCursorWorkspaces = await cursorDbParser.getAllWorkspaces();
+    
+    // Get prompt data to enrich workspace info
+    const cursorData = await cursorDbParser.getAllData();
+    
+    // Build workspace list from Cursor database first (this is the source of truth)
+    const workspaces = allCursorWorkspaces.map(ws => {
+      // Count prompts for this workspace
+      const wsPrompts = cursorData.prompts.filter(p => p.workspaceId === ws.id);
+      
+      // Check if we have activity data for this workspace
+      const activityData = workspaceData.get(ws.path);
+      
+      return {
+        id: ws.id,
+        path: ws.path || `Unknown (${ws.id.substring(0, 8)})`,
+        name: ws.name,
+        entries: activityData?.entries?.length || 0,
+        events: activityData?.events?.length || 0,
+        promptCount: wsPrompts.length,
+        lastActivity: activityData?.lastActivity || ws.lastAccessed,
+        lastAccessed: ws.lastAccessed,
+        created: ws.created,
+        sessionId: workspaceSessions.get(ws.path),
+        active: activityData ? true : false,
+        exists: ws.exists,
+        fromCursorDb: true
+      };
+    });
+    
+    // Add any workspaces from knownWorkspaces that weren't in Cursor DB
+    Array.from(knownWorkspaces).forEach(wsPath => {
+      if (!workspaces.find(w => w.path === wsPath)) {
+        const activityData = workspaceData.get(wsPath);
+        workspaces.push({
+          path: wsPath,
+          name: wsPath.split('/').pop() || 'Unknown',
+          entries: activityData?.entries?.length || 0,
+          events: activityData?.events?.length || 0,
+          promptCount: 0,
+          lastActivity: activityData?.lastActivity || null,
+          sessionId: workspaceSessions.get(wsPath),
+          active: activityData ? true : false,
+          exists: true,
+          fromCursorDb: false
+        });
+      }
+    });
+    
+    // Sort by lastActivity/lastAccessed (most recent first)
+    workspaces.sort((a, b) => {
+      const aTime = a.lastActivity || a.lastAccessed || 0;
+      const bTime = b.lastActivity || b.lastAccessed || 0;
+      return new Date(bTime) - new Date(aTime);
+    });
+    
+    res.json(workspaces);
+  } catch (error) {
+    console.error('Error getting workspaces:', error);
+    res.status(500).json({ error: error.message });
+  }
 });
 
 app.get('/api/workspace/:workspacePath/activity', (req, res) => {
@@ -1088,24 +1188,41 @@ app.get('/api/activity', async (req, res) => {
     const allPrompts = db.prompts;
     
     // Convert entries to events format for dashboard compatibility
-    const events = allEntries.map(entry => ({
-      id: entry.id,
-      type: entry.type || 'file_change',
-      timestamp: entry.timestamp,
-      session_id: entry.session_id || 'default',
-      workspace_path: entry.workspace_path || entry.file_path || '/unknown',
-      file_path: entry.file_path,
-      details: JSON.stringify({
-        content: entry.content,
-        before_content: entry.before_content,
-        after_content: entry.after_content,
-        diff: entry.diff,
+    const events = allEntries.map(entry => {
+      // Calculate diff stats if we have before/after content
+      let diffStats = {};
+      if (entry.before_code && entry.after_code) {
+        const diff = calculateDiff(entry.before_code, entry.after_code);
+        diffStats = {
+          lines_added: diff.linesAdded,
+          lines_removed: diff.linesRemoved,
+          chars_added: diff.charsAdded,
+          chars_deleted: diff.charsDeleted,
+          before_content: diff.beforeContent.length > 10000 ? diff.beforeContent.substring(0, 10000) + '\n... (truncated)' : diff.beforeContent,
+          after_content: diff.afterContent.length > 10000 ? diff.afterContent.substring(0, 10000) + '\n... (truncated)' : diff.afterContent
+        };
+      }
+      
+      return {
+        id: entry.id,
+        type: entry.type || 'file_change',
+        timestamp: entry.timestamp,
+        session_id: entry.session_id || 'default',
+        workspace_path: entry.workspace_path || entry.file_path || '/unknown',
         file_path: entry.file_path,
-        workspace_path: entry.workspace_path
-      }),
-      title: entry.title || `File Change: ${entry.file_path ? entry.file_path.split('/').pop() : 'Unknown'}`,
-      description: entry.description || 'File change detected'
-    }));
+        details: JSON.stringify({
+          content: entry.content,
+          before_content: entry.before_content || entry.before_code,
+          after_content: entry.after_content || entry.after_code,
+          diff: entry.diff,
+          file_path: entry.file_path,
+          workspace_path: entry.workspace_path,
+          ...diffStats
+        }),
+        title: entry.title || `File Change: ${entry.file_path ? entry.file_path.split('/').pop() : 'Unknown'}`,
+        description: entry.description || entry.notes || 'File change detected'
+      };
+    });
     
     console.log(`API: Returning ${events.length} activity events`);
     res.json(events);
@@ -1138,15 +1255,123 @@ app.get('/entries', async (req, res) => {
     const allEntries = db.entries;
     const allPrompts = db.prompts;
     
-    const entriesWithPrompts = allEntries.map(entry => ({
-      ...entry,
-      prompt: entry.prompt_id ? allPrompts.find(p => p.id === entry.prompt_id) : null
-    }));
-    
-    res.json(entriesWithPrompts);
+    // Also get prompts from Cursor database
+    try {
+      const cursorData = await cursorDbParser.getAllData();
+      const cursorPrompts = cursorData.prompts || [];
+      
+      // Add Cursor database prompts to response
+      const combined = [
+        ...allPrompts,
+        ...cursorPrompts.map(p => ({
+          id: `cursor_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+          timestamp: p.timestamp || new Date().toISOString(),
+          text: p.text,
+          status: p.status || 'captured',
+          source: 'cursor-database',
+          method: 'database-extraction',
+          confidence: p.confidence || 'medium'
+        }))
+      ];
+      
+      res.json({ entries: combined });
+    } catch (dbError) {
+      console.warn('Could not extract Cursor database prompts:', dbError.message);
+      res.json({ entries: allPrompts });
+    }
   } catch (error) {
     console.error('Error fetching entries with prompts:', error);
     res.status(500).json({ error: 'Failed to fetch entries' });
+  }
+});
+
+// New endpoint specifically for Cursor database data
+app.get('/api/cursor-database', async (req, res) => {
+  try {
+    const data = await cursorDbParser.getAllData();
+    res.json({
+      success: true,
+      data: data,
+      timestamp: Date.now()
+    });
+  } catch (error) {
+    console.error('Error fetching Cursor database:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+});
+
+// API endpoint for file contents (for TF-IDF analysis)
+app.get('/api/file-contents', async (req, res) => {
+  try {
+    const entries = await persistentDB.getAllEntries();
+    
+    // Helper to check if a string is a Git object hash (40-char hex)
+    const isGitObjectHash = (str) => /^[0-9a-f]{40}$/i.test(str);
+    
+    // Build file content map with latest content for each file
+    const fileContents = new Map();
+    
+    entries.forEach(entry => {
+      const filePath = entry.file_path;
+      if (!filePath) return;
+      
+      // Filter out Git internal files
+      if (filePath.includes('.git/objects/')) return;
+      if (filePath.includes('.git/logs/')) return;
+      if (filePath.endsWith('.pack')) return;
+      if (filePath.endsWith('.idx')) return;
+      
+      const fileName = filePath.split('/').pop();
+      
+      // Filter out Git object hashes as filenames
+      if (isGitObjectHash(fileName)) return;
+      
+      // Filter out Git refs that are just hashes
+      if (filePath.includes('.git/refs/') && isGitObjectHash(fileName)) return;
+      
+      // Use after_code as the most recent content
+      const content = entry.after_code || entry.after_content || '';
+      if (!content) return;
+      
+      // Skip very small files (likely Git metadata)
+      if (content.length < 10) return;
+      
+      if (!fileContents.has(filePath)) {
+        fileContents.set(filePath, {
+          path: filePath,
+          name: fileName,
+          ext: filePath.split('.').pop()?.toLowerCase(),
+          content: content,
+          lastModified: entry.timestamp,
+          changes: 1,
+          size: content.length
+        });
+      } else {
+        // Update if this entry is more recent
+        const existing = fileContents.get(filePath);
+        if (new Date(entry.timestamp) > new Date(existing.lastModified)) {
+          existing.content = content;
+          existing.lastModified = entry.timestamp;
+          existing.size = content.length;
+        }
+        existing.changes++;
+      }
+    });
+    
+    const result = Array.from(fileContents.values());
+    console.log(`📁 Serving ${result.length} files with content for TF-IDF analysis (filtered Git objects)`);
+    
+    res.json({
+      files: result,
+      totalFiles: result.length,
+      totalSize: result.reduce((sum, f) => sum + f.size, 0)
+    });
+  } catch (error) {
+    console.error('Error fetching file contents:', error);
+    res.status(500).json({ error: 'Failed to fetch file contents' });
   }
 });
 
@@ -1507,10 +1732,24 @@ function calculateDiff(text1, text2) {
   const diffSize = Math.abs(text1.length - text2.length);
   const isSignificant = diffSize >= diffThreshold;
   
+  // Calculate line-based diff stats
+  const lines1 = text1.split('\n');
+  const lines2 = text2.split('\n');
+  const linesAdded = Math.max(0, lines2.length - lines1.length);
+  const linesRemoved = Math.max(0, lines1.length - lines2.length);
+  const charsAdded = Math.max(0, text2.length - text1.length);
+  const charsDeleted = Math.max(0, text1.length - text2.length);
+  
   return {
     diffSize,
     isSignificant,
-    summary: `+${text2.length - text1.length} chars`
+    summary: `+${text2.length - text1.length} chars`,
+    linesAdded,
+    linesRemoved,
+    charsAdded,
+    charsDeleted,
+    beforeContent: text1,
+    afterContent: text2
   };
 }
 
@@ -1616,7 +1855,13 @@ async function processFileChange(filePath) {
           details: JSON.stringify({ 
             file_path: relativePath,
             diff_summary: diff.summary,
-            diff_size: diff.diffSize
+            diff_size: diff.diffSize,
+            lines_added: diff.linesAdded,
+            lines_removed: diff.linesRemoved,
+            chars_added: diff.charsAdded,
+            chars_deleted: diff.charsDeleted,
+            before_content: diff.beforeContent.length > 10000 ? diff.beforeContent.substring(0, 10000) + '\n... (truncated)' : diff.beforeContent,
+            after_content: diff.afterContent.length > 10000 ? diff.afterContent.substring(0, 10000) + '\n... (truncated)' : diff.afterContent
           })
         };
         
@@ -1852,22 +2097,56 @@ function extractModelInfo(data) {
   return modelInfo;
 }
 
+// Load data from persistent database on startup
+async function loadPersistedData() {
+  try {
+    console.log('💾 Loading persisted data from SQLite...');
+    await persistentDB.init();
+    
+    const [entries, prompts] = await Promise.all([
+      persistentDB.getAllEntries(),
+      persistentDB.getAllPrompts()
+    ]);
+    
+    // Restore to in-memory database
+    db._entries = entries;
+    db._prompts = prompts;
+    
+    // Update nextId to be higher than any existing ID
+    if (entries.length > 0) {
+      const maxId = Math.max(...entries.map(e => e.id));
+      db.nextId = maxId + 1;
+    }
+    if (prompts.length > 0) {
+      const maxId = Math.max(...prompts.map(p => p.id));
+      db.nextId = Math.max(db.nextId, maxId + 1);
+    }
+    
+    const stats = await persistentDB.getStats();
+    console.log(`✅ Loaded ${stats.entries} entries and ${stats.prompts} prompts from database`);
+  } catch (error) {
+    console.error('⚠️  Error loading persisted data:', error.message);
+    console.log('   Starting with empty database');
+  }
+}
+
 // Start the server
 const HOST = process.env.HOST || 'localhost';
 
-app.listen(PORT, HOST, () => {
-  console.log(`🚀 Companion service running on http://${HOST}:${PORT}`);
-  console.log(`📊 Health endpoint: http://${HOST}:${PORT}/health`);
-  console.log(`📈 Activity endpoint: http://${HOST}:${PORT}/api/activity`);
-  console.log(`🔍 Queue endpoint: http://${HOST}:${PORT}/queue`);
-  console.log(` WebSocket server running on ws://${HOST}:${PORT}`);
-  const workspacesToWatch = config.workspace_roots || config.workspaces || [config.root_dir];
-  const autoDetect = config.auto_detect_workspaces !== false;
-  if (autoDetect) {
-    console.log(` Auto-detecting workspaces from ${workspacesToWatch.length} root location(s):`);
-  } else {
-    console.log(` Watching ${workspacesToWatch.length} configured workspace(s):`);
-  }
+loadPersistedData().then(() => {
+  app.listen(PORT, HOST, () => {
+    console.log(`🚀 Companion service running on http://${HOST}:${PORT}`);
+    console.log(`📊 Health endpoint: http://${HOST}:${PORT}/health`);
+    console.log(`📈 Activity endpoint: http://${HOST}:${PORT}/api/activity`);
+    console.log(`🔍 Queue endpoint: http://${HOST}:${PORT}/queue`);
+    console.log(` WebSocket server running on ws://${HOST}:${PORT}`);
+    const workspacesToWatch = config.workspace_roots || config.workspaces || [config.root_dir];
+    const autoDetect = config.auto_detect_workspaces !== false;
+    if (autoDetect) {
+      console.log(` Auto-detecting workspaces from ${workspacesToWatch.length} root location(s):`);
+    } else {
+      console.log(` Watching ${workspacesToWatch.length} configured workspace(s):`);
+    }
   workspacesToWatch.forEach((ws, i) => {
     console.log(`   ${i + 1}. ${ws}`);
   });
@@ -1896,4 +2175,31 @@ app.listen(PORT, HOST, () => {
   }, 5 * 60 * 1000);
   
   console.log('⏰ Session timeout check started (every 5 minutes)');
+  
+  // Start Cursor database monitoring
+  console.log('🔍 Starting Cursor database monitoring...');
+  cursorDbParser.startMonitoring((data) => {
+    if (data.prompts && data.prompts.length > 0) {
+      console.log(`💬 Found ${data.prompts.length} prompts in Cursor database`);
+      
+      // Optionally add to our database (avoid duplicates)
+      data.prompts.forEach(prompt => {
+        const exists = db.prompts.find(p => p.text === prompt.text);
+        if (!exists) {
+          db.prompts.push({
+            ...prompt,
+            id: db.nextId++,
+            added_from_database: true
+          });
+        }
+      });
+    }
+  });
+  }); // Close app.listen callback
+}).catch(error => {
+  console.error('❌ Failed to load persisted data:', error);
+  // Start anyway with empty database
+  app.listen(PORT, HOST, () => {
+    console.log(`🚀 Companion service running on http://${HOST}:${PORT} (without persisted data)`);
+  });
 });
