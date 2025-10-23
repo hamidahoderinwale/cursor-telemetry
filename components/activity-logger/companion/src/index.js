@@ -1,10 +1,14 @@
 #!/usr/bin/env node
 
+const path = require('path');
+
+// Load environment variables from workspace root
+require('dotenv').config({ path: path.resolve(__dirname, '../../../../../.env') });
+
 const express = require('express');
 const cors = require('cors');
 const http = require('http');
 const chokidar = require('chokidar');
-const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 const lunr = require('lunr'); // Import lunr

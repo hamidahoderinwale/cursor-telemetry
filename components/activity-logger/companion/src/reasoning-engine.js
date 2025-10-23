@@ -3,16 +3,39 @@
  * Provides intelligent analysis of development patterns using temporal reasoning
  */
 
-const fetch = require('node-fetch');
+// Use dynamic import for node-fetch v3 (ESM)
+let fetchModule;
+const fetchPromise = import('node-fetch').then(mod => {
+    fetchModule = mod.default;
+});
 
 class ReasoningEngine {
     constructor() {
-        this.apiKey = process.env.OPENROUTER_API_KEY || '';
-        this.modelEndpoint = 'https://openrouter.ai/api/v1/chat/completions';
-        this.modelName = 'qwen/qwen-2.5-7b-instruct'; // Qwen 2.5 reasoning model
+        // Try Hugging Face first, then OpenRouter
+        this.hfApiKey = process.env.HF_TOKEN || process.env.HUGGINGFACE_API_KEY || process.env.HF_API_KEY || '';
+        this.openRouterKey = process.env.OPENROUTER_API_KEY || '';
         
-        if (!this.apiKey) {
-            console.warn('⚠️ OPENROUTER_API_KEY not found in environment');
+        // Hugging Face endpoints
+        // Note: Free Inference API may not support all models. For Qwen models, consider:
+        // 1. Dedicated Inference Endpoints: https://ui.endpoints.huggingface.co/
+        // 2. Set HF_ENDPOINT in .env to your custom endpoint URL
+        // 3. Use OpenRouter as fallback (set OPENROUTER_API_KEY)
+        this.hfEndpoint = process.env.HF_ENDPOINT || 'https://api-inference.huggingface.co/models/Qwen/Qwen2.5-7B-Instruct';
+        
+        // OpenRouter endpoint (fallback)
+        this.openRouterEndpoint = 'https://openrouter.ai/api/v1/chat/completions';
+        this.openRouterModel = 'qwen/qwen-2.5-7b-instruct';
+        
+        // Determine which API to use
+        if (this.hfApiKey) {
+            console.log('🤗 Using Hugging Face API for Qwen model');
+            this.useHuggingFace = true;
+        } else if (this.openRouterKey) {
+            console.log('🔀 Using OpenRouter API for Qwen model');
+            this.useHuggingFace = false;
+        } else {
+            console.warn('⚠️ No API key found (HF_TOKEN, HUGGINGFACE_API_KEY, or OPENROUTER_API_KEY)');
+            this.useHuggingFace = false;
         }
     }
     
@@ -223,10 +246,10 @@ ${query}
     }
     
     /**
-     * Generate response using Qwen model via OpenRouter
+     * Generate response using Qwen model via Hugging Face or OpenRouter
      */
     async generateResponse(query, context) {
-        if (!this.apiKey) {
+        if (!this.hfApiKey && !this.openRouterKey) {
             // Fallback response without API
             return {
                 content: this.generateFallbackResponse(query, context),
@@ -236,51 +259,13 @@ ${query}
         }
         
         try {
-            const messages = [
-                {
-                    role: 'system',
-                    content: `You are an AI assistant that helps developers understand their coding patterns and productivity. 
-You have access to their development telemetry data and can provide insights about their work.
-Be concise, specific, and actionable. Use the data provided to give evidence-based answers.
-Format your response in a friendly, conversational tone.`
-                },
-                {
-                    role: 'user',
-                    content: `${context}\n\nBased on this data, please answer: ${query}`
-                }
-            ];
-            
-            const response = await fetch(this.modelEndpoint, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${this.apiKey}`,
-                    'Content-Type': 'application/json',
-                    'HTTP-Referer': 'http://localhost:43917',
-                    'X-Title': 'Cursor Telemetry Dashboard'
-                },
-                body: JSON.stringify({
-                    model: this.modelName,
-                    messages: messages,
-                    temperature: 0.7,
-                    max_tokens: 500
-                })
-            });
-            
-            if (!response.ok) {
-                throw new Error(`OpenRouter API error: ${response.status}`);
+            if (this.useHuggingFace) {
+                return await this.generateWithHuggingFace(query, context);
+            } else {
+                return await this.generateWithOpenRouter(query, context);
             }
-            
-            const data = await response.json();
-            const content = data.choices[0].message.content;
-            
-            return {
-                content: content,
-                reasoning: 'Generated using Qwen 2.5 reasoning model',
-                confidence: 0.9
-            };
-            
         } catch (error) {
-            console.error('OpenRouter API error:', error);
+            console.error('API error:', error);
             // Fallback to rule-based
             return {
                 content: this.generateFallbackResponse(query, context),
@@ -288,6 +273,127 @@ Format your response in a friendly, conversational tone.`
                 confidence: 0.6
             };
         }
+    }
+    
+    /**
+     * Generate response using Hugging Face Inference API
+     */
+    async generateWithHuggingFace(query, context) {
+        // Ensure fetch is loaded
+        await fetchPromise;
+        
+        // Format as a single prompt for text generation models
+        const systemPrompt = `You are an AI assistant that helps developers understand their coding patterns and productivity. 
+You have access to their development telemetry data and can provide insights about their work.
+Be concise, specific, and actionable. Use the data provided to give evidence-based answers.
+Format your response in a friendly, conversational tone.`;
+        
+        const prompt = `<|im_start|>system
+${systemPrompt}<|im_end|>
+<|im_start|>user
+${context}
+
+Based on this data, please answer: ${query}<|im_end|>
+<|im_start|>assistant
+`;
+        
+        const response = await fetchModule(this.hfEndpoint, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${this.hfApiKey}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                inputs: prompt,
+                parameters: {
+                    max_new_tokens: 500,
+                    temperature: 0.7,
+                    top_p: 0.95,
+                    return_full_text: false,
+                    do_sample: true
+                }
+            })
+        });
+        
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Hugging Face API error: ${response.status} - ${errorText}`);
+        }
+        
+        const data = await response.json();
+        
+        // Handle standard HF inference response format
+        let content;
+        if (Array.isArray(data) && data[0]?.generated_text) {
+            content = data[0].generated_text;
+        } else if (data.generated_text) {
+            content = data.generated_text;
+        } else if (data[0]?.text) {
+            content = data[0].text;
+        } else {
+            console.error('Unexpected HF response:', JSON.stringify(data).substring(0, 200));
+            throw new Error('Unexpected response format from Hugging Face');
+        }
+        
+        // Clean up any remaining prompt markers
+        content = content.replace(/<\|im_end\|>/g, '').trim();
+        
+        return {
+            content: content || this.generateFallbackResponse(query, context),
+            reasoning: 'Generated using Qwen 2.5 via Hugging Face',
+            confidence: 0.9
+        };
+    }
+    
+    /**
+     * Generate response using OpenRouter API
+     */
+    async generateWithOpenRouter(query, context) {
+        // Ensure fetch is loaded
+        await fetchPromise;
+        
+        const messages = [
+            {
+                role: 'system',
+                content: `You are an AI assistant that helps developers understand their coding patterns and productivity. 
+You have access to their development telemetry data and can provide insights about their work.
+Be concise, specific, and actionable. Use the data provided to give evidence-based answers.
+Format your response in a friendly, conversational tone.`
+            },
+            {
+                role: 'user',
+                content: `${context}\n\nBased on this data, please answer: ${query}`
+            }
+        ];
+        
+        const response = await fetchModule(this.openRouterEndpoint, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${this.openRouterKey}`,
+                'Content-Type': 'application/json',
+                'HTTP-Referer': 'http://localhost:43917',
+                'X-Title': 'Cursor Telemetry Dashboard'
+            },
+            body: JSON.stringify({
+                model: this.openRouterModel,
+                messages: messages,
+                temperature: 0.7,
+                max_tokens: 500
+            })
+        });
+        
+        if (!response.ok) {
+            throw new Error(`OpenRouter API error: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        const content = data.choices[0].message.content;
+        
+        return {
+            content: content,
+            reasoning: 'Generated using Qwen 2.5 via OpenRouter',
+            confidence: 0.9
+        };
     }
     
     /**
