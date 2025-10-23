@@ -4023,6 +4023,8 @@ document.addEventListener('DOMContentLoaded', () => {
         await storage.storePrompts(state.data.prompts);
         calculateStats();
         renderCurrentView();
+        // Re-initialize search index when data updates
+        initializeSearch();
       }
     }, CONFIG.REFRESH_INTERVAL);
   } else {
@@ -4036,6 +4038,8 @@ document.addEventListener('DOMContentLoaded', () => {
       state.connected = true;
       updateConnectionStatus(true);
       renderCurrentView();
+      // Initialize search engine
+      initializeSearch();
     }).catch(error => {
       console.error('Initial data fetch failed:', error);
       updateConnectionStatus(false);
@@ -4175,6 +4179,308 @@ async function checkClipboardStatus() {
   }
 }
 
+// ===================================
+// Search Integration
+// ===================================
+
+let searchEngine = null;
+let searchSelectedIndex = -1;
+let searchCurrentResults = [];
+
+/**
+ * Initialize search engine when data is loaded
+ */
+async function initializeSearch() {
+  if (window.SearchEngine) {
+    searchEngine = new window.SearchEngine();
+    await searchEngine.initialize(state.data);
+    console.log('✅ Search engine initialized');
+  }
+}
+
+/**
+ * Open search palette
+ */
+function openSearchPalette() {
+  const palette = document.getElementById('searchPalette');
+  const input = document.getElementById('searchInput');
+  
+  if (palette) {
+    palette.classList.add('active');
+    if (input) {
+      input.focus();
+      input.value = '';
+      showSearchSuggestions();
+    }
+  }
+}
+
+/**
+ * Close search palette
+ */
+function closeSearchPalette() {
+  const palette = document.getElementById('searchPalette');
+  if (palette) {
+    palette.classList.remove('active');
+    searchSelectedIndex = -1;
+    searchCurrentResults = [];
+  }
+}
+
+/**
+ * Perform search
+ */
+function performSearch(query) {
+  if (!searchEngine || !query.trim()) {
+    showSearchSuggestions();
+    return;
+  }
+
+  const results = searchEngine.search(query, { limit: 20 });
+  searchCurrentResults = results;
+  searchSelectedIndex = -1;
+  renderSearchResults(results);
+}
+
+/**
+ * Show search suggestions
+ */
+function showSearchSuggestions() {
+  const suggestionsContainer = document.getElementById('searchSuggestions');
+  const resultsContainer = document.getElementById('searchResults');
+  
+  if (!searchEngine || !suggestionsContainer) return;
+
+  const suggestions = searchEngine.getSuggestions('');
+  
+  resultsContainer.innerHTML = '';
+  
+  if (suggestions.length === 0) {
+    suggestionsContainer.innerHTML = `
+      <div class="search-empty">
+        <svg class="search-empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <circle cx="11" cy="11" r="8" stroke-width="2"/>
+          <path d="M21 21l-4.35-4.35" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        <div>Start typing to search...</div>
+        <div style="font-size: var(--text-xs); margin-top: var(--space-sm);">
+          Try: <code>type:prompt</code> or <code>workspace:cursor-telemetry</code>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  suggestionsContainer.innerHTML = `
+    <div style="padding: var(--space-sm); color: var(--color-text-muted); font-size: var(--text-xs); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">
+      Recent Searches
+    </div>
+    ${suggestions.map(suggestion => `
+      <div class="search-suggestion-item" onclick="applySearchSuggestion('${escapeHtml(suggestion)}')">
+        <span class="search-suggestion-icon">🕐</span>
+        <span>${escapeHtml(suggestion)}</span>
+      </div>
+    `).join('')}
+  `;
+}
+
+/**
+ * Apply search suggestion
+ */
+function applySearchSuggestion(suggestion) {
+  const input = document.getElementById('searchInput');
+  if (input) {
+    input.value = suggestion;
+    input.focus();
+    performSearch(suggestion);
+  }
+}
+
+/**
+ * Render search results
+ */
+function renderSearchResults(results) {
+  const container = document.getElementById('searchResults');
+  const suggestionsContainer = document.getElementById('searchSuggestions');
+  
+  if (!container) return;
+
+  suggestionsContainer.innerHTML = '';
+
+  if (results.length === 0) {
+    container.innerHTML = `
+      <div class="search-empty">
+        <svg class="search-empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <circle cx="11" cy="11" r="8" stroke-width="2"/>
+          <path d="M21 21l-4.35-4.35" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        <div>No results found</div>
+        <div style="font-size: var(--text-xs); margin-top: var(--space-sm); color: var(--color-text-muted);">
+          Try different keywords or filters
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = results.map((result, index) => {
+    const icon = getSearchResultIcon(result.type);
+    const typeColor = getSearchResultTypeColor(result.type);
+    const time = new Date(result.timestamp).toLocaleString();
+    
+    return `
+      <div class="search-result-item ${index === searchSelectedIndex ? 'selected' : ''}" 
+           onclick="selectSearchResult(${index})"
+           data-result-index="${index}">
+        <div class="search-result-icon" style="border-color: ${typeColor};">
+          ${icon}
+        </div>
+        <div class="search-result-content">
+          <div class="search-result-title">
+            ${escapeHtml(result.title)}
+          </div>
+          <div class="search-result-description">
+            ${escapeHtml(result.content.substring(0, 150))}${result.content.length > 150 ? '...' : ''}
+          </div>
+          <div class="search-result-meta">
+            <span class="search-result-badge" style="border-color: ${typeColor};">${result.type}</span>
+            <span>${escapeHtml(result.workspace)}</span>
+            <span>${time}</span>
+            ${result.searchMethod ? `<span style="color: var(--color-text-muted); font-size: 10px;">${result.searchMethod}</span>` : ''}
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+/**
+ * Get icon for search result type
+ */
+function getSearchResultIcon(type) {
+  const icons = {
+    event: `<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor">
+      <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z" fill="currentColor"/>
+      <path d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5z" stroke-width="2"/>
+    </svg>`,
+    prompt: `<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor">
+      <path d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2h-1l-3 3z" stroke-width="2" stroke-linecap="round"/>
+    </svg>`,
+    workspace: `<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor">
+      <path d="M3 7v10a2 2 0 002 2h10a2 2 0 002-2V9a2 2 0 00-2-2h-1V5a2 2 0 00-2-2H8a2 2 0 00-2 2v2H5a2 2 0 00-2 2z" stroke-width="2"/>
+    </svg>`
+  };
+  return icons[type] || icons.event;
+}
+
+/**
+ * Get color for search result type
+ */
+function getSearchResultTypeColor(type) {
+  const colors = {
+    event: 'var(--color-info)',
+    prompt: 'var(--color-accent)',
+    workspace: 'var(--color-success)'
+  };
+  return colors[type] || 'var(--color-border)';
+}
+
+/**
+ * Select search result
+ */
+function selectSearchResult(index) {
+  if (index < 0 || index >= searchCurrentResults.length) return;
+  
+  const result = searchCurrentResults[index];
+  
+  // Close search palette
+  closeSearchPalette();
+  
+  // Navigate to the result
+  if (result.type === 'event' || result.type === 'prompt') {
+    showEventModal(result.raw.id || result.raw.timestamp);
+  } else if (result.type === 'workspace') {
+    // Switch to workspace and show workspace view
+    state.currentWorkspace = result.raw.name || result.raw.path;
+    switchView('workspace');
+    renderCurrentView();
+  }
+}
+
+/**
+ * Navigate search results with keyboard
+ */
+function navigateSearchResults(direction) {
+  if (searchCurrentResults.length === 0) return;
+
+  if (direction === 'down') {
+    searchSelectedIndex = (searchSelectedIndex + 1) % searchCurrentResults.length;
+  } else if (direction === 'up') {
+    searchSelectedIndex = searchSelectedIndex <= 0 ? searchCurrentResults.length - 1 : searchSelectedIndex - 1;
+  }
+
+  // Update UI
+  const items = document.querySelectorAll('.search-result-item');
+  items.forEach((item, index) => {
+    if (index === searchSelectedIndex) {
+      item.classList.add('selected');
+      item.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    } else {
+      item.classList.remove('selected');
+    }
+  });
+}
+
+// Setup search input handler
+document.addEventListener('DOMContentLoaded', () => {
+  const searchInput = document.getElementById('searchInput');
+  
+  if (searchInput) {
+    // Debounce search
+    let searchTimeout;
+    searchInput.addEventListener('input', (e) => {
+      clearTimeout(searchTimeout);
+      searchTimeout = setTimeout(() => {
+        const query = e.target.value.trim();
+        if (query) {
+          performSearch(query);
+        } else {
+          showSearchSuggestions();
+        }
+      }, 300);
+    });
+
+    // Handle keyboard navigation
+    searchInput.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        navigateSearchResults('down');
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        navigateSearchResults('up');
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (searchSelectedIndex >= 0) {
+          selectSearchResult(searchSelectedIndex);
+        } else if (searchCurrentResults.length > 0) {
+          selectSearchResult(0);
+        }
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        closeSearchPalette();
+      }
+    });
+  }
+
+  // Setup Cmd+K / Ctrl+K shortcut
+  document.addEventListener('keydown', (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+      e.preventDefault();
+      openSearchPalette();
+    }
+  });
+});
+
 // Global functions for HTML onclick handlers
 window.showEventModal = showEventModal;
 window.closeEventModal = closeEventModal;
@@ -4188,4 +4494,9 @@ window.checkClipboardStatus = checkClipboardStatus;
 window.updateFileGraph = updateFileGraph;
 window.resetFileGraphZoom = resetFileGraphZoom;
 window.showFileInfo = showFileInfo;
+window.openSearchPalette = openSearchPalette;
+window.closeSearchPalette = closeSearchPalette;
+window.applySearchSuggestion = applySearchSuggestion;
+window.selectSearchResult = selectSearchResult;
+window.initializeSearch = initializeSearch;
 
