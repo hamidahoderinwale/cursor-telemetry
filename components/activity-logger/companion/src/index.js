@@ -1487,10 +1487,11 @@ app.post('/api/chat/query', async (req, res) => {
     console.log('💬 Chat query:', query);
     
     // Gather telemetry data
+    const allEntries = await persistentDB.getAllEntries();
     const telemetryData = {
-      events: await persistentDB.getAllEntries(),
+      events: allEntries,
       prompts: db.prompts || [],
-      sessions: Object.keys(sessions).map(id => ({ id, ...sessions[id] })),
+      sessions: [], // Session data structure to be implemented
       files: db.entries || []
     };
     
