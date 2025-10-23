@@ -412,6 +412,9 @@ function renderCurrentView() {
     case 'filegraph':
       renderFileGraphView(container);
       break;
+    case 'navigator':
+      renderNavigatorView(container);
+      break;
     case 'system':
       renderSystemView(container);
       break;
@@ -945,31 +948,6 @@ function renderAnalyticsView(container) {
         </div>
       </div>
 
-      <!-- AI Usage: Interface & Model -->
-      <div class="card">
-        <div class="card-header">
-          <h3 class="card-title">AI Usage: Interface & Model Distribution</h3>
-          <p class="card-subtitle">How you interact (Agent/Composer/Tab/Chat) and which AI models power them (Claude Sonnet, GPT-4, etc.)</p>
-        </div>
-        <div class="card-body">
-          <div style="display: flex; gap: var(--space-sm); margin-bottom: var(--space-md); align-items: center;">
-            <label style="display: flex; align-items: center; gap: var(--space-xs); font-size: var(--text-sm);">
-              <input type="radio" name="aiUsageView" value="interface" checked onchange="renderAIUsageChart()">
-              <span>By Interface</span>
-            </label>
-            <label style="display: flex; align-items: center; gap: var(--space-xs); font-size: var(--text-sm);">
-              <input type="radio" name="aiUsageView" value="model" onchange="renderAIUsageChart()">
-              <span>By Model</span>
-            </label>
-            <label style="display: flex; align-items: center; gap: var(--space-xs); font-size: var(--text-sm);">
-              <input type="radio" name="aiUsageView" value="combined" onchange="renderAIUsageChart()">
-              <span>Combined View</span>
-            </label>
-          </div>
-          <canvas id="aiUsageChart" style="max-height: 300px;"></canvas>
-        </div>
-      </div>
-
       <!-- Continuous Activity Timeline -->
       <div class="card">
         <div class="card-header">
@@ -1010,7 +988,6 @@ function renderAnalyticsView(container) {
   setTimeout(() => {
     renderAIActivityChart();
     renderPromptTokensChart();
-    renderAIUsageChart();
     renderActivityChart();
     renderFileTypesChart();
     renderHourlyChart();
@@ -1384,6 +1361,18 @@ function renderFileGraphView(container) {
         </div>
 
         <div class="control-group">
+          <label>Clustering:</label>
+          <select id="clusteringAlgorithm" onchange="updateFileGraph()">
+            <option value="none">None</option>
+            <option value="fileType">By File Type</option>
+            <option value="workspace">By Workspace</option>
+            <option value="directory">By Directory</option>
+            <option value="similarity">By Similarity</option>
+            <option value="community">Community Detection</option>
+          </select>
+        </div>
+
+        <div class="control-group">
           <label style="display: flex; align-items: center; gap: 4px;">
             Threshold: <span id="thresholdValue">0.2</span>
             <span title="Minimum similarity score (0-1) required to show connections between files. Higher values show only strongly related files." style="color: var(--color-text-muted); font-size: 12px; cursor: help;">ⓘ</span>
@@ -1403,7 +1392,17 @@ function renderFileGraphView(container) {
         <div class="control-actions">
           <button class="btn btn-primary" onclick="updateFileGraph()" style="font-size: 13px; padding: 6px 12px;">Refresh</button>
           <button class="btn btn-secondary" onclick="resetFileGraphZoom()" style="font-size: 13px; padding: 6px 12px;">Reset View</button>
+          <button class="btn btn-secondary" onclick="zoomToFit()" style="font-size: 13px; padding: 6px 12px;">Zoom to Fit</button>
+          <button class="btn btn-secondary" onclick="toggleLabels()" style="font-size: 13px; padding: 6px 12px;" id="labelToggle">Hide Labels</button>
         </div>
+      </div>
+      
+      <!-- Search & Navigation Panel -->
+      <div style="padding: var(--space-md); background: var(--color-bg-alt); border-radius: var(--radius-lg); margin-bottom: var(--space-md);">
+        <input type="text" id="fileSearch" placeholder="Search files by name..." 
+               style="width: 100%; padding: var(--space-sm); background: var(--color-bg); border: 1px solid var(--color-border); border-radius: var(--radius-md); color: var(--color-text); font-size: var(--text-sm);"
+               oninput="filterGraphNodes(this.value)">
+        <div id="fileSearchResults" style="margin-top: var(--space-sm); max-height: 120px; overflow-y: auto;"></div>
       </div>
 
       <div class="graph-container" id="fileGraphContainer" style="width: 100%; height: 600px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg); position: relative;">
@@ -1426,6 +1425,31 @@ function renderFileGraphView(container) {
         <div class="stat-item">
           <span class="stat-label">AI Prompts:</span>
           <span class="stat-value" id="graphPromptCount">0</span>
+        </div>
+      </div>
+      
+      <!-- Most Similar File Pairs -->
+      <div class="card" style="margin-top: var(--space-lg);">
+        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <h3 class="card-title">Most Similar File Pairs</h3>
+            <p class="card-subtitle">Files frequently modified together with highest co-occurrence scores</p>
+          </div>
+          <div style="display: flex; gap: var(--space-sm); align-items: center;">
+            <label style="font-size: var(--text-sm); color: var(--color-text-muted);">Show:</label>
+            <select id="similarPairsCount" onchange="updateSimilarPairs()" style="padding: 4px 8px; border-radius: 4px; border: 1px solid var(--color-border); background: var(--color-bg); color: var(--color-text); font-size: 13px;">
+              <option value="5">Top 5</option>
+              <option value="10" selected>Top 10</option>
+              <option value="15">Top 15</option>
+              <option value="20">Top 20</option>
+            </select>
+            <button onclick="highlightSimilarPairs()" class="btn-secondary" style="font-size: 13px; padding: 6px 12px;">Highlight in Graph</button>
+          </div>
+        </div>
+        <div class="card-body">
+          <div id="similarFilePairs" style="display: grid; gap: var(--space-md);">
+            <!-- Will be populated by JavaScript -->
+          </div>
         </div>
       </div>
 
@@ -1702,17 +1726,30 @@ async function initializeD3FileGraph() {
     const selectedTypes = Array.from(fileTypeFilter?.selectedOptions || []).map(o => o.value);
     const allowedExts = selectedTypes.length > 0 ? selectedTypes : allExts;
     
+    // Helper function to check if a string is a Git object hash (40-char hex)
+    const isGitObjectHash = (str) => /^[0-9a-f]{40}$/i.test(str);
+    
+    // Helper function to get a meaningful file name
+    const getMeaningfulName = (file) => {
+      // If the name itself is a Git hash, try to extract from path
+      if (isGitObjectHash(file.name)) {
+        const pathParts = file.path.split('/');
+        // Find a non-hash part of the path
+        for (let i = pathParts.length - 1; i >= 0; i--) {
+          if (!isGitObjectHash(pathParts[i]) && pathParts[i].length > 0) {
+            return pathParts[i];
+          }
+        }
+        return 'Git object';
+      }
+      return file.name;
+    };
+    
     // Filter files by selected extensions (with Git grouping support)
     const files = data.files
       .filter(f => {
-        // Filter out Git object hashes (40-char hex strings)
-        if (f.name && /^[a-f0-9]{40}$/i.test(f.name)) {
-          console.log(`⏭️  Skipping Git object hash: ${f.name}`);
-          return false;
-        }
-        
-        // Filter out files with no proper name
-        if (!f.name || f.name.length < 2) {
+        // Filter out Git object hashes (40-character hex strings in .git/objects/)
+        if (f.path && f.path.includes('.git/objects/') && isGitObjectHash(f.name)) {
           return false;
         }
         
@@ -1735,15 +1772,19 @@ async function initializeD3FileGraph() {
           }
         });
         
-        // Extract workspace/directory from path for grouping
+        // Get meaningful display name
+        const displayName = getMeaningfulName(f);
+        
+        // Extract workspace and directory for hierarchical grouping
         const pathParts = f.path.split('/');
-        const workspace = pathParts.length > 2 ? pathParts[0] : 'root';
+        const workspace = pathParts[0] || 'Unknown';
         const directory = pathParts.length > 2 ? pathParts.slice(0, -1).join('/') : workspace;
         
         return {
           id: f.path,
           path: f.path,
-          name: f.name,
+          name: displayName,  // Use meaningful name instead of hash
+          originalName: f.name,  // Keep original for reference
           ext: f.ext,
           content: f.content,
           changes: f.changes || 0,
@@ -1819,6 +1860,9 @@ async function initializeD3FileGraph() {
       const avgSim = links.reduce((sum, l) => sum + l.similarity, 0) / links.length;
       document.getElementById('graphAvgSimilarity').textContent = avgSim.toFixed(3);
     }
+    
+    // Render most similar file pairs
+    renderSimilarFilePairs(links, files);
     
     // Update embeddings analysis (now uses prompts, excluding composer conversations which are just names)
     const validPrompts = (state.data.prompts || []).filter(p => {
@@ -2314,96 +2358,178 @@ function renderD3FileGraph(container, nodes, links) {
   const width = container.clientWidth || 800;
   const height = container.clientHeight || 600;
   
-  // Get unique workspaces/directories for color assignment
-  const uniqueWorkspaces = [...new Set(nodes.map(n => n.workspace))];
-  const workspaceColorMap = {};
-  const workspaceColors = ['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#14b8a6', '#f43f5e'];
-  uniqueWorkspaces.forEach((ws, i) => {
-    workspaceColorMap[ws] = workspaceColors[i % workspaceColors.length];
-  });
+  // Get clustering algorithm
+  const clusterAlgorithm = document.getElementById('clusteringAlgorithm')?.value || 'none';
   
-  // Create SVG
+  // Apply clustering
+  const clusters = applyClustering(nodes, links, clusterAlgorithm);
+  
+  // Create SVG with zoom support
   const svg = d3.select(container)
     .append('svg')
     .attr('width', width)
     .attr('height', height)
     .style('background', 'var(--color-bg)');
   
-  // Add legend for workspaces
-  const legend = svg.append('g')
-    .attr('class', 'legend')
-    .attr('transform', `translate(20, 20)`);
+  // Add zoom behavior
+  const g = svg.append('g');
   
-  legend.append('text')
-    .text('Workspaces:')
-    .attr('x', 0)
-    .attr('y', 0)
-    .attr('font-size', '12px')
-    .attr('font-weight', 'bold')
-    .attr('fill', 'var(--color-text)');
+  const zoom = d3.zoom()
+    .scaleExtent([0.1, 4])
+    .on('zoom', (event) => {
+      g.attr('transform', event.transform);
+    });
   
-  uniqueWorkspaces.forEach((ws, i) => {
-    const legendItem = legend.append('g')
-      .attr('transform', `translate(0, ${(i + 1) * 20})`);
+  svg.call(zoom);
+  
+  // Store zoom behavior for external access
+  window.graphZoom = zoom;
+  window.graphSvg = svg;
+  window.graphG = g;
+  
+  // Create cluster hulls if clustering is enabled
+  if (clusters.length > 0) {
+    const hull = g.append('g')
+      .attr('class', 'cluster-hulls')
+      .selectAll('path')
+      .data(clusters)
+      .join('path')
+      .attr('fill', d => d.color)
+      .attr('fill-opacity', 0.15)
+      .attr('stroke', d => d.color)
+      .attr('stroke-width', 2)
+      .attr('stroke-dasharray', '5,5');
     
-    legendItem.append('circle')
-      .attr('cx', 8)
-      .attr('cy', 0)
-      .attr('r', 6)
-      .attr('fill', workspaceColorMap[ws]);
-    
-    legendItem.append('text')
-      .text(ws)
-      .attr('x', 20)
-      .attr('y', 4)
-      .attr('font-size', '11px')
-      .attr('fill', 'var(--color-text)');
-  });
+    // Add cluster labels
+    const clusterLabels = g.append('g')
+      .attr('class', 'cluster-labels')
+      .selectAll('text')
+      .data(clusters)
+      .join('text')
+      .text(d => `${d.name} (${d.nodes.length})`)
+      .attr('font-size', '14px')
+      .attr('font-weight', 'bold')
+      .attr('fill', d => d.color)
+      .attr('text-anchor', 'middle')
+      .style('pointer-events', 'none');
+  }
   
-  // Create simulation
-  const simulation = d3.forceSimulation(nodes)
-    .force('link', d3.forceLink(links).id(d => d.id).distance(100))
-    .force('charge', d3.forceManyBody().strength(-300))
-    .force('center', d3.forceCenter(width / 2, height / 2))
-    .force('collision', d3.forceCollide().radius(30));
+  // Get layout algorithm
+  const layoutAlgorithm = document.getElementById('layoutAlgorithm')?.value || 'force';
+  
+  // Create simulation based on layout
+  let simulation;
+  if (layoutAlgorithm === 'force') {
+    simulation = d3.forceSimulation(nodes)
+      .force('link', d3.forceLink(links).id(d => d.id).distance(d => {
+        // Shorter links for same cluster
+        if (d.source.cluster === d.target.cluster) return 50;
+        return 150;
+      }))
+      .force('charge', d3.forceManyBody().strength(-400))
+      .force('center', d3.forceCenter(width / 2, height / 2))
+      .force('collision', d3.forceCollide().radius(35))
+      .force('cluster', forceCluster(clusters));
+  } else if (layoutAlgorithm === 'circular') {
+    // Circular layout
+    const radius = Math.min(width, height) / 2 - 100;
+    nodes.forEach((d, i) => {
+      const angle = (i / nodes.length) * 2 * Math.PI;
+      d.x = width / 2 + radius * Math.cos(angle);
+      d.y = height / 2 + radius * Math.sin(angle);
+    });
+    simulation = d3.forceSimulation(nodes)
+      .force('link', d3.forceLink(links).id(d => d.id).distance(100))
+      .force('collision', d3.forceCollide().radius(35));
+  } else if (layoutAlgorithm === 'radial') {
+    // Radial layout - cluster-based
+    const angleStep = (2 * Math.PI) / clusters.length;
+    clusters.forEach((cluster, i) => {
+      const angle = i * angleStep;
+      const clusterRadius = Math.min(width, height) / 3;
+      const centerX = width / 2 + clusterRadius * Math.cos(angle);
+      const centerY = height / 2 + clusterRadius * Math.sin(angle);
+      
+      cluster.nodes.forEach((node, j) => {
+        const nodeAngle = (j / cluster.nodes.length) * 2 * Math.PI;
+        const nodeRadius = 50;
+        node.x = centerX + nodeRadius * Math.cos(nodeAngle);
+        node.y = centerY + nodeRadius * Math.sin(nodeAngle);
+      });
+    });
+    simulation = d3.forceSimulation(nodes)
+      .force('link', d3.forceLink(links).id(d => d.id).distance(80))
+      .force('collision', d3.forceCollide().radius(35));
+  }
   
   // Create links
-  const link = svg.append('g')
+  const link = g.append('g')
+    .attr('class', 'links')
     .selectAll('line')
     .data(links)
     .join('line')
-    .attr('stroke', '#64748b')
-    .attr('stroke-opacity', d => d.similarity * 0.8)
-    .attr('stroke-width', d => Math.max(1, d.similarity * 4));
+    .attr('stroke', d => {
+      // Highlight intra-cluster links
+      if (d.source.cluster === d.target.cluster) {
+        const cluster = clusters.find(c => c.id === d.source.cluster);
+        return cluster ? cluster.color : '#64748b';
+      }
+      return '#64748b';
+    })
+    .attr('stroke-opacity', d => d.similarity * 0.6)
+    .attr('stroke-width', d => Math.max(1, d.similarity * 3));
   
   // Create nodes
-  const node = svg.append('g')
+  const node = g.append('g')
+    .attr('class', 'nodes')
     .selectAll('g')
     .data(nodes)
     .join('g')
+    .attr('class', 'node')
     .call(d3.drag()
       .on('start', dragstarted)
       .on('drag', dragged)
       .on('end', dragended))
-    .on('click', (event, d) => showFileInfo(d))
+    .on('click', (event, d) => {
+      event.stopPropagation();
+      highlightConnections(d, node, link);
+      showFileInfo(d);
+    })
+    .on('mouseenter', (event, d) => {
+      highlightConnections(d, node, link);
+    })
+    .on('mouseleave', () => {
+      clearHighlights(node, link);
+    })
     .style('cursor', 'pointer');
   
-  // Add circles to nodes (colored by workspace)
+  // Add circles to nodes
   node.append('circle')
-    .attr('r', d => Math.max(8, Math.min(20, Math.sqrt(d.changes) * 3)))
-    .attr('fill', d => workspaceColorMap[d.workspace] || getFileTypeColor(d.ext))
+    .attr('r', d => {
+      const baseSize = Math.max(8, Math.min(20, Math.sqrt(d.changes) * 3));
+      return baseSize;
+    })
+    .attr('fill', d => {
+      // Use cluster color if clustered
+      if (d.cluster && clusters.length > 0) {
+        const cluster = clusters.find(c => c.id === d.cluster);
+        return cluster ? cluster.color : getFileTypeColor(d.ext);
+      }
+      return getFileTypeColor(d.ext);
+    })
     .attr('stroke', '#fff')
     .attr('stroke-width', 2)
-    .attr('opacity', 0.9);
+    .attr('class', 'node-circle');
   
   // Add labels to nodes
-  node.append('text')
+  const labels = node.append('text')
     .text(d => d.name)
     .attr('x', 0)
     .attr('y', -25)
     .attr('text-anchor', 'middle')
     .attr('font-size', '11px')
     .attr('fill', 'var(--color-text)')
+    .attr('class', 'node-label')
     .style('pointer-events', 'none');
   
   // Add change count badge
@@ -2415,10 +2541,34 @@ function renderD3FileGraph(container, nodes, links) {
     .attr('font-size', '10px')
     .attr('font-weight', 'bold')
     .attr('fill', '#fff')
+    .attr('class', 'node-badge')
     .style('pointer-events', 'none');
+  
+  // Store for toggle function
+  window.graphLabels = labels;
+  window.labelsVisible = true;
   
   // Update positions on tick
   simulation.on('tick', () => {
+    // Update cluster hulls
+    if (clusters.length > 0) {
+      g.selectAll('.cluster-hulls path')
+        .attr('d', d => {
+          const points = d.nodes.map(n => [n.x, n.y]);
+          return convexHull(points);
+        });
+      
+      g.selectAll('.cluster-labels text')
+        .attr('x', d => {
+          const xs = d.nodes.map(n => n.x);
+          return d3.mean(xs);
+        })
+        .attr('y', d => {
+          const ys = d.nodes.map(n => n.y);
+          return d3.min(ys) - 30;
+        });
+    }
+    
     link
       .attr('x1', d => d.source.x)
       .attr('y1', d => d.source.y)
@@ -2427,6 +2577,11 @@ function renderD3FileGraph(container, nodes, links) {
     
     node.attr('transform', d => `translate(${d.x},${d.y})`);
   });
+  
+  // Store nodes and links for external access
+  window.graphNodes = node;
+  window.graphLinks = link;
+  window.graphSimulation = simulation;
   
   // Drag functions
   function dragstarted(event, d) {
@@ -2442,9 +2597,710 @@ function renderD3FileGraph(container, nodes, links) {
   
   function dragended(event, d) {
     if (!event.active) simulation.alphaTarget(0);
-    d.fx = null;
-    d.fy = null;
+    // Keep node pinned on release
+    // d.fx = null;
+    // d.fy = null;
   }
+  
+  // Highlight connected nodes
+  function highlightConnections(d, nodes, links) {
+    const connectedIds = new Set();
+    links.each(function(l) {
+      if (l.source.id === d.id) connectedIds.add(l.target.id);
+      if (l.target.id === d.id) connectedIds.add(l.source.id);
+    });
+    
+    nodes.selectAll('.node-circle')
+      .attr('opacity', n => n.id === d.id || connectedIds.has(n.id) ? 1 : 0.2);
+    
+    links
+      .attr('opacity', l => l.source.id === d.id || l.target.id === d.id ? 1 : 0.1)
+      .attr('stroke-width', l => {
+        if (l.source.id === d.id || l.target.id === d.id) {
+          return Math.max(2, l.similarity * 5);
+        }
+        return Math.max(1, l.similarity * 3);
+      });
+  }
+  
+  function clearHighlights(nodes, links) {
+    nodes.selectAll('.node-circle').attr('opacity', 1);
+    links
+      .attr('opacity', 1)
+      .attr('stroke-width', d => Math.max(1, d.similarity * 3));
+  }
+}
+
+// Clustering algorithms
+function applyClustering(nodes, links, algorithm) {
+  if (algorithm === 'none') {
+    return [];
+  }
+  
+  const clusters = [];
+  const clusterColors = [
+    '#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', 
+    '#10b981', '#3b82f6', '#ef4444', '#14b8a6'
+  ];
+  
+  if (algorithm === 'fileType') {
+    const fileTypes = {};
+    nodes.forEach(node => {
+      if (!fileTypes[node.ext]) {
+        fileTypes[node.ext] = [];
+      }
+      fileTypes[node.ext].push(node);
+      node.cluster = node.ext;
+    });
+    
+    Object.keys(fileTypes).forEach((type, i) => {
+      clusters.push({
+        id: type,
+        name: type.toUpperCase(),
+        nodes: fileTypes[type],
+        color: clusterColors[i % clusterColors.length]
+      });
+    });
+  } else if (algorithm === 'workspace') {
+    const workspaces = {};
+    nodes.forEach(node => {
+      const ws = node.workspace || 'unknown';
+      if (!workspaces[ws]) {
+        workspaces[ws] = [];
+      }
+      workspaces[ws].push(node);
+      node.cluster = ws;
+    });
+    
+    Object.keys(workspaces).forEach((ws, i) => {
+      clusters.push({
+        id: ws,
+        name: ws.split('/').pop() || ws,
+        nodes: workspaces[ws],
+        color: clusterColors[i % clusterColors.length]
+      });
+    });
+  } else if (algorithm === 'directory') {
+    const directories = {};
+    nodes.forEach(node => {
+      const dir = node.directory || node.path.split('/').slice(0, -1).join('/') || 'root';
+      if (!directories[dir]) {
+        directories[dir] = [];
+      }
+      directories[dir].push(node);
+      node.cluster = dir;
+    });
+    
+    Object.keys(directories).forEach((dir, i) => {
+      clusters.push({
+        id: dir,
+        name: dir.split('/').pop() || dir,
+        nodes: directories[dir],
+        color: clusterColors[i % clusterColors.length]
+      });
+    });
+  } else if (algorithm === 'similarity') {
+    // K-means style clustering based on link similarity
+    const k = Math.min(5, Math.ceil(nodes.length / 10));
+    const assignments = kMeansClustering(nodes, links, k);
+    
+    for (let i = 0; i < k; i++) {
+      const clusterNodes = nodes.filter((_, idx) => assignments[idx] === i);
+      if (clusterNodes.length > 0) {
+        clusterNodes.forEach(n => n.cluster = `cluster-${i}`);
+        clusters.push({
+          id: `cluster-${i}`,
+          name: `Cluster ${i + 1}`,
+          nodes: clusterNodes,
+          color: clusterColors[i % clusterColors.length]
+        });
+      }
+    }
+  } else if (algorithm === 'community') {
+    // Simple community detection using modularity
+    const communities = detectCommunities(nodes, links);
+    communities.forEach((community, i) => {
+      community.forEach(n => n.cluster = `community-${i}`);
+      clusters.push({
+        id: `community-${i}`,
+        name: `Community ${i + 1}`,
+        nodes: community,
+        color: clusterColors[i % clusterColors.length]
+      });
+    });
+  }
+  
+  return clusters;
+}
+
+function kMeansClustering(nodes, links, k) {
+  // Simple k-means based on connectivity
+  const n = nodes.length;
+  const assignments = new Array(n).fill(0);
+  
+  // Initialize random centroids
+  const centroids = [];
+  for (let i = 0; i < k; i++) {
+    centroids.push(Math.floor(Math.random() * n));
+  }
+  
+  // Iterate a few times
+  for (let iter = 0; iter < 10; iter++) {
+    // Assign nodes to nearest centroid
+    for (let i = 0; i < n; i++) {
+      let minDist = Infinity;
+      let bestCluster = 0;
+      
+      for (let c = 0; c < k; c++) {
+        const centroidNode = nodes[centroids[c]];
+        const link = links.find(l => 
+          (l.source.id === nodes[i].id && l.target.id === centroidNode.id) ||
+          (l.target.id === nodes[i].id && l.source.id === centroidNode.id)
+        );
+        
+        const dist = link ? (1 - link.similarity) : 1;
+        if (dist < minDist) {
+          minDist = dist;
+          bestCluster = c;
+        }
+      }
+      
+      assignments[i] = bestCluster;
+    }
+    
+    // Update centroids
+    for (let c = 0; c < k; c++) {
+      const clusterNodes = nodes.filter((_, i) => assignments[i] === c);
+      if (clusterNodes.length > 0) {
+        // Find most connected node in cluster
+        let maxConnections = -1;
+        let bestIdx = 0;
+        clusterNodes.forEach(node => {
+          const connections = links.filter(l => 
+            l.source.id === node.id || l.target.id === node.id
+          ).length;
+          if (connections > maxConnections) {
+            maxConnections = connections;
+            bestIdx = nodes.indexOf(node);
+          }
+        });
+        centroids[c] = bestIdx;
+      }
+    }
+  }
+  
+  return assignments;
+}
+
+function detectCommunities(nodes, links) {
+  // Simple greedy modularity-based community detection
+  const communities = nodes.map(n => [n]);
+  
+  // Merge communities that increase modularity
+  for (let iter = 0; iter < 5; iter++) {
+    let bestMerge = null;
+    let bestModularity = -Infinity;
+    
+    for (let i = 0; i < communities.length; i++) {
+      for (let j = i + 1; j < communities.length; j++) {
+        const modularity = calculateModularity(communities[i], communities[j], links);
+        if (modularity > bestModularity) {
+          bestModularity = modularity;
+          bestMerge = [i, j];
+        }
+      }
+    }
+    
+    if (bestMerge && bestModularity > 0) {
+      const [i, j] = bestMerge;
+      communities[i] = [...communities[i], ...communities[j]];
+      communities.splice(j, 1);
+    } else {
+      break;
+    }
+  }
+  
+  return communities.filter(c => c.length > 0);
+}
+
+function calculateModularity(community1, community2, links) {
+  // Calculate links within merged community vs expected
+  const merged = [...community1, ...community2];
+  const mergedIds = new Set(merged.map(n => n.id));
+  
+  const internalLinks = links.filter(l => 
+    mergedIds.has(l.source.id) && mergedIds.has(l.target.id)
+  ).length;
+  
+  const totalLinks = links.length;
+  const expectedLinks = (merged.length * (merged.length - 1)) / (2 * totalLinks);
+  
+  return internalLinks - expectedLinks;
+}
+
+function forceCluster(clusters) {
+  // Custom force to pull nodes toward cluster centers
+  return (alpha) => {
+    clusters.forEach(cluster => {
+      if (cluster.nodes.length === 0) return;
+      
+      // Calculate cluster center
+      const centerX = d3.mean(cluster.nodes, d => d.x);
+      const centerY = d3.mean(cluster.nodes, d => d.y);
+      
+      // Pull nodes toward center
+      cluster.nodes.forEach(node => {
+        node.vx += (centerX - node.x) * alpha * 0.1;
+        node.vy += (centerY - node.y) * alpha * 0.1;
+      });
+    });
+  };
+}
+
+function convexHull(points) {
+  // Simple convex hull for cluster boundaries
+  if (points.length < 3) return '';
+  
+  // Sort points by x coordinate
+  points.sort((a, b) => a[0] - b[0]);
+  
+  // Build upper hull
+  const upper = [];
+  for (let i = 0; i < points.length; i++) {
+    while (upper.length >= 2) {
+      const m = upper.length;
+      const cross = (upper[m-1][0] - upper[m-2][0]) * (points[i][1] - upper[m-2][1]) -
+                    (upper[m-1][1] - upper[m-2][1]) * (points[i][0] - upper[m-2][0]);
+      if (cross <= 0) break;
+      upper.pop();
+    }
+    upper.push(points[i]);
+  }
+  
+  // Build lower hull
+  const lower = [];
+  for (let i = points.length - 1; i >= 0; i--) {
+    while (lower.length >= 2) {
+      const m = lower.length;
+      const cross = (lower[m-1][0] - lower[m-2][0]) * (points[i][1] - lower[m-2][1]) -
+                    (lower[m-1][1] - lower[m-2][1]) * (points[i][0] - lower[m-2][0]);
+      if (cross <= 0) break;
+      lower.pop();
+    }
+    lower.push(points[i]);
+  }
+  
+  // Remove last point of each half because it's repeated
+  upper.pop();
+  lower.pop();
+  
+  const hull = upper.concat(lower);
+  
+  // Add padding
+  const padding = 40;
+  const centroid = [
+    d3.mean(hull, d => d[0]),
+    d3.mean(hull, d => d[1])
+  ];
+  
+  const paddedHull = hull.map(p => {
+    const dx = p[0] - centroid[0];
+    const dy = p[1] - centroid[1];
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    const scale = (dist + padding) / dist;
+    return [
+      centroid[0] + dx * scale,
+      centroid[1] + dy * scale
+    ];
+  });
+  
+  return 'M' + paddedHull.map(p => p.join(',')).join('L') + 'Z';
+}
+
+// Navigation functions
+function zoomToFit() {
+  if (!window.graphSvg || !window.graphG || !window.graphNodes) return;
+  
+  const svg = window.graphSvg;
+  const g = window.graphG;
+  const zoom = window.graphZoom;
+  
+  // Get bounds of all nodes
+  const nodes = window.graphNodes.data();
+  if (nodes.length === 0) return;
+  
+  const xs = nodes.map(d => d.x);
+  const ys = nodes.map(d => d.y);
+  
+  const minX = Math.min(...xs) - 50;
+  const maxX = Math.max(...xs) + 50;
+  const minY = Math.min(...ys) - 50;
+  const maxY = Math.max(...ys) + 50;
+  
+  const width = parseFloat(svg.attr('width'));
+  const height = parseFloat(svg.attr('height'));
+  
+  const scale = 0.9 * Math.min(width / (maxX - minX), height / (maxY - minY));
+  const translateX = width / 2 - scale * (minX + maxX) / 2;
+  const translateY = height / 2 - scale * (minY + maxY) / 2;
+  
+  svg.transition()
+    .duration(750)
+    .call(zoom.transform, d3.zoomIdentity.translate(translateX, translateY).scale(scale));
+}
+
+function toggleLabels() {
+  if (!window.graphLabels) return;
+  
+  window.labelsVisible = !window.labelsVisible;
+  const button = document.getElementById('labelToggle');
+  
+  if (window.labelsVisible) {
+    window.graphLabels.attr('opacity', 1);
+    if (button) button.textContent = 'Hide Labels';
+  } else {
+    window.graphLabels.attr('opacity', 0);
+    if (button) button.textContent = 'Show Labels';
+  }
+}
+
+function filterGraphNodes(searchTerm) {
+  const resultsDiv = document.getElementById('fileSearchResults');
+  if (!resultsDiv || !window.fileGraphData) return;
+  
+  if (!searchTerm || searchTerm.trim() === '') {
+    resultsDiv.innerHTML = '';
+    // Reset all node highlighting
+    if (window.graphNodes) {
+      window.graphNodes.selectAll('.node-circle').attr('opacity', 1);
+    }
+    return;
+  }
+  
+  const term = searchTerm.toLowerCase();
+  const matches = window.fileGraphData.nodes.filter(n => 
+    n.name.toLowerCase().includes(term) || 
+    n.path.toLowerCase().includes(term)
+  );
+  
+  if (matches.length === 0) {
+    resultsDiv.innerHTML = '<div style="color: var(--color-text-muted); font-size: 12px; padding: var(--space-sm);">No matches found</div>';
+    return;
+  }
+  
+  // Highlight matching nodes
+  if (window.graphNodes) {
+    const matchIds = new Set(matches.map(m => m.id));
+    window.graphNodes.selectAll('.node-circle')
+      .attr('opacity', n => matchIds.has(n.id) ? 1 : 0.2);
+  }
+  
+  // Show results
+  resultsDiv.innerHTML = matches.slice(0, 10).map(match => `
+    <div onclick="focusOnNode('${match.id}')" 
+         style="padding: var(--space-xs); background: var(--color-bg); border-radius: var(--radius-sm); margin-bottom: var(--space-xs); cursor: pointer; font-size: 12px; display: flex; justify-content: space-between; align-items: center;">
+      <span style="font-family: var(--font-mono); color: var(--color-text);">${match.name}</span>
+      <span style="color: var(--color-text-muted); font-size: 11px;">${match.changes} changes</span>
+    </div>
+  `).join('') + (matches.length > 10 ? `<div style="color: var(--color-text-muted); font-size: 11px; padding: var(--space-xs);">+${matches.length - 10} more</div>` : '');
+}
+
+function focusOnNode(nodeId) {
+  if (!window.graphSvg || !window.graphG || !window.graphNodes) return;
+  
+  const node = window.graphNodes.data().find(n => n.id === nodeId);
+  if (!node) return;
+  
+  const svg = window.graphSvg;
+  const zoom = window.graphZoom;
+  const width = parseFloat(svg.attr('width'));
+  const height = parseFloat(svg.attr('height'));
+  
+  // Zoom to node
+  const scale = 1.5;
+  const translateX = width / 2 - scale * node.x;
+  const translateY = height / 2 - scale * node.y;
+  
+  svg.transition()
+    .duration(750)
+    .call(zoom.transform, d3.zoomIdentity.translate(translateX, translateY).scale(scale));
+  
+  // Show node info
+  showFileInfo(node);
+}
+
+// Most Similar File Pairs functionality
+function renderSimilarFilePairs(links, files) {
+  const container = document.getElementById('similarFilePairs');
+  if (!container) return;
+  
+  // Get top count from dropdown
+  const count = parseInt(document.getElementById('similarPairsCount')?.value || '10');
+  
+  // Sort links by similarity and get top pairs
+  const sortedLinks = [...links].sort((a, b) => b.similarity - a.similarity).slice(0, count);
+  
+  if (sortedLinks.length === 0) {
+    container.innerHTML = `
+      <div style="text-align: center; padding: var(--space-xl); color: var(--color-text-muted);">
+        <div style="font-size: 48px; margin-bottom: var(--space-md);">🔗</div>
+        <div style="font-size: var(--text-md); margin-bottom: var(--space-sm);">No Similar Pairs Found</div>
+        <div style="font-size: var(--text-sm);">Modify some files together to see relationships</div>
+      </div>
+    `;
+    return;
+  }
+  
+  // Store for highlighting
+  window.topSimilarPairs = sortedLinks;
+  
+  // Render each pair
+  container.innerHTML = sortedLinks.map((link, index) => {
+    const source = typeof link.source === 'object' ? link.source : files.find(f => f.id === link.source);
+    const target = typeof link.target === 'object' ? link.target : files.find(f => f.id === link.target);
+    
+    if (!source || !target) return '';
+    
+    const sourceName = source.name || source.id.split('/').pop();
+    const targetName = target.name || target.id.split('/').pop();
+    const similarityPercent = (link.similarity * 100).toFixed(1);
+    
+    // Calculate co-modification count
+    const sourceSessions = new Set((source.events || []).map(e => e.session_id).filter(Boolean));
+    const targetSessions = new Set((target.events || []).map(e => e.session_id).filter(Boolean));
+    const sharedSessions = [...sourceSessions].filter(s => targetSessions.has(s)).length;
+    
+    // Get file type colors
+    const sourceColor = getFileTypeColor(source.ext);
+    const targetColor = getFileTypeColor(target.ext);
+    
+    return `
+      <div class="similar-pair-item" data-source="${source.id}" data-target="${target.id}" 
+           style="display: flex; align-items: center; gap: var(--space-md); padding: var(--space-md); background: var(--color-bg-alt); border-radius: var(--radius-md); border: 2px solid transparent; transition: all 0.2s; cursor: pointer;"
+           onmouseenter="highlightPairInGraph('${source.id}', '${target.id}')"
+           onmouseleave="clearGraphHighlights()"
+           onclick="focusOnPair('${source.id}', '${target.id}')">
+        
+        <!-- Rank Badge -->
+        <div style="flex-shrink: 0; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; background: var(--color-primary); color: white; border-radius: 50%; font-weight: bold; font-size: 14px;">
+          ${index + 1}
+        </div>
+        
+        <!-- File Pair Info -->
+        <div style="flex: 1; min-width: 0;">
+          <div style="display: flex; align-items: center; gap: var(--space-sm); margin-bottom: var(--space-xs);">
+            <div style="display: flex; align-items: center; gap: var(--space-xs); flex: 1; min-width: 0;">
+              <span style="width: 8px; height: 8px; border-radius: 50%; background: ${sourceColor}; flex-shrink: 0;"></span>
+              <span style="font-family: var(--font-mono); font-size: var(--text-sm); color: var(--color-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${source.path}">${sourceName}</span>
+            </div>
+            <span style="color: var(--color-text-muted); font-size: var(--text-sm); flex-shrink: 0;">↔</span>
+            <div style="display: flex; align-items: center; gap: var(--space-xs); flex: 1; min-width: 0;">
+              <span style="width: 8px; height: 8px; border-radius: 50%; background: ${targetColor}; flex-shrink: 0;"></span>
+              <span style="font-family: var(--font-mono); font-size: var(--text-sm); color: var(--color-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${target.path}">${targetName}</span>
+            </div>
+          </div>
+          
+          <div style="display: flex; gap: var(--space-md); font-size: var(--text-xs); color: var(--color-text-muted);">
+            <span>${sharedSessions} shared sessions</span>
+            <span>•</span>
+            <span>${source.changes + target.changes} total changes</span>
+          </div>
+        </div>
+        
+        <!-- Similarity Score -->
+        <div style="flex-shrink: 0; text-align: right;">
+          <div style="font-size: var(--text-lg); font-weight: bold; color: var(--color-success);">
+            ${similarityPercent}%
+          </div>
+          <div style="font-size: var(--text-xs); color: var(--color-text-muted);">
+            similarity
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function updateSimilarPairs() {
+  if (!window.fileGraphData) return;
+  renderSimilarFilePairs(window.fileGraphData.links, window.fileGraphData.nodes);
+}
+
+function highlightPairInGraph(sourceId, targetId) {
+  if (!window.graphNodes || !window.graphLinks) return;
+  
+  // Highlight the two nodes
+  window.graphNodes.selectAll('.node-circle')
+    .attr('opacity', n => n.id === sourceId || n.id === targetId ? 1 : 0.2)
+    .attr('stroke-width', n => n.id === sourceId || n.id === targetId ? 4 : 2);
+  
+  // Highlight the link between them
+  window.graphLinks
+    .attr('opacity', l => {
+      const isTargetLink = (l.source.id === sourceId && l.target.id === targetId) ||
+                           (l.source.id === targetId && l.target.id === sourceId);
+      return isTargetLink ? 1 : 0.1;
+    })
+    .attr('stroke-width', l => {
+      const isTargetLink = (l.source.id === sourceId && l.target.id === targetId) ||
+                           (l.source.id === targetId && l.target.id === sourceId);
+      return isTargetLink ? 6 : Math.max(1, l.similarity * 3);
+    })
+    .attr('stroke', l => {
+      const isTargetLink = (l.source.id === sourceId && l.target.id === targetId) ||
+                           (l.source.id === targetId && l.target.id === sourceId);
+      return isTargetLink ? '#10b981' : '#64748b';
+    });
+}
+
+function clearGraphHighlights() {
+  if (!window.graphNodes || !window.graphLinks) return;
+  
+  window.graphNodes.selectAll('.node-circle')
+    .attr('opacity', 1)
+    .attr('stroke-width', 2);
+  
+  window.graphLinks
+    .attr('opacity', 1)
+    .attr('stroke-width', d => Math.max(1, d.similarity * 3))
+    .attr('stroke', d => {
+      if (d.source.cluster === d.target.cluster) {
+        const clusters = window.fileGraphData?.clusters || [];
+        const cluster = clusters.find(c => c.id === d.source.cluster);
+        return cluster ? cluster.color : '#64748b';
+      }
+      return '#64748b';
+    });
+}
+
+function focusOnPair(sourceId, targetId) {
+  if (!window.graphSvg || !window.graphNodes) return;
+  
+  const source = window.graphNodes.data().find(n => n.id === sourceId);
+  const target = window.graphNodes.data().find(n => n.id === targetId);
+  
+  if (!source || !target) return;
+  
+  const svg = window.graphSvg;
+  const zoom = window.graphZoom;
+  const width = parseFloat(svg.attr('width'));
+  const height = parseFloat(svg.attr('height'));
+  
+  // Calculate center point between the two nodes
+  const centerX = (source.x + target.x) / 2;
+  const centerY = (source.y + target.y) / 2;
+  
+  // Calculate distance between nodes
+  const dx = target.x - source.x;
+  const dy = target.y - source.y;
+  const distance = Math.sqrt(dx * dx + dy * dy);
+  
+  // Scale to fit both nodes with some padding
+  const scale = Math.min(2, (Math.min(width, height) * 0.6) / distance);
+  const translateX = width / 2 - scale * centerX;
+  const translateY = height / 2 - scale * centerY;
+  
+  svg.transition()
+    .duration(750)
+    .call(zoom.transform, d3.zoomIdentity.translate(translateX, translateY).scale(scale));
+  
+  // Keep highlight active
+  highlightPairInGraph(sourceId, targetId);
+}
+
+function highlightSimilarPairs() {
+  if (!window.topSimilarPairs || window.topSimilarPairs.length === 0) {
+    alert('No similar pairs to highlight. Generate the graph first.');
+    return;
+  }
+  
+  // Collect all IDs from top pairs
+  const pairIds = new Set();
+  window.topSimilarPairs.forEach(link => {
+    const sourceId = typeof link.source === 'object' ? link.source.id : link.source;
+    const targetId = typeof link.target === 'object' ? link.target.id : link.target;
+    pairIds.add(sourceId);
+    pairIds.add(targetId);
+  });
+  
+  // Highlight nodes in pairs
+  if (window.graphNodes) {
+    window.graphNodes.selectAll('.node-circle')
+      .transition()
+      .duration(300)
+      .attr('opacity', n => pairIds.has(n.id) ? 1 : 0.15)
+      .attr('stroke-width', n => pairIds.has(n.id) ? 4 : 2)
+      .attr('stroke', n => pairIds.has(n.id) ? '#10b981' : '#fff');
+  }
+  
+  // Highlight links in top pairs
+  if (window.graphLinks) {
+    window.graphLinks
+      .transition()
+      .duration(300)
+      .attr('opacity', l => {
+        const sourceId = typeof l.source === 'object' ? l.source.id : l.source;
+        const targetId = typeof l.target === 'object' ? l.target.id : l.target;
+        const isTopPair = window.topSimilarPairs.some(pair => {
+          const pairSourceId = typeof pair.source === 'object' ? pair.source.id : pair.source;
+          const pairTargetId = typeof pair.target === 'object' ? pair.target.id : pair.target;
+          return (sourceId === pairSourceId && targetId === pairTargetId) ||
+                 (sourceId === pairTargetId && targetId === pairSourceId);
+        });
+        return isTopPair ? 1 : 0.1;
+      })
+      .attr('stroke-width', l => {
+        const sourceId = typeof l.source === 'object' ? l.source.id : l.source;
+        const targetId = typeof l.target === 'object' ? l.target.id : l.target;
+        const isTopPair = window.topSimilarPairs.some(pair => {
+          const pairSourceId = typeof pair.source === 'object' ? pair.source.id : pair.source;
+          const pairTargetId = typeof pair.target === 'object' ? pair.target.id : pair.target;
+          return (sourceId === pairSourceId && targetId === pairTargetId) ||
+                 (sourceId === pairTargetId && targetId === pairSourceId);
+        });
+        return isTopPair ? 6 : Math.max(1, l.similarity * 3);
+      })
+      .attr('stroke', l => {
+        const sourceId = typeof l.source === 'object' ? l.source.id : l.source;
+        const targetId = typeof l.target === 'object' ? l.target.id : l.target;
+        const isTopPair = window.topSimilarPairs.some(pair => {
+          const pairSourceId = typeof pair.source === 'object' ? pair.source.id : pair.source;
+          const pairTargetId = typeof pair.target === 'object' ? pair.target.id : pair.target;
+          return (sourceId === pairSourceId && targetId === pairTargetId) ||
+                 (sourceId === pairTargetId && targetId === pairSourceId);
+        });
+        return isTopPair ? '#10b981' : '#64748b';
+      });
+  }
+  
+  // Zoom to fit highlighted nodes
+  setTimeout(() => {
+    if (window.graphSvg && window.graphNodes) {
+      const highlightedNodes = window.graphNodes.data().filter(n => pairIds.has(n.id));
+      if (highlightedNodes.length > 0) {
+        const xs = highlightedNodes.map(d => d.x);
+        const ys = highlightedNodes.map(d => d.y);
+        
+        const minX = Math.min(...xs) - 100;
+        const maxX = Math.max(...xs) + 100;
+        const minY = Math.min(...ys) - 100;
+        const maxY = Math.max(...ys) + 100;
+        
+        const svg = window.graphSvg;
+        const zoom = window.graphZoom;
+        const width = parseFloat(svg.attr('width'));
+        const height = parseFloat(svg.attr('height'));
+        
+        const scale = 0.8 * Math.min(width / (maxX - minX), height / (maxY - minY));
+        const translateX = width / 2 - scale * (minX + maxX) / 2;
+        const translateY = height / 2 - scale * (minY + maxY) / 2;
+        
+        svg.transition()
+          .duration(750)
+          .call(zoom.transform, d3.zoomIdentity.translate(translateX, translateY).scale(scale));
+      }
+    }
+  }, 350);
 }
 
 function getFileTypeColor(ext) {
@@ -2458,6 +3314,768 @@ function getFileTypeColor(ext) {
     'md': '#083fa1'
   };
   return colors[ext] || '#64748b';
+}
+
+// ===================================
+// Navigator Functions (Latent Space)
+// ===================================
+
+// Navigator state
+const navigatorState = {
+  viewMode: 'physical',
+  interpolation: 0.0,
+  transitionSpeed: 1.0,
+  physicalPositions: new Map(),
+  latentPositions: new Map(),
+  nodes: [],
+  links: [],
+  clusters: [],
+  svg: null,
+  simulation: null,
+  labelsVisible: true
+};
+
+async function initializeNavigator() {
+  const container = document.getElementById('navigatorContainer');
+  if (!container) return;
+  
+  try {
+    // Show loading
+    container.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%;"><div class="loading-spinner"></div><span style="margin-left: 12px;">Computing latent embeddings...</span></div>';
+    
+    // Fetch file data
+    const response = await fetch(`${CONFIG.API_BASE}/api/file-contents`);
+    const data = await response.json();
+    
+    if (!data.files || data.files.length === 0) {
+      container.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--color-text-muted);">No file data available</div>';
+      return;
+    }
+    
+    // Helper function to check if a string is a Git object hash (40-char hex)
+    const isGitObjectHash = (str) => /^[0-9a-f]{40}$/i.test(str);
+    
+    // Helper function to get a meaningful file name
+    const getMeaningfulName = (file) => {
+      // If the name itself is a Git hash, try to extract from path
+      if (isGitObjectHash(file.name)) {
+        const pathParts = file.path.split('/');
+        // Find a non-hash part of the path
+        for (let i = pathParts.length - 1; i >= 0; i--) {
+          if (!isGitObjectHash(pathParts[i]) && pathParts[i].length > 0) {
+            return pathParts[i];
+          }
+        }
+        return 'Git object';
+      }
+      return file.name;
+    };
+    
+    // Prepare files with events - filter out Git object hashes
+    const files = data.files
+      .filter(f => {
+        // Filter out Git object hashes
+        if (f.path && f.path.includes('.git/objects/') && isGitObjectHash(f.name)) {
+          return false;
+        }
+        return true;
+      })
+      .map(f => {
+        const relatedEvents = (state.data.events || []).filter(event => {
+          try {
+            const details = typeof event.details === 'string' ? JSON.parse(event.details) : event.details;
+            const filePath = details?.file_path || event.file_path || '';
+            return filePath.includes(f.name) || f.path.includes(filePath);
+          } catch (e) {
+            return false;
+          }
+        });
+        
+        // Get meaningful display name
+        const displayName = getMeaningfulName(f);
+        
+        return {
+          id: f.path,
+          path: f.path,
+          name: displayName,  // Use meaningful name instead of hash
+          originalName: f.name,  // Keep original for reference
+          ext: f.ext,
+          content: f.content,
+          changes: f.changes || 0,
+          lastModified: f.lastModified,
+          size: f.size,
+          events: relatedEvents || []
+        };
+      });
+    
+    // Compute physical positions (co-occurrence based)
+    const { nodes: physicalNodes, links } = computePhysicalLayout(files);
+    
+    // Compute latent positions (semantic similarity based)
+    const latentNodes = computeLatentLayout(files);
+    
+    // Store positions
+    physicalNodes.forEach(n => {
+      navigatorState.physicalPositions.set(n.id, { x: n.x, y: n.y });
+    });
+    
+    latentNodes.forEach(n => {
+      navigatorState.latentPositions.set(n.id, { x: n.x, y: n.y });
+    });
+    
+    // Detect latent clusters
+    navigatorState.clusters = detectLatentClusters(latentNodes, links);
+    
+    // Store data
+    navigatorState.nodes = physicalNodes;
+    navigatorState.links = links;
+    
+    // Render
+    renderNavigator(container, physicalNodes, links);
+    
+    // Render mini-map
+    renderMiniMap();
+    
+    // Update stats
+    updateNavigatorStats();
+    
+    // Generate insights
+    generateSemanticInsights();
+    
+  } catch (error) {
+    console.error('Error initializing navigator:', error);
+    container.innerHTML = `<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--color-error);">Error loading navigator: ${error.message}</div>`;
+  }
+}
+
+function computePhysicalLayout(files) {
+  // Use co-occurrence similarity (same as file graph)
+  const links = [];
+  const threshold = 0.3;
+  
+  for (let i = 0; i < files.length; i++) {
+    for (let j = i + 1; j < files.length; j++) {
+      const file1 = files[i];
+      const file2 = files[j];
+      
+      const sessions1 = new Set((file1.events || []).map(e => e.session_id).filter(Boolean));
+      const sessions2 = new Set((file2.events || []).map(e => e.session_id).filter(Boolean));
+      
+      const intersection = new Set([...sessions1].filter(x => sessions2.has(x)));
+      const union = new Set([...sessions1, ...sessions2]);
+      
+      const similarity = union.size > 0 ? intersection.size / union.size : 0;
+      
+      if (similarity > threshold) {
+        links.push({
+          source: file1.id,
+          target: file2.id,
+          similarity: similarity
+        });
+      }
+    }
+  }
+  
+  // Use force simulation to compute positions
+  const width = 800, height = 700;
+  const tempSimulation = d3.forceSimulation(files)
+    .force('link', d3.forceLink(links).id(d => d.id).distance(100))
+    .force('charge', d3.forceManyBody().strength(-300))
+    .force('center', d3.forceCenter(width / 2, height / 2))
+    .force('collision', d3.forceCollide().radius(30));
+  
+  // Run simulation to completion
+  for (let i = 0; i < 300; i++) {
+    tempSimulation.tick();
+  }
+  
+  tempSimulation.stop();
+  
+  return { nodes: files, links };
+}
+
+function computeLatentLayout(files) {
+  // Compute latent positions using simplified t-SNE/UMAP-like approach
+  // Based on TF-IDF content similarity
+  
+  const width = 800, height = 700;
+  
+  // Create feature vectors
+  const vectors = files.map(file => createFeatureVector(file));
+  
+  // Compute pairwise distances
+  const distances = [];
+  for (let i = 0; i < files.length; i++) {
+    distances[i] = [];
+    for (let j = 0; j < files.length; j++) {
+      distances[i][j] = euclideanDistance(vectors[i], vectors[j]);
+    }
+  }
+  
+  // Apply MDS (Multidimensional Scaling) for 2D projection
+  const positions = applyMDS(distances, 2);
+  
+  // Scale to canvas size
+  const xs = positions.map(p => p[0]);
+  const ys = positions.map(p => p[1]);
+  const minX = Math.min(...xs), maxX = Math.max(...xs);
+  const minY = Math.min(...ys), maxY = Math.max(...ys);
+  
+  const padding = 100;
+  const scaleX = (width - 2 * padding) / (maxX - minX || 1);
+  const scaleY = (height - 2 * padding) / (maxY - minY || 1);
+  
+  return files.map((file, i) => ({
+    ...file,
+    x: padding + (positions[i][0] - minX) * scaleX,
+    y: padding + (positions[i][1] - minY) * scaleY
+  }));
+}
+
+function createFeatureVector(file) {
+  // Create a simple feature vector based on file characteristics
+  const vector = [];
+  
+  // Content-based features (simplified TF-IDF)
+  const words = (file.content || '').toLowerCase().match(/\b\w+\b/g) || [];
+  const wordCounts = {};
+  words.forEach(w => wordCounts[w] = (wordCounts[w] || 0) + 1);
+  
+  // Take top 100 words as features
+  const topWords = Object.entries(wordCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 100);
+  
+  topWords.forEach(([word, count]) => {
+    vector.push(count / words.length); // Normalized frequency
+  });
+  
+  // Structural features
+  vector.push(file.changes / 100); // Normalized changes
+  vector.push(file.events.length / 50); // Normalized event count
+  
+  // Extension one-hot (simplified)
+  const exts = ['js', 'ts', 'py', 'html', 'css', 'json', 'md'];
+  exts.forEach(ext => {
+    vector.push(file.ext === ext ? 1 : 0);
+  });
+  
+  return vector;
+}
+
+function detectLatentClusters(nodes, links) {
+  // Use k-means clustering on latent positions
+  const k = Math.min(5, Math.ceil(nodes.length / 10));
+  const clusters = [];
+  
+  if (nodes.length === 0) return clusters;
+  
+  // Initialize centroids randomly
+  const centroids = [];
+  const used = new Set();
+  for (let i = 0; i < k; i++) {
+    let idx;
+    do {
+      idx = Math.floor(Math.random() * nodes.length);
+    } while (used.has(idx) && used.size < nodes.length);
+    used.add(idx);
+    centroids.push({ x: nodes[idx].x, y: nodes[idx].y });
+  }
+  
+  const clusterColors = [
+    '#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', 
+    '#10b981', '#3b82f6', '#ef4444', '#14b8a6'
+  ];
+  
+  // Run k-means iterations
+  for (let iter = 0; iter < 10; iter++) {
+    // Assign nodes to nearest centroid
+    const assignments = nodes.map(node => {
+      let minDist = Infinity;
+      let cluster = 0;
+      centroids.forEach((c, i) => {
+        const dist = Math.sqrt((node.x - c.x) ** 2 + (node.y - c.y) ** 2);
+        if (dist < minDist) {
+          minDist = dist;
+          cluster = i;
+        }
+      });
+      return cluster;
+    });
+    
+    // Update centroids
+    for (let i = 0; i < k; i++) {
+      const clusterNodes = nodes.filter((_, idx) => assignments[idx] === i);
+      if (clusterNodes.length > 0) {
+        centroids[i] = {
+          x: d3.mean(clusterNodes, d => d.x),
+          y: d3.mean(clusterNodes, d => d.y)
+        };
+      }
+    }
+  }
+  
+  // Final assignment
+  const assignments = nodes.map(node => {
+    let minDist = Infinity;
+    let cluster = 0;
+    centroids.forEach((c, i) => {
+      const dist = Math.sqrt((node.x - c.x) ** 2 + (node.y - c.y) ** 2);
+      if (dist < minDist) {
+        minDist = dist;
+        cluster = i;
+      }
+    });
+    return cluster;
+  });
+  
+  // Create cluster objects
+  for (let i = 0; i < k; i++) {
+    const clusterNodes = nodes.filter((_, idx) => assignments[idx] === i);
+    if (clusterNodes.length > 0) {
+      clusterNodes.forEach(n => n.cluster = `latent-${i}`);
+      clusters.push({
+        id: `latent-${i}`,
+        name: `Cluster ${i + 1}`,
+        nodes: clusterNodes,
+        color: clusterColors[i % clusterColors.length],
+        centroid: centroids[i]
+      });
+    }
+  }
+  
+  return clusters;
+}
+
+function renderNavigator(container, nodes, links) {
+  container.innerHTML = '';
+  
+  const width = container.clientWidth || 800;
+  const height = container.clientHeight || 700;
+  
+  // Create SVG
+  const svg = d3.select(container)
+    .append('svg')
+    .attr('width', width)
+    .attr('height', height)
+    .style('background', 'var(--color-bg)');
+  
+  const g = svg.append('g');
+  
+  // Add zoom
+  const zoom = d3.zoom()
+    .scaleExtent([0.1, 4])
+    .on('zoom', (event) => {
+      g.attr('transform', event.transform);
+      updateMiniMapViewport();
+    });
+  
+  svg.call(zoom);
+  
+  navigatorState.svg = svg;
+  navigatorState.zoom = zoom;
+  navigatorState.g = g;
+  
+  // Create links
+  const link = g.append('g')
+    .selectAll('line')
+    .data(links)
+    .join('line')
+    .attr('stroke', '#64748b')
+    .attr('stroke-opacity', 0.3)
+    .attr('stroke-width', d => Math.max(1, d.similarity * 2));
+  
+  // Create nodes
+  const node = g.append('g')
+    .selectAll('g')
+    .data(nodes)
+    .join('g')
+    .attr('class', 'nav-node')
+    .call(d3.drag()
+      .on('start', dragstarted)
+      .on('drag', dragged)
+      .on('end', dragended))
+    .on('click', (event, d) => showFileInfo(d))
+    .style('cursor', 'pointer');
+  
+  node.append('circle')
+    .attr('r', d => Math.max(6, Math.min(15, Math.sqrt(d.changes) * 2)))
+    .attr('fill', d => {
+      if (d.cluster && navigatorState.clusters.length > 0) {
+        const cluster = navigatorState.clusters.find(c => c.id === d.cluster);
+        return cluster ? cluster.color : getFileTypeColor(d.ext);
+      }
+      return getFileTypeColor(d.ext);
+    })
+    .attr('stroke', '#fff')
+    .attr('stroke-width', 2)
+    .attr('class', 'nav-node-circle');
+  
+  const labels = node.append('text')
+    .text(d => d.name)
+    .attr('x', 0)
+    .attr('y', -20)
+    .attr('text-anchor', 'middle')
+    .attr('font-size', '10px')
+    .attr('fill', 'var(--color-text)')
+    .attr('class', 'nav-node-label')
+    .style('pointer-events', 'none');
+  
+  navigatorState.labels = labels;
+  navigatorState.nodeElements = node;
+  navigatorState.linkElements = link;
+  
+  // Update positions
+  updateNodePositions();
+  
+  function dragstarted(event, d) {
+    d.fx = d.x;
+    d.fy = d.y;
+  }
+  
+  function dragged(event, d) {
+    d.fx = event.x;
+    d.fy = event.y;
+    updateNodePositions();
+  }
+  
+  function dragended(event, d) {
+    d.fx = null;
+    d.fy = null;
+  }
+}
+
+function setNavigatorViewMode(mode) {
+  navigatorState.viewMode = mode;
+  
+  // Update button states
+  document.querySelectorAll('.view-mode-btn').forEach(btn => {
+    btn.classList.remove('active');
+  });
+  document.querySelector(`.view-mode-btn[data-mode="${mode}"]`)?.classList.add('active');
+  
+  // Set interpolation
+  const targetInterpolation = {
+    'physical': 0.0,
+    'hybrid': 0.5,
+    'latent': 1.0
+  }[mode];
+  
+  // Animate transition
+  animateInterpolation(navigatorState.interpolation, targetInterpolation);
+}
+
+function animateInterpolation(from, to) {
+  const duration = 1000 / navigatorState.transitionSpeed;
+  const startTime = Date.now();
+  
+  const animate = () => {
+    const elapsed = Date.now() - startTime;
+    const t = Math.min(elapsed / duration, 1);
+    const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; // easeInOutQuad
+    
+    navigatorState.interpolation = from + (to - from) * eased;
+    
+    // Update visualization
+    updateNodePositions();
+    updateInterpolationDisplay();
+    
+    if (t < 1) {
+      requestAnimationFrame(animate);
+    }
+  };
+  
+  animate();
+}
+
+function updateNodePositions() {
+  if (!navigatorState.nodeElements || !navigatorState.linkElements) return;
+  
+  const t = navigatorState.interpolation;
+  
+  // Interpolate positions
+  navigatorState.nodes.forEach(node => {
+    const phys = navigatorState.physicalPositions.get(node.id);
+    const lat = navigatorState.latentPositions.get(node.id);
+    
+    if (phys && lat) {
+      node.x = phys.x * (1 - t) + lat.x * t;
+      node.y = phys.y * (1 - t) + lat.y * t;
+    }
+  });
+  
+  // Update D3 elements
+  navigatorState.nodeElements.attr('transform', d => `translate(${d.x},${d.y})`);
+  
+  navigatorState.linkElements
+    .attr('x1', d => {
+      const source = navigatorState.nodes.find(n => n.id === d.source || n.id === d.source.id);
+      return source ? source.x : 0;
+    })
+    .attr('y1', d => {
+      const source = navigatorState.nodes.find(n => n.id === d.source || n.id === d.source.id);
+      return source ? source.y : 0;
+    })
+    .attr('x2', d => {
+      const target = navigatorState.nodes.find(n => n.id === d.target || n.id === d.target.id);
+      return target ? target.x : 0;
+    })
+    .attr('y2', d => {
+      const target = navigatorState.nodes.find(n => n.id === d.target || n.id === d.target.id);
+      return target ? target.y : 0;
+    });
+  
+  // Update mini-map
+  updateMiniMapViewport();
+}
+
+function updateInterpolationDisplay() {
+  const percent = Math.round(navigatorState.interpolation * 100);
+  const el = document.getElementById('interpolationValue');
+  if (el) {
+    el.textContent = `${percent}%`;
+  }
+}
+
+function updateTransitionSpeed(value) {
+  navigatorState.transitionSpeed = parseFloat(value);
+  const el = document.getElementById('speedLabel');
+  if (el) {
+    el.textContent = `${value}x`;
+  }
+}
+
+function renderMiniMap() {
+  const container = document.getElementById('miniMapCanvas');
+  if (!container) return;
+  
+  container.innerHTML = '';
+  
+  const width = container.clientWidth;
+  const height = 180;
+  const scale = 0.2;
+  
+  const svg = d3.select(container)
+    .append('svg')
+    .attr('width', width)
+    .attr('height', height);
+  
+  // Render simplified nodes
+  svg.selectAll('circle')
+    .data(navigatorState.nodes)
+    .join('circle')
+    .attr('cx', d => d.x * scale)
+    .attr('cy', d => d.y * scale)
+    .attr('r', 1.5)
+    .attr('fill', d => {
+      if (d.cluster) {
+        const cluster = navigatorState.clusters.find(c => c.id === d.cluster);
+        return cluster ? cluster.color : '#999';
+      }
+      return '#999';
+    })
+    .attr('opacity', 0.8);
+  
+  // Viewport rectangle
+  const viewportRect = svg.append('rect')
+    .attr('class', 'minimap-viewport')
+    .attr('fill', 'none')
+    .attr('stroke', '#3b82f6')
+    .attr('stroke-width', 1.5);
+  
+  navigatorState.miniMapSvg = svg;
+  navigatorState.miniMapViewport = viewportRect;
+  navigatorState.miniMapScale = scale;
+  
+  // Click to navigate
+  svg.on('click', (event) => {
+    const [x, y] = d3.pointer(event);
+    navigateToMiniMapPosition(x / scale, y / scale);
+  });
+  
+  updateMiniMapViewport();
+}
+
+function updateMiniMapViewport() {
+  if (!navigatorState.miniMapViewport || !navigatorState.svg) return;
+  
+  const transform = d3.zoomTransform(navigatorState.svg.node());
+  const scale = navigatorState.miniMapScale;
+  
+  const width = 800 / transform.k;
+  const height = 700 / transform.k;
+  const x = -transform.x / transform.k;
+  const y = -transform.y / transform.k;
+  
+  navigatorState.miniMapViewport
+    .attr('x', x * scale)
+    .attr('y', y * scale)
+    .attr('width', width * scale)
+    .attr('height', height * scale);
+}
+
+function navigateToMiniMapPosition(x, y) {
+  if (!navigatorState.svg || !navigatorState.zoom) return;
+  
+  const width = 800;
+  const height = 700;
+  const scale = 1.5;
+  
+  const translateX = width / 2 - scale * x;
+  const translateY = height / 2 - scale * y;
+  
+  navigatorState.svg.transition()
+    .duration(500)
+    .call(navigatorState.zoom.transform, d3.zoomIdentity.translate(translateX, translateY).scale(scale));
+}
+
+function updateNavigatorStats() {
+  document.getElementById('navFileCount').textContent = navigatorState.nodes.length;
+  document.getElementById('navClusterCount').textContent = navigatorState.clusters.length;
+  
+  // Calculate coherence (average intra-cluster distance vs inter-cluster distance)
+  let coherence = 0;
+  if (navigatorState.clusters.length > 1) {
+    const intraDistances = [];
+    const interDistances = [];
+    
+    navigatorState.clusters.forEach(cluster => {
+      cluster.nodes.forEach((n1, i) => {
+        cluster.nodes.forEach((n2, j) => {
+          if (i < j) {
+            const dist = Math.sqrt((n1.x - n2.x) ** 2 + (n1.y - n2.y) ** 2);
+            intraDistances.push(dist);
+          }
+        });
+      });
+    });
+    
+    navigatorState.clusters.forEach((c1, i) => {
+      navigatorState.clusters.forEach((c2, j) => {
+        if (i < j) {
+          c1.nodes.forEach(n1 => {
+            c2.nodes.forEach(n2 => {
+              const dist = Math.sqrt((n1.x - n2.x) ** 2 + (n1.y - n2.y) ** 2);
+              interDistances.push(dist);
+            });
+          });
+        }
+      });
+    });
+    
+    const avgIntra = d3.mean(intraDistances) || 1;
+    const avgInter = d3.mean(interDistances) || 1;
+    coherence = Math.max(0, Math.min(100, (1 - avgIntra / avgInter) * 100));
+  }
+  
+  document.getElementById('navCoherence').textContent = `${coherence.toFixed(0)}%`;
+  
+  // Update cluster legend
+  const legend = document.getElementById('clusterLegend');
+  if (legend) {
+    legend.innerHTML = navigatorState.clusters.map(cluster => `
+      <div style="display: flex; align-items: center; gap: var(--space-xs);">
+        <div style="width: 12px; height: 12px; border-radius: 2px; background: ${cluster.color};"></div>
+        <span style="color: var(--color-text);">${cluster.name} (${cluster.nodes.length})</span>
+      </div>
+    `).join('');
+  }
+}
+
+function generateSemanticInsights() {
+  const container = document.getElementById('semanticInsights');
+  if (!container || navigatorState.clusters.length === 0) return;
+  
+  const insights = [];
+  
+  // Find most isolated cluster
+  const clusterCenters = navigatorState.clusters.map(c => c.centroid);
+  let maxDist = 0;
+  let isolatedCluster = null;
+  
+  navigatorState.clusters.forEach((cluster, i) => {
+    const distances = clusterCenters.map((center, j) => {
+      if (i === j) return 0;
+      return Math.sqrt((cluster.centroid.x - center.x) ** 2 + (cluster.centroid.y - center.y) ** 2);
+    });
+    const minDist = Math.min(...distances.filter(d => d > 0));
+    if (minDist > maxDist) {
+      maxDist = minDist;
+      isolatedCluster = cluster;
+    }
+  });
+  
+  if (isolatedCluster) {
+    insights.push({
+      title: 'Most Isolated Module',
+      description: `${isolatedCluster.name} has minimal semantic overlap with other parts of your codebase.`,
+      cluster: isolatedCluster,
+      type: 'isolation'
+    });
+  }
+  
+  // Find largest cluster
+  const largestCluster = navigatorState.clusters.reduce((max, c) => 
+    c.nodes.length > max.nodes.length ? c : max
+  );
+  
+  insights.push({
+    title: 'Core Module',
+    description: `${largestCluster.name} contains ${largestCluster.nodes.length} files (${((largestCluster.nodes.length / navigatorState.nodes.length) * 100).toFixed(0)}% of codebase).`,
+    cluster: largestCluster,
+    type: 'core'
+  });
+  
+  // Render insights
+  container.innerHTML = insights.map(insight => `
+    <div style="padding: var(--space-md); background: var(--color-bg-alt); border-left: 4px solid ${insight.cluster.color}; border-radius: var(--radius-md);">
+      <h4 style="margin: 0 0 var(--space-xs) 0; font-size: var(--text-sm); color: var(--color-text);">${insight.title}</h4>
+      <p style="margin: 0; font-size: var(--text-xs); color: var(--color-text-muted);">${insight.description}</p>
+    </div>
+  `).join('');
+}
+
+function zoomToFitNavigator() {
+  if (!navigatorState.svg || !navigatorState.zoom || navigatorState.nodes.length === 0) return;
+  
+  const xs = navigatorState.nodes.map(d => d.x);
+  const ys = navigatorState.nodes.map(d => d.y);
+  
+  const minX = Math.min(...xs) - 50;
+  const maxX = Math.max(...xs) + 50;
+  const minY = Math.min(...ys) - 50;
+  const maxY = Math.max(...ys) + 50;
+  
+  const width = 800;
+  const height = 700;
+  
+  const scale = 0.9 * Math.min(width / (maxX - minX), height / (maxY - minY));
+  const translateX = width / 2 - scale * (minX + maxX) / 2;
+  const translateY = height / 2 - scale * (minY + maxY) / 2;
+  
+  navigatorState.svg.transition()
+    .duration(750)
+    .call(navigatorState.zoom.transform, d3.zoomIdentity.translate(translateX, translateY).scale(scale));
+}
+
+function resetNavigatorView() {
+  setNavigatorViewMode('physical');
+  zoomToFitNavigator();
+}
+
+function toggleNavigatorLabels() {
+  if (!navigatorState.labels) return;
+  
+  navigatorState.labelsVisible = !navigatorState.labelsVisible;
+  const button = document.getElementById('navigatorLabelToggle');
+  
+  if (navigatorState.labelsVisible) {
+    navigatorState.labels.attr('opacity', 1);
+    if (button) button.textContent = 'Hide Labels';
+  } else {
+    navigatorState.labels.attr('opacity', 0);
+    if (button) button.textContent = 'Show Labels';
+  }
 }
 
 function showFileInfo(file) {
@@ -2478,16 +4096,8 @@ function showFileInfo(file) {
         <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">File Information</h4>
         <div style="display: grid; gap: var(--space-sm);">
           <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-            <span style="color: var(--color-text-muted);">Workspace:</span>
-            <span class="badge" style="background: var(--color-primary); color: white; font-weight: 600;">${escapeHtml(file.workspace || 'Unknown')}</span>
-          </div>
-          <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-            <span style="color: var(--color-text-muted);">Directory:</span>
-            <span style="color: var(--color-text); font-family: var(--font-mono); font-size: var(--text-xs);" title="${escapeHtml(file.directory || file.path)}">${escapeHtml(truncate(file.directory || file.path, 40))}</span>
-          </div>
-          <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-            <span style="color: var(--color-text-muted);">File Name:</span>
-            <span style="color: var(--color-text); font-family: var(--font-mono); font-weight: 600;">${escapeHtml(file.name)}</span>
+            <span style="color: var(--color-text-muted);">Path:</span>
+            <span style="color: var(--color-text); font-family: var(--font-mono); font-size: var(--text-xs);" title="${escapeHtml(file.path)}">${escapeHtml(truncate(file.path, 50))}</span>
           </div>
           <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
             <span style="color: var(--color-text-muted);">Type:</span>
@@ -2555,6 +4165,153 @@ function resetFileGraph() {
 function resetFileGraphZoom() {
   // Alias for resetFileGraph
   resetFileGraph();
+}
+
+// ===================================
+// Navigator View (Latent Space)
+// ===================================
+
+function renderNavigatorView(container) {
+  container.innerHTML = `
+    <div class="navigator-view">
+      <div class="view-header">
+        <h2>Semantic Navigator</h2>
+        <p class="view-subtitle">Explore your codebase in latent space - where semantic similarity becomes visual proximity</p>
+      </div>
+
+      <!-- View Mode Switcher -->
+      <div class="view-mode-controls" style="display: flex; gap: var(--space-lg); align-items: center; padding: var(--space-lg); background: var(--color-bg-alt); border-radius: var(--radius-lg); margin-bottom: var(--space-lg);">
+        <div style="flex: 1;">
+          <h3 style="margin: 0 0 var(--space-xs) 0; font-size: var(--text-md); color: var(--color-text);">View Mode</h3>
+          <div class="view-mode-switcher" style="display: flex; gap: var(--space-sm);">
+            <button class="view-mode-btn active" data-mode="physical" onclick="setNavigatorViewMode('physical')">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="margin-right: 4px;">
+                <path d="M4 4h3v3H4V4zm5 0h3v3H9V4zM4 9h3v3H4V9zm5 0h3v3H9V9z"/>
+              </svg>
+              Physical
+            </button>
+            <button class="view-mode-btn" data-mode="hybrid" onclick="setNavigatorViewMode('hybrid')">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="margin-right: 4px;">
+                <circle cx="8" cy="4" r="2"/>
+                <circle cx="4" cy="12" r="2"/>
+                <circle cx="12" cy="12" r="2"/>
+                <path d="M8 6L4 10M8 6l4 4"/>
+              </svg>
+              Hybrid
+            </button>
+            <button class="view-mode-btn" data-mode="latent" onclick="setNavigatorViewMode('latent')">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="margin-right: 4px;">
+                <circle cx="8" cy="8" r="6"/>
+                <circle cx="8" cy="8" r="3"/>
+                <path d="M8 2v4M8 10v4M2 8h4M10 8h4"/>
+              </svg>
+              Latent
+            </button>
+          </div>
+          <p style="margin: var(--space-xs) 0 0 0; font-size: var(--text-xs); color: var(--color-text-muted);">
+            <strong>Physical:</strong> Direct co-modification • 
+            <strong>Latent:</strong> Semantic similarity • 
+            <strong>Hybrid:</strong> Blend both
+          </p>
+        </div>
+
+        <div style="border-left: 1px solid var(--color-border); padding-left: var(--space-lg);">
+          <h3 style="margin: 0 0 var(--space-xs) 0; font-size: var(--text-md); color: var(--color-text);">Transition Speed</h3>
+          <input type="range" id="transitionSpeed" min="0.5" max="2" step="0.1" value="1" 
+                 style="width: 200px;" oninput="updateTransitionSpeed(this.value)">
+          <div style="display: flex; justify-content: space-between; font-size: var(--text-xs); color: var(--color-text-muted); margin-top: 4px;">
+            <span>Slow</span>
+            <span id="speedLabel">1.0x</span>
+            <span>Fast</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Main Content Area -->
+      <div style="display: grid; grid-template-columns: 1fr 200px; gap: var(--space-lg);">
+        
+        <!-- Main Visualization -->
+        <div>
+          <div class="navigator-container" id="navigatorContainer" style="width: 100%; height: 700px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg); position: relative;">
+            <!-- Navigator will be rendered here -->
+          </div>
+
+          <!-- Navigation Controls -->
+          <div style="display: flex; gap: var(--space-md); margin-top: var(--space-md); align-items: center;">
+            <button class="btn btn-primary" onclick="zoomToFitNavigator()" style="font-size: 13px; padding: 8px 16px;">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="margin-right: 4px;">
+                <path d="M2 2h5v5H2V2zm7 0h5v5H9V2zM2 9h5v5H2V9zm7 0h5v5H9V9z"/>
+              </svg>
+              Zoom to Fit
+            </button>
+            <button class="btn btn-secondary" onclick="resetNavigatorView()" style="font-size: 13px; padding: 8px 16px;">Reset View</button>
+            <button class="btn btn-secondary" onclick="toggleNavigatorLabels()" id="navigatorLabelToggle" style="font-size: 13px; padding: 8px 16px;">Hide Labels</button>
+            
+            <div style="flex: 1;"></div>
+            
+            <div style="display: flex; gap: var(--space-sm); align-items: center; font-size: var(--text-sm); color: var(--color-text-muted);">
+              <span>Interpolation:</span>
+              <span id="interpolationValue" style="font-weight: bold; color: var(--color-primary);">0%</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Mini-Map Widget -->
+        <div>
+          <div class="mini-map-widget" style="background: var(--color-bg-alt); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: var(--space-md);">
+            <h3 style="margin: 0 0 var(--space-sm) 0; font-size: var(--text-sm); color: var(--color-text); display: flex; align-items: center; gap: var(--space-xs);">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                <path d="M8 0a8 8 0 100 16A8 8 0 008 0zm0 2a6 6 0 110 12A6 6 0 018 2z"/>
+              </svg>
+              Overview
+            </h3>
+            <div id="miniMapCanvas" style="width: 100%; height: 180px; background: var(--color-bg); border-radius: var(--radius-sm); border: 1px solid var(--color-border); position: relative; cursor: pointer;">
+              <!-- Mini-map will be rendered here -->
+            </div>
+            
+            <div style="margin-top: var(--space-md); font-size: var(--text-xs); color: var(--color-text-muted);">
+              <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                <span>Files:</span>
+                <span id="navFileCount" style="color: var(--color-text); font-weight: 600;">0</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                <span>Clusters:</span>
+                <span id="navClusterCount" style="color: var(--color-text); font-weight: 600;">0</span>
+              </div>
+              <div style="display: flex; justify-content: space-between;">
+                <span>Coherence:</span>
+                <span id="navCoherence" style="color: var(--color-success); font-weight: 600;">0%</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Cluster Legend -->
+          <div style="margin-top: var(--space-md); background: var(--color-bg-alt); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: var(--space-md);">
+            <h3 style="margin: 0 0 var(--space-sm) 0; font-size: var(--text-sm); color: var(--color-text);">Latent Clusters</h3>
+            <div id="clusterLegend" style="display: flex; flex-direction: column; gap: var(--space-xs); font-size: var(--text-xs);">
+              <!-- Cluster legend will be populated -->
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Semantic Insights -->
+      <div class="card" style="margin-top: var(--space-lg);">
+        <div class="card-header">
+          <h3 class="card-title">Semantic Insights</h3>
+          <p class="card-subtitle">Discovered patterns in latent space</p>
+        </div>
+        <div class="card-body">
+          <div id="semanticInsights" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: var(--space-md);">
+            <!-- Insights will be populated -->
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Initialize navigator after DOM is ready
+  setTimeout(() => initializeNavigator(), 0);
 }
 
 // ===================================
@@ -3267,284 +5024,6 @@ function renderPromptTokensChart() {
           },
           grid: {
             drawOnChartArea: false
-          }
-        }
-      }
-    }
-  });
-}
-
-function renderAIUsageChart() {
-  const canvas = document.getElementById('aiUsageChart');
-  if (!canvas) return;
-  
-  const ctx = canvas.getContext('2d');
-  
-  // Get selected view mode
-  const viewMode = document.querySelector('input[name="aiUsageView"]:checked')?.value || 'interface';
-  
-  // Extract prompt data
-  const prompts = state.data.prompts || [];
-  
-  // Group prompts by time buckets (hourly for last 24 hours)
-  const now = Date.now();
-  const hours = 24;
-  const buckets = Array.from({ length: hours }, (_, i) => {
-    const time = now - (hours - i) * 60 * 60 * 1000;
-    return {
-      timestamp: time,
-      // Interface data
-      agent: 0,
-      composer: 0,
-      edit: 0,
-      chat: 0,
-      // Model data
-      models: {},
-      // Combined data (interface + model)
-      combined: {}
-    };
-  });
-  
-  const allModels = new Set();
-  const allCombinations = new Set();
-  
-  // Aggregate prompts into buckets
-  prompts.forEach(prompt => {
-    const promptTime = new Date(prompt.timestamp).getTime();
-    const bucketIndex = Math.floor((promptTime - (now - hours * 60 * 60 * 1000)) / (60 * 60 * 1000));
-    
-    if (bucketIndex >= 0 && bucketIndex < hours) {
-      const mode = (prompt.mode || prompt.modelType || '').toLowerCase();
-      const source = (prompt.source || '').toLowerCase();
-      
-      // Determine interface
-      let interfaceType = 'unknown';
-      if (mode === 'agent' || prompt.isAuto) {
-        interfaceType = 'agent';
-        buckets[bucketIndex].agent += 1;
-      } else if (source === 'composer' || mode === 'composer') {
-        interfaceType = 'composer';
-        buckets[bucketIndex].composer += 1;
-      } else if (mode === 'edit') {
-        interfaceType = 'edit';
-        buckets[bucketIndex].edit += 1;
-      } else if (mode === 'chat') {
-        interfaceType = 'chat';
-        buckets[bucketIndex].chat += 1;
-      }
-      
-      // Determine model (exclude Tab/CMD+K as it's not a model-based interaction)
-      let modelName = null;
-      
-      // Tab/CMD+K completions don't use AI models in the same way
-      if (interfaceType !== 'edit') {
-        modelName = prompt.modelName || 'Claude Sonnet 4.5';
-        if (modelName.toLowerCase().includes('claude') && modelName.toLowerCase().includes('sonnet')) {
-          modelName = 'Claude Sonnet 4.5';
-        } else if (modelName.toLowerCase().includes('gpt-4')) {
-          modelName = 'GPT-4';
-        } else if (modelName.toLowerCase().includes('gpt-3.5')) {
-          modelName = 'GPT-3.5';
-        } else if (modelName.toLowerCase().includes('claude') && modelName.toLowerCase().includes('opus')) {
-          modelName = 'Claude Opus';
-        } else if (modelName.toLowerCase().includes('claude') && modelName.toLowerCase().includes('haiku')) {
-          modelName = 'Claude Haiku';
-        }
-        
-        allModels.add(modelName);
-        
-        // Track model usage
-        if (!buckets[bucketIndex].models[modelName]) {
-          buckets[bucketIndex].models[modelName] = 0;
-        }
-        buckets[bucketIndex].models[modelName] += 1;
-      }
-      
-      // Track combined (interface + model)
-      // For Tab completions, just show as "Tab Completion" without model
-      const combinedKey = interfaceType === 'edit' 
-        ? 'Tab Completion (CMD+K)'
-        : `${modelName} (${interfaceType})`;
-      allCombinations.add(combinedKey);
-      if (!buckets[bucketIndex].combined[combinedKey]) {
-        buckets[bucketIndex].combined[combinedKey] = 0;
-      }
-      buckets[bucketIndex].combined[combinedKey] += 1;
-    }
-  });
-  
-  // Generate labels
-  const labels = buckets.map(b => {
-    const date = new Date(b.timestamp);
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  });
-  
-  // Generate datasets based on view mode
-  let datasets = [];
-  
-  if (viewMode === 'interface') {
-    // Interface view
-    datasets = [
-      {
-        label: 'Agent (Autonomous)',
-        data: buckets.map(b => b.agent),
-        backgroundColor: 'rgba(139, 92, 246, 0.8)',
-        borderColor: '#8b5cf6',
-        borderWidth: 1
-      },
-      {
-        label: 'Composer',
-        data: buckets.map(b => b.composer),
-        backgroundColor: 'rgba(245, 158, 11, 0.8)',
-        borderColor: '#f59e0b',
-        borderWidth: 1
-      },
-      {
-        label: 'Tab (CMD+K)',
-        data: buckets.map(b => b.edit),
-        backgroundColor: 'rgba(16, 185, 129, 0.8)',
-        borderColor: '#10b981',
-        borderWidth: 1
-      },
-      {
-        label: 'Chat Panel',
-        data: buckets.map(b => b.chat),
-        backgroundColor: 'rgba(59, 130, 246, 0.8)',
-        borderColor: '#3b82f6',
-        borderWidth: 1
-      }
-    ];
-  } else if (viewMode === 'model') {
-    // Model view
-    const colorMap = {
-      'Claude Sonnet 4.5': { bg: 'rgba(204, 120, 92, 0.8)', border: '#cc785c' },
-      'Claude Opus': { bg: 'rgba(180, 100, 82, 0.8)', border: '#b46452' },
-      'Claude Haiku': { bg: 'rgba(224, 140, 112, 0.8)', border: '#e08c70' },
-      'GPT-4': { bg: 'rgba(16, 163, 127, 0.8)', border: '#10a37f' },
-      'GPT-3.5': { bg: 'rgba(46, 193, 157, 0.8)', border: '#2ec19d' }
-    };
-    
-    datasets = Array.from(allModels).sort().map((modelName, index) => {
-      const colors = colorMap[modelName] || {
-        bg: `rgba(${100 + index * 30}, ${116 + index * 20}, ${139 + index * 10}, 0.8)`,
-        border: `rgb(${100 + index * 30}, ${116 + index * 20}, ${139 + index * 10})`
-      };
-      
-      return {
-        label: modelName,
-        data: buckets.map(b => b.models[modelName] || 0),
-        backgroundColor: colors.bg,
-        borderColor: colors.border,
-        borderWidth: 1
-      };
-    });
-  } else {
-    // Combined view (interface + model)
-    const colorMapCombined = {
-      'agent': 'rgba(139, 92, 246, 0.8)',
-      'composer': 'rgba(245, 158, 11, 0.8)',
-      'edit': 'rgba(16, 185, 129, 0.8)',
-      'chat': 'rgba(59, 130, 246, 0.8)'
-    };
-    
-    datasets = Array.from(allCombinations).sort().map(combinedKey => {
-      const interfaceType = combinedKey.match(/\((\w+)\)/)?.[1] || 'unknown';
-      const baseColor = colorMapCombined[interfaceType] || 'rgba(100, 116, 139, 0.8)';
-      
-      return {
-        label: combinedKey,
-        data: buckets.map(b => b.combined[combinedKey] || 0),
-        backgroundColor: baseColor,
-        borderColor: baseColor.replace('0.8', '1'),
-        borderWidth: 1
-      };
-    });
-  }
-  
-  // Check if we have any data
-  if (datasets.length === 0 || datasets.every(ds => ds.data.every(v => v === 0))) {
-    ctx.font = '14px Inter';
-    ctx.fillStyle = '#666';
-    ctx.textAlign = 'center';
-    ctx.fillText('No AI usage data available', canvas.width / 2, canvas.height / 2);
-    return;
-  }
-
-  createChart('aiUsageChart', {
-    type: 'bar',
-    data: {
-      labels: labels,
-      datasets: datasets
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: true,
-      interaction: {
-        mode: 'index',
-        intersect: false
-      },
-      plugins: {
-        legend: {
-          display: true,
-          position: 'top',
-          align: 'end',
-          labels: {
-            usePointStyle: true,
-            padding: 8,
-            font: { size: 10 }
-          }
-        },
-        tooltip: {
-          backgroundColor: 'rgba(0, 0, 0, 0.8)',
-          padding: 10,
-          callbacks: {
-            label: function(context) {
-              const label = context.dataset.label || '';
-              const value = context.parsed.y;
-              return `${label}: ${value} prompt${value !== 1 ? 's' : ''}`;
-            },
-            afterBody: function(context) {
-              const index = context[0].dataIndex;
-              const bucket = buckets[index];
-              let total = 0;
-              if (viewMode === 'interface') {
-                total = bucket.agent + bucket.composer + bucket.edit + bucket.chat;
-              } else if (viewMode === 'model') {
-                total = Object.values(bucket.models).reduce((sum, count) => sum + count, 0);
-              } else {
-                total = Object.values(bucket.combined).reduce((sum, count) => sum + count, 0);
-              }
-              return total > 0 ? `\nTotal: ${total} prompt${total !== 1 ? 's' : ''}` : '';
-            }
-          }
-        }
-      },
-      scales: {
-        x: {
-          stacked: true,
-          grid: {
-            display: false
-          },
-          ticks: {
-            maxRotation: 45,
-            minRotation: 0,
-            autoSkip: true,
-            maxTicksLimit: 12
-          }
-        },
-        y: {
-          stacked: true,
-          beginAtZero: true,
-          title: {
-            display: true,
-            text: 'Number of Prompts',
-            font: { size: 11 }
-          },
-          ticks: {
-            precision: 0,
-            callback: function(value) {
-              return Math.floor(value);
-            }
           }
         }
       }
