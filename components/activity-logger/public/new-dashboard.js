@@ -949,7 +949,7 @@ function renderAnalyticsView(container) {
       <div class="card">
         <div class="card-header">
           <h3 class="card-title">AI Usage: Interface & Model Distribution</h3>
-          <p class="card-subtitle">How you interact (Agent/Composer/CMD+K/Chat) and which models you use (Claude Sonnet, GPT-4, etc.)</p>
+          <p class="card-subtitle">How you interact (Agent/Composer/Tab/Chat) and which AI models power them (Claude Sonnet, GPT-4, etc.)</p>
         </div>
         <div class="card-body">
           <div style="display: flex; gap: var(--space-sm); margin-bottom: var(--space-md); align-items: center;">
@@ -3267,26 +3267,38 @@ function renderAIUsageChart() {
         buckets[bucketIndex].chat += 1;
       }
       
-      // Determine model
-      let modelName = prompt.modelName || 'Claude Sonnet 4.5';
-      if (modelName.toLowerCase().includes('claude') && modelName.toLowerCase().includes('sonnet')) {
-        modelName = 'Claude Sonnet 4.5';
-      } else if (modelName.toLowerCase().includes('gpt-4')) {
-        modelName = 'GPT-4';
-      } else if (modelName.toLowerCase().includes('gpt-3.5')) {
-        modelName = 'GPT-3.5';
-      }
+      // Determine model (exclude Tab/CMD+K as it's not a model-based interaction)
+      let modelName = null;
       
-      allModels.add(modelName);
-      
-      // Track model usage
-      if (!buckets[bucketIndex].models[modelName]) {
-        buckets[bucketIndex].models[modelName] = 0;
+      // Tab/CMD+K completions don't use AI models in the same way
+      if (interfaceType !== 'edit') {
+        modelName = prompt.modelName || 'Claude Sonnet 4.5';
+        if (modelName.toLowerCase().includes('claude') && modelName.toLowerCase().includes('sonnet')) {
+          modelName = 'Claude Sonnet 4.5';
+        } else if (modelName.toLowerCase().includes('gpt-4')) {
+          modelName = 'GPT-4';
+        } else if (modelName.toLowerCase().includes('gpt-3.5')) {
+          modelName = 'GPT-3.5';
+        } else if (modelName.toLowerCase().includes('claude') && modelName.toLowerCase().includes('opus')) {
+          modelName = 'Claude Opus';
+        } else if (modelName.toLowerCase().includes('claude') && modelName.toLowerCase().includes('haiku')) {
+          modelName = 'Claude Haiku';
+        }
+        
+        allModels.add(modelName);
+        
+        // Track model usage
+        if (!buckets[bucketIndex].models[modelName]) {
+          buckets[bucketIndex].models[modelName] = 0;
+        }
+        buckets[bucketIndex].models[modelName] += 1;
       }
-      buckets[bucketIndex].models[modelName] += 1;
       
       // Track combined (interface + model)
-      const combinedKey = `${modelName} (${interfaceType})`;
+      // For Tab completions, just show as "Tab Completion" without model
+      const combinedKey = interfaceType === 'edit' 
+        ? 'Tab Completion (CMD+K)'
+        : `${modelName} (${interfaceType})`;
       allCombinations.add(combinedKey);
       if (!buckets[bucketIndex].combined[combinedKey]) {
         buckets[bucketIndex].combined[combinedKey] = 0;
@@ -3322,7 +3334,7 @@ function renderAIUsageChart() {
         borderWidth: 1
       },
       {
-        label: 'CMD+K (Inline)',
+        label: 'Tab (CMD+K)',
         data: buckets.map(b => b.edit),
         backgroundColor: 'rgba(16, 185, 129, 0.8)',
         borderColor: '#10b981',
