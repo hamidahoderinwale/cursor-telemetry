@@ -179,11 +179,14 @@ async function fetchAllData() {
       const promptsData = prompts.value;
       if (promptsData && promptsData.entries && Array.isArray(promptsData.entries)) {
         state.data.prompts = promptsData.entries;
+        console.log(`📝 Loaded ${promptsData.entries.length} prompts from /entries`);
       } else if (Array.isArray(promptsData)) {
         state.data.prompts = promptsData;
+        console.log(`📝 Loaded ${promptsData.length} prompts (direct array) from /entries`);
       } else {
         // Ensure prompts is always an array
         state.data.prompts = [];
+        console.log('⚠️ No prompts loaded from /entries');
       }
     }
 
@@ -286,6 +289,13 @@ function calculateStats() {
   });
   
   const aiInteractions = composerIds.size + nonJsonPrompts;
+  
+  console.log(`📊 AI Interactions Calculation:`, {
+    totalPrompts: state.data.prompts?.length || 0,
+    composerIds: composerIds.size,
+    nonJsonPrompts: nonJsonPrompts,
+    aiInteractions: aiInteractions
+  });
 
   // Calculate code changed (approximate)
   let totalChars = 0;
