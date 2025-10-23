@@ -1,6 +1,15 @@
 {
-  "root_dir": "/Users/hamidaho/Desktop/cursor_dashboard",
+  "root_dir": "/Users/hamidaho/new_cursor/cursor-telemetry",
+  "workspace_roots": [
+    "/Users/hamidaho/Desktop",
+    "/Users/hamidaho/Documents",
+    "/Users/hamidaho/new_cursor",
+    "/Users/hamidaho/new_cursor_dash"
+  ],
+  "auto_detect_workspaces": true,
   "ignore": [
+    "Library/**",
+    "**/Library/**",
     "node_modules/**",
     "**/node_modules/**",
     "dist/**",

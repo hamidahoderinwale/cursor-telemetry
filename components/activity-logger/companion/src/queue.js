@@ -124,6 +124,16 @@ class Queue {
     };
   }
 
+  // Get all queue data
+  getQueue() {
+    return {
+      entries: this.entries,
+      events: this.events,
+      pending_prompts: this.pendingPrompts,
+      cursor: this.cursor
+    };
+  }
+
   // Get pending prompts for debugging
   getPendingPrompts() {
     return this.pendingPrompts;
