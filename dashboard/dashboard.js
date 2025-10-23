@@ -1424,6 +1424,31 @@ function renderFileGraphView(container) {
           <span class="stat-value" id="graphPromptCount">0</span>
         </div>
       </div>
+      
+      <!-- Most Similar File Pairs -->
+      <div class="card" style="margin-top: var(--space-lg);">
+        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <h3 class="card-title">Most Similar File Pairs</h3>
+            <p class="card-subtitle">Files frequently modified together with highest co-occurrence scores</p>
+          </div>
+          <div style="display: flex; gap: var(--space-sm); align-items: center;">
+            <label style="font-size: var(--text-sm); color: var(--color-text-muted);">Show:</label>
+            <select id="similarPairsCount" onchange="updateSimilarPairs()" style="padding: 4px 8px; border-radius: 4px; border: 1px solid var(--color-border); background: var(--color-bg); color: var(--color-text); font-size: 13px;">
+              <option value="5">Top 5</option>
+              <option value="10" selected>Top 10</option>
+              <option value="15">Top 15</option>
+              <option value="20">Top 20</option>
+            </select>
+            <button onclick="highlightSimilarPairs()" class="btn-secondary" style="font-size: 13px; padding: 6px 12px;">Highlight in Graph</button>
+          </div>
+        </div>
+        <div class="card-body">
+          <div id="similarFilePairs" style="display: grid; gap: var(--space-md);">
+            <!-- Will be populated by JavaScript -->
+          </div>
+        </div>
+      </div>
 
       <!-- Semantic Analysis Panels -->
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-lg); margin-top: var(--space-xl);">
@@ -1797,6 +1822,9 @@ async function initializeD3FileGraph() {
       const avgSim = links.reduce((sum, l) => sum + l.similarity, 0) / links.length;
       document.getElementById('graphAvgSimilarity').textContent = avgSim.toFixed(3);
     }
+    
+    // Render most similar file pairs
+    renderSimilarFilePairs(links, files);
     
     // Update embeddings analysis (now uses prompts, excluding composer conversations which are just names)
     const validPrompts = (state.data.prompts || []).filter(p => {
@@ -2961,6 +2989,280 @@ function focusOnNode(nodeId) {
   
   // Show node info
   showFileInfo(node);
+}
+
+// Most Similar File Pairs functionality
+function renderSimilarFilePairs(links, files) {
+  const container = document.getElementById('similarFilePairs');
+  if (!container) return;
+  
+  // Get top count from dropdown
+  const count = parseInt(document.getElementById('similarPairsCount')?.value || '10');
+  
+  // Sort links by similarity and get top pairs
+  const sortedLinks = [...links].sort((a, b) => b.similarity - a.similarity).slice(0, count);
+  
+  if (sortedLinks.length === 0) {
+    container.innerHTML = `
+      <div style="text-align: center; padding: var(--space-xl); color: var(--color-text-muted);">
+        <div style="font-size: 48px; margin-bottom: var(--space-md);">🔗</div>
+        <div style="font-size: var(--text-md); margin-bottom: var(--space-sm);">No Similar Pairs Found</div>
+        <div style="font-size: var(--text-sm);">Modify some files together to see relationships</div>
+      </div>
+    `;
+    return;
+  }
+  
+  // Store for highlighting
+  window.topSimilarPairs = sortedLinks;
+  
+  // Render each pair
+  container.innerHTML = sortedLinks.map((link, index) => {
+    const source = typeof link.source === 'object' ? link.source : files.find(f => f.id === link.source);
+    const target = typeof link.target === 'object' ? link.target : files.find(f => f.id === link.target);
+    
+    if (!source || !target) return '';
+    
+    const sourceName = source.name || source.id.split('/').pop();
+    const targetName = target.name || target.id.split('/').pop();
+    const similarityPercent = (link.similarity * 100).toFixed(1);
+    
+    // Calculate co-modification count
+    const sourceSessions = new Set((source.events || []).map(e => e.session_id).filter(Boolean));
+    const targetSessions = new Set((target.events || []).map(e => e.session_id).filter(Boolean));
+    const sharedSessions = [...sourceSessions].filter(s => targetSessions.has(s)).length;
+    
+    // Get file type colors
+    const sourceColor = getFileTypeColor(source.ext);
+    const targetColor = getFileTypeColor(target.ext);
+    
+    return `
+      <div class="similar-pair-item" data-source="${source.id}" data-target="${target.id}" 
+           style="display: flex; align-items: center; gap: var(--space-md); padding: var(--space-md); background: var(--color-bg-alt); border-radius: var(--radius-md); border: 2px solid transparent; transition: all 0.2s; cursor: pointer;"
+           onmouseenter="highlightPairInGraph('${source.id}', '${target.id}')"
+           onmouseleave="clearGraphHighlights()"
+           onclick="focusOnPair('${source.id}', '${target.id}')">
+        
+        <!-- Rank Badge -->
+        <div style="flex-shrink: 0; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; background: var(--color-primary); color: white; border-radius: 50%; font-weight: bold; font-size: 14px;">
+          ${index + 1}
+        </div>
+        
+        <!-- File Pair Info -->
+        <div style="flex: 1; min-width: 0;">
+          <div style="display: flex; align-items: center; gap: var(--space-sm); margin-bottom: var(--space-xs);">
+            <div style="display: flex; align-items: center; gap: var(--space-xs); flex: 1; min-width: 0;">
+              <span style="width: 8px; height: 8px; border-radius: 50%; background: ${sourceColor}; flex-shrink: 0;"></span>
+              <span style="font-family: var(--font-mono); font-size: var(--text-sm); color: var(--color-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${source.path}">${sourceName}</span>
+            </div>
+            <span style="color: var(--color-text-muted); font-size: var(--text-sm); flex-shrink: 0;">↔</span>
+            <div style="display: flex; align-items: center; gap: var(--space-xs); flex: 1; min-width: 0;">
+              <span style="width: 8px; height: 8px; border-radius: 50%; background: ${targetColor}; flex-shrink: 0;"></span>
+              <span style="font-family: var(--font-mono); font-size: var(--text-sm); color: var(--color-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${target.path}">${targetName}</span>
+            </div>
+          </div>
+          
+          <div style="display: flex; gap: var(--space-md); font-size: var(--text-xs); color: var(--color-text-muted);">
+            <span>${sharedSessions} shared sessions</span>
+            <span>•</span>
+            <span>${source.changes + target.changes} total changes</span>
+          </div>
+        </div>
+        
+        <!-- Similarity Score -->
+        <div style="flex-shrink: 0; text-align: right;">
+          <div style="font-size: var(--text-lg); font-weight: bold; color: var(--color-success);">
+            ${similarityPercent}%
+          </div>
+          <div style="font-size: var(--text-xs); color: var(--color-text-muted);">
+            similarity
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function updateSimilarPairs() {
+  if (!window.fileGraphData) return;
+  renderSimilarFilePairs(window.fileGraphData.links, window.fileGraphData.nodes);
+}
+
+function highlightPairInGraph(sourceId, targetId) {
+  if (!window.graphNodes || !window.graphLinks) return;
+  
+  // Highlight the two nodes
+  window.graphNodes.selectAll('.node-circle')
+    .attr('opacity', n => n.id === sourceId || n.id === targetId ? 1 : 0.2)
+    .attr('stroke-width', n => n.id === sourceId || n.id === targetId ? 4 : 2);
+  
+  // Highlight the link between them
+  window.graphLinks
+    .attr('opacity', l => {
+      const isTargetLink = (l.source.id === sourceId && l.target.id === targetId) ||
+                           (l.source.id === targetId && l.target.id === sourceId);
+      return isTargetLink ? 1 : 0.1;
+    })
+    .attr('stroke-width', l => {
+      const isTargetLink = (l.source.id === sourceId && l.target.id === targetId) ||
+                           (l.source.id === targetId && l.target.id === sourceId);
+      return isTargetLink ? 6 : Math.max(1, l.similarity * 3);
+    })
+    .attr('stroke', l => {
+      const isTargetLink = (l.source.id === sourceId && l.target.id === targetId) ||
+                           (l.source.id === targetId && l.target.id === sourceId);
+      return isTargetLink ? '#10b981' : '#64748b';
+    });
+}
+
+function clearGraphHighlights() {
+  if (!window.graphNodes || !window.graphLinks) return;
+  
+  window.graphNodes.selectAll('.node-circle')
+    .attr('opacity', 1)
+    .attr('stroke-width', 2);
+  
+  window.graphLinks
+    .attr('opacity', 1)
+    .attr('stroke-width', d => Math.max(1, d.similarity * 3))
+    .attr('stroke', d => {
+      if (d.source.cluster === d.target.cluster) {
+        const clusters = window.fileGraphData?.clusters || [];
+        const cluster = clusters.find(c => c.id === d.source.cluster);
+        return cluster ? cluster.color : '#64748b';
+      }
+      return '#64748b';
+    });
+}
+
+function focusOnPair(sourceId, targetId) {
+  if (!window.graphSvg || !window.graphNodes) return;
+  
+  const source = window.graphNodes.data().find(n => n.id === sourceId);
+  const target = window.graphNodes.data().find(n => n.id === targetId);
+  
+  if (!source || !target) return;
+  
+  const svg = window.graphSvg;
+  const zoom = window.graphZoom;
+  const width = parseFloat(svg.attr('width'));
+  const height = parseFloat(svg.attr('height'));
+  
+  // Calculate center point between the two nodes
+  const centerX = (source.x + target.x) / 2;
+  const centerY = (source.y + target.y) / 2;
+  
+  // Calculate distance between nodes
+  const dx = target.x - source.x;
+  const dy = target.y - source.y;
+  const distance = Math.sqrt(dx * dx + dy * dy);
+  
+  // Scale to fit both nodes with some padding
+  const scale = Math.min(2, (Math.min(width, height) * 0.6) / distance);
+  const translateX = width / 2 - scale * centerX;
+  const translateY = height / 2 - scale * centerY;
+  
+  svg.transition()
+    .duration(750)
+    .call(zoom.transform, d3.zoomIdentity.translate(translateX, translateY).scale(scale));
+  
+  // Keep highlight active
+  highlightPairInGraph(sourceId, targetId);
+}
+
+function highlightSimilarPairs() {
+  if (!window.topSimilarPairs || window.topSimilarPairs.length === 0) {
+    alert('No similar pairs to highlight. Generate the graph first.');
+    return;
+  }
+  
+  // Collect all IDs from top pairs
+  const pairIds = new Set();
+  window.topSimilarPairs.forEach(link => {
+    const sourceId = typeof link.source === 'object' ? link.source.id : link.source;
+    const targetId = typeof link.target === 'object' ? link.target.id : link.target;
+    pairIds.add(sourceId);
+    pairIds.add(targetId);
+  });
+  
+  // Highlight nodes in pairs
+  if (window.graphNodes) {
+    window.graphNodes.selectAll('.node-circle')
+      .transition()
+      .duration(300)
+      .attr('opacity', n => pairIds.has(n.id) ? 1 : 0.15)
+      .attr('stroke-width', n => pairIds.has(n.id) ? 4 : 2)
+      .attr('stroke', n => pairIds.has(n.id) ? '#10b981' : '#fff');
+  }
+  
+  // Highlight links in top pairs
+  if (window.graphLinks) {
+    window.graphLinks
+      .transition()
+      .duration(300)
+      .attr('opacity', l => {
+        const sourceId = typeof l.source === 'object' ? l.source.id : l.source;
+        const targetId = typeof l.target === 'object' ? l.target.id : l.target;
+        const isTopPair = window.topSimilarPairs.some(pair => {
+          const pairSourceId = typeof pair.source === 'object' ? pair.source.id : pair.source;
+          const pairTargetId = typeof pair.target === 'object' ? pair.target.id : pair.target;
+          return (sourceId === pairSourceId && targetId === pairTargetId) ||
+                 (sourceId === pairTargetId && targetId === pairSourceId);
+        });
+        return isTopPair ? 1 : 0.1;
+      })
+      .attr('stroke-width', l => {
+        const sourceId = typeof l.source === 'object' ? l.source.id : l.source;
+        const targetId = typeof l.target === 'object' ? l.target.id : l.target;
+        const isTopPair = window.topSimilarPairs.some(pair => {
+          const pairSourceId = typeof pair.source === 'object' ? pair.source.id : pair.source;
+          const pairTargetId = typeof pair.target === 'object' ? pair.target.id : pair.target;
+          return (sourceId === pairSourceId && targetId === pairTargetId) ||
+                 (sourceId === pairTargetId && targetId === pairSourceId);
+        });
+        return isTopPair ? 6 : Math.max(1, l.similarity * 3);
+      })
+      .attr('stroke', l => {
+        const sourceId = typeof l.source === 'object' ? l.source.id : l.source;
+        const targetId = typeof l.target === 'object' ? l.target.id : l.target;
+        const isTopPair = window.topSimilarPairs.some(pair => {
+          const pairSourceId = typeof pair.source === 'object' ? pair.source.id : pair.source;
+          const pairTargetId = typeof pair.target === 'object' ? pair.target.id : pair.target;
+          return (sourceId === pairSourceId && targetId === pairTargetId) ||
+                 (sourceId === pairTargetId && targetId === pairSourceId);
+        });
+        return isTopPair ? '#10b981' : '#64748b';
+      });
+  }
+  
+  // Zoom to fit highlighted nodes
+  setTimeout(() => {
+    if (window.graphSvg && window.graphNodes) {
+      const highlightedNodes = window.graphNodes.data().filter(n => pairIds.has(n.id));
+      if (highlightedNodes.length > 0) {
+        const xs = highlightedNodes.map(d => d.x);
+        const ys = highlightedNodes.map(d => d.y);
+        
+        const minX = Math.min(...xs) - 100;
+        const maxX = Math.max(...xs) + 100;
+        const minY = Math.min(...ys) - 100;
+        const maxY = Math.max(...ys) + 100;
+        
+        const svg = window.graphSvg;
+        const zoom = window.graphZoom;
+        const width = parseFloat(svg.attr('width'));
+        const height = parseFloat(svg.attr('height'));
+        
+        const scale = 0.8 * Math.min(width / (maxX - minX), height / (maxY - minY));
+        const translateX = width / 2 - scale * (minX + maxX) / 2;
+        const translateY = height / 2 - scale * (minY + maxY) / 2;
+        
+        svg.transition()
+          .duration(750)
+          .call(zoom.transform, d3.zoomIdentity.translate(translateX, translateY).scale(scale));
+      }
+    }
+  }, 350);
 }
 
 function getFileTypeColor(ext) {
