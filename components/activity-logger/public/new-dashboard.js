@@ -5940,6 +5940,181 @@ function closeThreadModal() {
   document.getElementById('threadModal').classList.remove('active');
 }
 
+function showEventModal(id) {
+  // Find the item (event or prompt) by ID
+  const event = state.data.events.find(e => (e.id || e.timestamp) === id);
+  const prompt = state.data.prompts.find(p => p.id === id || p.timestamp === id);
+  
+  const modal = document.getElementById('eventModal');
+  const title = document.getElementById('modalTitle');
+  const body = document.getElementById('modalBody');
+  
+  if (!modal || !title || !body) {
+    console.error('Modal elements not found');
+    return;
+  }
+  
+  // If it's a prompt, use the existing prompt modal function
+  if (prompt) {
+    showPromptInModal(prompt, modal, title, body);
+    modal.classList.add('active');
+    return;
+  }
+  
+  // If it's an event, show event details
+  if (!event) {
+    console.warn('Event/Prompt not found:', id);
+    return;
+  }
+  
+  try {
+    const details = typeof event.details === 'string' ? JSON.parse(event.details) : event.details;
+    const filePath = details?.file_path || event.file_path || 'Unknown file';
+    const fileName = filePath.split('/').pop() || filePath;
+    
+    title.textContent = `File Change: ${fileName}`;
+    
+    // Find related prompts within 5 minutes
+    const relatedPrompts = findRelatedPrompts(event, 5);
+    
+    let html = `
+      <div style="display: flex; flex-direction: column; gap: var(--space-xl);">
+        
+        <!-- Event Metadata -->
+        <div>
+          <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">Event Details</h4>
+          <div style="display: grid; gap: var(--space-sm);">
+            <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
+              <span style="color: var(--color-text-muted);">File:</span>
+              <span style="color: var(--color-text); font-family: var(--font-mono); font-size: var(--text-sm);">${escapeHtml(filePath)}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
+              <span style="color: var(--color-text-muted);">Timestamp:</span>
+              <span style="color: var(--color-text);">${new Date(event.timestamp).toLocaleString()}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
+              <span style="color: var(--color-text-muted);">Type:</span>
+              <span style="color: var(--color-text);"><span class="badge">${event.type || 'file_change'}</span></span>
+            </div>
+            ${event.session_id ? `
+              <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
+                <span style="color: var(--color-text-muted);">Session:</span>
+                <span style="color: var(--color-text); font-family: var(--font-mono); font-size: var(--text-xs);">${event.session_id.substring(0, 16)}...</span>
+              </div>
+            ` : ''}
+          </div>
+        </div>
+    `;
+    
+    // Show code diff statistics and content if available
+    if (details?.chars_added || details?.chars_deleted || details?.lines_added || details?.lines_removed) {
+      html += `
+        <div>
+          <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">Code Changes</h4>
+          <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-md); margin-bottom: var(--space-lg);">
+            <div style="text-align: center; padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md);">
+              <div style="font-size: var(--text-xl); color: var(--color-success); font-weight: 600;">+${details.lines_added || 0}</div>
+              <div style="font-size: var(--text-xs); color: var(--color-text-muted);">Lines Added</div>
+            </div>
+            <div style="text-align: center; padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md);">
+              <div style="font-size: var(--text-xl); color: var(--color-error); font-weight: 600;">-${details.lines_removed || 0}</div>
+              <div style="font-size: var(--text-xs); color: var(--color-text-muted);">Lines Removed</div>
+            </div>
+            <div style="text-align: center; padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md);">
+              <div style="font-size: var(--text-xl); color: var(--color-success); font-weight: 600;">+${details.chars_added || 0}</div>
+              <div style="font-size: var(--text-xs); color: var(--color-text-muted);">Chars Added</div>
+            </div>
+            <div style="text-align: center; padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md);">
+              <div style="font-size: var(--color-error); font-weight: 600;">-${details.chars_deleted || 0}</div>
+              <div style="font-size: var(--text-xs); color: var(--color-text-muted);">Chars Deleted</div>
+            </div>
+          </div>
+      `;
+      
+      // Show before/after code if available
+      if (details.before_content || details.after_content) {
+        html += `
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-md);">
+            <div>
+              <div style="font-weight: 600; color: var(--color-text); margin-bottom: var(--space-sm);">Before:</div>
+              <pre style="padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md); overflow-x: auto; max-height: 400px; font-size: 11px; line-height: 1.5; border-left: 3px solid var(--color-error);"><code>${escapeHtml(details.before_content || 'No content')}</code></pre>
+            </div>
+            <div>
+              <div style="font-weight: 600; color: var(--color-text); margin-bottom: var(--space-sm);">After:</div>
+              <pre style="padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md); overflow-x: auto; max-height: 400px; font-size: 11px; line-height: 1.5; border-left: 3px solid var(--color-success);"><code>${escapeHtml(details.after_content || 'No content')}</code></pre>
+            </div>
+          </div>
+        `;
+      }
+      
+      html += `</div>`;
+    }
+    
+    // Show related AI prompts
+    if (relatedPrompts && relatedPrompts.length > 0) {
+      html += `
+        <div>
+          <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">Related AI Prompts (${relatedPrompts.length})</h4>
+          <div style="display: flex; flex-direction: column; gap: var(--space-md);">
+      `;
+      
+      relatedPrompts.forEach(p => {
+        const promptText = p.text || p.prompt || p.preview || p.content || 'No text';
+        const isJsonLike = promptText.startsWith('{') || promptText.startsWith('[');
+        const displayText = isJsonLike ? 'Composer session metadata' : (promptText.length > 200 ? promptText.substring(0, 200) + '...' : promptText);
+        const timeDiff = Math.abs(new Date(event.timestamp).getTime() - new Date(p.timestamp).getTime());
+        const minsDiff = Math.round(timeDiff / 60000);
+        
+        html += `
+          <div style="padding: var(--space-md); background: var(--color-bg-alt); border-radius: var(--radius-md); border-left: 3px solid var(--color-accent); cursor: pointer;" onclick="showEventModal('${p.id || p.timestamp}')">
+            <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: var(--space-sm);">
+              <div style="flex: 1;">
+                <div style="font-size: var(--text-sm); color: var(--color-text); margin-bottom: var(--space-xs);">
+                  ${escapeHtml(displayText)}
+                </div>
+                <div style="display: flex; gap: var(--space-xs); flex-wrap: wrap;">
+                  ${p.mode ? `<span class="badge" style="background: ${p.mode === 'agent' ? 'var(--color-accent)' : p.mode === 'chat' ? 'var(--color-info)' : 'var(--color-secondary)'}; color: white;">${p.mode.toUpperCase()}${p.isAuto ? ' (AUTO)' : ''}</span>` : ''}
+                  ${p.modelName ? `<span class="badge" style="background: var(--color-primary); color: white;">${p.modelName}</span>` : ''}
+                  ${p.contextUsage > 0 ? `<span class="badge" style="background: var(--color-warning); color: white;">${p.contextUsage.toFixed(1)}% context</span>` : ''}
+                  <span class="badge">${minsDiff === 0 ? 'Same time' : `${minsDiff} min ${minsDiff < 0 ? 'before' : 'after'}`}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+      });
+      
+      html += `
+          </div>
+        </div>
+      `;
+    }
+    
+    html += `</div>`;
+    
+    body.innerHTML = html;
+    modal.classList.add('active');
+    
+  } catch (error) {
+    console.error('Error showing event modal:', error);
+    title.textContent = 'Error';
+    body.innerHTML = `<div style="color: var(--color-error);">Error loading event details: ${error.message}</div>`;
+    modal.classList.add('active');
+  }
+}
+
+function closeEventModal() {
+  const modal = document.getElementById('eventModal');
+  if (modal) {
+    modal.classList.remove('active');
+  }
+}
+
+// Make modal functions globally accessible
+window.showEventModal = showEventModal;
+window.closeEventModal = closeEventModal;
+window.closeThreadModal = closeThreadModal;
+
 // ===================================
 // Utility Functions
 // ===================================
