@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Chat Widget - Cursor Telemetry</title>
+    <style>
+        :root {
+            --chat-primary: #6366f1;
+            --chat-bg: #1a1a1a;
+            --chat-surface: #252525;
+            --chat-border: #333;
+            --chat-text: #e5e7eb;
+            --chat-text-muted: #9ca3af;
+            --chat-accent: #8b5cf6;
+            --chat-success: #10b981;
+            --chat-warning: #f59e0b;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #0f0f0f;
+        }
+
+        /* Chat Widget Container */
+        .chat-widget-container {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            z-index: 10000;
+            font-size: 14px;
+        }
+
+        /* Collapsed Button */
+        .chat-toggle-btn {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--chat-primary), var(--chat-accent));
+            border: none;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .chat-toggle-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 6px 16px rgba(99, 102, 241, 0.6);
+        }
+
+        .chat-toggle-btn svg {
+            width: 28px;
+            height: 28px;
+            color: white;
+        }
+
+        .chat-toggle-btn .notification-badge {
+            position: absolute;
+            top: -4px;
+            right: -4px;
+            background: var(--chat-warning);
+            color: white;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            font-size: 11px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 2px solid var(--chat-bg);
+        }
+
+        /* Expanded Chat Widget */
+        .chat-widget {
+            width: 420px;
+            height: 600px;
+            background: var(--chat-bg);
+            border-radius: 16px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+            display: none;
+            flex-direction: column;
+            overflow: hidden;
+            border: 1px solid var(--chat-border);
+            animation: slideUp 0.3s ease;
+        }
+
+        .chat-widget.open {
+            display: flex;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* Chat Header */
+        .chat-header {
+            padding: 16px 20px;
+            background: var(--chat-surface);
+            border-bottom: 1px solid var(--chat-border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .chat-header-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .chat-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--chat-primary), var(--chat-accent));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+        }
+
+        .chat-title {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .chat-title h3 {
+            margin: 0;
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--chat-text);
+        }
+
+        .chat-status {
+            font-size: 12px;
+            color: var(--chat-text-muted);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--chat-success);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .chat-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .chat-action-btn {
+            width: 32px;
+            height: 32px;
+            border: none;
+            background: transparent;
+            color: var(--chat-text-muted);
+            cursor: pointer;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+
+        .chat-action-btn:hover {
+            background: var(--chat-bg);
+            color: var(--chat-text);
+        }
+
+        /* Chat Messages */
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .chat-messages::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .chat-messages::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .chat-messages::-webkit-scrollbar-thumb {
+            background: var(--chat-border);
+            border-radius: 3px;
+        }
+
+        /* Message Bubbles */
+        .message {
+            display: flex;
+            gap: 12px;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .message.user {
+            flex-direction: row-reverse;
+        }
+
+        .message-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: var(--chat-surface);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            font-size: 16px;
+        }
+
+        .message.user .message-avatar {
+            background: linear-gradient(135deg, var(--chat-primary), var(--chat-accent));
+        }
+
+        .message-content {
+            max-width: 75%;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .message-bubble {
+            padding: 12px 16px;
+            border-radius: 12px;
+            background: var(--chat-surface);
+            color: var(--chat-text);
+            line-height: 1.5;
+        }
+
+        .message.user .message-bubble {
+            background: linear-gradient(135deg, var(--chat-primary), var(--chat-accent));
+            color: white;
+        }
+
+        .message-time {
+            font-size: 11px;
+            color: var(--chat-text-muted);
+            padding: 0 4px;
+        }
+
+        .message.user .message-time {
+            text-align: right;
+        }
+
+        /* Reasoning Steps */
+        .reasoning-steps {
+            background: var(--chat-bg);
+            border: 1px solid var(--chat-border);
+            border-radius: 8px;
+            padding: 12px;
+            margin-top: 8px;
+            font-size: 12px;
+        }
+
+        .reasoning-step {
+            padding: 8px;
+            border-left: 2px solid var(--chat-accent);
+            margin-bottom: 8px;
+            color: var(--chat-text-muted);
+        }
+
+        .reasoning-step:last-child {
+            margin-bottom: 0;
+        }
+
+        .reasoning-step strong {
+            color: var(--chat-text);
+        }
+
+        /* Suggestions */
+        .suggestions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        .suggestion-chip {
+            padding: 8px 12px;
+            background: var(--chat-surface);
+            border: 1px solid var(--chat-border);
+            border-radius: 16px;
+            font-size: 12px;
+            color: var(--chat-text);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .suggestion-chip:hover {
+            background: var(--chat-primary);
+            border-color: var(--chat-primary);
+            color: white;
+        }
+
+        /* Typing Indicator */
+        .typing-indicator {
+            display: flex;
+            gap: 12px;
+            padding: 12px 16px;
+        }
+
+        .typing-dots {
+            display: flex;
+            gap: 4px;
+            align-items: center;
+        }
+
+        .typing-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--chat-text-muted);
+            animation: typing 1.4s infinite;
+        }
+
+        .typing-dot:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+
+        .typing-dot:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+
+        @keyframes typing {
+            0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+            30% { transform: translateY(-10px); opacity: 1; }
+        }
+
+        /* Chat Input */
+        .chat-input-container {
+            padding: 16px 20px;
+            background: var(--chat-surface);
+            border-top: 1px solid var(--chat-border);
+        }
+
+        .chat-input-wrapper {
+            display: flex;
+            gap: 8px;
+            align-items: flex-end;
+        }
+
+        .chat-input {
+            flex: 1;
+            background: var(--chat-bg);
+            border: 1px solid var(--chat-border);
+            border-radius: 12px;
+            padding: 12px 16px;
+            color: var(--chat-text);
+            font-size: 14px;
+            resize: none;
+            max-height: 120px;
+            font-family: inherit;
+            transition: border-color 0.2s;
+        }
+
+        .chat-input:focus {
+            outline: none;
+            border-color: var(--chat-primary);
+        }
+
+        .chat-input::placeholder {
+            color: var(--chat-text-muted);
+        }
+
+        .send-btn {
+            width: 40px;
+            height: 40px;
+            border-radius: 10px;
+            background: var(--chat-primary);
+            border: none;
+            color: white;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+            flex-shrink: 0;
+        }
+
+        .send-btn:hover:not(:disabled) {
+            background: var(--chat-accent);
+            transform: scale(1.05);
+        }
+
+        .send-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* Quick Actions */
+        .quick-actions {
+            display: flex;
+            gap: 8px;
+            padding: 0 20px 12px;
+            overflow-x: auto;
+        }
+
+        .quick-action {
+            padding: 8px 12px;
+            background: var(--chat-surface);
+            border: 1px solid var(--chat-border);
+            border-radius: 8px;
+            font-size: 12px;
+            color: var(--chat-text);
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .quick-action:hover {
+            background: var(--chat-bg);
+            border-color: var(--chat-primary);
+        }
+
+        /* Welcome Message */
+        .welcome-message {
+            text-align: center;
+            padding: 40px 20px;
+            color: var(--chat-text-muted);
+        }
+
+        .welcome-message h4 {
+            margin: 0 0 8px 0;
+            color: var(--chat-text);
+            font-size: 16px;
+        }
+
+        .welcome-message p {
+            margin: 0 0 16px 0;
+            font-size: 13px;
+        }
+    </style>
+</head>
+<body>
+    <div class="chat-widget-container">
+        <!-- Collapsed Button -->
+        <button class="chat-toggle-btn" id="chatToggleBtn">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                <path d="M8 10h.01M12 10h.01M16 10h.01"></path>
+            </svg>
+            <span class="notification-badge" id="notificationBadge" style="display: none;">3</span>
+        </button>
+
+        <!-- Expanded Widget -->
+        <div class="chat-widget" id="chatWidget">
+            <!-- Header -->
+            <div class="chat-header">
+                <div class="chat-header-info">
+                    <div class="chat-avatar">🧠</div>
+                    <div class="chat-title">
+                        <h3>Development Assistant</h3>
+                        <div class="chat-status">
+                            <span class="status-indicator"></span>
+                            <span>Analyzing your patterns</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="chat-actions">
+                    <button class="chat-action-btn" title="Settings">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="3"></circle>
+                            <path d="M12 1v6m0 6v6m5.66-13a8 8 0 0 1 0 14m-11.32 0a8 8 0 0 1 0-14"></path>
+                        </svg>
+                    </button>
+                    <button class="chat-action-btn" id="minimizeBtn" title="Minimize">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M19 12H5"></path>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Quick Actions -->
+            <div class="quick-actions">
+                <button class="quick-action" data-action="productivity">
+                    📊 Productivity today
+                </button>
+                <button class="quick-action" data-action="files">
+                    📁 Most edited files
+                </button>
+                <button class="quick-action" data-action="ai-usage">
+                    🤖 AI usage patterns
+                </button>
+                <button class="quick-action" data-action="sessions">
+                    ⏱️ Session analysis
+                </button>
+            </div>
+
+            <!-- Messages -->
+            <div class="chat-messages" id="chatMessages">
+                <div class="welcome-message">
+                    <h4>👋 Welcome to your Development Assistant</h4>
+                    <p>I can analyze your coding patterns, productivity, and AI usage to provide personalized insights.</p>
+                    <div class="suggestions">
+                        <div class="suggestion-chip">How productive was I today?</div>
+                        <div class="suggestion-chip">What did I work on this week?</div>
+                        <div class="suggestion-chip">Show my AI interaction patterns</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Input -->
+            <div class="chat-input-container">
+                <div class="chat-input-wrapper">
+                    <textarea 
+                        class="chat-input" 
+                        id="chatInput" 
+                        placeholder="Ask about your development patterns..."
+                        rows="1"
+                    ></textarea>
+                    <button class="send-btn" id="sendBtn">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"></path>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="chat-widget.js"></script>
+</body>
+</html>
+
