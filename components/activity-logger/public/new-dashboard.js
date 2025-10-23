@@ -1864,34 +1864,7 @@ async function initializeD3FileGraph() {
     // Render most similar file pairs
     renderSimilarFilePairs(links, files);
     
-    // Update embeddings analysis (now uses prompts, excluding composer conversations which are just names)
-    const validPrompts = (state.data.prompts || []).filter(p => {
-      const text = p.text || p.prompt || p.preview || p.content || '';
-      const isJsonLike = text.startsWith('{') || text.startsWith('[');
-      const isComposerConversation = p.source === 'composer' && p.type === 'conversation';
-      return !isJsonLike && !isComposerConversation && text.length > 10;
-    });
-    const totalTokens = validPrompts.reduce((sum, p) => {
-      const text = p.text || p.prompt || p.preview || p.content || '';
-      return sum + tokenizeCode(text).length;
-    }, 0);
-    document.getElementById('embeddingsFilesCount').textContent = validPrompts.length;
-    document.getElementById('embeddingsTotalChanges').textContent = totalTokens;
-    document.getElementById('embeddingsAvgSimilarity').textContent = '0.000'; // Will be updated by renderEmbeddingsVisualization
-    
-    // Show top similar pairs
-    const pairsHtml = similarities.slice(0, 5).map(pair => `
-      <div style="display: flex; justify-content: space-between; padding: var(--space-xs); background: var(--color-bg); border-radius: var(--radius-sm); font-size: 12px;">
-        <span style="font-family: var(--font-mono); color: var(--color-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;">
-          ${pair.file1} ↔ ${pair.file2}
-        </span>
-        <span style="font-weight: 600; color: var(--color-accent); margin-left: var(--space-sm);">${pair.similarity.toFixed(3)}</span>
-      </div>
-    `).join('');
-    document.getElementById('similarityPairs').innerHTML = pairsHtml || '<div style="color: var(--color-text-muted); font-size: 13px;">No similar pairs found</div>';
-    
-    // Render embeddings visualization
-    window.embeddingsData = { files, tfidfVectors: files.map((f, i) => ({file: f, vectorIndex: i})) };
+    // Render file similarity based on AI prompts
     renderEmbeddingsVisualization();
     
     // Update TF-IDF analysis
@@ -4177,6 +4150,219 @@ function resetFileGraph() {
 function resetFileGraphZoom() {
   // Alias for resetFileGraph
   resetFileGraph();
+}
+
+// ===================================
+// File Similarity via Prompts Analysis
+// ===================================
+
+function renderEmbeddingsVisualization() {
+  console.log('🎨 Rendering file similarity embeddings based on prompt context...');
+  
+  // Get all prompts with valid text (filter out JSON/composer conversations)
+  const validPrompts = (state.data.prompts || []).filter(p => {
+    if (!p.text && !p.preview && !p.prompt) return false;
+    const text = p.text || p.preview || p.prompt || '';
+    if (text.startsWith('{') || text.startsWith('[')) return false;
+    if (text.length < 20) return false;
+    if (p.source === 'composer' && p.type === 'conversation') return false;
+    return true;
+  });
+  
+  console.log(`📊 Found ${validPrompts.length} valid prompts for analysis`);
+  
+  if (validPrompts.length === 0) {
+    document.getElementById('embeddingsVisualization').innerHTML = `
+      <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--color-text-muted); font-size: 13px;">
+        No prompt data available for analysis
+      </div>
+    `;
+    return;
+  }
+  
+  // Extract file references from prompts
+  const filePromptMap = new Map(); // file path -> array of prompts
+  
+  validPrompts.forEach(prompt => {
+    const text = prompt.text || prompt.preview || prompt.prompt || '';
+    
+    // Extract file paths from prompt text (look for common patterns)
+    const filePatterns = [
+      /[\w-]+\.(js|ts|py|html|css|json|md|txt|jsx|tsx|vue|svelte)/gi, // File extensions
+      /\/[\w\/-]+\.[\w]+/g, // Unix-style paths
+      /[\w]+\/[\w\/]+\.(js|ts|py)/g // Relative paths
+    ];
+    
+    const mentionedFiles = new Set();
+    filePatterns.forEach(pattern => {
+      const matches = text.match(pattern) || [];
+      matches.forEach(m => mentionedFiles.add(m));
+    });
+    
+    // Also check workspace info if available
+    if (prompt.workspaceName && prompt.workspaceName !== 'Unknown') {
+      mentionedFiles.forEach(file => {
+        const fullPath = `${prompt.workspaceName}/${file}`;
+        if (!filePromptMap.has(fullPath)) {
+          filePromptMap.set(fullPath, []);
+        }
+        filePromptMap.get(fullPath).push(prompt);
+      });
+    }
+  });
+  
+  console.log(`📁 Found ${filePromptMap.size} files mentioned in prompts`);
+  
+  // Build file-to-file similarity based on shared prompt context
+  const filesArray = Array.from(filePromptMap.keys());
+  const fileSimilarities = [];
+  
+  for (let i = 0; i < filesArray.length; i++) {
+    for (let j = i + 1; j < filesArray.length; j++) {
+      const file1 = filesArray[i];
+      const file2 = filesArray[j];
+      const prompts1 = filePromptMap.get(file1);
+      const prompts2 = filePromptMap.get(file2);
+      
+      // Calculate Jaccard similarity of prompt sets
+      const set1 = new Set(prompts1.map(p => p.id || p.timestamp));
+      const set2 = new Set(prompts2.map(p => p.id || p.timestamp));
+      const intersection = new Set([...set1].filter(x => set2.has(x)));
+      const union = new Set([...set1, ...set2]);
+      
+      const similarity = union.size > 0 ? intersection.size / union.size : 0;
+      
+      if (similarity > 0) {
+        fileSimilarities.push({
+          file1,
+          file2,
+          similarity,
+          sharedPrompts: intersection.size,
+          totalPrompts: union.size
+        });
+      }
+    }
+  }
+  
+  // Sort by similarity
+  fileSimilarities.sort((a, b) => b.similarity - a.similarity);
+  
+  console.log(`🔗 Found ${fileSimilarities.length} file pairs with shared prompt context`);
+  
+  // Display top similar file pairs
+  const similarityPairsContainer = document.getElementById('similarityPairs');
+  if (similarityPairsContainer && fileSimilarities.length > 0) {
+    const topPairs = fileSimilarities.slice(0, 10);
+    similarityPairsContainer.innerHTML = topPairs.map((pair, idx) => `
+      <div style="padding: var(--space-sm); background: var(--color-bg-alt); border-radius: var(--radius-sm); border-left: 3px solid ${idx < 3 ? '#10b981' : '#6366f1'};">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+          <span style="font-size: 12px; font-weight: 600; color: var(--color-text);">${pair.file1.split('/').pop()} ↔ ${pair.file2.split('/').pop()}</span>
+          <span style="font-size: 11px; font-weight: 700; color: #10b981;">${(pair.similarity * 100).toFixed(1)}%</span>
+        </div>
+        <div style="font-size: 11px; color: var(--color-text-muted);">
+          ${pair.sharedPrompts} shared prompt${pair.sharedPrompts > 1 ? 's' : ''} • ${pair.totalPrompts} total
+        </div>
+      </div>
+    `).join('');
+    
+    // Update stats
+    document.getElementById('embeddingsFilesCount').textContent = filesArray.length;
+    document.getElementById('embeddingsTotalChanges').textContent = validPrompts.length;
+    const avgSim = fileSimilarities.length > 0 
+      ? fileSimilarities.reduce((sum, p) => sum + p.similarity, 0) / fileSimilarities.length 
+      : 0;
+    document.getElementById('embeddingsAvgSimilarity').textContent = avgSim.toFixed(3);
+  } else {
+    similarityPairsContainer.innerHTML = `
+      <div style="color: var(--color-text-muted); font-size: 13px;">
+        No file relationships found in prompts
+      </div>
+    `;
+  }
+  
+  // Create 2D visualization of file relationships
+  if (filesArray.length > 1) {
+    renderFileSimilarityVisualization(filesArray, filePromptMap, fileSimilarities);
+  }
+}
+
+function renderFileSimilarityVisualization(files, filePromptMap, similarities) {
+  const container = document.getElementById('embeddingsVisualization');
+  if (!container) return;
+  
+  container.innerHTML = '';
+  
+  const width = container.clientWidth || 600;
+  const height = 300;
+  
+  // Create nodes
+  const nodes = files.map(file => ({
+    id: file,
+    name: file.split('/').pop(),
+    promptCount: filePromptMap.get(file).length
+  }));
+  
+  // Create links from similarities
+  const links = similarities
+    .filter(s => s.similarity > 0.1) // Only show meaningful connections
+    .map(s => ({
+      source: s.file1,
+      target: s.file2,
+      value: s.similarity
+    }));
+  
+  // Create D3 force simulation
+  const svg = d3.select(container)
+    .append('svg')
+    .attr('width', width)
+    .attr('height', height);
+  
+  const simulation = d3.forceSimulation(nodes)
+    .force('link', d3.forceLink(links).id(d => d.id).distance(100))
+    .force('charge', d3.forceManyBody().strength(-200))
+    .force('center', d3.forceCenter(width / 2, height / 2))
+    .force('collision', d3.forceCollide().radius(20));
+  
+  // Draw links
+  const link = svg.append('g')
+    .selectAll('line')
+    .data(links)
+    .join('line')
+    .attr('stroke', '#6366f1')
+    .attr('stroke-opacity', d => d.value * 0.8)
+    .attr('stroke-width', d => Math.max(1, d.value * 3));
+  
+  // Draw nodes
+  const node = svg.append('g')
+    .selectAll('g')
+    .data(nodes)
+    .join('g');
+  
+  node.append('circle')
+    .attr('r', d => Math.max(4, Math.min(12, Math.sqrt(d.promptCount) * 2)))
+    .attr('fill', '#8b5cf6')
+    .attr('stroke', '#fff')
+    .attr('stroke-width', 1.5);
+  
+  node.append('text')
+    .text(d => d.name)
+    .attr('x', 0)
+    .attr('y', -15)
+    .attr('text-anchor', 'middle')
+    .attr('font-size', '9px')
+    .attr('fill', 'var(--color-text)')
+    .style('pointer-events', 'none');
+  
+  // Update positions on simulation tick
+  simulation.on('tick', () => {
+    link
+      .attr('x1', d => d.source.x)
+      .attr('y1', d => d.source.y)
+      .attr('x2', d => d.target.x)
+      .attr('y2', d => d.target.y);
+    
+    node.attr('transform', d => `translate(${d.x},${d.y})`);
+  });
 }
 
 // ===================================
