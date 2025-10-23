@@ -1705,6 +1705,17 @@ async function initializeD3FileGraph() {
     // Filter files by selected extensions (with Git grouping support)
     const files = data.files
       .filter(f => {
+        // Filter out Git object hashes (40-char hex strings)
+        if (f.name && /^[a-f0-9]{40}$/i.test(f.name)) {
+          console.log(`⏭️  Skipping Git object hash: ${f.name}`);
+          return false;
+        }
+        
+        // Filter out files with no proper name
+        if (!f.name || f.name.length < 2) {
+          return false;
+        }
+        
         const ext = f.ext;
         // Check if this is a Git file and "Git" is selected
         if (ext && (ext.startsWith('Git') || ext === 'COMMIT_EDITMSG' || ext === 'HEAD' || ext === 'index' || ext === 'FETCH_HEAD' || ext === 'ORIG_HEAD')) {
@@ -1724,6 +1735,11 @@ async function initializeD3FileGraph() {
           }
         });
         
+        // Extract workspace/directory from path for grouping
+        const pathParts = f.path.split('/');
+        const workspace = pathParts.length > 2 ? pathParts[0] : 'root';
+        const directory = pathParts.length > 2 ? pathParts.slice(0, -1).join('/') : workspace;
+        
         return {
           id: f.path,
           path: f.path,
@@ -1733,7 +1749,9 @@ async function initializeD3FileGraph() {
           changes: f.changes || 0,
           lastModified: f.lastModified,
           size: f.size,
-          events: relatedEvents || []
+          events: relatedEvents || [],
+          workspace: workspace,
+          directory: directory
         };
       });
 
@@ -2296,12 +2314,51 @@ function renderD3FileGraph(container, nodes, links) {
   const width = container.clientWidth || 800;
   const height = container.clientHeight || 600;
   
+  // Get unique workspaces/directories for color assignment
+  const uniqueWorkspaces = [...new Set(nodes.map(n => n.workspace))];
+  const workspaceColorMap = {};
+  const workspaceColors = ['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#14b8a6', '#f43f5e'];
+  uniqueWorkspaces.forEach((ws, i) => {
+    workspaceColorMap[ws] = workspaceColors[i % workspaceColors.length];
+  });
+  
   // Create SVG
   const svg = d3.select(container)
     .append('svg')
     .attr('width', width)
     .attr('height', height)
     .style('background', 'var(--color-bg)');
+  
+  // Add legend for workspaces
+  const legend = svg.append('g')
+    .attr('class', 'legend')
+    .attr('transform', `translate(20, 20)`);
+  
+  legend.append('text')
+    .text('Workspaces:')
+    .attr('x', 0)
+    .attr('y', 0)
+    .attr('font-size', '12px')
+    .attr('font-weight', 'bold')
+    .attr('fill', 'var(--color-text)');
+  
+  uniqueWorkspaces.forEach((ws, i) => {
+    const legendItem = legend.append('g')
+      .attr('transform', `translate(0, ${(i + 1) * 20})`);
+    
+    legendItem.append('circle')
+      .attr('cx', 8)
+      .attr('cy', 0)
+      .attr('r', 6)
+      .attr('fill', workspaceColorMap[ws]);
+    
+    legendItem.append('text')
+      .text(ws)
+      .attr('x', 20)
+      .attr('y', 4)
+      .attr('font-size', '11px')
+      .attr('fill', 'var(--color-text)');
+  });
   
   // Create simulation
   const simulation = d3.forceSimulation(nodes)
@@ -2331,12 +2388,13 @@ function renderD3FileGraph(container, nodes, links) {
     .on('click', (event, d) => showFileInfo(d))
     .style('cursor', 'pointer');
   
-  // Add circles to nodes
+  // Add circles to nodes (colored by workspace)
   node.append('circle')
     .attr('r', d => Math.max(8, Math.min(20, Math.sqrt(d.changes) * 3)))
-    .attr('fill', d => getFileTypeColor(d.ext))
+    .attr('fill', d => workspaceColorMap[d.workspace] || getFileTypeColor(d.ext))
     .attr('stroke', '#fff')
-    .attr('stroke-width', 2);
+    .attr('stroke-width', 2)
+    .attr('opacity', 0.9);
   
   // Add labels to nodes
   node.append('text')
@@ -2420,8 +2478,16 @@ function showFileInfo(file) {
         <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">File Information</h4>
         <div style="display: grid; gap: var(--space-sm);">
           <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-            <span style="color: var(--color-text-muted);">Path:</span>
-            <span style="color: var(--color-text); font-family: var(--font-mono); font-size: var(--text-xs);" title="${escapeHtml(file.path)}">${escapeHtml(truncate(file.path, 50))}</span>
+            <span style="color: var(--color-text-muted);">Workspace:</span>
+            <span class="badge" style="background: var(--color-primary); color: white; font-weight: 600;">${escapeHtml(file.workspace || 'Unknown')}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
+            <span style="color: var(--color-text-muted);">Directory:</span>
+            <span style="color: var(--color-text); font-family: var(--font-mono); font-size: var(--text-xs);" title="${escapeHtml(file.directory || file.path)}">${escapeHtml(truncate(file.directory || file.path, 40))}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
+            <span style="color: var(--color-text-muted);">File Name:</span>
+            <span style="color: var(--color-text); font-family: var(--font-mono); font-weight: 600;">${escapeHtml(file.name)}</span>
           </div>
           <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
             <span style="color: var(--color-text-muted);">Type:</span>
