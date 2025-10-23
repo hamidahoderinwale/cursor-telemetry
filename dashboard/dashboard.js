@@ -1636,8 +1636,15 @@ async function initializeD3FileGraph() {
     
     console.log(`📊 Loaded ${data.files.length} files (${(data.totalSize / 1024 / 1024).toFixed(2)} MB) from database`);
     
-    // Get unique file extensions from the data
-    const allExts = [...new Set(data.files.map(f => f.ext).filter(Boolean))].sort();
+    // Get unique file extensions from the data, grouping Git files
+    const allExts = [...new Set(data.files.map(f => {
+      const ext = f.ext;
+      // Group all Git-related files as just "Git"
+      if (ext && (ext.startsWith('Git') || ext === 'COMMIT_EDITMSG' || ext === 'HEAD' || ext === 'index' || ext === 'FETCH_HEAD' || ext === 'ORIG_HEAD')) {
+        return 'Git';
+      }
+      return ext;
+    }).filter(Boolean))].sort();
     
     // Populate file type dropdown
     const fileTypeFilter = document.getElementById('fileTypeFilter');
@@ -1655,9 +1662,16 @@ async function initializeD3FileGraph() {
     const selectedTypes = Array.from(fileTypeFilter?.selectedOptions || []).map(o => o.value);
     const allowedExts = selectedTypes.length > 0 ? selectedTypes : allExts;
     
-    // Filter files by selected extensions
+    // Filter files by selected extensions (with Git grouping support)
     const files = data.files
-      .filter(f => allowedExts.includes(f.ext))
+      .filter(f => {
+        const ext = f.ext;
+        // Check if this is a Git file and "Git" is selected
+        if (ext && (ext.startsWith('Git') || ext === 'COMMIT_EDITMSG' || ext === 'HEAD' || ext === 'index' || ext === 'FETCH_HEAD' || ext === 'ORIG_HEAD')) {
+          return allowedExts.includes('Git');
+        }
+        return allowedExts.includes(ext);
+      })
       .map(f => {
         // Find all events related to this file
         const relatedEvents = (state.data.events || []).filter(event => {
@@ -1748,11 +1762,12 @@ async function initializeD3FileGraph() {
       document.getElementById('graphAvgSimilarity').textContent = avgSim.toFixed(3);
     }
     
-    // Update embeddings analysis (now uses prompts)
+    // Update embeddings analysis (now uses prompts, excluding composer conversations which are just names)
     const validPrompts = (state.data.prompts || []).filter(p => {
       const text = p.text || p.prompt || p.preview || p.content || '';
       const isJsonLike = text.startsWith('{') || text.startsWith('[');
-      return !isJsonLike && text.length > 10;
+      const isComposerConversation = p.source === 'composer' && p.type === 'conversation';
+      return !isJsonLike && !isComposerConversation && text.length > 10;
     });
     const totalTokens = validPrompts.reduce((sum, p) => {
       const text = p.text || p.prompt || p.preview || p.content || '';
@@ -1825,11 +1840,13 @@ function renderEmbeddingsVisualization() {
   const dimensions = parseInt(document.getElementById('embeddingsDimensions')?.value || '2');
   
   try {
-    // Filter out JSON metadata and prepare prompt texts
+    // Filter out JSON metadata, composer conversations (which are just names), and prepare actual prompt texts
     const validPrompts = prompts.filter(p => {
       const text = p.text || p.prompt || p.preview || p.content || '';
       const isJsonLike = text.startsWith('{') || text.startsWith('[');
-      return !isJsonLike && text.length > 10;
+      // Exclude composer conversations as they only contain conversation names, not actual prompt content
+      const isComposerConversation = p.source === 'composer' && p.type === 'conversation';
+      return !isJsonLike && !isComposerConversation && text.length > 10;
     });
     
     if (validPrompts.length === 0) {
