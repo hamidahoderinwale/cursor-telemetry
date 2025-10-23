@@ -6289,6 +6289,69 @@ document.addEventListener('DOMContentLoaded', () => {
     setInterval(fetchAllData, CONFIG.REFRESH_INTERVAL);
   }
 
+  // Setup search palette keyboard shortcuts and event listeners
+  document.addEventListener('keydown', (e) => {
+    // CMD+K or CTRL+K to open search
+    if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+      e.preventDefault();
+      openSearchPalette();
+    }
+    
+    // ESC to close search
+    if (e.key === 'Escape') {
+      const palette = document.getElementById('searchPalette');
+      if (palette && palette.classList.contains('active')) {
+        closeSearchPalette();
+      }
+    }
+    
+    // Arrow keys for navigation
+    const palette = document.getElementById('searchPalette');
+    if (palette && palette.classList.contains('active')) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        navigateSearchResults('down');
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        navigateSearchResults('up');
+      } else if (e.key === 'Enter' && searchSelectedIndex >= 0) {
+        e.preventDefault();
+        selectSearchResult(searchSelectedIndex);
+      }
+    }
+  });
+  
+  // Setup search input with debouncing
+  const searchInput = document.getElementById('searchInput');
+  if (searchInput) {
+    let debounceTimeout;
+    searchInput.addEventListener('input', (e) => {
+      clearTimeout(debounceTimeout);
+      debounceTimeout = setTimeout(() => {
+        performSearch(e.target.value);
+      }, 300); // 300ms debounce
+    });
+  }
+  
+  // Setup search trigger button
+  const searchTrigger = document.getElementById('searchTrigger');
+  if (searchTrigger) {
+    searchTrigger.addEventListener('click', () => {
+      openSearchPalette();
+    });
+  }
+  
+  // Close search when clicking overlay
+  const searchPalette = document.getElementById('searchPalette');
+  if (searchPalette) {
+    const overlay = searchPalette.querySelector('.modal-overlay');
+    if (overlay) {
+      overlay.addEventListener('click', () => {
+        closeSearchPalette();
+      });
+    }
+  }
+  
   console.log('✓ Dashboard initialized');
 });
 
