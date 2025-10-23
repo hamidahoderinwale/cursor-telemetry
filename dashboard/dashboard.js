@@ -412,6 +412,9 @@ function renderCurrentView() {
     case 'filegraph':
       renderFileGraphView(container);
       break;
+    case 'navigator':
+      renderNavigatorView(container);
+      break;
     case 'system':
       renderSystemView(container);
       break;
@@ -3278,6 +3281,737 @@ function getFileTypeColor(ext) {
   return colors[ext] || '#64748b';
 }
 
+// ===================================
+// Navigator Functions (Latent Space)
+// ===================================
+
+// Navigator state
+const navigatorState = {
+  viewMode: 'physical',
+  interpolation: 0.0,
+  transitionSpeed: 1.0,
+  physicalPositions: new Map(),
+  latentPositions: new Map(),
+  nodes: [],
+  links: [],
+  clusters: [],
+  svg: null,
+  simulation: null,
+  labelsVisible: true
+};
+
+async function initializeNavigator() {
+  const container = document.getElementById('navigatorContainer');
+  if (!container) return;
+  
+  try {
+    // Show loading
+    container.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%;"><div class="loading-spinner"></div><span style="margin-left: 12px;">Computing latent embeddings...</span></div>';
+    
+    // Fetch file data
+    const response = await fetch(`${CONFIG.API_BASE}/api/file-contents`);
+    const data = await response.json();
+    
+    if (!data.files || data.files.length === 0) {
+      container.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--color-text-muted);">No file data available</div>';
+      return;
+    }
+    
+    // Prepare files with events
+    const files = data.files.map(f => {
+      const relatedEvents = (state.data.events || []).filter(event => {
+        try {
+          const details = typeof event.details === 'string' ? JSON.parse(event.details) : event.details;
+          const filePath = details?.file_path || event.file_path || '';
+          return filePath.includes(f.name) || f.path.includes(filePath);
+        } catch (e) {
+          return false;
+        }
+      });
+      
+      return {
+        id: f.path,
+        path: f.path,
+        name: f.name,
+        ext: f.ext,
+        content: f.content,
+        changes: f.changes || 0,
+        lastModified: f.lastModified,
+        size: f.size,
+        events: relatedEvents || []
+      };
+    });
+    
+    // Compute physical positions (co-occurrence based)
+    const { nodes: physicalNodes, links } = computePhysicalLayout(files);
+    
+    // Compute latent positions (semantic similarity based)
+    const latentNodes = computeLatentLayout(files);
+    
+    // Store positions
+    physicalNodes.forEach(n => {
+      navigatorState.physicalPositions.set(n.id, { x: n.x, y: n.y });
+    });
+    
+    latentNodes.forEach(n => {
+      navigatorState.latentPositions.set(n.id, { x: n.x, y: n.y });
+    });
+    
+    // Detect latent clusters
+    navigatorState.clusters = detectLatentClusters(latentNodes, links);
+    
+    // Store data
+    navigatorState.nodes = physicalNodes;
+    navigatorState.links = links;
+    
+    // Render
+    renderNavigator(container, physicalNodes, links);
+    
+    // Render mini-map
+    renderMiniMap();
+    
+    // Update stats
+    updateNavigatorStats();
+    
+    // Generate insights
+    generateSemanticInsights();
+    
+  } catch (error) {
+    console.error('Error initializing navigator:', error);
+    container.innerHTML = `<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--color-error);">Error loading navigator: ${error.message}</div>`;
+  }
+}
+
+function computePhysicalLayout(files) {
+  // Use co-occurrence similarity (same as file graph)
+  const links = [];
+  const threshold = 0.3;
+  
+  for (let i = 0; i < files.length; i++) {
+    for (let j = i + 1; j < files.length; j++) {
+      const file1 = files[i];
+      const file2 = files[j];
+      
+      const sessions1 = new Set((file1.events || []).map(e => e.session_id).filter(Boolean));
+      const sessions2 = new Set((file2.events || []).map(e => e.session_id).filter(Boolean));
+      
+      const intersection = new Set([...sessions1].filter(x => sessions2.has(x)));
+      const union = new Set([...sessions1, ...sessions2]);
+      
+      const similarity = union.size > 0 ? intersection.size / union.size : 0;
+      
+      if (similarity > threshold) {
+        links.push({
+          source: file1.id,
+          target: file2.id,
+          similarity: similarity
+        });
+      }
+    }
+  }
+  
+  // Use force simulation to compute positions
+  const width = 800, height = 700;
+  const tempSimulation = d3.forceSimulation(files)
+    .force('link', d3.forceLink(links).id(d => d.id).distance(100))
+    .force('charge', d3.forceManyBody().strength(-300))
+    .force('center', d3.forceCenter(width / 2, height / 2))
+    .force('collision', d3.forceCollide().radius(30));
+  
+  // Run simulation to completion
+  for (let i = 0; i < 300; i++) {
+    tempSimulation.tick();
+  }
+  
+  tempSimulation.stop();
+  
+  return { nodes: files, links };
+}
+
+function computeLatentLayout(files) {
+  // Compute latent positions using simplified t-SNE/UMAP-like approach
+  // Based on TF-IDF content similarity
+  
+  const width = 800, height = 700;
+  
+  // Create feature vectors
+  const vectors = files.map(file => createFeatureVector(file));
+  
+  // Compute pairwise distances
+  const distances = [];
+  for (let i = 0; i < files.length; i++) {
+    distances[i] = [];
+    for (let j = 0; j < files.length; j++) {
+      distances[i][j] = euclideanDistance(vectors[i], vectors[j]);
+    }
+  }
+  
+  // Apply MDS (Multidimensional Scaling) for 2D projection
+  const positions = applyMDS(distances, 2);
+  
+  // Scale to canvas size
+  const xs = positions.map(p => p[0]);
+  const ys = positions.map(p => p[1]);
+  const minX = Math.min(...xs), maxX = Math.max(...xs);
+  const minY = Math.min(...ys), maxY = Math.max(...ys);
+  
+  const padding = 100;
+  const scaleX = (width - 2 * padding) / (maxX - minX || 1);
+  const scaleY = (height - 2 * padding) / (maxY - minY || 1);
+  
+  return files.map((file, i) => ({
+    ...file,
+    x: padding + (positions[i][0] - minX) * scaleX,
+    y: padding + (positions[i][1] - minY) * scaleY
+  }));
+}
+
+function createFeatureVector(file) {
+  // Create a simple feature vector based on file characteristics
+  const vector = [];
+  
+  // Content-based features (simplified TF-IDF)
+  const words = (file.content || '').toLowerCase().match(/\b\w+\b/g) || [];
+  const wordCounts = {};
+  words.forEach(w => wordCounts[w] = (wordCounts[w] || 0) + 1);
+  
+  // Take top 100 words as features
+  const topWords = Object.entries(wordCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 100);
+  
+  topWords.forEach(([word, count]) => {
+    vector.push(count / words.length); // Normalized frequency
+  });
+  
+  // Structural features
+  vector.push(file.changes / 100); // Normalized changes
+  vector.push(file.events.length / 50); // Normalized event count
+  
+  // Extension one-hot (simplified)
+  const exts = ['js', 'ts', 'py', 'html', 'css', 'json', 'md'];
+  exts.forEach(ext => {
+    vector.push(file.ext === ext ? 1 : 0);
+  });
+  
+  return vector;
+}
+
+function detectLatentClusters(nodes, links) {
+  // Use k-means clustering on latent positions
+  const k = Math.min(5, Math.ceil(nodes.length / 10));
+  const clusters = [];
+  
+  if (nodes.length === 0) return clusters;
+  
+  // Initialize centroids randomly
+  const centroids = [];
+  const used = new Set();
+  for (let i = 0; i < k; i++) {
+    let idx;
+    do {
+      idx = Math.floor(Math.random() * nodes.length);
+    } while (used.has(idx) && used.size < nodes.length);
+    used.add(idx);
+    centroids.push({ x: nodes[idx].x, y: nodes[idx].y });
+  }
+  
+  const clusterColors = [
+    '#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', 
+    '#10b981', '#3b82f6', '#ef4444', '#14b8a6'
+  ];
+  
+  // Run k-means iterations
+  for (let iter = 0; iter < 10; iter++) {
+    // Assign nodes to nearest centroid
+    const assignments = nodes.map(node => {
+      let minDist = Infinity;
+      let cluster = 0;
+      centroids.forEach((c, i) => {
+        const dist = Math.sqrt((node.x - c.x) ** 2 + (node.y - c.y) ** 2);
+        if (dist < minDist) {
+          minDist = dist;
+          cluster = i;
+        }
+      });
+      return cluster;
+    });
+    
+    // Update centroids
+    for (let i = 0; i < k; i++) {
+      const clusterNodes = nodes.filter((_, idx) => assignments[idx] === i);
+      if (clusterNodes.length > 0) {
+        centroids[i] = {
+          x: d3.mean(clusterNodes, d => d.x),
+          y: d3.mean(clusterNodes, d => d.y)
+        };
+      }
+    }
+  }
+  
+  // Final assignment
+  const assignments = nodes.map(node => {
+    let minDist = Infinity;
+    let cluster = 0;
+    centroids.forEach((c, i) => {
+      const dist = Math.sqrt((node.x - c.x) ** 2 + (node.y - c.y) ** 2);
+      if (dist < minDist) {
+        minDist = dist;
+        cluster = i;
+      }
+    });
+    return cluster;
+  });
+  
+  // Create cluster objects
+  for (let i = 0; i < k; i++) {
+    const clusterNodes = nodes.filter((_, idx) => assignments[idx] === i);
+    if (clusterNodes.length > 0) {
+      clusterNodes.forEach(n => n.cluster = `latent-${i}`);
+      clusters.push({
+        id: `latent-${i}`,
+        name: `Cluster ${i + 1}`,
+        nodes: clusterNodes,
+        color: clusterColors[i % clusterColors.length],
+        centroid: centroids[i]
+      });
+    }
+  }
+  
+  return clusters;
+}
+
+function renderNavigator(container, nodes, links) {
+  container.innerHTML = '';
+  
+  const width = container.clientWidth || 800;
+  const height = container.clientHeight || 700;
+  
+  // Create SVG
+  const svg = d3.select(container)
+    .append('svg')
+    .attr('width', width)
+    .attr('height', height)
+    .style('background', 'var(--color-bg)');
+  
+  const g = svg.append('g');
+  
+  // Add zoom
+  const zoom = d3.zoom()
+    .scaleExtent([0.1, 4])
+    .on('zoom', (event) => {
+      g.attr('transform', event.transform);
+      updateMiniMapViewport();
+    });
+  
+  svg.call(zoom);
+  
+  navigatorState.svg = svg;
+  navigatorState.zoom = zoom;
+  navigatorState.g = g;
+  
+  // Create links
+  const link = g.append('g')
+    .selectAll('line')
+    .data(links)
+    .join('line')
+    .attr('stroke', '#64748b')
+    .attr('stroke-opacity', 0.3)
+    .attr('stroke-width', d => Math.max(1, d.similarity * 2));
+  
+  // Create nodes
+  const node = g.append('g')
+    .selectAll('g')
+    .data(nodes)
+    .join('g')
+    .attr('class', 'nav-node')
+    .call(d3.drag()
+      .on('start', dragstarted)
+      .on('drag', dragged)
+      .on('end', dragended))
+    .on('click', (event, d) => showFileInfo(d))
+    .style('cursor', 'pointer');
+  
+  node.append('circle')
+    .attr('r', d => Math.max(6, Math.min(15, Math.sqrt(d.changes) * 2)))
+    .attr('fill', d => {
+      if (d.cluster && navigatorState.clusters.length > 0) {
+        const cluster = navigatorState.clusters.find(c => c.id === d.cluster);
+        return cluster ? cluster.color : getFileTypeColor(d.ext);
+      }
+      return getFileTypeColor(d.ext);
+    })
+    .attr('stroke', '#fff')
+    .attr('stroke-width', 2)
+    .attr('class', 'nav-node-circle');
+  
+  const labels = node.append('text')
+    .text(d => d.name)
+    .attr('x', 0)
+    .attr('y', -20)
+    .attr('text-anchor', 'middle')
+    .attr('font-size', '10px')
+    .attr('fill', 'var(--color-text)')
+    .attr('class', 'nav-node-label')
+    .style('pointer-events', 'none');
+  
+  navigatorState.labels = labels;
+  navigatorState.nodeElements = node;
+  navigatorState.linkElements = link;
+  
+  // Update positions
+  updateNodePositions();
+  
+  function dragstarted(event, d) {
+    d.fx = d.x;
+    d.fy = d.y;
+  }
+  
+  function dragged(event, d) {
+    d.fx = event.x;
+    d.fy = event.y;
+    updateNodePositions();
+  }
+  
+  function dragended(event, d) {
+    d.fx = null;
+    d.fy = null;
+  }
+}
+
+function setNavigatorViewMode(mode) {
+  navigatorState.viewMode = mode;
+  
+  // Update button states
+  document.querySelectorAll('.view-mode-btn').forEach(btn => {
+    btn.classList.remove('active');
+  });
+  document.querySelector(`.view-mode-btn[data-mode="${mode}"]`)?.classList.add('active');
+  
+  // Set interpolation
+  const targetInterpolation = {
+    'physical': 0.0,
+    'hybrid': 0.5,
+    'latent': 1.0
+  }[mode];
+  
+  // Animate transition
+  animateInterpolation(navigatorState.interpolation, targetInterpolation);
+}
+
+function animateInterpolation(from, to) {
+  const duration = 1000 / navigatorState.transitionSpeed;
+  const startTime = Date.now();
+  
+  const animate = () => {
+    const elapsed = Date.now() - startTime;
+    const t = Math.min(elapsed / duration, 1);
+    const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; // easeInOutQuad
+    
+    navigatorState.interpolation = from + (to - from) * eased;
+    
+    // Update visualization
+    updateNodePositions();
+    updateInterpolationDisplay();
+    
+    if (t < 1) {
+      requestAnimationFrame(animate);
+    }
+  };
+  
+  animate();
+}
+
+function updateNodePositions() {
+  if (!navigatorState.nodeElements || !navigatorState.linkElements) return;
+  
+  const t = navigatorState.interpolation;
+  
+  // Interpolate positions
+  navigatorState.nodes.forEach(node => {
+    const phys = navigatorState.physicalPositions.get(node.id);
+    const lat = navigatorState.latentPositions.get(node.id);
+    
+    if (phys && lat) {
+      node.x = phys.x * (1 - t) + lat.x * t;
+      node.y = phys.y * (1 - t) + lat.y * t;
+    }
+  });
+  
+  // Update D3 elements
+  navigatorState.nodeElements.attr('transform', d => `translate(${d.x},${d.y})`);
+  
+  navigatorState.linkElements
+    .attr('x1', d => {
+      const source = navigatorState.nodes.find(n => n.id === d.source || n.id === d.source.id);
+      return source ? source.x : 0;
+    })
+    .attr('y1', d => {
+      const source = navigatorState.nodes.find(n => n.id === d.source || n.id === d.source.id);
+      return source ? source.y : 0;
+    })
+    .attr('x2', d => {
+      const target = navigatorState.nodes.find(n => n.id === d.target || n.id === d.target.id);
+      return target ? target.x : 0;
+    })
+    .attr('y2', d => {
+      const target = navigatorState.nodes.find(n => n.id === d.target || n.id === d.target.id);
+      return target ? target.y : 0;
+    });
+  
+  // Update mini-map
+  updateMiniMapViewport();
+}
+
+function updateInterpolationDisplay() {
+  const percent = Math.round(navigatorState.interpolation * 100);
+  const el = document.getElementById('interpolationValue');
+  if (el) {
+    el.textContent = `${percent}%`;
+  }
+}
+
+function updateTransitionSpeed(value) {
+  navigatorState.transitionSpeed = parseFloat(value);
+  const el = document.getElementById('speedLabel');
+  if (el) {
+    el.textContent = `${value}x`;
+  }
+}
+
+function renderMiniMap() {
+  const container = document.getElementById('miniMapCanvas');
+  if (!container) return;
+  
+  container.innerHTML = '';
+  
+  const width = container.clientWidth;
+  const height = 180;
+  const scale = 0.2;
+  
+  const svg = d3.select(container)
+    .append('svg')
+    .attr('width', width)
+    .attr('height', height);
+  
+  // Render simplified nodes
+  svg.selectAll('circle')
+    .data(navigatorState.nodes)
+    .join('circle')
+    .attr('cx', d => d.x * scale)
+    .attr('cy', d => d.y * scale)
+    .attr('r', 1.5)
+    .attr('fill', d => {
+      if (d.cluster) {
+        const cluster = navigatorState.clusters.find(c => c.id === d.cluster);
+        return cluster ? cluster.color : '#999';
+      }
+      return '#999';
+    })
+    .attr('opacity', 0.8);
+  
+  // Viewport rectangle
+  const viewportRect = svg.append('rect')
+    .attr('class', 'minimap-viewport')
+    .attr('fill', 'none')
+    .attr('stroke', '#3b82f6')
+    .attr('stroke-width', 1.5);
+  
+  navigatorState.miniMapSvg = svg;
+  navigatorState.miniMapViewport = viewportRect;
+  navigatorState.miniMapScale = scale;
+  
+  // Click to navigate
+  svg.on('click', (event) => {
+    const [x, y] = d3.pointer(event);
+    navigateToMiniMapPosition(x / scale, y / scale);
+  });
+  
+  updateMiniMapViewport();
+}
+
+function updateMiniMapViewport() {
+  if (!navigatorState.miniMapViewport || !navigatorState.svg) return;
+  
+  const transform = d3.zoomTransform(navigatorState.svg.node());
+  const scale = navigatorState.miniMapScale;
+  
+  const width = 800 / transform.k;
+  const height = 700 / transform.k;
+  const x = -transform.x / transform.k;
+  const y = -transform.y / transform.k;
+  
+  navigatorState.miniMapViewport
+    .attr('x', x * scale)
+    .attr('y', y * scale)
+    .attr('width', width * scale)
+    .attr('height', height * scale);
+}
+
+function navigateToMiniMapPosition(x, y) {
+  if (!navigatorState.svg || !navigatorState.zoom) return;
+  
+  const width = 800;
+  const height = 700;
+  const scale = 1.5;
+  
+  const translateX = width / 2 - scale * x;
+  const translateY = height / 2 - scale * y;
+  
+  navigatorState.svg.transition()
+    .duration(500)
+    .call(navigatorState.zoom.transform, d3.zoomIdentity.translate(translateX, translateY).scale(scale));
+}
+
+function updateNavigatorStats() {
+  document.getElementById('navFileCount').textContent = navigatorState.nodes.length;
+  document.getElementById('navClusterCount').textContent = navigatorState.clusters.length;
+  
+  // Calculate coherence (average intra-cluster distance vs inter-cluster distance)
+  let coherence = 0;
+  if (navigatorState.clusters.length > 1) {
+    const intraDistances = [];
+    const interDistances = [];
+    
+    navigatorState.clusters.forEach(cluster => {
+      cluster.nodes.forEach((n1, i) => {
+        cluster.nodes.forEach((n2, j) => {
+          if (i < j) {
+            const dist = Math.sqrt((n1.x - n2.x) ** 2 + (n1.y - n2.y) ** 2);
+            intraDistances.push(dist);
+          }
+        });
+      });
+    });
+    
+    navigatorState.clusters.forEach((c1, i) => {
+      navigatorState.clusters.forEach((c2, j) => {
+        if (i < j) {
+          c1.nodes.forEach(n1 => {
+            c2.nodes.forEach(n2 => {
+              const dist = Math.sqrt((n1.x - n2.x) ** 2 + (n1.y - n2.y) ** 2);
+              interDistances.push(dist);
+            });
+          });
+        }
+      });
+    });
+    
+    const avgIntra = d3.mean(intraDistances) || 1;
+    const avgInter = d3.mean(interDistances) || 1;
+    coherence = Math.max(0, Math.min(100, (1 - avgIntra / avgInter) * 100));
+  }
+  
+  document.getElementById('navCoherence').textContent = `${coherence.toFixed(0)}%`;
+  
+  // Update cluster legend
+  const legend = document.getElementById('clusterLegend');
+  if (legend) {
+    legend.innerHTML = navigatorState.clusters.map(cluster => `
+      <div style="display: flex; align-items: center; gap: var(--space-xs);">
+        <div style="width: 12px; height: 12px; border-radius: 2px; background: ${cluster.color};"></div>
+        <span style="color: var(--color-text);">${cluster.name} (${cluster.nodes.length})</span>
+      </div>
+    `).join('');
+  }
+}
+
+function generateSemanticInsights() {
+  const container = document.getElementById('semanticInsights');
+  if (!container || navigatorState.clusters.length === 0) return;
+  
+  const insights = [];
+  
+  // Find most isolated cluster
+  const clusterCenters = navigatorState.clusters.map(c => c.centroid);
+  let maxDist = 0;
+  let isolatedCluster = null;
+  
+  navigatorState.clusters.forEach((cluster, i) => {
+    const distances = clusterCenters.map((center, j) => {
+      if (i === j) return 0;
+      return Math.sqrt((cluster.centroid.x - center.x) ** 2 + (cluster.centroid.y - center.y) ** 2);
+    });
+    const minDist = Math.min(...distances.filter(d => d > 0));
+    if (minDist > maxDist) {
+      maxDist = minDist;
+      isolatedCluster = cluster;
+    }
+  });
+  
+  if (isolatedCluster) {
+    insights.push({
+      title: 'Most Isolated Module',
+      description: `${isolatedCluster.name} has minimal semantic overlap with other parts of your codebase.`,
+      cluster: isolatedCluster,
+      type: 'isolation'
+    });
+  }
+  
+  // Find largest cluster
+  const largestCluster = navigatorState.clusters.reduce((max, c) => 
+    c.nodes.length > max.nodes.length ? c : max
+  );
+  
+  insights.push({
+    title: 'Core Module',
+    description: `${largestCluster.name} contains ${largestCluster.nodes.length} files (${((largestCluster.nodes.length / navigatorState.nodes.length) * 100).toFixed(0)}% of codebase).`,
+    cluster: largestCluster,
+    type: 'core'
+  });
+  
+  // Render insights
+  container.innerHTML = insights.map(insight => `
+    <div style="padding: var(--space-md); background: var(--color-bg-alt); border-left: 4px solid ${insight.cluster.color}; border-radius: var(--radius-md);">
+      <h4 style="margin: 0 0 var(--space-xs) 0; font-size: var(--text-sm); color: var(--color-text);">${insight.title}</h4>
+      <p style="margin: 0; font-size: var(--text-xs); color: var(--color-text-muted);">${insight.description}</p>
+    </div>
+  `).join('');
+}
+
+function zoomToFitNavigator() {
+  if (!navigatorState.svg || !navigatorState.zoom || navigatorState.nodes.length === 0) return;
+  
+  const xs = navigatorState.nodes.map(d => d.x);
+  const ys = navigatorState.nodes.map(d => d.y);
+  
+  const minX = Math.min(...xs) - 50;
+  const maxX = Math.max(...xs) + 50;
+  const minY = Math.min(...ys) - 50;
+  const maxY = Math.max(...ys) + 50;
+  
+  const width = 800;
+  const height = 700;
+  
+  const scale = 0.9 * Math.min(width / (maxX - minX), height / (maxY - minY));
+  const translateX = width / 2 - scale * (minX + maxX) / 2;
+  const translateY = height / 2 - scale * (minY + maxY) / 2;
+  
+  navigatorState.svg.transition()
+    .duration(750)
+    .call(navigatorState.zoom.transform, d3.zoomIdentity.translate(translateX, translateY).scale(scale));
+}
+
+function resetNavigatorView() {
+  setNavigatorViewMode('physical');
+  zoomToFitNavigator();
+}
+
+function toggleNavigatorLabels() {
+  if (!navigatorState.labels) return;
+  
+  navigatorState.labelsVisible = !navigatorState.labelsVisible;
+  const button = document.getElementById('navigatorLabelToggle');
+  
+  if (navigatorState.labelsVisible) {
+    navigatorState.labels.attr('opacity', 1);
+    if (button) button.textContent = 'Hide Labels';
+  } else {
+    navigatorState.labels.attr('opacity', 0);
+    if (button) button.textContent = 'Show Labels';
+  }
+}
+
 function showFileInfo(file) {
   const modal = document.getElementById('eventModal');
   const title = document.getElementById('modalTitle');
@@ -3365,6 +4099,153 @@ function resetFileGraph() {
 function resetFileGraphZoom() {
   // Alias for resetFileGraph
   resetFileGraph();
+}
+
+// ===================================
+// Navigator View (Latent Space)
+// ===================================
+
+function renderNavigatorView(container) {
+  container.innerHTML = `
+    <div class="navigator-view">
+      <div class="view-header">
+        <h2>Semantic Navigator</h2>
+        <p class="view-subtitle">Explore your codebase in latent space - where semantic similarity becomes visual proximity</p>
+      </div>
+
+      <!-- View Mode Switcher -->
+      <div class="view-mode-controls" style="display: flex; gap: var(--space-lg); align-items: center; padding: var(--space-lg); background: var(--color-bg-alt); border-radius: var(--radius-lg); margin-bottom: var(--space-lg);">
+        <div style="flex: 1;">
+          <h3 style="margin: 0 0 var(--space-xs) 0; font-size: var(--text-md); color: var(--color-text);">View Mode</h3>
+          <div class="view-mode-switcher" style="display: flex; gap: var(--space-sm);">
+            <button class="view-mode-btn active" data-mode="physical" onclick="setNavigatorViewMode('physical')">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="margin-right: 4px;">
+                <path d="M4 4h3v3H4V4zm5 0h3v3H9V4zM4 9h3v3H4V9zm5 0h3v3H9V9z"/>
+              </svg>
+              Physical
+            </button>
+            <button class="view-mode-btn" data-mode="hybrid" onclick="setNavigatorViewMode('hybrid')">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="margin-right: 4px;">
+                <circle cx="8" cy="4" r="2"/>
+                <circle cx="4" cy="12" r="2"/>
+                <circle cx="12" cy="12" r="2"/>
+                <path d="M8 6L4 10M8 6l4 4"/>
+              </svg>
+              Hybrid
+            </button>
+            <button class="view-mode-btn" data-mode="latent" onclick="setNavigatorViewMode('latent')">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="margin-right: 4px;">
+                <circle cx="8" cy="8" r="6"/>
+                <circle cx="8" cy="8" r="3"/>
+                <path d="M8 2v4M8 10v4M2 8h4M10 8h4"/>
+              </svg>
+              Latent
+            </button>
+          </div>
+          <p style="margin: var(--space-xs) 0 0 0; font-size: var(--text-xs); color: var(--color-text-muted);">
+            <strong>Physical:</strong> Direct co-modification • 
+            <strong>Latent:</strong> Semantic similarity • 
+            <strong>Hybrid:</strong> Blend both
+          </p>
+        </div>
+
+        <div style="border-left: 1px solid var(--color-border); padding-left: var(--space-lg);">
+          <h3 style="margin: 0 0 var(--space-xs) 0; font-size: var(--text-md); color: var(--color-text);">Transition Speed</h3>
+          <input type="range" id="transitionSpeed" min="0.5" max="2" step="0.1" value="1" 
+                 style="width: 200px;" oninput="updateTransitionSpeed(this.value)">
+          <div style="display: flex; justify-content: space-between; font-size: var(--text-xs); color: var(--color-text-muted); margin-top: 4px;">
+            <span>Slow</span>
+            <span id="speedLabel">1.0x</span>
+            <span>Fast</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Main Content Area -->
+      <div style="display: grid; grid-template-columns: 1fr 200px; gap: var(--space-lg);">
+        
+        <!-- Main Visualization -->
+        <div>
+          <div class="navigator-container" id="navigatorContainer" style="width: 100%; height: 700px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg); position: relative;">
+            <!-- Navigator will be rendered here -->
+          </div>
+
+          <!-- Navigation Controls -->
+          <div style="display: flex; gap: var(--space-md); margin-top: var(--space-md); align-items: center;">
+            <button class="btn btn-primary" onclick="zoomToFitNavigator()" style="font-size: 13px; padding: 8px 16px;">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="margin-right: 4px;">
+                <path d="M2 2h5v5H2V2zm7 0h5v5H9V2zM2 9h5v5H2V9zm7 0h5v5H9V9z"/>
+              </svg>
+              Zoom to Fit
+            </button>
+            <button class="btn btn-secondary" onclick="resetNavigatorView()" style="font-size: 13px; padding: 8px 16px;">Reset View</button>
+            <button class="btn btn-secondary" onclick="toggleNavigatorLabels()" id="navigatorLabelToggle" style="font-size: 13px; padding: 8px 16px;">Hide Labels</button>
+            
+            <div style="flex: 1;"></div>
+            
+            <div style="display: flex; gap: var(--space-sm); align-items: center; font-size: var(--text-sm); color: var(--color-text-muted);">
+              <span>Interpolation:</span>
+              <span id="interpolationValue" style="font-weight: bold; color: var(--color-primary);">0%</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Mini-Map Widget -->
+        <div>
+          <div class="mini-map-widget" style="background: var(--color-bg-alt); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: var(--space-md);">
+            <h3 style="margin: 0 0 var(--space-sm) 0; font-size: var(--text-sm); color: var(--color-text); display: flex; align-items: center; gap: var(--space-xs);">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                <path d="M8 0a8 8 0 100 16A8 8 0 008 0zm0 2a6 6 0 110 12A6 6 0 018 2z"/>
+              </svg>
+              Overview
+            </h3>
+            <div id="miniMapCanvas" style="width: 100%; height: 180px; background: var(--color-bg); border-radius: var(--radius-sm); border: 1px solid var(--color-border); position: relative; cursor: pointer;">
+              <!-- Mini-map will be rendered here -->
+            </div>
+            
+            <div style="margin-top: var(--space-md); font-size: var(--text-xs); color: var(--color-text-muted);">
+              <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                <span>Files:</span>
+                <span id="navFileCount" style="color: var(--color-text); font-weight: 600;">0</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                <span>Clusters:</span>
+                <span id="navClusterCount" style="color: var(--color-text); font-weight: 600;">0</span>
+              </div>
+              <div style="display: flex; justify-content: space-between;">
+                <span>Coherence:</span>
+                <span id="navCoherence" style="color: var(--color-success); font-weight: 600;">0%</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Cluster Legend -->
+          <div style="margin-top: var(--space-md); background: var(--color-bg-alt); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: var(--space-md);">
+            <h3 style="margin: 0 0 var(--space-sm) 0; font-size: var(--text-sm); color: var(--color-text);">Latent Clusters</h3>
+            <div id="clusterLegend" style="display: flex; flex-direction: column; gap: var(--space-xs); font-size: var(--text-xs);">
+              <!-- Cluster legend will be populated -->
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Semantic Insights -->
+      <div class="card" style="margin-top: var(--space-lg);">
+        <div class="card-header">
+          <h3 class="card-title">Semantic Insights</h3>
+          <p class="card-subtitle">Discovered patterns in latent space</p>
+        </div>
+        <div class="card-body">
+          <div id="semanticInsights" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: var(--space-md);">
+            <!-- Insights will be populated -->
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Initialize navigator after DOM is ready
+  setTimeout(() => initializeNavigator(), 0);
 }
 
 // ===================================
