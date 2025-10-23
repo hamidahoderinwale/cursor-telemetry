@@ -4191,10 +4191,23 @@ let searchCurrentResults = [];
  * Initialize search engine when data is loaded
  */
 async function initializeSearch() {
-  if (window.SearchEngine) {
+  try {
+    if (!window.SearchEngine) {
+      console.warn('⚠️ SearchEngine class not available');
+      return;
+    }
+    
+    if (!window.lunr) {
+      console.warn('⚠️ Lunr.js not loaded');
+      return;
+    }
+    
+    console.log('🔍 Initializing search engine...');
     searchEngine = new window.SearchEngine();
     await searchEngine.initialize(state.data);
-    console.log('✅ Search engine initialized');
+    console.log('✅ Search engine initialized with', searchEngine.documents.length, 'documents');
+  } catch (error) {
+    console.error('❌ Search engine initialization failed:', error);
   }
 }
 
@@ -4208,9 +4221,20 @@ function openSearchPalette() {
   if (palette) {
     palette.classList.add('active');
     if (input) {
-      input.focus();
-      input.value = '';
+      setTimeout(() => {
+        input.focus();
+        input.value = '';
+      }, 50); // Small delay to ensure modal is visible
       showSearchSuggestions();
+    }
+    
+    // Log search engine status for debugging
+    if (searchEngine) {
+      console.log('✅ Search ready with', searchEngine.documents?.length || 0, 'documents');
+    } else {
+      console.warn('⚠️ Search engine not ready - initializing...');
+      // Try to initialize if not already done
+      initializeSearch();
     }
   }
 }
@@ -4231,15 +4255,55 @@ function closeSearchPalette() {
  * Perform search
  */
 function performSearch(query) {
-  if (!searchEngine || !query.trim()) {
+  if (!query.trim()) {
     showSearchSuggestions();
     return;
   }
+  
+  if (!searchEngine) {
+    console.warn('⚠️ Search engine not initialized');
+    const container = document.getElementById('searchResults');
+    if (container) {
+      container.innerHTML = `
+        <div class="search-empty">
+          <svg class="search-empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <circle cx="11" cy="11" r="8" stroke-width="2"/>
+            <path d="M21 21l-4.35-4.35" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          <div>Search is initializing...</div>
+          <div style="font-size: var(--text-xs); margin-top: var(--space-sm); color: var(--color-text-muted);">
+            Please wait for data to load
+          </div>
+        </div>
+      `;
+    }
+    return;
+  }
 
-  const results = searchEngine.search(query, { limit: 20 });
-  searchCurrentResults = results;
-  searchSelectedIndex = -1;
-  renderSearchResults(results);
+  try {
+    console.log('🔍 Searching for:', query);
+    const results = searchEngine.search(query, { limit: 20 });
+    console.log('📊 Found', results.length, 'results');
+    searchCurrentResults = results;
+    searchSelectedIndex = -1;
+    renderSearchResults(results);
+  } catch (error) {
+    console.error('❌ Search error:', error);
+    const container = document.getElementById('searchResults');
+    if (container) {
+      container.innerHTML = `
+        <div class="search-empty">
+          <svg class="search-empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" stroke-width="2"/>
+          </svg>
+          <div>Search error</div>
+          <div style="font-size: var(--text-xs); margin-top: var(--space-sm); color: var(--color-text-muted);">
+            ${error.message}
+          </div>
+        </div>
+      `;
+    }
+  }
 }
 
 /**
