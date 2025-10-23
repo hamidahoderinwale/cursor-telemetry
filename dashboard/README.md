@@ -90,24 +90,106 @@ A comprehensive, real-time dashboard for monitoring Cursor IDE activity, AI inte
 #### Recent Activity (15-min intervals)
 - Last 12 hours of development activity
 
+#### AI Usage: Interface & Model Distribution
+**Three View Modes** (toggle with radio buttons):
+
+1. **By Interface** - How you interact with AI:
+   - 🟣 Agent (Autonomous) - AI working independently
+   - 🟠 Composer - Main composition panel
+   - 🟢 Tab (CMD+K) - Quick autocomplete/suggestions
+   - 🔵 Chat Panel - Traditional chat interface
+
+2. **By Model** - Which AI models are used:
+   - 🟠 Claude Sonnet 4.5 (Anthropic)
+   - 🟠 Claude Opus (Anthropic)
+   - 🟠 Claude Haiku (Anthropic)
+   - 🟢 GPT-4 (OpenAI)
+   - 🟢 GPT-3.5 (OpenAI)
+   - Note: Tab completions excluded (not full model-based)
+
+3. **Combined View** - Both dimensions together:
+   - Shows entries like "Claude Sonnet 4.5 (agent)"
+   - Tab completions shown as "Tab Completion (CMD+K)"
+   - Full context of model + interface usage
+
+**Generalization**: 
+- Automatically tracks any new models
+- Dynamic color assignment for unknown models
+- Normalizes known model variants
+- Ready for multi-provider scenarios
+
 ### File Graph Page
+
+#### Hierarchical Organization
+- **Workspace Grouping**: Files colored by workspace/project
+- **Real Filenames**: Git object hashes filtered out (no more `803662867720fa6f...`)
+- **Directory Structure**: Shows folder hierarchy
+- **Visual Clustering**: Files from same workspace naturally group together
+
+#### Color Coding by Workspace
+- 🔵 Indigo - Workspace 1
+- 🟣 Purple - Workspace 2  
+- 🔴 Pink - Workspace 3
+- 🟠 Orange - Workspace 4
+- 🟢 Green - Workspace 5
+- 🔵 Blue - Workspace 6
+- 🟦 Teal - Workspace 7
+- 🔴 Rose - Workspace 8
+- **Legend** displayed on graph showing workspace → color mapping
 
 #### Semantic Analysis
 - **TF-IDF**: Term frequency-inverse document frequency for code similarity
-- **Co-occurrence**: Files modified together
+- **Co-occurrence**: Files modified together in same sessions
 - **Temporal Proximity**: Files changed around the same time
+- **Session-based Similarity**: Jaccard similarity on shared sessions
 
 #### Visualization Controls
-- **Layout**: Force-directed, circular, radial
-- **Node Size**: By change count, file size, or recency
-- **Overlay**: AI prompts, activity heat
+- **Layout**: Force-directed (with workspace clustering)
+- **Node Size**: By change count
+- **File Type Filter**: Multi-select dropdown by extension
 - **Threshold**: Similarity filtering (0.0 - 1.0)
-- **File Type Filter**: Multi-select by extension
+
+#### File Information Modal
+When clicking a node, displays:
+- Workspace badge (color-coded)
+- Directory path (folder structure)
+- File name (bold, highlighted)
+- File type, total changes, last modified
+- Recent events (last 10 modifications)
 
 #### Embeddings Visualization
-- 2D/3D prompt embeddings using PCA, t-SNE, or MDS
+- **AI Prompt Analysis** (not files - composer conversations excluded)
+- 2D/3D embeddings using PCA, t-SNE, or MDS
 - Color-coded by timestamp (older = purple, newer = yellow/green)
-- Top terms and phrases extraction
+- **Top Terms & Phrases** extraction with occurrence counts
+- Prompts analyzed: Filters out JSON and conversation names
+- Shows actual prompt content relationships
+
+### Search Engine
+
+**Keyboard Shortcut**: `CMD+K` or `⌘K` to open search palette
+
+#### Search Modes
+- **Full-text**: Lunr.js inverted index for fast text search
+- **Semantic**: TF-IDF cosine similarity for related content
+- **Fuzzy**: Levenshtein distance for typo tolerance
+- **Faceted**: Filter by type, workspace, date, mode
+
+#### Faceted Filters
+- `type:prompt` - Only AI prompts
+- `type:event` - Only file change events
+- `workspace:name` - Specific workspace
+- `date:today` - Today's activity
+- `date:week` - Last 7 days
+- `mode:agent` - Agent interactions only
+
+#### Features
+- Real-time results as you type (debounced)
+- Keyboard navigation (↑/↓ arrows, Enter to select)
+- Search history tracking
+- Suggested searches and filters
+- Multi-modal search (combines full-text + semantic)
+- Click results to view details in modal
 
 ## Data Capture Techniques
 
