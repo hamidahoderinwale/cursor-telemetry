@@ -1169,7 +1169,15 @@ function renderFileTypesChart() {
     try {
       const details = typeof event.details === 'string' ? JSON.parse(event.details) : event.details;
       const path = details?.file_path || '';
-      const ext = path.split('.').pop() || 'unknown';
+      let ext = path.split('.').pop() || 'unknown';
+      
+      // Group all Git-related extensions under "Git"
+      if (ext.startsWith('Git') || ext === 'COMMIT_EDITMSG' || ext === 'HEAD' || 
+          ext === 'index' || ext === 'FETCH_HEAD' || ext === 'ORIG_HEAD' || 
+          path.includes('.git/')) {
+        ext = 'Git';
+      }
+      
       typeCount[ext] = (typeCount[ext] || 0) + 1;
     } catch {}
   });
