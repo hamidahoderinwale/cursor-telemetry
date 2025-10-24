@@ -816,6 +816,7 @@ curl "http://localhost:3000/api/conversations"
 ## Related Projects
 - [Clio](https://github.com/openclio/clio) - Faceted analysis framework
 - [D3.js](https://d3js.org/) - Data visualization library
+- [General User Models from Computer Use] (https://arxiv.org/abs/2505.10831)
 
 ## Support
 
