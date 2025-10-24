@@ -2542,6 +2542,15 @@ loadPersistedData().then(() => {
           
           db.prompts.push(enhancedPrompt);
           
+          // ===== SAVE TO PERSISTENT DATABASE =====
+          try {
+            await persistentDB.savePrompt(enhancedPrompt);
+            console.log(`   Saved prompt to SQLite: ${enhancedPrompt.id}`);
+          } catch (saveError) {
+            console.warn('Error saving prompt to database:', saveError.message);
+          }
+          // ===== END PERSISTENCE =====
+          
           // ===== NEW: Track analytics for this prompt =====
           try {
             // Analyze context window
