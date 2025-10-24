@@ -814,8 +814,6 @@ curl "http://localhost:3000/api/conversations"
 **Security Warning**: The system captures API keys, passwords, personal information, and business data in plain text with no encryption or access controls.
 
 ## Related Projects
-
-- [Cursor IDE](https://cursor.sh/) - AI-powered code editor
 - [Clio](https://github.com/openclio/clio) - Faceted analysis framework
 - [D3.js](https://d3js.org/) - Data visualization library
 
