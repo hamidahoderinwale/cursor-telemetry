@@ -18,7 +18,33 @@ The Cursor Telemetry Dashboard is an intelligent monitoring platform that captur
 - **Export Capability**: Download complete database snapshots as JSON
 - **Interactive Dashboard**: 7 views with Chart.js and D3.js visualizations
 
-### System Architecture
+## Dashboard Preview
+
+### Overview Page
+The Overview page provides real-time statistics and activity monitoring at a glance.
+
+![Dashboard Overview](images/dashboard-overview.png)
+
+**Features shown:**
+- Active sessions and file change counters
+- AI interactions and code changed metrics
+- Recent activity timeline with file modifications
+- System status (memory, CPU, load average)
+- Workspace list with entry and event counts
+
+### Analytics Page
+The Analytics page displays comprehensive insights into AI activity, code output, and productivity metrics.
+
+![Dashboard Analytics](images/dashboard-analytics.png)
+
+**Features shown:**
+- AI Activity & Code Output correlation graph
+- Prompt frequency tracking over time
+- Code output volume (KB) visualization
+- Modified files over time tracking
+- Git repository activity monitoring
+
+## System Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
