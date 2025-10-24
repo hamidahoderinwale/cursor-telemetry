@@ -31,14 +31,27 @@ const PromptCaptureSystem = require('./prompt-capture-system.js');
 // Import Cursor database parser
 const CursorDatabaseParser = require('./cursor-db-parser.js');
 
+// Import screenshot monitor
+const ScreenshotMonitor = require('./screenshot-monitor.js');
+
 // Import persistent database
 const PersistentDB = require('./persistent-db.js');
 
 // Import reasoning engine
 const { ReasoningEngine } = require('./reasoning-engine.js');
 
+// Import new analytics modules
+const ContextAnalyzer = require('./context-analyzer.js');
+const ErrorTracker = require('./error-tracker.js');
+const ProductivityTracker = require('./productivity-tracker.js');
+
 // Initialize persistent database
 const persistentDB = new PersistentDB();
+
+// Initialize analytics trackers
+const contextAnalyzer = new ContextAnalyzer();
+const errorTracker = new ErrorTracker();
+const productivityTracker = new ProductivityTracker();
 
 // Simple in-memory database for companion service (with persistent backup)
 const db = {
@@ -124,6 +137,29 @@ ideStateCapture.start(); // Start capturing IDE state
 
 // Initialize Cursor database parser
 let cursorDbParser = new CursorDatabaseParser();
+
+// Initialize screenshot monitor
+let screenshotMonitor = new ScreenshotMonitor();
+
+// Start screenshot monitoring with callback
+screenshotMonitor.start((action, screenshotData) => {
+  // Link screenshots to recent prompts/events
+  if (action === 'added') {
+    console.log(`📷 Screenshot captured: ${screenshotData.fileName}`);
+    
+    // Find prompts/events near this time
+    const recentPrompts = db.prompts.filter(p => {
+      const promptTime = new Date(p.timestamp).getTime();
+      const screenshotTime = new Date(screenshotData.timestamp).getTime();
+      return Math.abs(screenshotTime - promptTime) <= 5 * 60 * 1000; // 5 minutes
+    });
+    
+    // Link screenshot to prompts
+    recentPrompts.forEach(prompt => {
+      screenshotMonitor.linkScreenshotToEvent(screenshotData.id, prompt.id, 'prompt');
+    });
+  }
+});
 
 // Add new endpoint for IDE state
 app.get('/ide-state', (req, res) => {
@@ -1379,6 +1415,162 @@ function decodeGitRef(filePath, content) {
   return null;
 }
 
+// API endpoint for screenshots
+app.get('/api/screenshots', (req, res) => {
+  try {
+    const { limit, recent, since, until } = req.query;
+    
+    let screenshots = [];
+    
+    if (recent) {
+      // Get recent screenshots
+      screenshots = screenshotMonitor.getRecentScreenshots(parseInt(recent) || 10);
+    } else if (since && until) {
+      // Get screenshots in time range
+      const startTime = new Date(since).getTime();
+      const endTime = new Date(until).getTime();
+      screenshots = screenshotMonitor.getScreenshotsInRange(startTime, endTime);
+    } else {
+      // Get all screenshots
+      screenshots = screenshotMonitor.getAllScreenshots();
+      if (limit) {
+        screenshots = screenshots.slice(0, parseInt(limit));
+      }
+    }
+    
+    res.json({
+      success: true,
+      screenshots: screenshots,
+      stats: screenshotMonitor.getStats()
+    });
+  } catch (error) {
+    console.error('Error getting screenshots:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// API endpoint to get screenshots near a specific time
+app.get('/api/screenshots/near/:timestamp', (req, res) => {
+  try {
+    const timestamp = req.params.timestamp;
+    const windowMs = parseInt(req.query.window) || 5 * 60 * 1000; // 5 minutes default
+    
+    const screenshots = screenshotMonitor.findScreenshotsNearTime(timestamp, windowMs);
+    
+    res.json({
+      success: true,
+      screenshots: screenshots,
+      count: screenshots.length
+    });
+  } catch (error) {
+    console.error('Error finding screenshots:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ===================================
+// NEW ANALYTICS ENDPOINTS
+// ===================================
+
+// Context Analytics Endpoints
+app.get('/api/analytics/context', (req, res) => {
+  try {
+    const analytics = contextAnalyzer.getContextAnalytics();
+    res.json({
+      success: true,
+      data: analytics
+    });
+  } catch (error) {
+    console.error('Error getting context analytics:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/analytics/context/snapshots', (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 50;
+    const snapshots = contextAnalyzer.getRecentSnapshots(limit);
+    res.json({
+      success: true,
+      data: snapshots,
+      count: snapshots.length
+    });
+  } catch (error) {
+    console.error('Error getting context snapshots:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/analytics/context/timeline', (req, res) => {
+  try {
+    const timeline = contextAnalyzer.getContextTimeline();
+    res.json({
+      success: true,
+      data: timeline
+    });
+  } catch (error) {
+    console.error('Error getting context timeline:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/analytics/context/file-relationships', (req, res) => {
+  try {
+    const minCount = parseInt(req.query.minCount) || 2;
+    const graph = contextAnalyzer.getFileRelationshipGraph(minCount);
+    res.json({
+      success: true,
+      data: graph
+    });
+  } catch (error) {
+    console.error('Error getting file relationships:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Error Tracking Endpoints
+app.get('/api/analytics/errors', (req, res) => {
+  try {
+    const stats = errorTracker.getErrorStats();
+    res.json({
+      success: true,
+      data: stats
+    });
+  } catch (error) {
+    console.error('Error getting error stats:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/analytics/errors/recent', (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 20;
+    const errors = errorTracker.getRecentErrors(limit);
+    res.json({
+      success: true,
+      data: errors,
+      count: errors.length
+    });
+  } catch (error) {
+    console.error('Error getting recent errors:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Productivity Metrics Endpoints
+app.get('/api/analytics/productivity', (req, res) => {
+  try {
+    const stats = productivityTracker.getProductivityStats();
+    res.json({
+      success: true,
+      data: stats
+    });
+  } catch (error) {
+    console.error('Error getting productivity stats:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // API endpoint for file contents (for TF-IDF analysis)
 app.get('/api/file-contents', async (req, res) => {
   try {
@@ -1946,6 +2138,22 @@ async function processFileChange(filePath) {
           // Update workspace data
           updateWorkspaceData(workspacePath, entry, null);
           
+          // ===== NEW: Track productivity metrics =====
+          // Track file edit for time-to-first-edit calculation
+          const ttfeMetrics = productivityTracker.trackFileEdit(entry);
+          
+          // Track code churn (if AI-generated)
+          if (entry.source === 'ai-generated' || entry.prompt_id) {
+            productivityTracker.trackCodeChurn(entry);
+          }
+          
+          // Detect debug activity
+          productivityTracker.detectDebugActivity(entry);
+          
+          // Track activity for active/waiting time
+          productivityTracker.trackActivity('file_change');
+          // ===== END NEW TRACKING =====
+          
           // Broadcast real-time update to connected clients
           io.emit('new-entry', entry);
           io.emit('entries-update', db.entries);
@@ -2318,21 +2526,49 @@ loadPersistedData().then(() => {
   
   // Start Cursor database monitoring
   console.log('🔍 Starting Cursor database monitoring...');
-  cursorDbParser.startMonitoring((data) => {
+  cursorDbParser.startMonitoring(async (data) => {
     if (data.prompts && data.prompts.length > 0) {
       console.log(`💬 Found ${data.prompts.length} prompts in Cursor database`);
       
       // Optionally add to our database (avoid duplicates)
-      data.prompts.forEach(prompt => {
+      for (const prompt of data.prompts) {
         const exists = db.prompts.find(p => p.text === prompt.text);
         if (!exists) {
-          db.prompts.push({
+          const enhancedPrompt = {
             ...prompt,
             id: db.nextId++,
             added_from_database: true
-          });
+          };
+          
+          db.prompts.push(enhancedPrompt);
+          
+          // ===== NEW: Track analytics for this prompt =====
+          try {
+            // Analyze context window
+            const contextAnalysis = await contextAnalyzer.analyzePromptContext(prompt);
+            if (contextAnalysis) {
+              enhancedPrompt.contextAnalysis = contextAnalysis;
+            }
+            
+            // Track prompt creation for productivity metrics
+            productivityTracker.trackPromptCreated(enhancedPrompt);
+            
+            // Detect prompt iterations
+            productivityTracker.detectPromptIteration(enhancedPrompt, db.prompts);
+            
+            // Mark as AI-generated code source
+            if (enhancedPrompt.linkedEntryId) {
+              const linkedEntry = db.entries.find(e => e.id === enhancedPrompt.linkedEntryId);
+              if (linkedEntry) {
+                productivityTracker.markAIGeneratedCode(linkedEntry);
+              }
+            }
+          } catch (trackingError) {
+            console.warn('Error tracking prompt analytics:', trackingError.message);
+          }
+          // ===== END NEW TRACKING =====
         }
-      });
+      }
     }
   });
   }); // Close app.listen callback

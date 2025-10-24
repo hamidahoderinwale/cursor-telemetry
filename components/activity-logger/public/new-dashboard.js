@@ -543,6 +543,8 @@ function renderTimelineItem(event) {
   // Quick check for related prompts (will do full search in modal)
   // Only show badge if we have prompts and the event has file_path
   let promptBadge = '';
+  let contextIndicators = '';
+  
   try {
     if (state.data.prompts && state.data.prompts.length > 0 && 
         (event.type === 'file_change' || event.type === 'code_change')) {
@@ -557,6 +559,30 @@ function renderTimelineItem(event) {
         promptBadge = `<span style="display: inline-flex; align-items: center; justify-content: center; background: var(--color-accent); color: white; font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 10px; margin-left: 8px;" title="Has related AI prompts">AI</span>`;
       }
     }
+    
+    // Add context file indicators
+    if (event.context) {
+      const badges = [];
+      
+      // @ files indicator
+      if (event.context.atFiles && event.context.atFiles.length > 0) {
+        badges.push(`<span style="display: inline-flex; align-items: center; justify-content: center; background: #10b981; color: white; font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 10px; margin-left: 4px;" title="${event.context.atFiles.length} @ referenced files">📁 ${event.context.atFiles.length}</span>`);
+      }
+      
+      // Context files indicator
+      const contextFileCount = (event.context.contextFiles?.attachedFiles?.length || 0) + 
+                               (event.context.contextFiles?.codebaseFiles?.length || 0);
+      if (contextFileCount > 0) {
+        badges.push(`<span style="display: inline-flex; align-items: center; justify-content: center; background: #3b82f6; color: white; font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 10px; margin-left: 4px;" title="${contextFileCount} context files">🔗 ${contextFileCount}</span>`);
+      }
+      
+      // UI state indicator
+      if (event.context.browserState && event.context.browserState.tabs && event.context.browserState.tabs.length > 0) {
+        badges.push(`<span style="display: inline-flex; align-items: center; justify-content: center; background: #8b5cf6; color: white; font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 10px; margin-left: 4px;" title="${event.context.browserState.tabs.length} tabs open">🖥️ ${event.context.browserState.tabs.length}</span>`);
+      }
+      
+      contextIndicators = badges.join('');
+    }
   } catch (e) {
     // Ignore errors in badge display
   }
@@ -568,6 +594,7 @@ function renderTimelineItem(event) {
           <div class="timeline-title">
             ${title}
             ${promptBadge}
+            ${contextIndicators}
           </div>
           <div class="timeline-meta">${time}</div>
         </div>
@@ -991,6 +1018,84 @@ function renderAnalyticsView(container) {
           </div>
         </div>
       </div>
+
+      <!-- Context File Analytics -->
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">Context File Analytics</h3>
+          <p class="card-subtitle">@ referenced files and context patterns</p>
+        </div>
+        <div class="card-body">
+          <div id="contextFileAnalytics" style="min-height: 200px;"></div>
+        </div>
+      </div>
+
+      <!-- Context File Heatmap -->
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">File Context Heatmap</h3>
+          <p class="card-subtitle">Files most often referenced together</p>
+        </div>
+        <div class="card-body">
+          <div id="contextFileHeatmap" style="min-height: 300px;"></div>
+        </div>
+      </div>
+
+      <!-- UI State Analytics -->
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">UI State Analytics</h3>
+          <p class="card-subtitle">Tab usage and interface patterns</p>
+        </div>
+        <div class="card-body">
+          <div id="uiStateAnalytics" style="min-height: 250px;"></div>
+        </div>
+      </div>
+
+      <!-- NEW: Enhanced Context Window Analytics -->
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">🧠 Enhanced Context Window Analytics</h3>
+          <p class="card-subtitle">Deep dive into @ mentions, token usage, and file relationships</p>
+        </div>
+        <div class="card-body">
+          <div id="enhancedContextAnalytics" style="min-height: 200px;"></div>
+        </div>
+      </div>
+
+      <!-- NEW: Error & Bug Tracking -->
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">🚨 Error & Bug Tracking</h3>
+          <p class="card-subtitle">Linter errors, test failures, and rollbacks</p>
+        </div>
+        <div class="card-body">
+          <div id="errorTracking" style="min-height: 200px;"></div>
+        </div>
+      </div>
+
+      <!-- NEW: Productivity Insights -->
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">⚡ Productivity Insights</h3>
+          <p class="card-subtitle">Time-to-edit, iterations, code churn, and debug frequency</p>
+        </div>
+        <div class="card-body">
+          <div id="productivityInsights" style="min-height: 200px;"></div>
+        </div>
+      </div>
+
+      <!-- NEW: File Relationship Visualization -->
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">🔗 File Relationship Network</h3>
+          <p class="card-subtitle">Files frequently used together in AI context</p>
+        </div>
+        <div class="card-body">
+          <div id="fileRelationshipViz" style="min-height: 300px;"></div>
+        </div>
+      </div>
+
     </div>
   `;
 
@@ -1001,6 +1106,15 @@ function renderAnalyticsView(container) {
     renderActivityChart();
     renderFileTypesChart();
     renderHourlyChart();
+    renderContextFileAnalytics();
+    renderContextFileHeatmap();
+    renderUIStateAnalytics();
+    
+    // NEW: Render new analytics sections
+    renderEnhancedContextAnalytics();
+    renderErrorTracking();
+    renderProductivityInsights();
+    renderFileRelationshipVisualization();
   }, 100);
 }
 
@@ -5306,7 +5420,7 @@ function findRelatedPrompts(event, timeWindowMinutes = 5) {
   return related;
 }
 
-function showEventModal(eventId) {
+async function showEventModal(eventId) {
   // Check if it's an event or a prompt
   const event = state.data.events.find(e => e.id === eventId || e.timestamp === eventId);
   const prompt = state.data.prompts.find(p => p.id === eventId);
@@ -5319,11 +5433,25 @@ function showEventModal(eventId) {
   
   // Handle prompt display
   if (prompt && !event) {
-    showPromptInModal(prompt, modal, title, body);
+    await showPromptInModal(prompt, modal, title, body);
     return;
   }
 
   title.textContent = getEventTitle(event);
+  
+  // Fetch related screenshots
+  let relatedScreenshots = [];
+  try {
+    const screenshotsResponse = await fetch(`http://localhost:43917/api/screenshots/near/${event.timestamp}`);
+    if (screenshotsResponse.ok) {
+      const screenshotsData = await screenshotsResponse.json();
+      if (screenshotsData.success) {
+        relatedScreenshots = screenshotsData.screenshots;
+      }
+    }
+  } catch (error) {
+    console.warn('Could not fetch screenshots:', error);
+  }
   
   try {
     const details = typeof event.details === 'string' ? JSON.parse(event.details) : event.details;
@@ -5418,6 +5546,123 @@ function showEventModal(eventId) {
             ` : ''}
           </div>
         </div>
+
+        ${event.context ? `
+          <div>
+            <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">Context Information</h4>
+            <div style="display: grid; gap: var(--space-md);">
+              
+              ${event.context.atFiles && event.context.atFiles.length > 0 ? `
+                <div style="padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md); border-left: 3px solid #10b981;">
+                  <div style="font-weight: 600; margin-bottom: var(--space-sm); color: var(--color-text); display: flex; align-items: center; gap: var(--space-xs);">
+                    <span>📁 @ Referenced Files</span>
+                    <span style="background: #10b981; color: white; font-size: 10px; padding: 2px 6px; border-radius: 10px;">${event.context.atFiles.length}</span>
+                  </div>
+                  <div style="display: flex; flex-wrap: wrap; gap: var(--space-xs);">
+                    ${event.context.atFiles.map(file => `
+                      <span style="font-family: var(--font-mono); font-size: var(--text-xs); padding: 4px 8px; background: rgba(16, 185, 129, 0.1); color: #10b981; border-radius: 4px;">
+                        ${file.reference || file.fileName || file.filePath}
+                      </span>
+                    `).join('')}
+                  </div>
+                </div>
+              ` : ''}
+              
+              ${(event.context.contextFiles?.attachedFiles?.length || 0) + (event.context.contextFiles?.codebaseFiles?.length || 0) > 0 ? `
+                <div style="padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md); border-left: 3px solid #3b82f6;">
+                  <div style="font-weight: 600; margin-bottom: var(--space-sm); color: var(--color-text); display: flex; align-items: center; gap: var(--space-xs);">
+                    <span>🔗 Context Files</span>
+                    <span style="background: #3b82f6; color: white; font-size: 10px; padding: 2px 6px; border-radius: 10px;">
+                      ${(event.context.contextFiles?.attachedFiles?.length || 0) + (event.context.contextFiles?.codebaseFiles?.length || 0)}
+                    </span>
+                  </div>
+                  <div style="display: grid; gap: var(--space-xs);">
+                    ${event.context.contextFiles?.attachedFiles?.map(file => `
+                      <div style="font-family: var(--font-mono); font-size: var(--text-xs); padding: 4px 8px; background: rgba(59, 130, 246, 0.1); color: #3b82f6; border-radius: 4px; display: flex; justify-content: space-between; align-items: center;">
+                        <span>${file.name || file.path}</span>
+                        <span style="font-size: 10px; padding: 2px 4px; background: rgba(59, 130, 246, 0.2); border-radius: 3px;">attached</span>
+                      </div>
+                    `).join('') || ''}
+                    ${event.context.contextFiles?.codebaseFiles?.slice(0, 5).map(file => `
+                      <div style="font-family: var(--font-mono); font-size: var(--text-xs); padding: 4px 8px; background: rgba(59, 130, 246, 0.05); color: #60a5fa; border-radius: 4px; display: flex; justify-content: space-between; align-items: center;">
+                        <span>${file.name || file.path}</span>
+                        <span style="font-size: 10px; padding: 2px 4px; background: rgba(59, 130, 246, 0.1); border-radius: 3px;">codebase</span>
+                      </div>
+                    `).join('') || ''}
+                    ${(event.context.contextFiles?.codebaseFiles?.length || 0) > 5 ? `
+                      <div style="font-size: var(--text-xs); color: var(--color-text-muted); padding: 4px 8px; text-align: center;">
+                        +${event.context.contextFiles.codebaseFiles.length - 5} more files
+                      </div>
+                    ` : ''}
+                  </div>
+                </div>
+              ` : ''}
+              
+              ${event.context.browserState && event.context.browserState.tabs && event.context.browserState.tabs.length > 0 ? `
+                <div style="padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md); border-left: 3px solid #8b5cf6;">
+                  <div style="font-weight: 600; margin-bottom: var(--space-sm); color: var(--color-text); display: flex; align-items: center; gap: var(--space-xs);">
+                    <span>🖥️ UI State</span>
+                    <span style="background: #8b5cf6; color: white; font-size: 10px; padding: 2px 6px; border-radius: 10px;">${event.context.browserState.tabs.length} tabs</span>
+                  </div>
+                  <div style="display: flex; flex-wrap: wrap; gap: var(--space-xs);">
+                    ${event.context.browserState.tabs.map(tab => `
+                      <span style="font-family: var(--font-mono); font-size: var(--text-xs); padding: 4px 8px; background: rgba(139, 92, 246, 0.1); color: #8b5cf6; border-radius: 4px; ${tab.isActive ? 'font-weight: 600; border: 1px solid #8b5cf6;' : ''}">
+                        ${tab.name || tab.path}
+                      </span>
+                    `).join('')}
+                  </div>
+                </div>
+              ` : ''}
+              
+            </div>
+          </div>
+        ` : ''}
+
+        ${relatedScreenshots.length > 0 ? `
+          <div>
+            <h4 style="margin-bottom: var(--space-md); color: var(--color-text); display: flex; align-items: center; gap: var(--space-sm);">
+              <span>📷 Related Screenshots</span>
+              <span style="background: #f59e0b; color: white; font-size: 10px; padding: 2px 6px; border-radius: 10px;">${relatedScreenshots.length}</span>
+            </h4>
+            <div style="font-size: var(--text-sm); color: var(--color-text-muted); margin-bottom: var(--space-md);">
+              Screenshots captured within 5 minutes of this event
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: var(--space-md);">
+              ${relatedScreenshots.map(screenshot => {
+                const timeDiff = Math.abs(new Date(event.timestamp).getTime() - new Date(screenshot.timestamp).getTime());
+                const minutesAgo = Math.floor(timeDiff / 60000);
+                const secondsAgo = Math.floor((timeDiff % 60000) / 1000);
+                const timingText = minutesAgo > 0 ? `${minutesAgo}m ${secondsAgo}s` : `${secondsAgo}s`;
+                const isBefore = new Date(screenshot.timestamp) < new Date(event.timestamp);
+                
+                return `
+                  <div style="border: 2px solid var(--color-border); border-radius: var(--radius-md); overflow: hidden; background: var(--color-bg); transition: all 0.2s;" 
+                       onmouseover="this.style.transform='scale(1.02)'; this.style.boxShadow='0 8px 16px rgba(0,0,0,0.15)';" 
+                       onmouseout="this.style.transform=''; this.style.boxShadow='';">
+                    <div style="position: relative; background: #000; aspect-ratio: 16/9; overflow: hidden;">
+                      <img src="file://${screenshot.path}" 
+                           alt="${screenshot.fileName}" 
+                           style="width: 100%; height: 100%; object-fit: contain; cursor: pointer;"
+                           onclick="window.open('file://${screenshot.path}', '_blank')"
+                           onerror="this.parentElement.innerHTML = '<div style=\\'display: flex; align-items: center; justify-content: center; height: 100%; color: var(--color-text-muted); padding: var(--space-md); text-align: center; flex-direction: column;\\'>📷<div style=\\'font-size: 0.75em; margin-top: 8px;\\'>Screenshot not accessible</div></div>'">
+                      <div style="position: absolute; top: 8px; right: 8px; background: rgba(0,0,0,0.7); color: white; padding: 4px 8px; border-radius: 4px; font-size: 10px; font-weight: 600;">
+                        ${timingText} ${isBefore ? 'before' : 'after'}
+                      </div>
+                    </div>
+                    <div style="padding: var(--space-sm);">
+                      <div style="font-size: var(--text-xs); font-family: var(--font-mono); color: var(--color-text); margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${screenshot.fileName}">
+                        ${screenshot.fileName}
+                      </div>
+                      <div style="font-size: 10px; color: var(--color-text-muted);">
+                        ${new Date(screenshot.timestamp).toLocaleTimeString()}
+                      </div>
+                    </div>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+        ` : ''}
 
         ${details?.before_content !== undefined && details?.after_content !== undefined && (details.before_content || details.after_content) ? `
           <div>
@@ -6867,3 +7112,427 @@ window.applySearchSuggestion = applySearchSuggestion;
 window.selectSearchResult = selectSearchResult;
 window.initializeSearch = initializeSearch;
 
+// Context File Analytics Functions
+function renderContextFileAnalytics() {
+  const container = document.getElementById('contextFileAnalytics');
+  if (!container) return;
+
+  // Collect context data from prompts
+  const promptsWithContext = state.data.prompts?.filter(p => p.context) || [];
+  
+  if (promptsWithContext.length === 0) {
+    container.innerHTML = '<div style="text-align: center; color: var(--color-text-muted); padding: var(--space-xl);">No context data available yet</div>';
+    return;
+  }
+
+  // Calculate statistics
+  const stats = {
+    totalAtFiles: 0,
+    totalContextFiles: 0,
+    totalUIStates: 0,
+    mostReferencedFiles: new Map()
+  };
+
+  promptsWithContext.forEach(prompt => {
+    if (prompt.context.atFiles) {
+      stats.totalAtFiles += prompt.context.atFiles.length;
+      prompt.context.atFiles.forEach(file => {
+        const fileName = file.fileName || file.filePath || file.reference;
+        stats.mostReferencedFiles.set(fileName, (stats.mostReferencedFiles.get(fileName) || 0) + 1);
+      });
+    }
+    
+    if (prompt.context.contextFiles) {
+      const contextCount = (prompt.context.contextFiles.attachedFiles?.length || 0) + 
+                          (prompt.context.contextFiles.codebaseFiles?.length || 0);
+      stats.totalContextFiles += contextCount;
+    }
+    
+    if (prompt.context.browserState?.tabs) {
+      stats.totalUIStates++;
+    }
+  });
+
+  // Get top referenced files
+  const topFiles = Array.from(stats.mostReferencedFiles.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10);
+
+  container.innerHTML = `
+    <div style="display: grid; gap: var(--space-xl);">
+      <!-- Stats Summary -->
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--space-md);">
+        <div style="text-align: center; padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md);">
+          <div style="font-size: 2rem; font-weight: 600; color: #10b981;">${stats.totalAtFiles}</div>
+          <div style="font-size: var(--text-sm); color: var(--color-text-muted); margin-top: var(--space-xs);">@ Files Referenced</div>
+        </div>
+        <div style="text-align: center; padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md);">
+          <div style="font-size: 2rem; font-weight: 600; color: #3b82f6;">${stats.totalContextFiles}</div>
+          <div style="font-size: var(--text-sm); color: var(--color-text-muted); margin-top: var(--space-xs);">Context Files</div>
+        </div>
+        <div style="text-align: center; padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md);">
+          <div style="font-size: 2rem; font-weight: 600; color: #8b5cf6;">${stats.totalUIStates}</div>
+          <div style="font-size: var(--text-sm); color: var(--color-text-muted); margin-top: var(--space-xs);">UI States</div>
+        </div>
+        <div style="text-align: center; padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md);">
+          <div style="font-size: 2rem; font-weight: 600; color: var(--color-accent);">${promptsWithContext.length}</div>
+          <div style="font-size: var(--text-sm); color: var(--color-text-muted); margin-top: var(--space-xs);">With Context</div>
+        </div>
+      </div>
+
+      <!-- Most Referenced Files -->
+      ${topFiles.length > 0 ? `
+        <div>
+          <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">Most Referenced Files</h4>
+          <div style="display: grid; gap: var(--space-sm);">
+            ${topFiles.map(([fileName, count]) => {
+              const percentage = Math.round((count / stats.totalAtFiles) * 100);
+              return `
+                <div style="display: flex; align-items: center; gap: var(--space-md); padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
+                  <div style="flex: 1;">
+                    <div style="font-family: var(--font-mono); font-size: var(--text-sm); color: var(--color-text); margin-bottom: 4px;">${fileName}</div>
+                    <div style="background: var(--color-bg-alt); height: 6px; border-radius: 3px; overflow: hidden;">
+                      <div style="background: linear-gradient(90deg, #10b981, #3b82f6); height: 100%; width: ${percentage}%;"></div>
+                    </div>
+                  </div>
+                  <div style="text-align: right; min-width: 60px;">
+                    <div style="font-weight: 600; color: var(--color-text);">${count}</div>
+                    <div style="font-size: 10px; color: var(--color-text-muted);">${percentage}%</div>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      ` : ''}
+    </div>
+  `;
+}
+
+function renderContextFileHeatmap() {
+  const container = document.getElementById('contextFileHeatmap');
+  if (!container) return;
+
+  // Collect file co-occurrence data
+  const promptsWithContext = state.data.prompts?.filter(p => p.context) || [];
+  
+  if (promptsWithContext.length === 0) {
+    container.innerHTML = '<div style="text-align: center; color: var(--color-text-muted); padding: var(--space-xl);">No context data available yet</div>';
+    return;
+  }
+
+  // Build co-occurrence matrix
+  const fileCoOccurrence = new Map();
+  
+  promptsWithContext.forEach(prompt => {
+    const files = [];
+    
+    // Collect all files from this prompt
+    if (prompt.context.atFiles) {
+      files.push(...prompt.context.atFiles.map(f => f.fileName || f.filePath || f.reference));
+    }
+    if (prompt.context.contextFiles?.attachedFiles) {
+      files.push(...prompt.context.contextFiles.attachedFiles.map(f => f.name || f.path));
+    }
+    
+    // Record co-occurrences
+    for (let i = 0; i < files.length; i++) {
+      for (let j = i + 1; j < files.length; j++) {
+        const key = [files[i], files[j]].sort().join('::');
+        fileCoOccurrence.set(key, (fileCoOccurrence.get(key) || 0) + 1);
+      }
+    }
+  });
+
+  // Get top file pairs
+  const topPairs = Array.from(fileCoOccurrence.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 15);
+
+  if (topPairs.length === 0) {
+    container.innerHTML = '<div style="text-align: center; color: var(--color-text-muted); padding: var(--space-xl);">Not enough data for heatmap</div>';
+    return;
+  }
+
+  const maxCount = topPairs[0][1];
+
+  container.innerHTML = `
+    <div>
+      <div style="font-size: var(--text-sm); color: var(--color-text-muted); margin-bottom: var(--space-md);">
+        Files frequently referenced together in the same prompt
+      </div>
+      <div style="display: grid; gap: var(--space-xs);">
+        ${topPairs.map(([key, count]) => {
+          const [file1, file2] = key.split('::');
+          const intensity = count / maxCount;
+          const color = `rgba(99, 102, 241, ${0.2 + (intensity * 0.8)})`;
+          
+          return `
+            <div style="display: flex; align-items: center; gap: var(--space-sm); padding: var(--space-sm); background: ${color}; border-radius: var(--radius-md); transition: all 0.2s;" 
+                 onmouseover="this.style.transform='translateX(4px)'; this.style.boxShadow='0 2px 8px rgba(0,0,0,0.1)';" 
+                 onmouseout="this.style.transform=''; this.style.boxShadow='';">
+              <div style="flex: 1; display: flex; align-items: center; gap: var(--space-xs); font-family: var(--font-mono); font-size: var(--text-xs);">
+                <span style="color: var(--color-text); font-weight: 500;">${file1}</span>
+                <span style="color: var(--color-text-muted);">↔</span>
+                <span style="color: var(--color-text); font-weight: 500;">${file2}</span>
+              </div>
+              <div style="background: rgba(255, 255, 255, 0.9); padding: 4px 10px; border-radius: 12px; font-weight: 600; font-size: var(--text-xs); color: var(--color-primary);">
+                ${count}x
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function renderUIStateAnalytics() {
+  const container = document.getElementById('uiStateAnalytics');
+  if (!container) return;
+
+  // Collect UI state data
+  const promptsWithUI = state.data.prompts?.filter(p => p.context?.browserState?.tabs) || [];
+  
+  if (promptsWithUI.length === 0) {
+    container.innerHTML = '<div style="text-align: center; color: var(--color-text-muted); padding: var(--space-xl);">No UI state data available yet</div>';
+    return;
+  }
+
+  // Calculate statistics
+  const tabCounts = promptsWithUI.map(p => p.context.browserState.tabs.length);
+  const averageTabs = (tabCounts.reduce((a, b) => a + b, 0) / tabCounts.length).toFixed(1);
+  const maxTabs = Math.max(...tabCounts);
+  const minTabs = Math.min(...tabCounts);
+  
+  // Most active tabs
+  const tabFrequency = new Map();
+  promptsWithUI.forEach(prompt => {
+    prompt.context.browserState.tabs.forEach(tab => {
+      const tabName = tab.name || tab.path;
+      tabFrequency.set(tabName, (tabFrequency.get(tabName) || 0) + 1);
+    });
+  });
+  
+  const topTabs = Array.from(tabFrequency.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10);
+
+  container.innerHTML = `
+    <div style="display: grid; gap: var(--space-xl);">
+      <!-- Tab Statistics -->
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: var(--space-md);">
+        <div style="text-align: center; padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md);">
+          <div style="font-size: 1.5rem; font-weight: 600; color: #8b5cf6;">${averageTabs}</div>
+          <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">Avg Tabs Open</div>
+        </div>
+        <div style="text-align: center; padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md);">
+          <div style="font-size: 1.5rem; font-weight: 600; color: #ec4899;">${maxTabs}</div>
+          <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">Max Tabs</div>
+        </div>
+        <div style="text-align: center; padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md);">
+          <div style="font-size: 1.5rem; font-weight: 600; color: #06b6d4;">${minTabs}</div>
+          <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">Min Tabs</div>
+        </div>
+        <div style="text-align: center; padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md);">
+          <div style="font-size: 1.5rem; font-weight: 600; color: #f59e0b;">${promptsWithUI.length}</div>
+          <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">UI Sessions</div>
+        </div>
+      </div>
+
+      <!-- Most Active Tabs -->
+      ${topTabs.length > 0 ? `
+        <div>
+          <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">Most Active Tabs</h4>
+          <div style="display: grid; gap: var(--space-xs);">
+            ${topTabs.map(([tabName, count]) => {
+              const percentage = Math.round((count / promptsWithUI.length) * 100);
+              return `
+                <div style="display: flex; align-items: center; gap: var(--space-md); padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
+                  <div style="flex: 1;">
+                    <div style="font-family: var(--font-mono); font-size: var(--text-sm); color: var(--color-text); margin-bottom: 4px;">${tabName}</div>
+                    <div style="background: var(--color-bg-alt); height: 6px; border-radius: 3px; overflow: hidden;">
+                      <div style="background: linear-gradient(90deg, #8b5cf6, #ec4899); height: 100%; width: ${percentage}%;"></div>
+                    </div>
+                  </div>
+                  <div style="text-align: right; min-width: 60px;">
+                    <div style="font-weight: 600; color: var(--color-text);">${count}</div>
+                    <div style="font-size: 10px; color: var(--color-text-muted);">${percentage}%</div>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      ` : ''}
+    </div>
+  `;
+}
+
+
+// ===================================
+// NEW ANALYTICS VISUALIZATION FUNCTIONS
+// ===================================
+
+/**
+ * Render Enhanced Context Window Analytics
+ */
+async function renderEnhancedContextAnalytics() {
+  const container = document.getElementById('enhancedContextAnalytics');
+  if (!container) return;
+
+  try {
+    const response = await APIClient.get('/api/analytics/context');
+    if (!response.success) throw new Error('Failed to fetch context analytics');
+
+    const data = response.data;
+
+    container.innerHTML = `
+      <div style="display: grid; gap: var(--space-lg);">
+        <!-- Stats Grid -->
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--space-md);">
+          <div class="stat-box">
+            <div class="stat-value">${data.avgFilesPerPrompt.toFixed(1)}</div>
+            <div class="stat-label">Avg Files/Prompt</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-value">${(data.avgTokensPerPrompt / 1000).toFixed(1)}K</div>
+            <div class="stat-label">Avg Tokens</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-value" style="color: ${data.truncationRate > 10 ? '#EF4444' : '#10B981'}">
+              ${data.truncationRate.toFixed(1)}%
+            </div>
+            <div class="stat-label">Truncation Rate</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-value">${data.avgContextUtilization.toFixed(0)}%</div>
+            <div class="stat-label">Avg Utilization</div>
+          </div>
+        </div>
+      </div>
+    `;
+  } catch (error) {
+    console.error('Error rendering context analytics:', error);
+    container.innerHTML = '<div class="error-state">Failed to load context analytics</div>';
+  }
+}
+
+/**
+ * Render Error & Bug Tracking
+ */
+async function renderErrorTracking() {
+  const container = document.getElementById('errorTracking');
+  if (!container) return;
+
+  try {
+    const [statsRes, recentRes] = await Promise.all([
+      APIClient.get('/api/analytics/errors'),
+      APIClient.get('/api/analytics/errors/recent?limit=10')
+    ]);
+
+    if (!statsRes.success || !recentRes.success) throw new Error('Failed to fetch error data');
+
+    const stats = statsRes.data;
+    const recentErrors = recentRes.data;
+
+    container.innerHTML = `
+      <div style="display: grid; gap: var(--space-lg);">
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--space-md);">
+          <div class="stat-box">
+            <div class="stat-value">${stats.linter.last24h}</div>
+            <div class="stat-label">Linter Errors (24h)</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-value">${stats.tests.last24h}</div>
+            <div class="stat-label">Test Failures (24h)</div>
+          </div>
+        </div>
+      </div>
+    `;
+  } catch (error) {
+    console.error('Error rendering error tracking:', error);
+    container.innerHTML = '<div class="error-state">Failed to load error tracking</div>';
+  }
+}
+
+/**
+ * Render Productivity Insights
+ */
+async function renderProductivityInsights() {
+  const container = document.getElementById('productivityInsights');
+  if (!container) return;
+
+  try {
+    const response = await APIClient.get('/api/analytics/productivity');
+    if (!response.success) throw new Error('Failed to fetch productivity data');
+
+    const data = response.data;
+
+    const activeTimeMin = Math.round(data.activity.totalActiveTime / 60000);
+    const waitingTimeMin = Math.round(data.activity.totalWaitingTime / 60000);
+
+    container.innerHTML = `
+      <div style="display: grid; gap: var(--space-lg);">
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--space-md);">
+          <div class="stat-box">
+            <div class="stat-value">${activeTimeMin}m</div>
+            <div class="stat-label">Active Coding Time</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-value">${data.promptIterations.last24h}</div>
+            <div class="stat-label">Prompt Iterations (24h)</div>
+          </div>
+        </div>
+      </div>
+    `;
+  } catch (error) {
+    console.error('Error rendering productivity insights:', error);
+    container.innerHTML = '<div class="error-state">Failed to load productivity insights</div>';
+  }
+}
+
+/**
+ * Render File Relationship Visualization
+ */
+async function renderFileRelationshipVisualization() {
+  const container = document.getElementById('fileRelationshipViz');
+  if (!container) return;
+
+  try {
+    const response = await APIClient.get('/api/analytics/context/file-relationships?minCount=2');
+    if (!response.success) throw new Error('Failed to fetch file relationships');
+
+    const graph = response.data;
+
+    if (graph.nodes.length === 0) {
+      container.innerHTML = '<div style="text-align: center; padding: var(--space-xl); color: var(--color-text-muted);">Not enough data yet</div>';
+      return;
+    }
+
+    const sortedNodes = graph.nodes.sort((a, b) => b.mentions - a.mentions).slice(0, 10);
+
+    container.innerHTML = `
+      <div>
+        <h4>Most Referenced Files</h4>
+        <div style="display: grid; gap: var(--space-sm);">
+          ${sortedNodes.map(node => `
+            <div style="padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md);">
+              <span style="font-family: var(--font-mono);">${node.label}</span>
+              <span style="float: right; font-weight: 600;">${node.mentions}</span>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  } catch (error) {
+    console.error('Error rendering file relationships:', error);
+    container.innerHTML = '<div class="error-state">Failed to load file relationships</div>';
+  }
+}
+
+// Export new functions
+window.renderEnhancedContextAnalytics = renderEnhancedContextAnalytics;
+window.renderErrorTracking = renderErrorTracking;
+window.renderProductivityInsights = renderProductivityInsights;
+window.renderFileRelationshipVisualization = renderFileRelationshipVisualization;
