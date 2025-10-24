@@ -1665,3 +1665,136 @@ body {
   background: var(--color-surface-hover);
 }
 
+/* ===================================
+   API Documentation Styles
+   =================================== */
+
+.api-endpoint {
+  padding: var(--space-lg);
+  background: var(--color-bg);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  transition: all var(--transition-fast);
+}
+
+.api-endpoint:hover {
+  border-color: var(--color-primary);
+  box-shadow: 0 2px 8px rgba(139, 92, 246, 0.1);
+}
+
+.api-method-url {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  margin-bottom: var(--space-md);
+}
+
+.api-method {
+  display: inline-block;
+  padding: var(--space-xs) var(--space-md);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  min-width: 60px;
+  text-align: center;
+}
+
+.api-get {
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--color-success);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.api-post {
+  background: rgba(59, 130, 246, 0.15);
+  color: var(--color-info);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.api-endpoint code {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--color-primary-light);
+  background: transparent;
+  padding: 0;
+}
+
+.api-endpoint p {
+  margin: 0 0 var(--space-md) 0;
+  color: var(--color-text-muted);
+}
+
+.api-endpoint details {
+  margin-top: var(--space-md);
+}
+
+.api-endpoint summary {
+  cursor: pointer;
+  padding: var(--space-sm) var(--space-md);
+  background: var(--color-surface);
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  transition: all var(--transition-fast);
+  list-style: none;
+  user-select: none;
+}
+
+.api-endpoint summary::-webkit-details-marker {
+  display: none;
+}
+
+.api-endpoint summary::before {
+  content: '▶';
+  display: inline-block;
+  margin-right: var(--space-sm);
+  transition: transform 0.2s;
+  font-size: 0.8em;
+}
+
+.api-endpoint details[open] summary::before {
+  transform: rotate(90deg);
+}
+
+.api-endpoint summary:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-primary-light);
+}
+
+.api-endpoint pre {
+  margin: var(--space-md) 0 0 0;
+  padding: var(--space-md);
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  overflow-x: auto;
+}
+
+.api-endpoint pre code {
+  font-size: var(--text-xs);
+  line-height: 1.6;
+  color: var(--color-text);
+}
+
+.api-endpoint ul {
+  margin: var(--space-md) 0 0 0;
+  padding-left: var(--space-xl);
+  list-style: disc;
+}
+
+.api-endpoint li {
+  margin: var(--space-sm) 0;
+  color: var(--color-text-muted);
+}
+
+.api-endpoint li code {
+  background: var(--color-surface);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+}
+

@@ -428,6 +428,9 @@ function renderCurrentView() {
     case 'system':
       renderSystemView(container);
       break;
+    case 'api-docs':
+      renderAPIDocsView(container);
+      break;
     default:
       container.innerHTML = '<div class="empty-state">View not found</div>';
   }
@@ -4754,6 +4757,414 @@ function renderSystemView(container) {
   setTimeout(() => {
     renderSystemResourcesChart();
   }, 0);
+}
+
+// ===================================
+// API Documentation View
+// ===================================
+
+function renderAPIDocsView(container) {
+  container.innerHTML = `
+    <div style="max-width: 1200px; margin: 0 auto;">
+      <div class="page-header">
+        <h1>API Documentation</h1>
+        <p class="page-subtitle">Complete reference for the Cursor Telemetry Companion Service API</p>
+      </div>
+
+      <div style="display: grid; gap: var(--space-xl);">
+        
+        <!-- Overview Card -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">Overview</h3>
+          </div>
+          <div class="card-body">
+            <p><strong>Base URL:</strong> <code>http://localhost:43917</code></p>
+            <p><strong>Content-Type:</strong> <code>application/json</code></p>
+            <p><strong>CORS:</strong> Enabled for all origins</p>
+            <div style="margin-top: var(--space-md); padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md); border-left: 3px solid var(--color-info);">
+              <strong>Quick Test:</strong> <code>curl http://localhost:43917/health</code>
+            </div>
+          </div>
+        </div>
+
+        <!-- Core Endpoints -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">Core Endpoints</h3>
+          </div>
+          <div class="card-body" style="display: grid; gap: var(--space-lg);">
+            
+            <div class="api-endpoint">
+              <div class="api-method-url">
+                <span class="api-method api-get">GET</span>
+                <code>/health</code>
+              </div>
+              <p>Health check and service status</p>
+              <details>
+                <summary>Response Example</summary>
+                <pre><code>{
+  "status": "running",
+  "timestamp": "2025-10-24T04:00:00.000Z",
+  "entries": 811,
+  "prompts": 337,
+  "queue_length": 26,
+  "clipboard_stats": {...},
+  "raw_data_stats": {...}
+}</code></pre>
+              </details>
+            </div>
+
+            <div class="api-endpoint">
+              <div class="api-method-url">
+                <span class="api-method api-get">GET</span>
+                <code>/api/activity</code>
+              </div>
+              <p>Get all historical activity events</p>
+              <details>
+                <summary>Query Parameters</summary>
+                <ul>
+                  <li><code>since</code> - Timestamp filter (optional)</li>
+                  <li><code>limit</code> - Max results (default: all)</li>
+                </ul>
+              </details>
+              <details>
+                <summary>Response Example</summary>
+                <pre><code>[
+  {
+    "id": "abc123",
+    "type": "code_change",
+    "timestamp": "2025-10-24T03:30:00.000Z",
+    "file_path": "src/index.js",
+    "workspace_path": "/Users/dev/project",
+    "session_id": "sess_xyz",
+    "details": {...}
+  }
+]</code></pre>
+              </details>
+            </div>
+
+            <div class="api-endpoint">
+              <div class="api-method-url">
+                <span class="api-method api-get">GET</span>
+                <code>/entries</code>
+              </div>
+              <p>Get prompts and entries with Cursor DB integration</p>
+              <details>
+                <summary>Response Example</summary>
+                <pre><code>{
+  "entries": [
+    {
+      "id": 123,
+      "text": "Implementing authentication",
+      "source": "composer",
+      "timestamp": "2025-10-24T03:30:00.000Z",
+      "workspacePath": "/Users/dev/project",
+      "linesAdded": 247,
+      "linesRemoved": 83,
+      "contextUsage": 67.5,
+      "mode": "agent",
+      "modelName": "claude-4.5-sonnet"
+    }
+  ]
+}</code></pre>
+              </details>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Database Management -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">Database Management</h3>
+          </div>
+          <div class="card-body" style="display: grid; gap: var(--space-lg);">
+            
+            <div class="api-endpoint">
+              <div class="api-method-url">
+                <span class="api-method api-get">GET</span>
+                <code>/api/database/stats</code>
+              </div>
+              <p>Get database statistics with integrity checks</p>
+              <details>
+                <summary>Response Example</summary>
+                <pre><code>{
+  "success": true,
+  "stats": {
+    "entries": 811,
+    "prompts": 337,
+    "events": 806,
+    "linked_entries": 245,
+    "linked_prompts": 198,
+    "unique_sessions": 27,
+    "linked_entries_percent": "30.21",
+    "linked_prompts_percent": "58.75"
+  },
+  "integrity": {
+    "valid": true,
+    "checks": {
+      "orphaned_entry_prompts": 0,
+      "orphaned_prompt_entries": 0,
+      "null_timestamps": 0
+    }
+  }
+}</code></pre>
+              </details>
+            </div>
+
+            <div class="api-endpoint">
+              <div class="api-method-url">
+                <span class="api-method api-get">GET</span>
+                <code>/api/database/entries-with-prompts</code>
+              </div>
+              <p>Get entries with their linked prompts (JOIN query)</p>
+              <details>
+                <summary>Query Parameters</summary>
+                <ul>
+                  <li><code>limit</code> - Max results (default: 100)</li>
+                </ul>
+              </details>
+            </div>
+
+            <div class="api-endpoint">
+              <div class="api-method-url">
+                <span class="api-method api-get">GET</span>
+                <code>/api/database/prompts-with-entries</code>
+              </div>
+              <p>Get prompts with their linked entries (JOIN query)</p>
+              <details>
+                <summary>Query Parameters</summary>
+                <ul>
+                  <li><code>limit</code> - Max results (default: 100)</li>
+                </ul>
+              </details>
+            </div>
+
+            <div class="api-endpoint">
+              <div class="api-method-url">
+                <span class="api-method api-get">GET</span>
+                <code>/api/export/database</code>
+              </div>
+              <p>Export complete database snapshot as JSON</p>
+              <details>
+                <summary>Response Structure</summary>
+                <pre><code>{
+  "success": true,
+  "data": {
+    "metadata": {
+      "exportedAt": "2025-10-24T04:00:00.000Z",
+      "version": "1.0",
+      "totalEntries": 811,
+      "totalPrompts": 337,
+      "totalEvents": 806
+    },
+    "entries": [...],
+    "prompts": [...],
+    "events": [...],
+    "workspaces": [...],
+    "stats": {...}
+  }
+}</code></pre>
+              </details>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Analytics Endpoints -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">Analytics Endpoints</h3>
+          </div>
+          <div class="card-body" style="display: grid; gap: var(--space-lg);">
+            
+            <div class="api-endpoint">
+              <div class="api-method-url">
+                <span class="api-method api-get">GET</span>
+                <code>/api/analytics/context</code>
+              </div>
+              <p>Context window analytics (@ mentions, token usage)</p>
+            </div>
+
+            <div class="api-endpoint">
+              <div class="api-method-url">
+                <span class="api-method api-get">GET</span>
+                <code>/api/analytics/context/file-relationships</code>
+              </div>
+              <p>File co-occurrence graph for context analysis</p>
+              <details>
+                <summary>Query Parameters</summary>
+                <ul>
+                  <li><code>minCount</code> - Minimum co-occurrence count (default: 2)</li>
+                </ul>
+              </details>
+            </div>
+
+            <div class="api-endpoint">
+              <div class="api-method-url">
+                <span class="api-method api-get">GET</span>
+                <code>/api/analytics/errors</code>
+              </div>
+              <p>Error and bug tracking statistics</p>
+            </div>
+
+            <div class="api-endpoint">
+              <div class="api-method-url">
+                <span class="api-method api-get">GET</span>
+                <code>/api/analytics/productivity</code>
+              </div>
+              <p>Productivity metrics (time-to-edit, iterations, code churn)</p>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Data Sources -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">Data Sources & Raw Data</h3>
+          </div>
+          <div class="card-body" style="display: grid; gap: var(--space-lg);">
+            
+            <div class="api-endpoint">
+              <div class="api-method-url">
+                <span class="api-method api-get">GET</span>
+                <code>/ide-state</code>
+              </div>
+              <p>Current IDE state from AppleScript capture</p>
+            </div>
+
+            <div class="api-endpoint">
+              <div class="api-method-url">
+                <span class="api-method api-get">GET</span>
+                <code>/raw-data/system-resources</code>
+              </div>
+              <p>System resource usage (CPU, memory, load)</p>
+              <details>
+                <summary>Query Parameters</summary>
+                <ul>
+                  <li><code>limit</code> - Max data points (default: 50)</li>
+                </ul>
+              </details>
+            </div>
+
+            <div class="api-endpoint">
+              <div class="api-method-url">
+                <span class="api-method api-get">GET</span>
+                <code>/raw-data/git</code>
+              </div>
+              <p>Git activity data (commits, branches)</p>
+            </div>
+
+            <div class="api-endpoint">
+              <div class="api-method-url">
+                <span class="api-method api-get">GET</span>
+                <code>/api/cursor-database</code>
+              </div>
+              <p>Direct access to Cursor database mining results</p>
+            </div>
+
+            <div class="api-endpoint">
+              <div class="api-method-url">
+                <span class="api-method api-get">GET</span>
+                <code>/api/workspaces</code>
+              </div>
+              <p>List of monitored workspaces</p>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- MCP Integration -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">MCP Integration (Model Context Protocol)</h3>
+          </div>
+          <div class="card-body" style="display: grid; gap: var(--space-lg);">
+            
+            <div class="api-endpoint">
+              <div class="api-method-url">
+                <span class="api-method api-post">POST</span>
+                <code>/mcp/log-prompt-response</code>
+              </div>
+              <p>Log AI prompt/response pairs from MCP</p>
+              <details>
+                <summary>Request Body</summary>
+                <pre><code>{
+  "session_id": "optional-session-id",
+  "file_path": "src/index.js",
+  "prompt": "How do I implement JWT auth?",
+  "response": "Here's how to implement JWT..."
+}</code></pre>
+              </details>
+            </div>
+
+            <div class="api-endpoint">
+              <div class="api-method-url">
+                <span class="api-method api-post">POST</span>
+                <code>/mcp/log-code-change</code>
+              </div>
+              <p>Log code changes from MCP</p>
+              <details>
+                <summary>Request Body</summary>
+                <pre><code>{
+  "file_path": "src/index.js",
+  "before_code": "const x = 1;",
+  "after_code": "const x = 2;",
+  "source": "ai-generated"
+}</code></pre>
+              </details>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- WebSocket -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">WebSocket (Real-time Updates)</h3>
+          </div>
+          <div class="card-body">
+            <p><strong>URL:</strong> <code>ws://localhost:43917</code></p>
+            <p>Connect via Socket.IO for real-time activity updates</p>
+            <details>
+              <summary>Events</summary>
+              <ul>
+                <li><code>activity</code> - New activity event</li>
+                <li><code>prompt</code> - New prompt captured</li>
+                <li><code>workspace</code> - Workspace change</li>
+              </ul>
+            </details>
+            <details>
+              <summary>Example (Socket.IO Client)</summary>
+              <pre><code>const socket = io('http://localhost:43917');
+socket.on('activity', (event) => {
+  console.log('New activity:', event);
+});</code></pre>
+            </details>
+          </div>
+        </div>
+
+        <!-- Rate Limiting & Performance -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">Performance Notes</h3>
+          </div>
+          <div class="card-body">
+            <ul>
+              <li><strong>No rate limiting:</strong> Local API, no throttling</li>
+              <li><strong>Polling interval:</strong> Dashboard polls every 5 seconds</li>
+              <li><strong>Database size:</strong> ~5-10MB per hour of active development</li>
+              <li><strong>Max response time:</strong> Most endpoints <50ms</li>
+              <li><strong>Large exports:</strong> /api/export/database may take 1-2 seconds for large datasets</li>
+            </ul>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  `;
 }
 
 function renderSystemResourcesChart() {
