@@ -10,6 +10,7 @@ const { promisify } = require('util');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const ContextExtractor = require('./context-extractor');
 
 const execAsync = promisify(exec);
 
@@ -22,6 +23,7 @@ class CursorDatabaseParser {
       lastUpdate: 0
     };
     this.updateInterval = 10000; // Update every 10 seconds
+    this.contextExtractor = new ContextExtractor();
   }
 
   /**
@@ -367,6 +369,44 @@ class CursorDatabaseParser {
   }
 
   /**
+   * Extract context information for prompts
+   */
+  async extractContextForPrompts(prompts) {
+    const enrichedPrompts = [];
+    
+    for (const prompt of prompts) {
+      try {
+        // Extract context using the context extractor
+        const context = await this.contextExtractor.getPromptContext({
+          text: prompt.text,
+          content: prompt.text,
+          composerData: prompt.composerData || {},
+          response: prompt.response
+        });
+        
+        // Enrich prompt with context information
+        const enrichedPrompt = {
+          ...prompt,
+          context: {
+            atFiles: context.atFiles || [],
+            contextFiles: context.contextFiles || {},
+            responseFiles: context.responseFiles || [],
+            browserState: context.browserState || {},
+            fileRelationships: context.fileRelationships || {}
+          }
+        };
+        
+        enrichedPrompts.push(enrichedPrompt);
+      } catch (error) {
+        console.warn(`Could not extract context for prompt ${prompt.composerId}:`, error.message);
+        enrichedPrompts.push(prompt);
+      }
+    }
+    
+    return enrichedPrompts;
+  }
+
+  /**
    * Extract individual prompts from text
    */
   extractPromptsFromText(text) {
@@ -491,13 +531,16 @@ class CursorDatabaseParser {
         ...workspacePrompts
       ];
 
+      // Enrich prompts with context information
+      const enrichedPrompts = await this.extractContextForPrompts(allPrompts);
+
       this.cache = {
         conversations: composerData,
-        prompts: allPrompts,
+        prompts: enrichedPrompts,
         lastUpdate: now,
         stats: {
           totalConversations: composerData.length,
-          totalPrompts: allPrompts.length,
+          totalPrompts: enrichedPrompts.length,
           workspaces: workspacePrompts.length
         }
       };

@@ -270,3 +270,4 @@ async function initializeDataSync() {
 window.initializeDataSync = initializeDataSync;
 window.getSynchronizer = () => synchronizer;
 
+

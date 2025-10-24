@@ -456,3 +456,4 @@ window.FileGraphVisualizer = FileGraphVisualizer;
 window.initializeFileGraph = initializeFileGraph;
 window.getFileGraphVisualizer = () => fileGraphVisualizer;
 
+

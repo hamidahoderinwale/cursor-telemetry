@@ -16,25 +16,25 @@ class ReasoningEngine {
         this.openRouterKey = process.env.OPENROUTER_API_KEY || '';
         
         // Hugging Face endpoints
-        // Note: Free Inference API may not support all models. For Qwen models, consider:
-        // 1. Dedicated Inference Endpoints: https://ui.endpoints.huggingface.co/
-        // 2. Set HF_ENDPOINT in .env to your custom endpoint URL
-        // 3. Use OpenRouter as fallback (set OPENROUTER_API_KEY)
-        this.hfEndpoint = process.env.HF_ENDPOINT || 'https://api-inference.huggingface.co/models/Qwen/Qwen2.5-7B-Instruct';
+        // Using Meta-Llama-3.1-8B-Instruct - widely available on HF inference
+        // Set HF_ENDPOINT in .env to use a custom model or dedicated endpoint
+        this.hfEndpoint = process.env.HF_ENDPOINT || 'https://api-inference.huggingface.co/models/meta-llama/Meta-Llama-3.1-8B-Instruct';
+        this.hfModel = process.env.HF_MODEL || 'meta-llama/Meta-Llama-3.1-8B-Instruct';
         
         // OpenRouter endpoint (fallback)
         this.openRouterEndpoint = 'https://openrouter.ai/api/v1/chat/completions';
-        this.openRouterModel = 'qwen/qwen-2.5-7b-instruct';
+        this.openRouterModel = process.env.OPENROUTER_MODEL || 'microsoft/phi-3-mini-128k-instruct:free';
         
         // Determine which API to use
         if (this.hfApiKey) {
-            console.log('🤗 Using Hugging Face API for Qwen model');
+            console.log(`🤗 Using Hugging Face API with ${this.hfModel}`);
             this.useHuggingFace = true;
         } else if (this.openRouterKey) {
-            console.log('🔀 Using OpenRouter API for Qwen model');
+            console.log(`🔀 Using OpenRouter API with ${this.openRouterModel}`);
             this.useHuggingFace = false;
         } else {
             console.warn('⚠️ No API key found (HF_TOKEN, HUGGINGFACE_API_KEY, or OPENROUTER_API_KEY)');
+            console.log('💡 Using rule-based fallback responses');
             this.useHuggingFace = false;
         }
     }
@@ -282,19 +282,21 @@ ${query}
         // Ensure fetch is loaded
         await fetchPromise;
         
-        // Format as a single prompt for text generation models
+        // Format prompt for Llama 3.1 (uses special tokens)
         const systemPrompt = `You are an AI assistant that helps developers understand their coding patterns and productivity. 
 You have access to their development telemetry data and can provide insights about their work.
 Be concise, specific, and actionable. Use the data provided to give evidence-based answers.
 Format your response in a friendly, conversational tone.`;
         
-        const prompt = `<|im_start|>system
-${systemPrompt}<|im_end|>
-<|im_start|>user
+        // Llama 3 format: <|begin_of_text|><|start_header_id|>system<|end_header_id|>...
+        const prompt = `<|begin_of_text|><|start_header_id|>system<|end_header_id|>
+
+${systemPrompt}<|eot_id|><|start_header_id|>user<|end_header_id|>
+
 ${context}
 
-Based on this data, please answer: ${query}<|im_end|>
-<|im_start|>assistant
+Based on this data, please answer: ${query}<|eot_id|><|start_header_id|>assistant<|end_header_id|>
+
 `;
         
         const response = await fetchModule(this.hfEndpoint, {
@@ -306,17 +308,25 @@ Based on this data, please answer: ${query}<|im_end|>
             body: JSON.stringify({
                 inputs: prompt,
                 parameters: {
-                    max_new_tokens: 500,
+                    max_new_tokens: 400,
                     temperature: 0.7,
-                    top_p: 0.95,
+                    top_p: 0.9,
                     return_full_text: false,
-                    do_sample: true
+                    do_sample: true,
+                    repetition_penalty: 1.1
                 }
             })
         });
         
         if (!response.ok) {
             const errorText = await response.text();
+            console.error(`HF API Error (${response.status}):`, errorText);
+            
+            // Check if model is loading
+            if (response.status === 503) {
+                throw new Error('Model is loading. Please try again in a few seconds.');
+            }
+            
             throw new Error(`Hugging Face API error: ${response.status} - ${errorText}`);
         }
         
@@ -328,20 +338,24 @@ Based on this data, please answer: ${query}<|im_end|>
             content = data[0].generated_text;
         } else if (data.generated_text) {
             content = data.generated_text;
-        } else if (data[0]?.text) {
-            content = data[0].text;
+        } else if (typeof data === 'string') {
+            content = data;
         } else {
             console.error('Unexpected HF response:', JSON.stringify(data).substring(0, 200));
             throw new Error('Unexpected response format from Hugging Face');
         }
         
         // Clean up any remaining prompt markers
-        content = content.replace(/<\|im_end\|>/g, '').trim();
+        content = content
+            .replace(/<\|eot_id\|>/g, '')
+            .replace(/<\|end_header_id\|>/g, '')
+            .replace(/<\|start_header_id\|>assistant<\|end_header_id\|>/g, '')
+            .trim();
         
         return {
             content: content || this.generateFallbackResponse(query, context),
-            reasoning: 'Generated using Qwen 2.5 via Hugging Face',
-            confidence: 0.9
+            reasoning: `Generated using ${this.hfModel} via Hugging Face`,
+            confidence: 0.85
         };
     }
     
@@ -391,8 +405,8 @@ Format your response in a friendly, conversational tone.`
         
         return {
             content: content,
-            reasoning: 'Generated using Qwen 2.5 via OpenRouter',
-            confidence: 0.9
+            reasoning: `Generated using ${this.openRouterModel} via OpenRouter`,
+            confidence: 0.85
         };
     }
     
