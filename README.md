@@ -20,70 +20,146 @@ The Cursor Telemetry Dashboard is an intelligent monitoring and analysis platfor
 ### System Components
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    Cursor Telemetry Dashboard               │
-├─────────────────────────────────────────────────────────────┤
-│  Frontend Dashboard (React-like Components)                │
-│  ├── Real-time Visualizations (D3.js)                     │
-│  ├── Session Management Interface                          │
-│  ├── Memory Generation UI                                  │
-│  ├── Memory Management Interface                           │
-│  ├── Privacy Controls UI                                   │
-│  └── Analytics Dashboard                                   │
-├─────────────────────────────────────────────────────────────┤
-│  Backend Services (Node.js/Express)                        │
-│  ├── Web Server (Express + Socket.IO)                     │
-│  ├── Cell Stage Classifier (AST + Clio)                   │
-│  ├── Memory Generation Engine                              │
-│  ├── Privacy Service (Post-Processing)                     │
-│  ├── File-based Integration Service                        │
-│  └── Data Storage (SQLite + JSON)                         │
-├─────────────────────────────────────────────────────────────┤
-│  Companion Service (Activity Logger) - Port 43917         │
-│  ├── File System Monitoring (Chokidar)                    │
-│  ├── Code Delta Detection                                  │
-│  ├── Clipboard Monitoring                                  │
-│  ├── DOM Change Detection                                  │
-│  ├── MCP Integration                                       │
-│  └── WebSocket Communication                               │
-├─────────────────────────────────────────────────────────────┤
-│  Integration Layer                                         │
-│  ├── Cursor IDE Integration (.cursor-session files)       │
-│  ├── Notebook Generation (Jupyter/Colab)                  │
-│  ├── Memory Export/Import System                           │
-│  └── SDK (JavaScript/Python)                              │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│                    Cursor Telemetry Dashboard                       │
+├─────────────────────────────────────────────────────────────────────┤
+│  Frontend Dashboard (Vanilla JS)                                   │
+│  ├── Real-time Visualizations (Chart.js, D3.js)                   │
+│  ├── Multi-layer Search Engine (Lunr.js + TF-IDF Semantic)        │
+│  ├── Activity Timeline & File Graph Views                          │
+│  ├── Enhanced Analytics Dashboard (Context, Errors, Productivity)  │
+│  ├── API Documentation View                                        │
+│  ├── Status Popup (Console Monitoring)                             │
+│  └── Export JSON (Database Snapshots)                              │
+├─────────────────────────────────────────────────────────────────────┤
+│  Companion Service (Port 43917) - Node.js/Express                  │
+│  ├── HTTP REST API (50+ endpoints)                                │
+│  │   ├── Core: /api/activity, /entries, /health                   │
+│  │   ├── Database: /api/database/stats, /api/export/database     │
+│  │   ├── Analytics: /api/analytics/context, errors, productivity  │
+│  │   └── Raw Data: /ide-state, /raw-data/system-resources        │
+│  ├── WebSocket Server (Socket.IO for real-time updates)           │
+│  ├── SQLite Database (companion.db)                               │
+│  │   ├── entries: File changes with before/after code             │
+│  │   ├── prompts: AI interactions with rich metadata              │
+│  │   └── events: Activity timeline                                │
+│  ├── Cursor Database Mining                                        │
+│  │   ├── Parser: Extracts from state.vscdb every 10s             │
+│  │   ├── Metadata: Lines added/removed, context usage, AI mode   │
+│  │   └── Linking: Auto-links prompts to code changes (5min window)│
+│  ├── Analytics Engines                                             │
+│  │   ├── Context Analyzer: @ mentions, token estimation           │
+│  │   ├── Error Tracker: Linter, tests, terminal errors            │
+│  │   └── Productivity Tracker: Time-to-edit, iterations, churn   │
+│  ├── Data Capture Systems                                          │
+│  │   ├── File Watcher (Chokidar): Monitors workspace changes      │
+│  │   ├── Clipboard Monitor: Captures prompts from clipboard       │
+│  │   ├── AppleScript: IDE state capture (macOS)                   │
+│  │   ├── Git Monitor: Commits, branches, activity                 │
+│  │   └── System Resources: CPU, memory, load metrics              │
+│  └── Integration Points                                            │
+│      ├── MCP Server: Model Context Protocol endpoints             │
+│      └── Screenshot Monitor: Browser screenshot tracking          │
+├─────────────────────────────────────────────────────────────────────┤
+│  Data Storage Layer                                                │
+│  ├── SQLite Database (companion.db) - Primary storage             │
+│  │   ├── Size: ~121MB (typical), 5-10MB/hour growth              │
+│  │   ├── Foreign Keys: Enabled for referential integrity          │
+│  │   ├── Indexes: 13 indexes for query optimization               │
+│  │   └── Validation: Integrity checks, orphan detection           │
+│  ├── In-Memory Cache (db object)                                  │
+│  │   ├── Fast access for real-time operations                     │
+│  │   └── Synchronized with SQLite                                 │
+│  └── IndexedDB (Browser - Optional)                               │
+│      └── Persistent caching for dashboard offline capability      │
+├─────────────────────────────────────────────────────────────────────┤
+│  Search & Discovery Engine                                         │
+│  ├── Full-Text Search (Lunr.js)                                   │
+│  │   ├── Inverted index for fast lookups                          │
+│  │   └── Supports advanced queries (type:, date:, workspace:)     │
+│  ├── Semantic Search (TF-IDF + Cosine Similarity)                 │
+│  │   ├── Document vectorization                                   │
+│  │   ├── Context-aware matching                                   │
+│  │   └── Auto-activates when full-text scores low                 │
+│  ├── Fuzzy Search (Levenshtein Distance)                          │
+│  │   ├── Typo tolerance                                           │
+│  │   └── Fallback for edge cases                                  │
+│  └── Advanced Features                                             │
+│      ├── Search history & suggestions                             │
+│      ├── Result ranking & scoring                                 │
+│      └── Filter support (workspace, type, date range)             │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Data Flow
 
-1. **Activity Capture**: Companion service (port 43917) monitors file changes, clipboard, and DOM changes
-2. **Real-time Processing**: WebSocket communication delivers live updates to dashboard (port 3000)
-3. **Cell Classification**: Advanced AST and Clio-based analysis of notebook cells
-4. **Memory Generation**: Conversion of sessions into executable artifacts
-5. **Privacy Processing**: Post-capture privacy transformations (not connected to capture)
-6. **Context Restoration**: File-based integration with Cursor IDE
+1. **Activity Capture** (Multiple Sources)
+   - **File System**: Chokidar monitors workspace → detects changes → calculates diffs
+   - **Cursor Database**: Parser queries state.vscdb every 10s → extracts prompts with metadata
+   - **Clipboard**: Monitors every 10s → captures potential prompts
+   - **System**: AppleScript captures IDE state every 2s → Git/system metrics collected
+   - **Screenshots**: Watches browser screenshot directory for web dev captures
+
+2. **Data Processing & Enrichment**
+   - **Prompt Enhancement**: Extract @ mentions, estimate tokens, analyze context usage
+   - **Code Analysis**: Calculate before/after diffs, detect patterns, extract metadata
+   - **Linking Logic**: Match prompts to code changes within 5-minute window
+   - **Analytics Computation**: Context metrics, error detection, productivity tracking
+
+3. **Persistent Storage** (Dual-layer)
+   - **In-Memory DB**: Fast access for real-time operations
+   - **SQLite DB**: Durable storage with automatic persistence
+   - **Synchronization**: Write-through cache pattern ensures consistency
+
+4. **API Serving** (50+ Endpoints)
+   - **REST API**: HTTP endpoints for all data access
+   - **WebSocket**: Real-time push notifications via Socket.IO
+   - **Static Serving**: Dashboard HTML/CSS/JS from Express
+
+5. **Dashboard Rendering**
+   - **Data Fetch**: HTTP polling every 5s + WebSocket updates
+   - **Search Indexing**: Builds Lunr index + TF-IDF vectors on data load
+   - **Visualization**: Chart.js for metrics, D3.js for graphs
+   - **State Management**: Global state object with view routing
+
+6. **Search & Discovery**
+   - **Query Parsing**: Extract filters and search terms
+   - **Multi-method Search**: Lunr → Semantic → Fuzzy (cascading)
+   - **Result Aggregation**: Merge results, rank by score + recency
+   - **Real-time Updates**: Re-index on data refresh
 
 ## Tech Stack
 
-### Frontend
-- **D3.js**: Data visualization and interactive charts
-- **Socket.IO Client**: Real-time communication
+### Frontend (Vanilla JavaScript)
+- **Chart.js**: Time-series and metric visualizations
+- **D3.js**: Interactive graphs and network visualizations
+- **Lunr.js**: Full-text search indexing
+- **Socket.IO Client**: Real-time WebSocket communication
+- **HTML5/CSS3**: Modern responsive UI with CSS variables
+- **IndexedDB**: Optional client-side persistent caching
 
+### Backend (Node.js Companion Service)
+- **Express.js**: HTTP server and REST API framework
+- **Socket.IO**: Real-time bidirectional WebSocket communication
+- **SQLite3**: Primary relational database (`companion.db`)
+  - 3 core tables (entries, prompts, events)
+  - 13 performance indexes
+  - Foreign key constraints enabled
+- **Chokidar**: File system monitoring with diff detection
+- **Clipboardy**: Cross-platform clipboard access
 
-### Backend
-- **Node.js**: Runtime environment
-- **Express.js**: Web server framework
-- **Socket.IO**: Real-time bidirectional communication
-- **Chokidar**: File system monitoring
-- **SQLite**: Primary data storage (`cursor_process_mining.db`)
-- **JSON Storage**: Lightweight data persistence
+### Data Mining & Analytics
+- **Cursor Database Parser**: Direct SQLite extraction from `state.vscdb`
+- **Context Analyzer**: @ mention extraction, token estimation, file co-occurrence
+- **Error Tracker**: Linter/test/terminal error aggregation
+- **Productivity Tracker**: Time-to-edit, iteration detection, code churn analysis
+- **Semantic Search**: TF-IDF vectorization with cosine similarity
 
-### Analysis & Integration
-- **AST Parsing**: Abstract Syntax Tree analysis for code complexity
-- **Clio Integration**: Faceted analysis for enhanced classification
-- **V-Measure Metrics**: Clustering evaluation and completeness scoring
-- **AppleScript**: macOS integration for Cursor IDE
+### System Integration
+- **AppleScript**: macOS IDE state capture (windows, files, cursor position)
+- **MCP (Model Context Protocol)**: Standardized AI interaction logging
+- **Git Integration**: Commit, branch, and activity monitoring
+- **System Metrics**: CPU, memory, load average tracking
 
 ## Quick Start
 
