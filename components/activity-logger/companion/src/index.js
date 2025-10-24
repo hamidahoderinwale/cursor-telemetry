@@ -1571,6 +1571,58 @@ app.get('/api/analytics/productivity', (req, res) => {
   }
 });
 
+// ===================================
+// DATABASE EXPORT ENDPOINT
+// ===================================
+
+app.get('/api/export/database', async (req, res) => {
+  try {
+    console.log('📤 Export request received');
+    
+    // Gather all data from database
+    const [entries, prompts, events] = await Promise.all([
+      persistentDB.getAllEntries(),
+      persistentDB.getAllPrompts(),
+      persistentDB.getAllEvents()
+    ]);
+    
+    // Get in-memory data
+    const exportData = {
+      metadata: {
+        exportedAt: new Date().toISOString(),
+        version: '1.0',
+        totalEntries: entries.length,
+        totalPrompts: prompts.length,
+        totalEvents: events.length
+      },
+      entries: entries,
+      prompts: prompts,
+      events: events,
+      workspaces: db.workspaces || [],
+      stats: {
+        sessions: db.entries.length,
+        fileChanges: entries.length,
+        aiInteractions: prompts.length,
+        totalActivities: events.length
+      }
+    };
+    
+    console.log(`✅ Exported ${entries.length} entries, ${prompts.length} prompts, ${events.length} events`);
+    
+    res.json({
+      success: true,
+      data: exportData
+    });
+    
+  } catch (error) {
+    console.error('Error exporting database:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+});
+
 // API endpoint for file contents (for TF-IDF analysis)
 app.get('/api/file-contents', async (req, res) => {
   try {

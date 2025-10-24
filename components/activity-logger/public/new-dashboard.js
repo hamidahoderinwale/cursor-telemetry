@@ -6513,6 +6513,65 @@ function closeStatusPopup() {
   }
 }
 
+/**
+ * Export database as JSON
+ */
+async function exportDatabase() {
+  try {
+    console.log('📤 Exporting database...');
+    
+    // Show loading state
+    const exportBtn = document.querySelector('.export-btn');
+    const originalHTML = exportBtn.innerHTML;
+    exportBtn.innerHTML = '<span>Exporting...</span>';
+    exportBtn.disabled = true;
+    
+    // Fetch data from API
+    const response = await fetch(`${CONFIG.API_BASE}/api/export/database`);
+    const result = await response.json();
+    
+    if (!result.success) {
+      throw new Error(result.error || 'Export failed');
+    }
+    
+    // Create filename with timestamp
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+    const filename = `cursor-telemetry-export-${timestamp}.json`;
+    
+    // Convert to JSON string with pretty formatting
+    const jsonString = JSON.stringify(result.data, null, 2);
+    
+    // Create blob and download
+    const blob = new Blob([jsonString], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    console.log(`✅ Exported ${result.data.metadata.totalEntries} entries, ${result.data.metadata.totalPrompts} prompts, ${result.data.metadata.totalEvents} events`);
+    
+    // Show success feedback
+    exportBtn.innerHTML = '<span>✓ Exported!</span>';
+    setTimeout(() => {
+      exportBtn.innerHTML = originalHTML;
+      exportBtn.disabled = false;
+    }, 2000);
+    
+  } catch (error) {
+    console.error('Export error:', error);
+    const exportBtn = document.querySelector('.export-btn');
+    exportBtn.innerHTML = '<span>✗ Failed</span>';
+    setTimeout(() => {
+      exportBtn.innerHTML = originalHTML;
+      exportBtn.disabled = false;
+    }, 2000);
+  }
+}
+
 // Add fadeOut animation to CSS (dynamically)
 const fadeOutStyle = document.createElement('style');
 fadeOutStyle.textContent = `
