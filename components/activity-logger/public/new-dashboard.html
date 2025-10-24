@@ -13,6 +13,17 @@
     <!-- Main App Container -->
     <div id="app" class="app-container">
         
+        <!-- Status Popup -->
+        <div id="statusPopup" class="status-popup">
+            <div class="status-popup-header">
+                <span class="status-popup-title">🚀 Dashboard Status</span>
+                <button class="status-popup-close" onclick="closeStatusPopup()">×</button>
+            </div>
+            <div class="status-popup-content" id="statusPopupContent">
+                <div class="status-message">Initializing...</div>
+            </div>
+        </div>
+
         <!-- Sidebar Navigation -->
         <aside class="sidebar">
             <div class="sidebar-header">
@@ -37,7 +48,7 @@
                 </button>
             </div>
 
-            <div style="padding: 0 var(--space-lg); margin-bottom: var(--space-md);">
+            <div style="padding: 0 var(--space-lg); margin-top: var(--space-sm); margin-bottom: var(--space-md);">
                 <div class="connection-status" id="connectionStatus">
                     <span class="status-dot"></span>
                     <span class="status-text">Connecting...</span>

@@ -6410,10 +6410,133 @@ function filterActivityByTimeRange(range) {
 }
 
 // ===================================
+// Status Popup System
+// ===================================
+
+/**
+ * Initialize status popup and console interceptor
+ */
+function initStatusPopup() {
+  const originalConsoleLog = console.log;
+  const statusPopupContent = document.getElementById('statusPopupContent');
+  
+  // Intercept console.log
+  console.log = function(...args) {
+    // Call original console.log
+    originalConsoleLog.apply(console, args);
+    
+    // Extract message
+    const message = args.map(arg => {
+      if (typeof arg === 'string') return arg;
+      if (typeof arg === 'object') return JSON.stringify(arg);
+      return String(arg);
+    }).join(' ');
+    
+    // Filter for status-relevant messages (with emojis)
+    const statusEmojis = ['🚀', '📦', '🔄', '✓', '✅', '📚', '📡', '⚠️', '🔍', '📊', '🔴', '📁'];
+    const hasStatusEmoji = statusEmojis.some(emoji => message.includes(emoji));
+    
+    if (hasStatusEmoji && statusPopupContent) {
+      addStatusMessage(message);
+    }
+  };
+  
+  // Auto-hide after 10 seconds of last message
+  let hideTimeout;
+  window.addEventListener('statusMessageAdded', () => {
+    clearTimeout(hideTimeout);
+    hideTimeout = setTimeout(() => {
+      const popup = document.getElementById('statusPopup');
+      if (popup && !popup.classList.contains('hidden')) {
+        popup.style.animation = 'fadeOut 0.3s ease-out';
+        setTimeout(() => {
+          popup.classList.add('hidden');
+        }, 300);
+      }
+    }, 10000);
+  });
+}
+
+/**
+ * Add a status message to the popup
+ */
+function addStatusMessage(message) {
+  const statusPopupContent = document.getElementById('statusPopupContent');
+  if (!statusPopupContent) return;
+  
+  // Determine message type based on content
+  let messageClass = 'status-info';
+  if (message.includes('🚀') || message.includes('🔄') || message.includes('🔍')) {
+    messageClass = 'status-init';
+  } else if (message.includes('✓') || message.includes('✅')) {
+    messageClass = 'status-success';
+  } else if (message.includes('⚠️')) {
+    messageClass = 'status-warning';
+  } else if (message.includes('🔴')) {
+    messageClass = 'status-error';
+  }
+  
+  // Create message element
+  const messageEl = document.createElement('div');
+  messageEl.className = `status-message ${messageClass}`;
+  messageEl.textContent = message;
+  
+  // Add to popup (prepend for newest first)
+  statusPopupContent.insertBefore(messageEl, statusPopupContent.firstChild);
+  
+  // Limit to 50 messages
+  if (statusPopupContent.children.length > 50) {
+    statusPopupContent.removeChild(statusPopupContent.lastChild);
+  }
+  
+  // Show popup if hidden
+  const popup = document.getElementById('statusPopup');
+  if (popup && popup.classList.contains('hidden')) {
+    popup.classList.remove('hidden');
+    popup.style.animation = 'slideInFromTop 0.3s ease-out';
+  }
+  
+  // Dispatch event for auto-hide timer
+  window.dispatchEvent(new CustomEvent('statusMessageAdded'));
+}
+
+/**
+ * Close status popup
+ */
+function closeStatusPopup() {
+  const popup = document.getElementById('statusPopup');
+  if (popup) {
+    popup.style.animation = 'fadeOut 0.3s ease-out';
+    setTimeout(() => {
+      popup.classList.add('hidden');
+    }, 300);
+  }
+}
+
+// Add fadeOut animation to CSS (dynamically)
+const fadeOutStyle = document.createElement('style');
+fadeOutStyle.textContent = `
+  @keyframes fadeOut {
+    from {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    to {
+      opacity: 0;
+      transform: translateY(-20px);
+    }
+  }
+`;
+document.head.appendChild(fadeOutStyle);
+
+// ===================================
 // Initialization
 // ===================================
 
 document.addEventListener('DOMContentLoaded', () => {
+  // Initialize status popup FIRST (before any console.logs)
+  initStatusPopup();
+  
   console.log('🚀 Initializing Cursor Activity Dashboard');
 
   // Setup navigation
