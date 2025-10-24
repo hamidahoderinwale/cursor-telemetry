@@ -4,7 +4,7 @@ A comprehensive real-time monitoring and analytics platform for Cursor IDE. Capt
 
 ## Overview
 
-The Cursor Telemetry Dashboard is an intelligent monitoring platform that captures and analyzes your complete development workflow in Cursor IDE. It automatically tracks file changes, mines AI prompts from Cursor's internal database, monitors system resources, and provides actionable insights through advanced analytics engines. All data is persisted in SQLite with a real-time web dashboard and comprehensive REST API.
+The Cursor Telemetry Dashboard is an intelligent monitoring platform that captures and analyzes your complete development workflow in Cursor IDE. It automatically tracks file changes, mines AI prompts from Cursor's internal database, and monitors system resources. All data is persisted in SQLite with a real-time web dashboard and comprehensive REST API.
 
 ### Key Features
 
