@@ -1572,9 +1572,61 @@ app.get('/api/analytics/productivity', (req, res) => {
 });
 
 // ===================================
-// DATABASE EXPORT ENDPOINT
+// DATABASE MANAGEMENT ENDPOINTS
 // ===================================
 
+// Database statistics and integrity
+app.get('/api/database/stats', async (req, res) => {
+  try {
+    const stats = await persistentDB.getStats();
+    const integrity = await persistentDB.validateIntegrity();
+    
+    res.json({
+      success: true,
+      stats,
+      integrity
+    });
+  } catch (error) {
+    console.error('Error getting database stats:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get entries with linked prompts
+app.get('/api/database/entries-with-prompts', async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 100;
+    const entries = await persistentDB.getEntriesWithPrompts(limit);
+    
+    res.json({
+      success: true,
+      data: entries,
+      count: entries.length
+    });
+  } catch (error) {
+    console.error('Error getting entries with prompts:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get prompts with linked entries
+app.get('/api/database/prompts-with-entries', async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 100;
+    const prompts = await persistentDB.getPromptsWithEntries(limit);
+    
+    res.json({
+      success: true,
+      data: prompts,
+      count: prompts.length
+    });
+  } catch (error) {
+    console.error('Error getting prompts with entries:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Database export
 app.get('/api/export/database', async (req, res) => {
   try {
     console.log('📤 Export request received');
@@ -2223,23 +2275,41 @@ async function processFileChange(filePath) {
           console.error('Error saving entry to database:', error);
         }
         
-        // Link the most recent pending prompt to this entry
+        // Link the most recent prompt to this entry (look for recent prompts within 5 minutes)
         try {
-          const lastPrompt = db.prompts
-            .filter(p => p.status === 'pending')
-            .sort((a, b) => b.timestamp - a.timestamp)[0];
+          const entryTime = new Date(entry.timestamp).getTime();
+          const fiveMinutesAgo = entryTime - (5 * 60 * 1000);
+          
+          // Find recent prompts (pending or captured status, within time window)
+          const recentPrompts = db.prompts
+            .filter(p => {
+              const promptTime = new Date(p.timestamp).getTime();
+              return (p.status === 'pending' || p.status === 'captured') && 
+                     promptTime >= fiveMinutesAgo &&
+                     promptTime <= entryTime &&
+                     !p.linked_entry_id; // Not already linked
+            })
+            .sort((a, b) => b.timestamp - a.timestamp);
+          
+          const lastPrompt = recentPrompts[0];
           
           if (lastPrompt) {
-            await db.update('prompts', lastPrompt.id, {
+            // Update in-memory
+            lastPrompt.status = 'linked';
+            lastPrompt.linked_entry_id = entry.id;
+            entry.prompt_id = lastPrompt.id;
+            
+            // Persist to database
+            await persistentDB.updatePrompt(lastPrompt.id, {
               status: 'linked',
               linked_entry_id: entry.id
             });
-            entry.prompt_id = lastPrompt.id;
             
-            // Update the entry in database with prompt_id
-            await db.update('entries', entry.id, { prompt_id: lastPrompt.id });
+            await persistentDB.updateEntry(entry.id, { 
+              prompt_id: lastPrompt.id 
+            });
             
-            console.log(`Linked prompt ${lastPrompt.id} to entry ${entry.id}`);
+            console.log(`✓ Linked prompt ${lastPrompt.id} ("${lastPrompt.text?.substring(0, 50)}...") to entry ${entry.id}`);
           }
         } catch (error) {
           console.error('Error linking prompt to entry:', error);

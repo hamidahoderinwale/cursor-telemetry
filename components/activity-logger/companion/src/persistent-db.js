@@ -35,6 +35,9 @@ class PersistentDB {
         
         console.log(`💾 Connected to SQLite database: ${this.dbPath}`);
         
+        // Enable foreign key constraints
+        this.db.run('PRAGMA foreign_keys = ON');
+        
         // Create tables - wait for all to complete before resolving
         this.db.serialize(() => {
           const tables = [];
@@ -159,8 +162,17 @@ class PersistentDB {
           this.db.run(`CREATE INDEX IF NOT EXISTS idx_entries_session ON entries(session_id)`);
           this.db.run(`CREATE INDEX IF NOT EXISTS idx_entries_timestamp ON entries(timestamp)`);
           this.db.run(`CREATE INDEX IF NOT EXISTS idx_entries_workspace ON entries(workspace_path)`);
+          this.db.run(`CREATE INDEX IF NOT EXISTS idx_entries_prompt_id ON entries(prompt_id)`);
+          this.db.run(`CREATE INDEX IF NOT EXISTS idx_entries_file_path ON entries(file_path)`);
+          
           this.db.run(`CREATE INDEX IF NOT EXISTS idx_prompts_timestamp ON prompts(timestamp)`);
+          this.db.run(`CREATE INDEX IF NOT EXISTS idx_prompts_linked_entry ON prompts(linked_entry_id)`);
+          this.db.run(`CREATE INDEX IF NOT EXISTS idx_prompts_status ON prompts(status)`);
+          this.db.run(`CREATE INDEX IF NOT EXISTS idx_prompts_workspace ON prompts(workspace_path)`);
+          
           this.db.run(`CREATE INDEX IF NOT EXISTS idx_events_timestamp ON events(timestamp)`);
+          this.db.run(`CREATE INDEX IF NOT EXISTS idx_events_session ON events(session_id)`);
+          this.db.run(`CREATE INDEX IF NOT EXISTS idx_events_type ON events(type)`);
           
           // Wait for all tables to be created
           Promise.all(tables).then(() => {
@@ -410,7 +422,7 @@ class PersistentDB {
   }
 
   /**
-   * Get database statistics
+   * Get database statistics with linking information
    */
   async getStats() {
     await this.init();
@@ -420,13 +432,131 @@ class PersistentDB {
         SELECT 
           (SELECT COUNT(*) FROM entries) as entries,
           (SELECT COUNT(*) FROM prompts) as prompts,
-          (SELECT COUNT(*) FROM events) as events
+          (SELECT COUNT(*) FROM events) as events,
+          (SELECT COUNT(*) FROM entries WHERE prompt_id IS NOT NULL) as linked_entries,
+          (SELECT COUNT(*) FROM prompts WHERE linked_entry_id IS NOT NULL) as linked_prompts,
+          (SELECT COUNT(DISTINCT session_id) FROM entries WHERE session_id IS NOT NULL) as unique_sessions
       `, (err, row) => {
         if (err) {
           reject(err);
         } else {
+          // Calculate percentages
+          row.linked_entries_percent = row.entries > 0 ? (row.linked_entries / row.entries * 100).toFixed(2) : 0;
+          row.linked_prompts_percent = row.prompts > 0 ? (row.linked_prompts / row.prompts * 100).toFixed(2) : 0;
           resolve(row);
         }
+      });
+    });
+  }
+  
+  /**
+   * Get entries with their linked prompts
+   */
+  async getEntriesWithPrompts(limit = 100) {
+    await this.init();
+    
+    return new Promise((resolve, reject) => {
+      this.db.all(`
+        SELECT 
+          e.*,
+          p.text as prompt_text,
+          p.status as prompt_status,
+          p.mode as prompt_mode,
+          p.model_name as prompt_model,
+          p.lines_added as prompt_lines_added,
+          p.lines_removed as prompt_lines_removed
+        FROM entries e
+        LEFT JOIN prompts p ON e.prompt_id = p.id
+        ORDER BY e.timestamp DESC
+        LIMIT ?
+      `, [limit], (err, rows) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(rows);
+        }
+      });
+    });
+  }
+  
+  /**
+   * Get prompts with their linked entries
+   */
+  async getPromptsWithEntries(limit = 100) {
+    await this.init();
+    
+    return new Promise((resolve, reject) => {
+      this.db.all(`
+        SELECT 
+          p.*,
+          e.file_path as entry_file_path,
+          e.timestamp as entry_timestamp,
+          e.source as entry_source
+        FROM prompts p
+        LEFT JOIN entries e ON p.linked_entry_id = e.id
+        ORDER BY p.timestamp DESC
+        LIMIT ?
+      `, [limit], (err, rows) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(rows);
+        }
+      });
+    });
+  }
+  
+  /**
+   * Validate database integrity
+   */
+  async validateIntegrity() {
+    await this.init();
+    
+    return new Promise((resolve, reject) => {
+      const checks = {
+        orphaned_entry_prompts: 0,
+        orphaned_prompt_entries: 0,
+        null_timestamps: 0,
+        duplicate_ids: 0
+      };
+      
+      // Check for orphaned references
+      this.db.get(`
+        SELECT COUNT(*) as count 
+        FROM entries 
+        WHERE prompt_id IS NOT NULL 
+          AND prompt_id NOT IN (SELECT id FROM prompts)
+      `, (err, row) => {
+        if (err) return reject(err);
+        checks.orphaned_entry_prompts = row.count;
+        
+        this.db.get(`
+          SELECT COUNT(*) as count 
+          FROM prompts 
+          WHERE linked_entry_id IS NOT NULL 
+            AND linked_entry_id NOT IN (SELECT id FROM entries)
+        `, (err2, row2) => {
+          if (err2) return reject(err2);
+          checks.orphaned_prompt_entries = row2.count;
+          
+          // Check for null timestamps
+          this.db.get(`
+            SELECT 
+              (SELECT COUNT(*) FROM entries WHERE timestamp IS NULL) +
+              (SELECT COUNT(*) FROM prompts WHERE timestamp IS NULL) +
+              (SELECT COUNT(*) FROM events WHERE timestamp IS NULL) as count
+          `, (err3, row3) => {
+            if (err3) return reject(err3);
+            checks.null_timestamps = row3.count;
+            
+            resolve({
+              valid: checks.orphaned_entry_prompts === 0 && 
+                     checks.orphaned_prompt_entries === 0 && 
+                     checks.null_timestamps === 0,
+              checks
+            });
+          });
+        });
       });
     });
   }
