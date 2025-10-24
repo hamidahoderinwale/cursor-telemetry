@@ -67,7 +67,7 @@ class PersistentDB {
             });
           }));
 
-          // Prompts table
+          // Prompts table with rich metadata
           tables.push(new Promise((res, rej) => {
             this.db.run(`
               CREATE TABLE IF NOT EXISTS prompts (
@@ -76,13 +76,59 @@ class PersistentDB {
                 text TEXT,
                 status TEXT,
                 linked_entry_id INTEGER,
-                source TEXT
+                source TEXT,
+                workspace_id TEXT,
+                workspace_path TEXT,
+                workspace_name TEXT,
+                composer_id TEXT,
+                subtitle TEXT,
+                lines_added INTEGER DEFAULT 0,
+                lines_removed INTEGER DEFAULT 0,
+                context_usage REAL DEFAULT 0,
+                mode TEXT,
+                model_type TEXT,
+                model_name TEXT,
+                force_mode TEXT,
+                is_auto INTEGER DEFAULT 0,
+                type TEXT,
+                confidence TEXT,
+                added_from_database INTEGER DEFAULT 0
               )
             `, (err) => {
               if (err) {
                 console.error('Error creating prompts table:', err);
                 rej(err);
               } else {
+                // Add new columns to existing table if they don't exist
+                const alterQueries = [
+                  `ALTER TABLE prompts ADD COLUMN workspace_id TEXT`,
+                  `ALTER TABLE prompts ADD COLUMN workspace_path TEXT`,
+                  `ALTER TABLE prompts ADD COLUMN workspace_name TEXT`,
+                  `ALTER TABLE prompts ADD COLUMN composer_id TEXT`,
+                  `ALTER TABLE prompts ADD COLUMN subtitle TEXT`,
+                  `ALTER TABLE prompts ADD COLUMN lines_added INTEGER DEFAULT 0`,
+                  `ALTER TABLE prompts ADD COLUMN lines_removed INTEGER DEFAULT 0`,
+                  `ALTER TABLE prompts ADD COLUMN context_usage REAL DEFAULT 0`,
+                  `ALTER TABLE prompts ADD COLUMN mode TEXT`,
+                  `ALTER TABLE prompts ADD COLUMN model_type TEXT`,
+                  `ALTER TABLE prompts ADD COLUMN model_name TEXT`,
+                  `ALTER TABLE prompts ADD COLUMN force_mode TEXT`,
+                  `ALTER TABLE prompts ADD COLUMN is_auto INTEGER DEFAULT 0`,
+                  `ALTER TABLE prompts ADD COLUMN type TEXT`,
+                  `ALTER TABLE prompts ADD COLUMN confidence TEXT`,
+                  `ALTER TABLE prompts ADD COLUMN added_from_database INTEGER DEFAULT 0`
+                ];
+                
+                // Try to add each column, ignore if already exists
+                alterQueries.forEach(query => {
+                  this.db.run(query, (alterErr) => {
+                    // Silently ignore "duplicate column" errors
+                    if (alterErr && !alterErr.message.includes('duplicate column')) {
+                      console.warn('Column may already exist:', alterErr.message);
+                    }
+                  });
+                });
+                
                 res();
               }
             });
@@ -169,7 +215,7 @@ class PersistentDB {
   }
 
   /**
-   * Save a prompt to the database
+   * Save a prompt to the database with full metadata
    */
   async savePrompt(prompt) {
     await this.init();
@@ -177,17 +223,36 @@ class PersistentDB {
     return new Promise((resolve, reject) => {
       const stmt = this.db.prepare(`
         INSERT OR REPLACE INTO prompts 
-        (id, timestamp, text, status, linked_entry_id, source)
-        VALUES (?, ?, ?, ?, ?, ?)
+        (id, timestamp, text, status, linked_entry_id, source,
+         workspace_id, workspace_path, workspace_name, composer_id, subtitle,
+         lines_added, lines_removed, context_usage, mode, model_type, model_name,
+         force_mode, is_auto, type, confidence, added_from_database)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
       
       stmt.run(
         prompt.id,
         prompt.timestamp,
         prompt.text || prompt.prompt || prompt.preview,
-        prompt.status,
-        prompt.linked_entry_id,
-        prompt.source
+        prompt.status || 'captured',
+        prompt.linked_entry_id || prompt.linkedEntryId || null,
+        prompt.source || 'unknown',
+        prompt.workspaceId || null,
+        prompt.workspacePath || null,
+        prompt.workspaceName || null,
+        prompt.composerId || null,
+        prompt.subtitle || null,
+        prompt.linesAdded || 0,
+        prompt.linesRemoved || 0,
+        prompt.contextUsage || 0,
+        prompt.mode || null,
+        prompt.modelType || null,
+        prompt.modelName || null,
+        prompt.forceMode || null,
+        prompt.isAuto ? 1 : 0,
+        prompt.type || null,
+        prompt.confidence || null,
+        prompt.added_from_database ? 1 : 0
       );
       
       stmt.finalize((err) => {

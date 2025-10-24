@@ -447,6 +447,35 @@ The Cursor Telemetry Dashboard captures comprehensive information about your dev
 - **Storage**: HTML content and metadata
 - **Privacy**: No content filtering
 
+#### 5. **Cursor Database Mining**
+- **What's Captured**: Direct extraction from Cursor's internal SQLite databases
+- **Source Location**: `~/Library/Application Support/Cursor/User/workspaceStorage/*/state.vscdb`
+- **Data Types**:
+  - **AI Conversation Titles**: Complete prompt/conversation names from Composer
+  - **Code Impact Metrics**: Lines added/removed per conversation (aggregated)
+  - **Context Usage**: Percentage of context window utilized per prompt
+  - **AI Mode Information**: Agent/Chat/Edit mode, model type (Claude 4.5 Sonnet inferred)
+  - **Workspace Context**: Workspace paths, friendly names, and session IDs
+  - **Temporal Data**: Creation/update timestamps for linking to code changes
+- **Metadata Captured**:
+  ```javascript
+  {
+    "text": "Implementing user authentication system",
+    "workspacePath": "/Users/dev/project",
+    "linesAdded": 247,
+    "linesRemoved": 83,
+    "contextUsage": 67.5,
+    "mode": "agent",
+    "modelName": "claude-4.5-sonnet",
+    "composerId": "uuid-12345",
+    "timestamp": 1729814400000
+  }
+  ```
+- **Update Frequency**: Every 10 seconds via database polling
+- **Linkage**: Prompts automatically linked to subsequent code changes for traceability
+- **Storage**: Extended SQLite schema with 16+ metadata fields per prompt
+- **Privacy**: Full conversation history with no filtering
+
 ### Information Types Captured
 
 #### **Code & Development Data**
@@ -478,16 +507,23 @@ The Cursor Telemetry Dashboard captures comprehensive information about your dev
 ### Data Storage & Retention
 
 #### **Storage Format**
-- **Database**: SQLite with full text storage
+- **Database**: SQLite (`companion.db`) with full text storage
 - **Format**: Plain text (no encryption)
 - **Retention**: Indefinite (no automatic cleanup)
 - **Access**: No authentication required
+- **Schema**:
+  - **entries**: File changes with before/after code, prompt linkage
+  - **prompts**: Enhanced metadata (16 fields) including AI mode, context usage, code impact
+  - **events**: Activity timeline with detailed event metadata
+- **Location**: `components/activity-logger/companion/data/companion.db`
 
 #### **Data Volume**
 - **Per Session**: 10-50MB of raw data
 - **Clipboard Entries**: 50-200 per session
-- **File Changes**: 20-100 per session
+- **File Changes**: 20-100 per session (tracked in entries table)
 - **MCP Entries**: 30-150 per session
+- **AI Prompts**: 20-100 per session with full metadata
+- **Database Growth**: ~5-10MB per hour of active development
 
 ### Security Detection & Analytics
 
