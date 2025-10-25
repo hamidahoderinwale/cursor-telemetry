@@ -17,6 +17,67 @@ class PersistentStorage {
       sessions: 'sessions',
       cursorDatabase: 'cursorDatabase'
     };
+    this.maxTimeSeriesPoints = 1000; // Limit time series to 1000 points max
+  }
+
+  /**
+   * Downsample time series data to reduce memory usage
+   * Uses LTTB (Largest-Triangle-Three-Buckets) algorithm
+   */
+  downsampleTimeSeries(data, threshold = 500) {
+    if (!data || data.length <= threshold) return data;
+    
+    console.log(`📉 Downsampling ${data.length} points to ${threshold} points`);
+    
+    const sampled = [];
+    const bucketSize = (data.length - 2) / (threshold - 2);
+    
+    sampled[0] = data[0]; // Always keep first point
+    
+    for (let i = 0; i < threshold - 2; i++) {
+      const avgRangeStart = Math.floor((i + 1) * bucketSize) + 1;
+      const avgRangeEnd = Math.floor((i + 2) * bucketSize) + 1;
+      const avgRangeLength = avgRangeEnd - avgRangeStart;
+      
+      let avgX = 0, avgY = 0;
+      
+      for (let j = avgRangeStart; j < avgRangeEnd; j++) {
+        avgX += data[j].timestamp || data[j].x || j;
+        avgY += data[j].value || data[j].y || 0;
+      }
+      
+      avgX /= avgRangeLength;
+      avgY /= avgRangeLength;
+      
+      // Select point in current bucket with largest triangle area
+      const rangeOffs = Math.floor(i * bucketSize) + 1;
+      const rangeTo = Math.floor((i + 1) * bucketSize) + 1;
+      
+      let maxArea = -1;
+      let maxAreaPoint = null;
+      
+      for (let j = rangeOffs; j < rangeTo; j++) {
+        const pointX = data[j].timestamp || data[j].x || j;
+        const pointY = data[j].value || data[j].y || 0;
+        
+        const area = Math.abs(
+          (sampled[sampled.length - 1].timestamp - avgX) * (pointY - sampled[sampled.length - 1].value) -
+          (sampled[sampled.length - 1].timestamp - pointX) * (avgY - sampled[sampled.length - 1].value)
+        );
+        
+        if (area > maxArea) {
+          maxArea = area;
+          maxAreaPoint = data[j];
+        }
+      }
+      
+      sampled.push(maxAreaPoint);
+    }
+    
+    sampled[sampled.length] = data[data.length - 1]; // Always keep last point
+    
+    console.log(`✅ Downsampled to ${sampled.length} points (${((1 - sampled.length / data.length) * 100).toFixed(1)}% reduction)`);
+    return sampled;
   }
 
   /**

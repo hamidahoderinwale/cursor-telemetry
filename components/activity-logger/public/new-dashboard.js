@@ -11,6 +11,9 @@ const CONFIG = {
   API_BASE: 'http://localhost:43917',
   WS_URL: 'ws://localhost:43917',
   REFRESH_INTERVAL: 5000,
+  ENABLE_TF_IDF: false, // Disable TF-IDF by default to save memory
+  ENABLE_SEMANTIC_SEARCH: false, // Disable semantic analysis by default
+  MAX_SEARCH_RESULTS: 50, // Limit search results to prevent memory issues
   CHART_COLORS: {
     primary: '#8B5CF6',
     secondary: '#6366F1',
@@ -154,15 +157,16 @@ class WebSocketManager {
 async function fetchAllData() {
   console.log('📡 Fetching data from companion service...');
   try {
+    // Use pagination to fetch only recent data (limit 200 most recent events)
     const [activity, workspaces, ideState, systemRes, gitData, prompts, cursorDb, terminalHistory] = await Promise.allSettled([
-      APIClient.get('/api/activity'), // Get ALL historical events
+      APIClient.get('/api/activity?limit=200&offset=0'), // Fetch only 200 most recent events
       APIClient.get('/api/workspaces'),
       APIClient.get('/ide-state'),
       APIClient.get('/raw-data/system-resources'),
       APIClient.get('/raw-data/git'),
       APIClient.get('/entries'), // Fetch prompts/entries (includes cursor DB)
       APIClient.get('/api/cursor-database'), // Direct cursor database data
-      APIClient.get('/api/terminal/history?limit=100') // Terminal commands
+      APIClient.get('/api/terminal/history?limit=50') // Terminal commands (reduced from 100 to 50)
     ]);
 
     console.log('📦 Data fetch results:', {
@@ -176,11 +180,20 @@ async function fetchAllData() {
       terminalHistory: terminalHistory.status
     });
 
-    // Process activity data - this contains ALL historical events
-    if (activity.status === 'fulfilled' && Array.isArray(activity.value)) {
-      // Replace events with ALL historical data
-      state.data.events = activity.value;
-      console.log(`📊 Loaded ${activity.value.length} total events from history`);
+    // Process activity data with pagination support
+    if (activity.status === 'fulfilled') {
+      const activityData = activity.value;
+      
+      // Handle paginated response format
+      if (activityData.data && Array.isArray(activityData.data)) {
+        state.data.events = activityData.data;
+        console.log(`📊 Loaded ${activityData.data.length} of ${activityData.pagination?.total || 'unknown'} events (paginated)`);
+      } 
+      // Handle legacy non-paginated format
+      else if (Array.isArray(activityData)) {
+        state.data.events = activityData.slice(0, 200); // Limit to 200 most recent
+        console.log(`📊 Loaded ${state.data.events.length} events (truncated for performance)`);
+      }
     }
 
     // Process prompts/entries
@@ -7298,16 +7311,36 @@ document.addEventListener('DOMContentLoaded', () => {
       initializeNonPersistent();
     });
     
-    // Setup auto-refresh with persistence - fetch fresh data and update cache
+    // Setup auto-refresh with debouncing to prevent excessive requests
+    let refreshInProgress = false;
+    let lastRefreshTime = Date.now();
+    const MIN_REFRESH_INTERVAL = 10000; // Minimum 10 seconds between refreshes
+    
     setInterval(async () => {
-      if (storage && synchronizer) {
-        await fetchAllData();
-        await storage.storeEvents(state.data.events);
-        await storage.storePrompts(state.data.prompts);
-        calculateStats();
-        renderCurrentView();
-        // Re-initialize search index when data updates
-        initializeSearch();
+      // Skip if refresh is already in progress or too soon
+      if (refreshInProgress || (Date.now() - lastRefreshTime) < MIN_REFRESH_INTERVAL) {
+        console.log('⏭️  Skipping refresh (debounced)');
+        return;
+      }
+      
+      refreshInProgress = true;
+      lastRefreshTime = Date.now();
+      
+      try {
+        if (storage && synchronizer) {
+          await fetchAllData();
+          await storage.storeEvents(state.data.events);
+          await storage.storePrompts(state.data.prompts);
+          calculateStats();
+          renderCurrentView();
+          // Re-initialize search index when data updates
+          initializeSearch();
+          console.log('✅ Data refreshed and cached');
+        }
+      } catch (error) {
+        console.error('❌ Refresh error:', error);
+      } finally {
+        refreshInProgress = false;
       }
     }, CONFIG.REFRESH_INTERVAL);
   } else {
@@ -7328,8 +7361,28 @@ document.addEventListener('DOMContentLoaded', () => {
       updateConnectionStatus(false);
     });
     
-    // Setup auto-refresh
-    setInterval(fetchAllData, CONFIG.REFRESH_INTERVAL);
+    // Setup auto-refresh with debouncing
+    let refreshInProgress = false;
+    let lastRefreshTime = Date.now();
+    const MIN_REFRESH_INTERVAL = 10000; // Minimum 10 seconds between refreshes
+    
+    setInterval(async () => {
+      if (refreshInProgress || (Date.now() - lastRefreshTime) < MIN_REFRESH_INTERVAL) {
+        console.log('⏭️  Skipping refresh (debounced)');
+        return;
+      }
+      
+      refreshInProgress = true;
+      lastRefreshTime = Date.now();
+      
+      try {
+        await fetchAllData();
+      } catch (error) {
+        console.error('❌ Refresh error:', error);
+      } finally {
+        refreshInProgress = false;
+      }
+    }, CONFIG.REFRESH_INTERVAL);
   }
 
   // Setup search palette keyboard shortcuts and event listeners

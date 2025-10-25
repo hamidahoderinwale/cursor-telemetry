@@ -1231,14 +1231,24 @@ app.get('/ide-state/cursor', (req, res) => {
 });
 
 // Get entries with linked prompts
-// API endpoint for activity data (used by dashboard)
+// API endpoint for activity data (used by dashboard) with pagination
 app.get('/api/activity', async (req, res) => {
   try {
+    const limit = Math.min(parseInt(req.query.limit) || 100, 1000); // Max 1000 at a time
+    const offset = parseInt(req.query.offset) || 0;
     const allEntries = db.entries;
     const allPrompts = db.prompts;
     
+    // Sort by timestamp descending (most recent first)
+    const sortedEntries = [...allEntries].sort((a, b) => 
+      new Date(b.timestamp) - new Date(a.timestamp)
+    );
+    
+    // Apply pagination
+    const paginatedEntries = sortedEntries.slice(offset, offset + limit);
+    
     // Convert entries to events format for dashboard compatibility
-    const events = allEntries.map(entry => {
+    const events = paginatedEntries.map(entry => {
       // Calculate diff stats if we have before/after content
       let diffStats = {};
       if (entry.before_code && entry.after_code) {
@@ -1248,8 +1258,9 @@ app.get('/api/activity', async (req, res) => {
           lines_removed: diff.linesRemoved,
           chars_added: diff.charsAdded,
           chars_deleted: diff.charsDeleted,
-          before_content: diff.beforeContent.length > 10000 ? diff.beforeContent.substring(0, 10000) + '\n... (truncated)' : diff.beforeContent,
-          after_content: diff.afterContent.length > 10000 ? diff.afterContent.substring(0, 10000) + '\n... (truncated)' : diff.afterContent
+          // Truncate large content to prevent memory issues
+          before_content: diff.beforeContent.length > 5000 ? diff.beforeContent.substring(0, 5000) + '\n... (truncated)' : diff.beforeContent,
+          after_content: diff.afterContent.length > 5000 ? diff.afterContent.substring(0, 5000) + '\n... (truncated)' : diff.afterContent
         };
       }
       
@@ -1261,7 +1272,7 @@ app.get('/api/activity', async (req, res) => {
         workspace_path: entry.workspace_path || entry.file_path || '/unknown',
         file_path: entry.file_path,
         details: JSON.stringify({
-          content: entry.content,
+          content: entry.content ? (entry.content.length > 5000 ? entry.content.substring(0, 5000) + '\n... (truncated)' : entry.content) : null,
           before_content: entry.before_content || entry.before_code,
           after_content: entry.after_content || entry.after_code,
           diff: entry.diff,
@@ -1274,8 +1285,16 @@ app.get('/api/activity', async (req, res) => {
       };
     });
     
-    console.log(`API: Returning ${events.length} activity events`);
-    res.json(events);
+    console.log(`API: Returning ${events.length} of ${allEntries.length} activity events (offset: ${offset})`);
+    res.json({
+      data: events,
+      pagination: {
+        total: allEntries.length,
+        limit,
+        offset,
+        hasMore: offset + events.length < allEntries.length
+      }
+    });
   } catch (error) {
     console.error('Error fetching activity data:', error);
     res.status(500).json({ error: 'Failed to fetch activity data' });
