@@ -44,6 +44,7 @@ const { ReasoningEngine } = require('./reasoning-engine.js');
 const ContextAnalyzer = require('./context-analyzer.js');
 const ErrorTracker = require('./error-tracker.js');
 const ProductivityTracker = require('./productivity-tracker.js');
+const TerminalMonitor = require('./terminal-monitor.js');
 
 // Initialize persistent database
 const persistentDB = new PersistentDB();
@@ -52,6 +53,10 @@ const persistentDB = new PersistentDB();
 const contextAnalyzer = new ContextAnalyzer();
 const errorTracker = new ErrorTracker();
 const productivityTracker = new ProductivityTracker();
+const terminalMonitor = new TerminalMonitor({
+  captureOutput: false, // Don't execute commands, just monitor
+  debug: false
+});
 
 // Simple in-memory database for companion service (with persistent backup)
 const db = {
@@ -1571,6 +1576,107 @@ app.get('/api/analytics/productivity', (req, res) => {
   }
 });
 
+// Terminal Monitoring Endpoints
+app.get('/api/terminal/history', async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 100;
+    const source = req.query.source;
+    const since = req.query.since ? parseInt(req.query.since) : null;
+    const workspace = req.query.workspace;
+    const exitCode = req.query.exitCode ? parseInt(req.query.exitCode) : undefined;
+    
+    // Fetch from database for persistent history
+    const history = await persistentDB.getTerminalCommands({ 
+      limit, 
+      source, 
+      since,
+      workspace,
+      exitCode
+    });
+    
+    res.json({
+      success: true,
+      data: history,
+      count: history.length
+    });
+  } catch (error) {
+    console.error('Error getting terminal history:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/terminal/stats', async (req, res) => {
+  try {
+    // Get stats from both in-memory and database
+    const memoryStats = terminalMonitor.getStats();
+    const allCommands = await persistentDB.getAllTerminalCommands();
+    
+    const now = Date.now();
+    const last24h = now - (24 * 60 * 60 * 1000);
+    const recentCommands = allCommands.filter(cmd => cmd.timestamp > last24h);
+    const errorCommands = allCommands.filter(cmd => cmd.exit_code && cmd.exit_code !== 0);
+    
+    // Count by source
+    const bySource = {};
+    allCommands.forEach(cmd => {
+      bySource[cmd.source] = (bySource[cmd.source] || 0) + 1;
+    });
+    
+    // Most common commands
+    const commandCounts = {};
+    allCommands.forEach(cmd => {
+      const shortCmd = cmd.command.split(' ')[0]; // Get first word
+      commandCounts[shortCmd] = (commandCounts[shortCmd] || 0) + 1;
+    });
+    const topCommands = Object.entries(commandCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([cmd, count]) => ({ command: cmd, count }));
+    
+    res.json({
+      success: true,
+      data: {
+        total: allCommands.length,
+        last24h: recentCommands.length,
+        errorCount: errorCommands.length,
+        errorRate: allCommands.length > 0 ? (errorCommands.length / allCommands.length * 100).toFixed(2) : 0,
+        bySource: bySource,
+        topCommands: topCommands,
+        memory: memoryStats
+      }
+    });
+  } catch (error) {
+    console.error('Error getting terminal stats:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/terminal/enable', (req, res) => {
+  try {
+    terminalMonitor.start();
+    res.json({
+      success: true,
+      message: 'Terminal monitoring enabled'
+    });
+  } catch (error) {
+    console.error('Error enabling terminal monitoring:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/terminal/disable', (req, res) => {
+  try {
+    terminalMonitor.stop();
+    res.json({
+      success: true,
+      message: 'Terminal monitoring disabled'
+    });
+  } catch (error) {
+    console.error('Error disabling terminal monitoring:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // ===================================
 // DATABASE MANAGEMENT ENDPOINTS
 // ===================================
@@ -2631,6 +2737,39 @@ loadPersistedData().then(() => {
     console.log(' Clipboard monitor started for prompt capture');
   } else {
     console.log(' Clipboard monitor disabled in config');
+  }
+  
+  // Start terminal monitor
+  if (config.enable_terminal_monitoring !== false) {
+    terminalMonitor.start();
+    
+    // Listen for terminal commands and track errors
+    terminalMonitor.on('command', async (commandRecord) => {
+      // Save to database
+      try {
+        await persistentDB.saveTerminalCommand(commandRecord);
+      } catch (error) {
+        console.error('Error persisting terminal command:', error);
+      }
+      
+      // Track terminal errors if exit code is non-zero
+      if (commandRecord.exitCode && commandRecord.exitCode !== 0) {
+        errorTracker.trackTerminalError(
+          commandRecord.command,
+          commandRecord.output || '',
+          commandRecord.exitCode
+        );
+      }
+      
+      // Emit WebSocket event for real-time updates
+      if (global.io) {
+        global.io.emit('terminal-command', commandRecord);
+      }
+    });
+    
+    console.log('🖥️  Terminal monitor started for command tracking');
+  } else {
+    console.log(' Terminal monitor disabled in config');
   }
   
   // Start enhanced raw data capture

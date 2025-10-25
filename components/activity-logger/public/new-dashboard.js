@@ -34,6 +34,7 @@ const state = {
     entries: [],
     threads: [],
     prompts: [],
+    terminalCommands: [],
     workspaces: [],
     systemResources: [],
     gitData: [],
@@ -43,7 +44,8 @@ const state = {
     sessions: 0,
     fileChanges: 0,
     aiInteractions: 0,
-    codeChanged: 0
+    codeChanged: 0,
+    terminalCommands: 0
   },
   sequence: 0,
   socket: null,
@@ -121,6 +123,11 @@ class WebSocketManager {
         handleRealtimeUpdate(data);
       });
 
+      this.socket.on('terminal-command', (cmd) => {
+        console.log('🖥️  Terminal command:', cmd);
+        handleTerminalCommand(cmd);
+      });
+
       this.socket.on('connect_error', (error) => {
         console.error('WebSocket error:', error);
         this.reconnectAttempts++;
@@ -147,14 +154,15 @@ class WebSocketManager {
 async function fetchAllData() {
   console.log('📡 Fetching data from companion service...');
   try {
-    const [activity, workspaces, ideState, systemRes, gitData, prompts, cursorDb] = await Promise.allSettled([
+    const [activity, workspaces, ideState, systemRes, gitData, prompts, cursorDb, terminalHistory] = await Promise.allSettled([
       APIClient.get('/api/activity'), // Get ALL historical events
       APIClient.get('/api/workspaces'),
       APIClient.get('/ide-state'),
       APIClient.get('/raw-data/system-resources'),
       APIClient.get('/raw-data/git'),
       APIClient.get('/entries'), // Fetch prompts/entries (includes cursor DB)
-      APIClient.get('/api/cursor-database') // Direct cursor database data
+      APIClient.get('/api/cursor-database'), // Direct cursor database data
+      APIClient.get('/api/terminal/history?limit=100') // Terminal commands
     ]);
 
     console.log('📦 Data fetch results:', {
@@ -164,7 +172,8 @@ async function fetchAllData() {
       systemRes: systemRes.status,
       gitData: gitData.status,
       prompts: prompts.status,
-      cursorDb: cursorDb.status
+      cursorDb: cursorDb.status,
+      terminalHistory: terminalHistory.status
     });
 
     // Process activity data - this contains ALL historical events
@@ -225,6 +234,14 @@ async function fetchAllData() {
       }
     }
 
+    // Process terminal history
+    if (terminalHistory.status === 'fulfilled' && terminalHistory.value.success) {
+      state.data.terminalCommands = terminalHistory.value.data || [];
+      console.log(`🖥️  Loaded ${state.data.terminalCommands.length} terminal commands`);
+    } else {
+      state.data.terminalCommands = [];
+    }
+
     // Process other data
     if (workspaces.status === 'fulfilled') {
       state.data.workspaces = workspaces.value || [];
@@ -257,6 +274,7 @@ async function fetchAllData() {
 function calculateStats() {
   const events = state.data.events;
   const entries = state.data.entries;
+  const terminalCommands = state.data.terminalCommands || [];
 
   // Count sessions
   const sessions = new Set();
@@ -268,6 +286,9 @@ function calculateStats() {
   const fileChanges = events.filter(e => 
     e.type === 'file_change' || e.type === 'code_change'
   ).length;
+  
+  // Count terminal commands
+  state.stats.terminalCommands = terminalCommands.length;
 
   // Count AI interactions (unique composer sessions + non-JSON prompts)
   const composerIds = new Set();
@@ -337,6 +358,24 @@ function handleRealtimeUpdate(data) {
   
   calculateStats();
   renderCurrentView();
+}
+
+function handleTerminalCommand(cmd) {
+  // Add to terminal commands array
+  state.data.terminalCommands.unshift(cmd);
+  
+  // Keep only last 100 commands in memory
+  if (state.data.terminalCommands.length > 100) {
+    state.data.terminalCommands = state.data.terminalCommands.slice(0, 100);
+  }
+  
+  // Update stats
+  state.stats.terminalCommands = state.data.terminalCommands.length;
+  
+  // If on activity view, re-render
+  if (state.currentView === 'activity') {
+    renderCurrentView();
+  }
 }
 
 // ===================================
@@ -494,6 +533,8 @@ function renderUnifiedTimeline(items) {
       ${items.map(item => {
         if (item.itemType === 'event') {
           return renderTimelineItem(item);
+        } else if (item.itemType === 'terminal') {
+          return renderTerminalTimelineItem(item);
         } else {
           return renderPromptTimelineItem(item);
         }
@@ -532,6 +573,36 @@ function renderPromptTimelineItem(prompt) {
           ${prompt.workspaceName ? `<span class="badge">${prompt.workspaceName}</span>` : prompt.workspaceId ? `<span class="badge">${prompt.workspaceId.substring(0, 8)}</span>` : ''}
           ${prompt.composerId ? `<span class="badge">Composer</span>` : ''}
           ${prompt.contextUsage > 0 ? `<span class="badge" style="background: var(--color-warning); color: white;">${prompt.contextUsage.toFixed(1)}% context</span>` : ''}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderTerminalTimelineItem(cmd) {
+  const time = formatTimeAgo(cmd.timestamp);
+  const commandText = cmd.command || 'Unknown command';
+  const displayText = commandText.length > 80 ? commandText.substring(0, 80) + '...' : commandText;
+  const isError = cmd.exit_code && cmd.exit_code !== 0;
+  const icon = isError ? '❌' : '🖥️';
+  const source = cmd.source || 'terminal';
+  
+  return `
+    <div class="timeline-item terminal-timeline-item ${isError ? 'error' : ''}" style="border-left-color: ${isError ? '#ef4444' : '#8b5cf6'}; cursor: pointer;" onclick="showTerminalModal('${cmd.id}')">
+      <div class="timeline-content">
+        <div class="timeline-header">
+          <div class="timeline-title" style="display: flex; align-items: center; gap: var(--space-sm);">
+            <span>${icon}</span>
+            <code style="background: rgba(0,0,0,0.05); padding: 2px 6px; border-radius: 3px; font-size: 13px;">${displayText}</code>
+          </div>
+          <div class="timeline-meta">${time}</div>
+        </div>
+        <div class="timeline-description" style="display: flex; gap: var(--space-xs); flex-wrap: wrap;">
+          <span class="badge" style="background: #6366f1; color: white;">${source}</span>
+          ${cmd.shell ? `<span class="badge">${cmd.shell}</span>` : ''}
+          ${cmd.workspace ? `<span class="badge" style="font-size: 11px;">${cmd.workspace.split('/').pop()}</span>` : ''}
+          ${isError ? `<span class="badge" style="background: #ef4444; color: white;">Exit ${cmd.exit_code}</span>` : ''}
+          ${cmd.duration ? `<span class="badge">${cmd.duration}ms</span>` : ''}
         </div>
       </div>
     </div>
@@ -735,8 +806,9 @@ function renderWorkspacesList() {
 function renderActivityView(container) {
   const events = filterEventsByWorkspace(state.data.events);
   const prompts = state.data.prompts || [];
+  const terminalCommands = state.data.terminalCommands || [];
   
-  // Merge events and prompts into unified timeline
+  // Merge events, prompts, and terminal commands into unified timeline
   const timelineItems = [
     ...events.map(event => ({
       ...event,
@@ -748,6 +820,12 @@ function renderActivityView(container) {
       itemType: 'prompt',
       sortTime: new Date(prompt.timestamp).getTime(),
       id: prompt.id || `prompt-${prompt.timestamp}`
+    })),
+    ...terminalCommands.map(cmd => ({
+      ...cmd,
+      itemType: 'terminal',
+      sortTime: cmd.timestamp,
+      id: cmd.id
     }))
   ].sort((a, b) => b.sortTime - a.sortTime).slice(0, 100);
   
@@ -759,7 +837,7 @@ function renderActivityView(container) {
         <div class="card-header">
           <div>
             <h3 class="card-title">Activity Timeline</h3>
-            <p class="card-subtitle">${timelineItems.length} items (${events.length} file changes, ${prompts.length} AI prompts)</p>
+            <p class="card-subtitle">${timelineItems.length} items (${events.length} file changes, ${prompts.length} AI prompts, ${terminalCommands.length} terminal commands)</p>
           </div>
           <div style="display: flex; gap: var(--space-md);">
             <select class="select-input" style="width: auto;" onchange="filterActivityByTimeRange(this.value)">
@@ -6759,6 +6837,132 @@ function showEventModal(id) {
   }
 }
 
+function showTerminalModal(id) {
+  // Find the terminal command by ID
+  const cmd = state.data.terminalCommands.find(c => c.id === id);
+  
+  const modal = document.getElementById('eventModal');
+  const title = document.getElementById('modalTitle');
+  const body = document.getElementById('modalBody');
+  
+  if (!modal || !title || !body) {
+    console.error('Modal elements not found');
+    return;
+  }
+  
+  if (!cmd) {
+    console.warn('Terminal command not found:', id);
+    return;
+  }
+  
+  try {
+    const isError = cmd.exit_code && cmd.exit_code !== 0;
+    const icon = isError ? '❌' : '🖥️';
+    
+    title.innerHTML = `${icon} Terminal Command`;
+    
+    let html = `
+      <div style="display: flex; flex-direction: column; gap: var(--space-xl);">
+        
+        <!-- Command Details -->
+        <div>
+          <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">Command Details</h4>
+          <div style="display: grid; gap: var(--space-sm);">
+            <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
+              <span style="color: var(--color-text-muted);">Command:</span>
+              <code style="color: var(--color-text); font-family: var(--font-mono); font-size: var(--text-sm); max-width: 500px; overflow-x: auto;">${escapeHtml(cmd.command)}</code>
+            </div>
+            <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
+              <span style="color: var(--color-text-muted);">Source:</span>
+              <span class="badge" style="background: #6366f1; color: white;">${cmd.source || 'unknown'}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
+              <span style="color: var(--color-text-muted);">Timestamp:</span>
+              <span style="color: var(--color-text);">${new Date(cmd.timestamp).toLocaleString()}</span>
+            </div>
+            ${cmd.shell ? `
+              <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
+                <span style="color: var(--color-text-muted);">Shell:</span>
+                <span class="badge">${cmd.shell}</span>
+              </div>
+            ` : ''}
+            ${cmd.workspace ? `
+              <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
+                <span style="color: var(--color-text-muted);">Workspace:</span>
+                <code style="color: var(--color-text); font-family: var(--font-mono); font-size: var(--text-xs);">${escapeHtml(cmd.workspace)}</code>
+              </div>
+            ` : ''}
+            ${cmd.exit_code !== null && cmd.exit_code !== undefined ? `
+              <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
+                <span style="color: var(--color-text-muted);">Exit Code:</span>
+                <span class="badge" style="background: ${isError ? '#ef4444' : '#10b981'}; color: white;">${cmd.exit_code}</span>
+              </div>
+            ` : ''}
+            ${cmd.duration ? `
+              <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
+                <span style="color: var(--color-text-muted);">Duration:</span>
+                <span style="color: var(--color-text);">${cmd.duration}ms</span>
+              </div>
+            ` : ''}
+          </div>
+        </div>
+    `;
+    
+    // Show command output if available
+    if (cmd.output) {
+      html += `
+        <div>
+          <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">Output</h4>
+          <pre style="padding: var(--space-md); background: #1e1e1e; color: #d4d4d4; border-radius: var(--radius-md); overflow-x: auto; max-height: 400px; font-size: 12px; line-height: 1.5;"><code>${escapeHtml(cmd.output)}</code></pre>
+        </div>
+      `;
+    }
+    
+    // Show error message if available
+    if (cmd.error) {
+      html += `
+        <div>
+          <h4 style="margin-bottom: var(--space-md); color: var(--color-error);">Error</h4>
+          <div style="padding: var(--space-md); background: #fee2e2; color: #dc2626; border-radius: var(--radius-md); font-family: var(--font-mono); font-size: var(--text-sm);">
+            ${escapeHtml(cmd.error)}
+          </div>
+        </div>
+      `;
+    }
+    
+    // Show related file changes if linked
+    if (cmd.linked_entry_id) {
+      const relatedEntry = state.data.events.find(e => e.id === cmd.linked_entry_id);
+      if (relatedEntry) {
+        html += `
+          <div>
+            <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">Related File Change</h4>
+            <div style="padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md); border-left: 3px solid var(--color-primary);">
+              <div style="font-family: var(--font-mono); font-size: var(--text-sm); color: var(--color-text); margin-bottom: var(--space-xs);">
+                ${escapeHtml(relatedEntry.file_path || 'Unknown file')}
+              </div>
+              <div style="font-size: var(--text-xs); color: var(--color-text-muted);">
+                ${new Date(relatedEntry.timestamp).toLocaleString()}
+              </div>
+            </div>
+          </div>
+        `;
+      }
+    }
+    
+    html += `</div>`;
+    
+    body.innerHTML = html;
+    modal.classList.add('active');
+    
+  } catch (error) {
+    console.error('Error showing terminal modal:', error);
+    title.textContent = 'Error';
+    body.innerHTML = `<div style="color: var(--color-error);">Error loading terminal command details: ${error.message}</div>`;
+    modal.classList.add('active');
+  }
+}
+
 function closeEventModal() {
   const modal = document.getElementById('eventModal');
   if (modal) {
@@ -6768,6 +6972,7 @@ function closeEventModal() {
 
 // Make modal functions globally accessible
 window.showEventModal = showEventModal;
+window.showTerminalModal = showTerminalModal;
 window.closeEventModal = closeEventModal;
 window.closeThreadModal = closeThreadModal;
 

@@ -1,6 +1,10 @@
 # Cursor Telemetry Dashboard
 
-A comprehensive real-time monitoring and analytics platform for Cursor IDE. It automatically tracks file changes, mines AI prompts from Cursor's internal database, system resources, and file relationships. All data is persisted in SQLite with a real-time web dashboard, with search, and an API (with 50+ endpoints) to build on top of.
+A comprehensive real-time monitoring and analytics platform for Cursor IDE. Captures file changes, AI prompts, code modifications, and system metrics with advanced analytics for context usage, productivity insights, error tracking, and file relationships. Features a live web dashboard with multi-layer search, 50+ API endpoints, and SQLite-backed persistence.
+
+## Overview
+
+The Cursor Telemetry Dashboard is an intelligent monitoring platform that captures and analyzes your complete development workflow in Cursor IDE. It automatically tracks file changes, mines AI prompts from Cursor's internal database, monitors system resources, and provides actionable insights through advanced analytics engines. All data is persisted in SQLite with a real-time web dashboard and comprehensive REST API.
 
 ### Key Features
 
@@ -13,6 +17,19 @@ A comprehensive real-time monitoring and analytics platform for Cursor IDE. It a
 - **Comprehensive API**: 50+ REST endpoints + WebSocket real-time updates
 - **Export Capability**: Download complete database snapshots as JSON
 - **Interactive Dashboard**: 7 views with Chart.js and D3.js visualizations
+
+### Intelligent Activity Linking
+
+Unlike simple logging systems, Cursor Telemetry creates a rich, interconnected graph of development activity through:
+
+- **Automatic Linking**: File changes are linked to AI prompts within a 5-minute window, creating bidirectional relationships
+- **Session Chunking**: Events are grouped into work sessions with 30-minute inactivity timeout
+- **Multi-Workspace Support**: Independent session tracking per project for parallel development
+- **Conversation Threading**: Composer interactions tracked as threads with iterations and related file changes
+- **Terminal Integration**: Shell commands linked to file changes, errors, and workspace context
+- **Contextual Relationships**: Screenshots, git commits, and errors associated via time-based proximity
+
+This enables analytics like time-to-implementation, prompt iteration detection, error pattern analysis, and complete context for each code change.
 
 ## Dashboard Preview
 
@@ -76,6 +93,7 @@ The Analytics page displays comprehensive insights into AI activity, code output
 │  │   └── Productivity Tracker: Time-to-edit, iterations, churn   │
 │  ├── Data Capture Systems                                          │
 │  │   ├── File Watcher (Chokidar): Monitors workspace changes      │
+│  │   ├── Terminal Monitor: Shell history, process monitoring      │
 │  │   ├── Clipboard Monitor: Captures prompts from clipboard       │
 │  │   ├── AppleScript: IDE state capture (macOS)                   │
 │  │   ├── Git Monitor: Commits, branches, activity                 │
@@ -184,6 +202,111 @@ The Analytics page displays comprehensive insights into AI activity, code output
 - **Git Integration**: Commit, branch, and activity monitoring
 - **System Metrics**: CPU, memory, load average tracking
 
+## Data Sources
+
+The system captures development activity from multiple sources, providing comprehensive coverage of your workflow:
+
+### 1. File System Monitor (Chokidar)
+- **What it captures**: File changes, additions, deletions in workspace directories
+- **How it works**: Watches configured workspace roots with glob pattern filtering
+- **Data stored**: Complete before/after code snapshots, diff calculations, file metadata
+- **Frequency**: Real-time on file save
+- **Configuration**: `workspace_roots`, `ignore` patterns in `config.json`
+
+### 2. Cursor Database Mining
+- **What it captures**: AI prompts, conversations, and Composer interactions
+- **How it works**: Direct SQLite queries to Cursor's internal database at `~/Library/Application Support/Cursor/User/workspaceStorage/*/state.vscdb`
+- **Data stored**: Prompt text, context usage (%), lines added/removed, AI mode (agent/chat/edit), composer IDs, timestamps
+- **Frequency**: Polls every 10 seconds (configurable via `cursor_db_poll_interval`)
+- **Linking**: Automatically links prompts to file changes within 5-minute window
+
+### 3. Terminal Monitor
+- **What it captures**: Shell commands, process execution, terminal output
+- **How it works**: Three strategies - shell history parsing (`.zsh_history`, `.bash_history`), active process monitoring, AppleScript (Cursor terminal on macOS)
+- **Data stored**: Command text, exit codes, duration, output, workspace context
+- **Frequency**: History checked every 30s, processes every 10s
+- **Configuration**: `enable_terminal_monitoring` in `config.json`
+
+### 4. MCP (Model Context Protocol) Integration
+- **What it captures**: Standardized AI interaction events from MCP-compatible tools
+- **How it works**: REST endpoints (`/mcp/log-prompt-response`, `/mcp/log-event`) receive structured data from external integrations
+- **Data stored**: Prompt/response pairs, file paths, code changes, session information
+- **Use cases**: Custom IDE extensions, external AI tools, workflow automation
+- **API**: Fully documented at `/api-docs` with request/response schemas
+
+### 5. Clipboard Monitor
+- **What it captures**: Clipboard content when text is copied
+- **How it works**: Polls system clipboard every 10 seconds using `clipboardy`
+- **Data stored**: Raw clipboard text (may include code, prompts, credentials)
+- **Frequency**: Every 10 seconds when enabled
+- **Configuration**: `enable_clipboard` in `config.json` (requires permission on macOS)
+- **Privacy note**: Captures ALL clipboard content including sensitive data
+
+### 6. IDE State Capture (AppleScript - macOS only)
+- **What it captures**: Cursor window state, active files, cursor position, focus state
+- **How it works**: AppleScript queries Cursor application state every 2 seconds
+- **Data stored**: Window titles, file paths, line/column numbers, active/inactive state
+- **Frequency**: Every 2 seconds
+- **Platform**: macOS only (gracefully skips on Linux/Windows)
+
+### 7. Git Monitor
+- **What it captures**: Repository activity, commits, branches, changes
+- **How it works**: Watches `.git` directories in workspace roots, executes git commands
+- **Data stored**: Commit hashes, messages, authors, timestamps, branch names, file diffs
+- **Frequency**: On-demand and periodic checks
+- **Integration**: Links git commits to file changes by path matching
+
+### 8. System Metrics
+- **What it captures**: CPU usage, memory consumption, load average, disk I/O
+- **How it works**: Node.js `os` module + platform-specific APIs
+- **Data stored**: Resource utilization percentages, timestamps
+- **Frequency**: Every 5 seconds
+- **Use cases**: Correlate system load with development activity, detect performance issues
+
+### 9. Screenshot Monitor
+- **What it captures**: Browser screenshots for web development workflows
+- **How it works**: Watches screenshot directory for new image files
+- **Data stored**: Screenshot paths, timestamps, metadata
+- **Frequency**: File system watch on screenshot directory
+- **Configuration**: `enable_screenshots` in `config.json`
+
+### MCP Integration Details
+
+The **Model Context Protocol (MCP)** is a standardized interface for AI tool integrations. The companion service implements MCP server endpoints for external tools to log their AI interactions.
+
+#### MCP Endpoints
+
+**POST /mcp/log-prompt-response**
+```json
+{
+  "session_id": "optional-session-id",
+  "file_path": "/path/to/file.js",
+  "prompt": "Add error handling",
+  "response": "Here's the code with error handling..."
+}
+```
+
+**POST /mcp/log-event**
+```json
+{
+  "session_id": "optional-session-id",
+  "type": "code_execution",
+  "details": {"status": "success", "duration": 1234}
+}
+```
+
+#### Use Cases
+- **Custom IDE Extensions**: Log interactions from VSCode/JetBrains extensions
+- **CLI Tools**: Track AI-powered CLI tool usage (GitHub Copilot CLI, etc.)
+- **Workflow Automation**: Record AI steps in CI/CD pipelines
+- **Third-party AI Tools**: Integrate ChatGPT, Claude, or other AI services
+
+#### Benefits
+- **Unified Timeline**: All AI interactions in one dashboard regardless of source
+- **Cross-tool Analytics**: Compare effectiveness across different AI tools
+- **Session Tracking**: Group related activities across multiple tools
+- **Persistent History**: Never lose track of AI-generated solutions
+
 ## Quick Start
 
 ### Prerequisites
@@ -248,112 +371,10 @@ The service automatically monitors:
 - File system changes (via Chokidar)
 - Cursor database (`~/Library/Application Support/Cursor/User/workspaceStorage/*/state.vscdb`)
 - Clipboard (when enabled)
+- Terminal commands (shell history, process monitoring)
 - IDE state (via AppleScript on macOS)
 - System resources (CPU, memory, load)
 - Git activity (commits, branches)
-
-## Memory System
-
-The Cursor Telemetry Dashboard includes a comprehensive memory system powered by the **PKL Extension** - an intelligent workflow capture and execution engine that transforms your coding sessions into reusable, executable memories.
-
-### What are Memories?
-
-Memories are executable artifacts that capture the complete context of a development session, including:
-- **Code files and changes** made during the session
-- **Analysis results** from cell stage classification
-- **Context information** like file paths, timestamps, and metadata
-- **Executable commands** that can recreate the development environment
-- **Quality metrics** based on V-measure completeness scoring
-- **PKL Facet Analysis** with data science workflow classification
-
-### Memory Types
-
-#### 1. Session Memories
-Created from individual development sessions, containing:
-- Complete session context and state
-- All code changes and file modifications
-- Analysis results and insights
-- Executable commands to recreate the session
-
-#### 2. Workflow Memories
-Template memories for common development patterns:
-- Data analysis workflows
-- Model training pipelines
-- Visualization creation patterns
-- Debugging procedures
-
-#### 3. Integration Memories
-Memories that integrate with external tools:
-- Cursor IDE session files (`.cursor-session`)
-- Jupyter notebook generation
-- File system operations
-- API integrations
-
-### Cell-Stage Classification
-
-Automatically classifies notebook cells into 12 data science stages:
-- `import` - Loading libraries and dependencies
-- `data_loading` - Reading datasets and external data
-- `data_preprocessing` - Cleaning and transforming data
-- `exploratory_analysis` - Initial data exploration (EDA)
-- `statistical_analysis` - Statistical tests and correlations
-- `machine_learning` - Model training and validation
-- `visualization` - Creating charts and plots
-- `model_evaluation` - Performance metrics and validation
-- `deployment` - Production code and APIs
-- `testing` - Unit tests and validation
-- `utility` - Helper functions and tools
-- `configuration` - Settings and parameters
-
-### Memory Management
-
-#### Creating Memories
-```bash
-# Create memory from a session with PKL features
-curl -X POST http://localhost:3000/api/session/{sessionId}/create-memory \
-  -H "Content-Type: application/json" \
-  -d '{
-    "category": "analysis",
-    "type": "workflow",
-    "tags": ["data-science", "visualization"],
-    "includeMemories": true,
-    "includeASTAnalysis": true,
-    "includeKuraAnalysis": true,
-    "pklFeatures": true
-  }'
-```
-
-#### Executing Memories
-```bash
-# Execute a stored memory
-curl -X POST http://localhost:3000/api/memories/{memoryId}/execute \
-  -H "Content-Type: application/json" \
-  -d '{
-    "context": {
-      "targetDirectory": "/path/to/workspace",
-      "parameters": {
-        "datasetPath": "/data/sample.csv"
-      }
-    }
-  }'
-```
-
-#### Memory Commands (Chat Interface)
-- `@memory create from session {sessionId}` - Create memory from session
-- `@memory search {query}` - Search memories
-- `@memory execute {memoryId}` - Execute a memory
-- `@memory list` - List all memories
-- `@memory stats` - Show memory statistics
-- `@memory export` - Export all memories
-- `@memory delete {memoryId}` - Delete a memory
-
-### Memory Quality Metrics
-
-- **Completeness Score (0-1)**: How complete the memory capture is
-- **V-Measure Score (0-1)**: Clustering quality and homogeneity
-- **File Coverage**: Percentage of relevant files captured
-- **Analysis Depth**: Level of analysis performed
-- **Execution Success Rate**: How often the memory executes successfully
 
 ## API Reference
 
@@ -401,6 +422,12 @@ The companion service exposes 50+ REST endpoints organized into these categories
 - `GET /api/analytics/file-relationships` - File co-change patterns
 - `GET /api/file-graph` - File dependency graph data
 
+#### Terminal Monitoring
+- `GET /api/terminal/history` - Shell command history with filters (limit, source, workspace, exitCode)
+- `GET /api/terminal/stats` - Terminal usage statistics and top commands
+- `POST /api/terminal/enable` - Enable terminal monitoring
+- `POST /api/terminal/disable` - Disable terminal monitoring
+
 #### Search & Query
 - `GET /api/search?q={query}` - Multi-layer search (Lunr + TF-IDF + fuzzy)
 - `GET /api/entries/search?query={q}` - Search file changes
@@ -429,6 +456,7 @@ The companion service maintains WebSocket connections on `ws://localhost:43917` 
 - `data-update` - New file changes, prompts, or events
 - `file-changed` - File modification with diff
 - `prompt-captured` - New AI prompt from Cursor DB
+- `terminal-command` - New terminal command captured
 - `system-metrics` - Updated CPU/memory/load
 - `stats-update` - Refreshed statistics
 
@@ -584,246 +612,48 @@ cursor-telemetry/
 - **Efficient Diffs**: Only changed code sections stored
 - **Frontend Caching**: IndexedDB for persistent dashboard state
 
-## Data Capture & Information Types
+## Data Storage & Privacy
 
-The Cursor Telemetry Dashboard captures comprehensive information about your development activities through multiple monitoring mechanisms. Understanding what data is captured is crucial for privacy and security.
+### Data Captured
 
-### Data Capture Sources
+The system monitors and stores:
+- **File Changes**: Complete before/after code with diffs
+- **AI Prompts**: Conversations from Cursor database with metadata (context usage, lines added/removed, AI mode)
+- **Terminal Commands**: Shell history and process monitoring with exit codes
+- **System Metrics**: CPU, memory, load average
+- **IDE State**: Window focus, cursor position (macOS via AppleScript)
+- **Clipboard**: Optional monitoring when enabled
+- **Git Activity**: Commits, branches, changes
 
-#### 1. **Clipboard Monitoring**
-- **What's Captured**: Complete clipboard content when copied
-- **Frequency**: Every 10 seconds (configurable)
-- **Data Types**: 
-  - Code snippets, prompts, responses
-  - API keys, passwords, tokens
-  - Personal information, file paths
-  - Any text copied to clipboard
-- **Storage**: Raw text stored in database
-- **Privacy**: No filtering applied by default
+### Storage Details
 
-#### 2. **MCP (Model Context Protocol) Integration**
-- **What's Captured**: Direct communication from Cursor IDE
-- **Data Types**:
-  - Complete prompt/response pairs
-  - File paths and context
-  - Code changes (before/after)
-  - Session information
-- **Storage**: Full conversation history
-- **Privacy**: No redaction applied
-
-#### 3. **File System Monitoring**
-- **What's Captured**: File changes and modifications
-- **Data Types**:
-  - Complete file contents (before/after)
-  - File paths (including usernames)
-  - Code diffs and changes
-  - Configuration files
-- **Storage**: Full file content snapshots
-- **Privacy**: No path anonymization
-
-#### 4. **DOM Monitoring**
-- **What's Captured**: Web page content and interactions
-- **Data Types**:
-  - Form inputs and selections
-  - Page content and structure
-  - User interactions
-- **Storage**: HTML content and metadata
-- **Privacy**: No content filtering
-
-#### 5. **Cursor Database Mining**
-- **What's Captured**: Direct extraction from Cursor's internal SQLite databases
-- **Source Location**: `~/Library/Application Support/Cursor/User/workspaceStorage/*/state.vscdb`
-- **Data Types**:
-  - **AI Conversation Titles**: Complete prompt/conversation names from Composer
-  - **Code Impact Metrics**: Lines added/removed per conversation (aggregated)
-  - **Context Usage**: Percentage of context window utilized per prompt
-  - **AI Mode Information**: Agent/Chat/Edit mode, model type (Claude 4.5 Sonnet inferred)
-  - **Workspace Context**: Workspace paths, friendly names, and session IDs
-  - **Temporal Data**: Creation/update timestamps for linking to code changes
-- **Metadata Captured**:
-  ```javascript
-  {
-    "text": "Implementing user authentication system",
-    "workspacePath": "/Users/dev/project",
-    "linesAdded": 247,
-    "linesRemoved": 83,
-    "contextUsage": 67.5,
-    "mode": "agent",
-    "modelName": "claude-4.5-sonnet",
-    "composerId": "uuid-12345",
-    "timestamp": 1729814400000
-  }
-  ```
-- **Update Frequency**: Every 10 seconds via database polling
-- **Linkage**: Prompts automatically linked to subsequent code changes for traceability
-- **Storage**: Extended SQLite schema with 16+ metadata fields per prompt
-- **Privacy**: Full conversation history with no filtering
-
-### Information Types Captured
-
-#### **Code & Development Data**
-```javascript
-{
-  "file_path": "/Users/john.smith/projects/auth/src/auth.js",
-  "before_code": "const auth = require('auth');",
-  "after_code": "const jwt = require('jsonwebtoken');\nconst auth = require('auth');",
-  "prompt": "How do I implement JWT authentication?",
-  "response": "Here's how to implement JWT authentication...",
-  "timestamp": "2024-01-15T10:30:00Z"
-}
-```
-
-#### **Sensitive Information**
-- **API Keys**: GitHub tokens, AWS credentials, Stripe keys
-- **Passwords**: Database passwords, service credentials
-- **Personal Data**: Names, emails, phone numbers
-- **Business Information**: Company names, project details
-- **System Information**: Usernames, file paths, directory structure
-
-#### **Security & Privacy Data**
-- **Authentication Tokens**: JWT secrets, OAuth tokens
-- **Database Credentials**: Connection strings, passwords
-- **Private Keys**: SSH keys, encryption keys
-- **Environment Variables**: Complete .env file contents
-- **Configuration Files**: API keys, secrets, credentials
-
-### Data Storage & Retention
-
-#### **Storage Format**
-- **Database**: SQLite (`companion.db`) with full text storage
-- **Format**: Plain text (no encryption)
-- **Retention**: Indefinite (no automatic cleanup)
-- **Access**: No authentication required
-- **Schema**:
-  - **entries**: File changes with before/after code, prompt linkage
-  - **prompts**: Enhanced metadata (16 fields) including AI mode, context usage, code impact
-  - **events**: Activity timeline with detailed event metadata
+- **Database**: SQLite (`companion.db`) stored in plain text
 - **Location**: `components/activity-logger/companion/data/companion.db`
+- **Growth**: ~5-10MB per hour of active development
+- **Retention**: Indefinite (no automatic cleanup)
+- **Access**: No authentication on API endpoints
 
-#### **Data Volume**
-- **Per Session**: 10-50MB of raw data
-- **Clipboard Entries**: 50-200 per session
-- **File Changes**: 20-100 per session (tracked in entries table)
-- **MCP Entries**: 30-150 per session
-- **AI Prompts**: 20-100 per session with full metadata
-- **Database Growth**: ~5-10MB per hour of active development
+### Privacy Notes
 
-### Security Detection & Analytics
+**The system captures code, prompts, and system information without encryption or filtering by default.** This may include sensitive data like API keys, credentials, or personal information. For production use:
 
-The system includes advanced security detection capabilities:
+1. Review captured data regularly
+2. Implement retention policies
+3. Add authentication to API endpoints
+4. Consider data encryption for sensitive environments
 
-#### **Secret Detection Patterns**
-- **GitHub Tokens**: `ghp_`, `gho_`, `ghu_`, `ghs_`, `ghr_`
-- **AWS Credentials**: Access keys, secret keys
-- **Database URLs**: PostgreSQL, MySQL, MongoDB
-- **JWT Secrets**: Authentication tokens
-- **Private Keys**: RSA, DSA, EC, OpenSSH
-- **API Keys**: Google, Stripe, Slack, etc.
-
-#### **Analytics API Examples**
+Export your data anytime:
 ```bash
-# Get database statistics with integrity checks
-curl "http://localhost:43917/api/database/stats"
-
-# Get context analytics (@ mentions, token usage)
-curl "http://localhost:43917/api/analytics/context"
-
-# Get error tracking statistics
-curl "http://localhost:43917/api/analytics/errors"
-
-# Get productivity metrics
-curl "http://localhost:43917/api/analytics/productivity"
-
-# Export complete database snapshot
-curl "http://localhost:43917/api/export/database" > telemetry-export.json
+curl "http://localhost:43917/api/export/database" > backup.json
 ```
-
-**For complete API reference**, visit the built-in documentation:
-```bash
-open http://localhost:43917/new-dashboard.html#api-docs
-```
-
-The API documentation view provides:
-- 50+ endpoint reference with examples
-- Request/response formats
-- Query parameters
-- WebSocket event documentation
-- Performance notes
-
-### Privacy Controls
-
-#### **Current Limitations**
-- **No Default Protection**: All data captured without filtering
-- **No Encryption**: Plain text storage
-- **No Access Controls**: Open API endpoints
-- **No Retention Limits**: Indefinite storage
-
-#### **Available Controls**
-```javascript
-// Privacy configuration (optional)
-const privacyConfig = {
-  enabled: false,              // DISABLED by default
-  redactNames: false,         // NO name redaction
-  redactNumbers: false,       // NO number redaction
-  redactEmails: false,        // NO email redaction
-  redactFilePaths: false      // NO path redaction
-};
-```
-
-#### **Security Recommendations**
-1. **Enable Privacy Controls**: Configure data redaction
-2. **Regular Security Audits**: Use security analytics API
-3. **Data Cleanup**: Implement retention policies
-4. **Access Controls**: Secure API endpoints
-5. **Encryption**: Implement data encryption
-
-### Data Export & Analysis
-
-#### **Export Capabilities**
-```bash
-# Export all data
-curl "http://localhost:3000/api/export/json"
-
-# Export security report
-curl "http://localhost:3000/api/security/analytics" > security-report.json
-
-# Export conversations
-curl "http://localhost:3000/api/conversations"
-```
-
-#### **Analytics Endpoints**
-- **Security Analytics**: `/api/security/analytics`
-- **Conversation Analytics**: `/api/conversations/analytics`
-- **Prompt Analytics**: `/api/prompts/analytics`
-- **Risk Assessment**: `/api/security/risk-assessment`
-
-## Privacy Considerations
-
-**Critical**: The system captures sensitive data with no privacy protection by default:
-
-1. **Review Captured Data**: Check what information is being stored
-2. **Enable Privacy Controls**: Configure data redaction and filtering
-3. **Monitor Security Issues**: Use security analytics to identify risks
-4. **Implement Data Policies**: Set retention limits and access controls
-5. **Regular Audits**: Review captured data for sensitive information
-
-**Security Warning**: The system captures API keys, passwords, personal information, and business data in plain text with no encryption or access controls.
 
 ## Related Projects
+
 - [Clio](https://github.com/openclio/clio) - Faceted analysis framework
 - [D3.js](https://d3js.org/) - Data visualization library
 - [General User Models from Computer Use] (https://arxiv.org/abs/2505.10831)
 
-## Support
-
-For questions, issues, or contributions, please:
-- Open an issue on GitHub
-- Check the documentation in `/docs`
-- Review the API reference above
-- Read `PRIVACY_CONTROLS_ANALYSIS.md` for privacy considerations
 
 ---
 
-**Note**: This dashboard is designed specifically for data science workflows and provides specialized insights into Jupyter notebook-based development patterns. The system is optimized for macOS, Cursor IDE integration, and requires .ipynb files for full functionality.
-
-**Privacy Warning**: The current privacy controls are not connected to data capture. All data is captured regardless of privacy settings. See `PRIVACY_CONTROLS_ANALYSIS.md` for details.// Test change for companion service
+**System Requirements**: macOS recommended for full AppleScript integration. Core features work on Linux/Windows with limited IDE state capture.

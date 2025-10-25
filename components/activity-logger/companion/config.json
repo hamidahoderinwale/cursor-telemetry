@@ -35,6 +35,7 @@
   ],
   "diff_threshold": 12,
   "enable_clipboard": true,
+  "enable_terminal_monitoring": true,
   "enable_preload": false,
   "strict_auth": false,
   "polling_interval": 2000

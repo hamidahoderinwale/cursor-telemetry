@@ -158,6 +158,34 @@ class PersistentDB {
             });
           }));
 
+          // Terminal commands table
+          tables.push(new Promise((res, rej) => {
+            this.db.run(`
+              CREATE TABLE IF NOT EXISTS terminal_commands (
+                id TEXT PRIMARY KEY,
+                command TEXT NOT NULL,
+                shell TEXT,
+                source TEXT,
+                timestamp INTEGER NOT NULL,
+                workspace TEXT,
+                output TEXT,
+                exit_code INTEGER,
+                duration INTEGER,
+                error TEXT,
+                linked_entry_id INTEGER,
+                linked_prompt_id INTEGER,
+                session_id TEXT
+              )
+            `, (err) => {
+              if (err) {
+                console.error('Error creating terminal_commands table:', err);
+                rej(err);
+              } else {
+                res();
+              }
+            });
+          }));
+
           // Create indexes for better query performance
           this.db.run(`CREATE INDEX IF NOT EXISTS idx_entries_session ON entries(session_id)`);
           this.db.run(`CREATE INDEX IF NOT EXISTS idx_entries_timestamp ON entries(timestamp)`);
@@ -173,6 +201,11 @@ class PersistentDB {
           this.db.run(`CREATE INDEX IF NOT EXISTS idx_events_timestamp ON events(timestamp)`);
           this.db.run(`CREATE INDEX IF NOT EXISTS idx_events_session ON events(session_id)`);
           this.db.run(`CREATE INDEX IF NOT EXISTS idx_events_type ON events(type)`);
+          
+          this.db.run(`CREATE INDEX IF NOT EXISTS idx_terminal_timestamp ON terminal_commands(timestamp)`);
+          this.db.run(`CREATE INDEX IF NOT EXISTS idx_terminal_workspace ON terminal_commands(workspace)`);
+          this.db.run(`CREATE INDEX IF NOT EXISTS idx_terminal_exit_code ON terminal_commands(exit_code)`);
+          this.db.run(`CREATE INDEX IF NOT EXISTS idx_terminal_session ON terminal_commands(session_id)`);
           
           // Wait for all tables to be created
           Promise.all(tables).then(() => {
@@ -306,6 +339,113 @@ class PersistentDB {
           reject(err);
         } else {
           resolve(event);
+        }
+      });
+    });
+  }
+
+  /**
+   * Save a terminal command to the database
+   */
+  async saveTerminalCommand(command) {
+    await this.init();
+    
+    return new Promise((resolve, reject) => {
+      const stmt = this.db.prepare(`
+        INSERT OR REPLACE INTO terminal_commands 
+        (id, command, shell, source, timestamp, workspace, output, exit_code, duration, error, linked_entry_id, linked_prompt_id, session_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      
+      stmt.run(
+        command.id,
+        command.command,
+        command.shell,
+        command.source,
+        command.timestamp,
+        command.workspace,
+        command.output,
+        command.exitCode,
+        command.duration,
+        command.error,
+        command.linkedEntryId || null,
+        command.linkedPromptId || null,
+        command.sessionId || null
+      );
+      
+      stmt.finalize((err) => {
+        if (err) {
+          console.error('Error saving terminal command:', err);
+          reject(err);
+        } else {
+          resolve(command);
+        }
+      });
+    });
+  }
+
+  /**
+   * Get all terminal commands
+   */
+  async getAllTerminalCommands(limit = 500) {
+    await this.init();
+    
+    return new Promise((resolve, reject) => {
+      this.db.all(
+        `SELECT * FROM terminal_commands ORDER BY timestamp DESC LIMIT ?`,
+        [limit],
+        (err, rows) => {
+          if (err) {
+            console.error('Error loading terminal commands:', err);
+            reject(err);
+          } else {
+            resolve(rows);
+          }
+        }
+      );
+    });
+  }
+
+  /**
+   * Get terminal commands with filters
+   */
+  async getTerminalCommands(options = {}) {
+    await this.init();
+    
+    const { limit = 100, source, since, workspace, exitCode } = options;
+    let query = 'SELECT * FROM terminal_commands WHERE 1=1';
+    const params = [];
+    
+    if (source) {
+      query += ' AND source = ?';
+      params.push(source);
+    }
+    
+    if (since) {
+      query += ' AND timestamp >= ?';
+      params.push(since);
+    }
+    
+    if (workspace) {
+      query += ' AND workspace = ?';
+      params.push(workspace);
+    }
+    
+    if (exitCode !== undefined) {
+      query += ' AND exit_code = ?';
+      params.push(exitCode);
+    }
+    
+    query += ' ORDER BY timestamp DESC LIMIT ?';
+    params.push(limit);
+    
+    return new Promise((resolve, reject) => {
+      this.db.all(query, params, (err, rows) => {
+        if (err) {
+          console.error('Error querying terminal commands:', err);
+          reject(err);
+        } else {
+          resolve(rows);
         }
       });
     });
