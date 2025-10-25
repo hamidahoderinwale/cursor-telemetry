@@ -12,6 +12,7 @@
   "dependencies": {
     "chokidar": "^3.5.3",
     "clipboardy": "^4.0.0",
+    "compression": "^1.8.1",
     "cors": "^2.8.5",
     "diff": "^5.1.0",
     "dotenv": "^17.2.3",

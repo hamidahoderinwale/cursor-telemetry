@@ -8,11 +8,12 @@
 const ContextExtractor = require('./context-extractor');
 
 class ContextAnalyzer {
-  constructor() {
+  constructor(persistentDB = null) {
     this.contextExtractor = new ContextExtractor();
     this.contextSnapshots = [];
     this.fileCoOccurrence = new Map(); // Track which files appear together
     this.fileContextHistory = new Map(); // Track file usage over time
+    this.persistentDB = persistentDB; // Store reference to persistent database
   }
 
   /**
@@ -44,33 +45,54 @@ class ContextAnalyzer {
         });
 
         // Add @ files
-        if (composerContext.atFiles) {
-          analysis.contextFiles.push(...composerContext.atFiles.map(f => ({
-            path: f,
-            type: 'explicit',
-            source: 'at_mention'
-          })));
+        if (composerContext.atFiles && Array.isArray(composerContext.atFiles)) {
+          composerContext.atFiles.forEach(f => {
+            const filePath = typeof f === 'string' ? f : (f.filePath || f.fileName || f.path);
+            if (filePath && filePath.length > 0) {
+              analysis.contextFiles.push({
+                path: filePath,
+                type: 'explicit',
+                source: 'at_mention'
+              });
+            }
+          });
         }
 
         // Add context files
         if (composerContext.contextFiles) {
-          Object.entries(composerContext.contextFiles).forEach(([path, info]) => {
-            analysis.contextFiles.push({
-              path: path,
-              type: 'implicit',
-              source: 'context_window',
-              lineCount: info.lineCount,
-              size: info.size
+          if (typeof composerContext.contextFiles === 'object' && !Array.isArray(composerContext.contextFiles)) {
+            Object.entries(composerContext.contextFiles).forEach(([path, info]) => {
+              if (path && path.length > 0 && !['attachedFiles', 'codebaseFiles', 'referencedFiles', 'mentionedFiles'].includes(path)) {
+                analysis.contextFiles.push({
+                  path: path,
+                  type: 'implicit',
+                  source: 'context_window',
+                  lineCount: info?.lineCount,
+                  size: info?.size
+                });
+              }
             });
-          });
+          } else if (Array.isArray(composerContext.contextFiles)) {
+            composerContext.contextFiles.forEach(file => {
+              const filePath = typeof file === 'string' ? file : (file.path || file.fileName || file.name);
+              if (filePath && filePath.length > 0) {
+                analysis.contextFiles.push({
+                  path: filePath,
+                  type: 'implicit',
+                  source: 'context_window'
+                });
+              }
+            });
+          }
         }
 
         // Add response files
-        if (composerContext.responseFiles) {
+        if (composerContext.responseFiles && Array.isArray(composerContext.responseFiles)) {
           composerContext.responseFiles.forEach(file => {
-            if (!analysis.contextFiles.find(f => f.path === file)) {
+            const filePath = typeof file === 'string' ? file : (file.path || file.fileName || file.name);
+            if (filePath && filePath.length > 0 && !analysis.contextFiles.find(f => f.path === filePath)) {
               analysis.contextFiles.push({
-                path: file,
+                path: filePath,
                 type: 'response',
                 source: 'ai_generated'
               });
@@ -91,12 +113,21 @@ class ContextAnalyzer {
       // Track file co-occurrence
       this.trackFileRelationships(analysis.contextFiles);
 
-      // Store snapshot
+      // Store snapshot in memory
       this.contextSnapshots.push(analysis);
 
-      // Keep only last 1000 snapshots
+      // Keep only last 1000 snapshots in memory
       if (this.contextSnapshots.length > 1000) {
         this.contextSnapshots = this.contextSnapshots.slice(-1000);
+      }
+
+      // Persist snapshot to database
+      if (this.persistentDB) {
+        try {
+          await this.persistentDB.saveContextSnapshot(analysis);
+        } catch (error) {
+          console.error('Error saving context snapshot to database:', error);
+        }
       }
 
       return analysis;
@@ -184,40 +215,56 @@ class ContextAnalyzer {
   }
 
   /**
-   * Get file relationship graph data
+   * Get file relationship graph data (optimized)
    */
   getFileRelationshipGraph(minCount = 2) {
     const edges = [];
     const nodes = new Map();
+    const snapshotCount = this.contextSnapshots.length || 1; // Avoid division by zero
 
-    // Build edges from co-occurrence data
-    this.fileCoOccurrence.forEach((data, key) => {
-      if (data.count >= minCount) {
-        edges.push({
-          source: data.file1,
-          target: data.file2,
-          weight: data.count,
-          strength: data.count / this.contextSnapshots.length
-        });
+    // Pre-filter and build in single pass for better performance
+    for (const [key, data] of this.fileCoOccurrence.entries()) {
+      if (data.count < minCount) continue; // Skip early
+      
+      // Add edge
+      edges.push({
+        source: data.file1,
+        target: data.file2,
+        weight: data.count,
+        strength: data.count / snapshotCount
+      });
 
-        // Track nodes
-        [data.file1, data.file2].forEach(file => {
-          if (!nodes.has(file)) {
-            const history = this.fileContextHistory.get(file);
-            nodes.set(file, {
-              id: file,
-              label: file.split('/').pop(),
-              mentions: history?.mentionCount || 0,
-              size: Math.min(50, 10 + (history?.mentionCount || 0))
-            });
-          }
+      // Add nodes (only if not already added)
+      if (!nodes.has(data.file1)) {
+        const history = this.fileContextHistory.get(data.file1);
+        nodes.set(data.file1, {
+          id: data.file1,
+          label: data.file1.split('/').pop() || data.file1,
+          mentions: history?.mentionCount || 0,
+          size: Math.min(50, 10 + (history?.mentionCount || 0))
         });
       }
-    });
+      
+      if (!nodes.has(data.file2)) {
+        const history = this.fileContextHistory.get(data.file2);
+        nodes.set(data.file2, {
+          id: data.file2,
+          label: data.file2.split('/').pop() || data.file2,
+          mentions: history?.mentionCount || 0,
+          size: Math.min(50, 10 + (history?.mentionCount || 0))
+        });
+      }
+    }
 
     return {
       nodes: Array.from(nodes.values()),
-      edges: edges
+      edges: edges,
+      metadata: {
+        totalRelationships: this.fileCoOccurrence.size,
+        filteredRelationships: edges.length,
+        totalFiles: this.fileContextHistory.size,
+        includedFiles: nodes.size
+      }
     };
   }
 

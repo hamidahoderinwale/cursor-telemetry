@@ -72,18 +72,34 @@ class FileGraphVisualizer {
   }
 
   /**
-   * Load file data from storage
+   * Load file data from API (optimized - use backend graph data)
    */
   async loadData() {
     try {
+      // Try loading from backend API first (much faster)
+      const response = await fetch('/api/analytics/context/file-relationships?minCount=1');
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success && result.data) {
+          this.nodes = result.data.nodes || [];
+          this.links = result.data.edges || [];
+          
+          if (this.nodes.length > 0) {
+            console.log(`✅ Loaded ${this.nodes.length} nodes and ${this.links.length} edges from API`);
+            return;
+          }
+        }
+      }
+
+      // Fallback to local data processing
       const sync = window.getSynchronizer();
       if (!sync) {
         console.warn('Data synchronizer not initialized');
         return;
       }
 
-      // Get all events with file content
-      const events = await sync.storage.getAllEvents(500);
+      // Get all events with file content (limited for performance)
+      const events = await sync.storage.getAllEvents(200); // Reduced from 500
       
       // Build file map
       const fileMap = new Map();

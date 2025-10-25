@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Prescriptions - Cursor Telemetry</title>
+  <link rel="stylesheet" href="prescriptions.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="header">
+      <div class="header-content">
+        <h1>📋 Prescriptions</h1>
+        <p class="subtitle">Behavioral rules and instructions that guide AI behavior</p>
+      </div>
+      <div class="header-actions">
+        <button onclick="showSuggestions()" class="btn btn-secondary">
+          ✨ Suggest from Patterns
+        </button>
+        <button onclick="showTemplates()" class="btn btn-secondary">
+          📚 Templates
+        </button>
+        <button onclick="showImportExport()" class="btn btn-secondary">
+          💾 Import/Export
+        </button>
+        <button onclick="showCreateModal()" class="btn btn-primary">
+          + New Prescription
+        </button>
+      </div>
+    </header>
+
+    <!-- Stats Bar -->
+    <div class="stats-bar" id="stats-bar">
+      <div class="stat-card">
+        <span class="stat-label">Total</span>
+        <span class="stat-value" id="stat-total">0</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Active</span>
+        <span class="stat-value" id="stat-active">0</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Inactive</span>
+        <span class="stat-value" id="stat-inactive">0</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Conflicts</span>
+        <span class="stat-value" id="stat-conflicts">0</span>
+      </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="filters">
+      <input type="text" id="search-input" placeholder="Search prescriptions..." class="search-input">
+      
+      <select id="category-filter" class="filter-select">
+        <option value="">All Categories</option>
+        <option value="formatting">Formatting</option>
+        <option value="behavior">Behavior</option>
+        <option value="domain">Domain</option>
+        <option value="workflow">Workflow</option>
+        <option value="security">Security</option>
+        <option value="communication">Communication</option>
+        <option value="constraints">Constraints</option>
+        <option value="allowlist">Allowlist</option>
+        <option value="blocklist">Blocklist</option>
+      </select>
+      
+      <select id="scope-filter" class="filter-select">
+        <option value="">All Scopes</option>
+        <option value="global">Global</option>
+        <option value="workspace">Workspace</option>
+        <option value="file-type">File Type</option>
+        <option value="file">File</option>
+      </select>
+      
+      <select id="active-filter" class="filter-select">
+        <option value="">All</option>
+        <option value="true">Active Only</option>
+        <option value="false">Inactive Only</option>
+      </select>
+
+      <button onclick="clearFilters()" class="btn btn-text">Clear Filters</button>
+    </div>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <div id="prescriptions-container" class="prescriptions-container">
+        <!-- Prescriptions will be rendered here -->
+      </div>
+      
+      <div id="empty-state" class="empty-state" style="display: none;">
+        <div class="empty-icon">📋</div>
+        <h2>No Prescriptions Yet</h2>
+        <p>Create your first prescription to start guiding AI behavior</p>
+        <button onclick="showCreateModal()" class="btn btn-primary">Create Prescription</button>
+      </div>
+    </main>
+  </div>
+
+  <!-- Create/Edit Modal -->
+  <div id="prescription-modal" class="modal" style="display: none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="modal-title">Create Prescription</h2>
+        <button onclick="closeModal()" class="btn-close">&times;</button>
+      </div>
+      
+      <form id="prescription-form" onsubmit="savePrescription(event)">
+        <div class="form-group">
+          <label for="title">Title *</label>
+          <input type="text" id="title" name="title" required 
+                 placeholder="e.g., No Markdown Files" maxlength="200">
+        </div>
+        
+        <div class="form-group">
+          <label for="prescription">Prescription *</label>
+          <textarea id="prescription" name="prescription" required rows="3"
+                    placeholder="e.g., Don't create markdown files unless explicitly requested" 
+                    maxlength="2000"></textarea>
+          <span class="char-count"><span id="char-count">0</span>/2000</span>
+        </div>
+        
+        <div class="form-row">
+          <div class="form-group">
+            <label for="category">Category *</label>
+            <select id="category" name="category" required>
+              <option value="behavior">Behavior</option>
+              <option value="formatting">Formatting</option>
+              <option value="domain">Domain</option>
+              <option value="workflow">Workflow</option>
+              <option value="security">Security</option>
+              <option value="communication">Communication</option>
+              <option value="constraints">Constraints</option>
+              <option value="allowlist">Allowlist</option>
+              <option value="blocklist">Blocklist</option>
+            </select>
+          </div>
+          
+          <div class="form-group">
+            <label for="scope">Scope *</label>
+            <select id="scope" name="scope" required onchange="toggleScopeValue()">
+              <option value="global">Global</option>
+              <option value="workspace">Workspace</option>
+              <option value="file-type">File Type</option>
+              <option value="file">File</option>
+            </select>
+          </div>
+        </div>
+        
+        <div class="form-group" id="scope-value-group" style="display: none;">
+          <label for="scope_value">Scope Value</label>
+          <input type="text" id="scope_value" name="scope_value" 
+                 placeholder="e.g., /path/to/workspace or .js">
+        </div>
+        
+        <div class="form-group">
+          <label for="priority">Priority (1-100)</label>
+          <input type="range" id="priority" name="priority" min="1" max="100" value="50">
+          <span class="priority-value" id="priority-value">50</span>
+        </div>
+        
+        <div class="form-group">
+          <label>
+            <input type="checkbox" id="active" name="active" checked>
+            Active
+          </label>
+        </div>
+        
+        <div class="modal-footer">
+          <button type="button" onclick="closeModal()" class="btn btn-secondary">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Suggestions Modal -->
+  <div id="suggestions-modal" class="modal" style="display: none;">
+    <div class="modal-content modal-large">
+      <div class="modal-header">
+        <h2>💡 Suggested Prescriptions</h2>
+        <button onclick="closeSuggestionsModal()" class="btn-close">&times;</button>
+      </div>
+      
+      <div id="suggestions-content" class="suggestions-content">
+        <!-- Suggestions will be rendered here -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Templates Modal -->
+  <div id="templates-modal" class="modal" style="display: none;">
+    <div class="modal-content modal-large">
+      <div class="modal-header">
+        <h2>📚 Prescription Templates</h2>
+        <button onclick="closeTemplatesModal()" class="btn-close">&times;</button>
+      </div>
+      
+      <div id="templates-content" class="templates-content">
+        <!-- Templates will be rendered here -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Import/Export Modal -->
+  <div id="import-export-modal" class="modal" style="display: none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>💾 Import/Export</h2>
+        <button onclick="closeImportExportModal()" class="btn-close">&times;</button>
+      </div>
+      
+      <div class="import-export-content">
+        <div class="section">
+          <h3>Export</h3>
+          <p>Download all prescriptions as JSON</p>
+          <button onclick="exportPrescriptions()" class="btn btn-primary">Export All</button>
+        </div>
+        
+        <div class="section">
+          <h3>Import</h3>
+          <p>Upload a JSON file with prescriptions</p>
+          <input type="file" id="import-file" accept=".json">
+          <label>
+            <input type="checkbox" id="import-overwrite">
+            Overwrite existing prescriptions with same title
+          </label>
+          <button onclick="importPrescriptions()" class="btn btn-primary">Import</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notifications -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <script src="prescriptions.js"></script>
+</body>
+</html>
+

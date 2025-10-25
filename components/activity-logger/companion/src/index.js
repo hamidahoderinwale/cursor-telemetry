@@ -7,6 +7,7 @@ require('dotenv').config({ path: path.resolve(__dirname, '../../../../../.env') 
 
 const express = require('express');
 const cors = require('cors');
+const compression = require('compression');
 const http = require('http');
 const chokidar = require('chokidar');
 const fs = require('fs');
@@ -50,7 +51,7 @@ const TerminalMonitor = require('./terminal-monitor.js');
 const persistentDB = new PersistentDB();
 
 // Initialize analytics trackers
-const contextAnalyzer = new ContextAnalyzer();
+const contextAnalyzer = new ContextAnalyzer(persistentDB);
 const errorTracker = new ErrorTracker();
 const productivityTracker = new ProductivityTracker();
 const terminalMonitor = new TerminalMonitor({
@@ -129,6 +130,7 @@ function broadcastUpdate(type, data) {
 }
 
 // Middleware
+app.use(compression()); // Enable gzip compression for all responses
 app.use(cors({ origin: '*' })); // Explicitly allow all origins
 app.use(express.json());
 
@@ -1491,17 +1493,44 @@ app.get('/api/analytics/context', (req, res) => {
   }
 });
 
-app.get('/api/analytics/context/snapshots', (req, res) => {
+app.get('/api/analytics/context/snapshots', async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 50;
-    const snapshots = contextAnalyzer.getRecentSnapshots(limit);
+    const since = parseInt(req.query.since) || 0;
+    const source = req.query.source || 'memory'; // 'memory' or 'database'
+    
+    let snapshots;
+    if (source === 'database') {
+      // Get from persistent database for historical data
+      snapshots = await persistentDB.getContextSnapshots({ limit, since });
+    } else {
+      // Get from in-memory for recent data
+      snapshots = contextAnalyzer.getRecentSnapshots(limit);
+    }
+    
     res.json({
       success: true,
       data: snapshots,
-      count: snapshots.length
+      count: snapshots.length,
+      source
     });
   } catch (error) {
     console.error('Error getting context snapshots:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get persistent context analytics from database
+app.get('/api/analytics/context/historical', async (req, res) => {
+  try {
+    const analytics = await persistentDB.getContextAnalytics();
+    res.json({
+      success: true,
+      data: analytics,
+      source: 'database'
+    });
+  } catch (error) {
+    console.error('Error getting historical context analytics:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -1519,10 +1548,42 @@ app.get('/api/analytics/context/timeline', (req, res) => {
   }
 });
 
+// Cache for file relationship graph
+const fileGraphCache = new Map();
+const GRAPH_CACHE_TTL = 30000; // 30 seconds
+
 app.get('/api/analytics/context/file-relationships', (req, res) => {
   try {
     const minCount = parseInt(req.query.minCount) || 2;
+    const cacheKey = `graph:${minCount}`;
+    
+    // Check cache
+    const cached = fileGraphCache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < GRAPH_CACHE_TTL) {
+      res.set('X-Cache', 'HIT');
+      return res.json({
+        success: true,
+        data: cached.data,
+        cached: true
+      });
+    }
+    
+    // Generate graph
     const graph = contextAnalyzer.getFileRelationshipGraph(minCount);
+    
+    // Cache result
+    fileGraphCache.set(cacheKey, {
+      data: graph,
+      timestamp: Date.now()
+    });
+    
+    // Clean old cache entries
+    if (fileGraphCache.size > 10) {
+      const oldestKey = Array.from(fileGraphCache.keys())[0];
+      fileGraphCache.delete(oldestKey);
+    }
+    
+    res.set('X-Cache', 'MISS');
     res.json({
       success: true,
       data: graph

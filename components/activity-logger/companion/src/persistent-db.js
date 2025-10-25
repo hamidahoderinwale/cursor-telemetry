@@ -158,6 +158,31 @@ class PersistentDB {
             });
           }));
 
+          // Context snapshots table for persistent context analytics
+          tables.push(new Promise((res, rej) => {
+            this.db.run(`
+              CREATE TABLE IF NOT EXISTS context_snapshots (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                prompt_id TEXT,
+                timestamp INTEGER,
+                file_count INTEGER DEFAULT 0,
+                token_estimate INTEGER DEFAULT 0,
+                truncated INTEGER DEFAULT 0,
+                utilization_percent REAL DEFAULT 0,
+                context_files TEXT,
+                at_mentions TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+              )
+            `, (err) => {
+              if (err) {
+                console.error('Error creating context_snapshots table:', err);
+                rej(err);
+              } else {
+                res();
+              }
+            });
+          }));
+
           // Terminal commands table
           tables.push(new Promise((res, rej) => {
             this.db.run(`
@@ -714,6 +739,112 @@ class PersistentDB {
         }
       });
     }
+  }
+  /**
+   * Save a context snapshot to the database
+   */
+  async saveContextSnapshot(snapshot) {
+    await this.init();
+    
+    return new Promise((resolve, reject) => {
+      const stmt = this.db.prepare(`
+        INSERT INTO context_snapshots 
+        (prompt_id, timestamp, file_count, token_estimate, truncated, utilization_percent, context_files, at_mentions)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      
+      stmt.run(
+        snapshot.promptId || null,
+        snapshot.timestamp,
+        snapshot.fileCount || 0,
+        snapshot.tokenEstimate || 0,
+        snapshot.truncated ? 1 : 0,
+        snapshot.utilizationPercent || 0,
+        JSON.stringify(snapshot.contextFiles || []),
+        JSON.stringify(snapshot.atMentions || [])
+      );
+      
+      stmt.finalize((err) => {
+        if (err) {
+          console.error('Error saving context snapshot:', err);
+          reject(err);
+        } else {
+          resolve(snapshot);
+        }
+      });
+    });
+  }
+
+  /**
+   * Get context snapshots with optional filtering
+   */
+  async getContextSnapshots(options = {}) {
+    await this.init();
+    
+    const { limit = 100, since = 0 } = options;
+    
+    return new Promise((resolve, reject) => {
+      this.db.all(
+        `SELECT * FROM context_snapshots 
+         WHERE timestamp >= ? 
+         ORDER BY timestamp DESC 
+         LIMIT ?`,
+        [since, limit],
+        (err, rows) => {
+          if (err) {
+            console.error('Error fetching context snapshots:', err);
+            reject(err);
+          } else {
+            const snapshots = rows.map(row => ({
+              id: row.id,
+              promptId: row.prompt_id,
+              timestamp: row.timestamp,
+              fileCount: row.file_count,
+              tokenEstimate: row.token_estimate,
+              truncated: row.truncated === 1,
+              utilizationPercent: row.utilization_percent,
+              contextFiles: JSON.parse(row.context_files || '[]'),
+              atMentions: JSON.parse(row.at_mentions || '[]'),
+              createdAt: row.created_at
+            }));
+            resolve(snapshots);
+          }
+        }
+      );
+    });
+  }
+
+  /**
+   * Get context analytics from stored snapshots
+   */
+  async getContextAnalytics() {
+    await this.init();
+    
+    return new Promise((resolve, reject) => {
+      this.db.get(
+        `SELECT 
+          COUNT(*) as total_snapshots,
+          AVG(file_count) as avg_files,
+          AVG(token_estimate) as avg_tokens,
+          AVG(utilization_percent) as avg_utilization,
+          SUM(CASE WHEN truncated = 1 THEN 1 ELSE 0 END) * 100.0 / COUNT(*) as truncation_rate
+         FROM context_snapshots`,
+        (err, row) => {
+          if (err) {
+            console.error('Error fetching context analytics:', err);
+            reject(err);
+          } else {
+            resolve({
+              totalSnapshots: row.total_snapshots || 0,
+              avgFilesPerPrompt: row.avg_files || 0,
+              avgTokensPerPrompt: Math.round(row.avg_tokens || 0),
+              avgContextUtilization: row.avg_utilization || 0,
+              truncationRate: row.truncation_rate || 0
+            });
+          }
+        }
+      );
+    });
   }
 }
 
