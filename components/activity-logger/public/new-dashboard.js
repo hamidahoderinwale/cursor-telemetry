@@ -109,7 +109,7 @@ class WebSocketManager {
       });
 
       this.socket.on('connect', () => {
-        console.log('✓ WebSocket connected');
+        console.log('WebSocket connected');
         state.connected = true;
         updateConnectionStatus(true);
         this.reconnectAttempts = 0;
@@ -122,12 +122,12 @@ class WebSocketManager {
       });
 
       this.socket.on('activityUpdate', (data) => {
-        console.log('📨 Activity update:', data);
+        console.log('Activity update:', data);
         handleRealtimeUpdate(data);
       });
 
       this.socket.on('terminal-command', (cmd) => {
-        console.log('🖥️  Terminal command:', cmd);
+        console.log('Terminal command:', cmd);
         handleTerminalCommand(cmd);
       });
 
@@ -155,7 +155,7 @@ class WebSocketManager {
 // ===================================
 
 async function fetchAllData() {
-  console.log('📡 Fetching data from companion service...');
+  console.log('Fetching data from companion service...');
   try {
     // Use pagination to fetch only recent data (limit 200 most recent events)
     const [activity, workspaces, ideState, systemRes, gitData, prompts, cursorDb, terminalHistory] = await Promise.allSettled([
@@ -169,7 +169,7 @@ async function fetchAllData() {
       APIClient.get('/api/terminal/history?limit=50') // Terminal commands (reduced from 100 to 50)
     ]);
 
-    console.log('📦 Data fetch results:', {
+    console.log('Data fetch results:', {
       activity: activity.status,
       workspaces: workspaces.status,
       ideState: ideState.status,
@@ -187,12 +187,12 @@ async function fetchAllData() {
       // Handle paginated response format
       if (activityData.data && Array.isArray(activityData.data)) {
         state.data.events = activityData.data;
-        console.log(`📊 Loaded ${activityData.data.length} of ${activityData.pagination?.total || 'unknown'} events (paginated)`);
+        console.log(`Loaded ${activityData.data.length} of ${activityData.pagination?.total || 'unknown'} events (paginated)`);
       } 
       // Handle legacy non-paginated format
       else if (Array.isArray(activityData)) {
         state.data.events = activityData.slice(0, 200); // Limit to 200 most recent
-        console.log(`📊 Loaded ${state.data.events.length} events (truncated for performance)`);
+        console.log(`Loaded ${state.data.events.length} events (truncated for performance)`);
       }
     }
 
@@ -201,14 +201,14 @@ async function fetchAllData() {
       const promptsData = prompts.value;
       if (promptsData && promptsData.entries && Array.isArray(promptsData.entries)) {
         state.data.prompts = promptsData.entries;
-        console.log(`📝 Loaded ${promptsData.entries.length} prompts from /entries`);
+        console.log(`Loaded ${promptsData.entries.length} prompts from /entries`);
       } else if (Array.isArray(promptsData)) {
         state.data.prompts = promptsData;
-        console.log(`📝 Loaded ${promptsData.length} prompts (direct array) from /entries`);
+        console.log(`Loaded ${promptsData.length} prompts (direct array) from /entries`);
       } else {
         // Ensure prompts is always an array
         state.data.prompts = [];
-        console.log('⚠️ No prompts loaded from /entries');
+        console.log('WARNING: No prompts loaded from /entries');
       }
     }
 
@@ -219,7 +219,7 @@ async function fetchAllData() {
       // Add conversations to entries
       if (dbData.conversations && dbData.conversations.length > 0) {
         state.data.cursorConversations = dbData.conversations;
-        console.log(`📊 Loaded ${dbData.conversations.length} Cursor conversations`);
+        console.log(`Loaded ${dbData.conversations.length} Cursor conversations`);
       }
       
       // Merge Cursor DB prompts with existing prompts (avoid duplicates)
@@ -250,7 +250,7 @@ async function fetchAllData() {
     // Process terminal history
     if (terminalHistory.status === 'fulfilled' && terminalHistory.value.success) {
       state.data.terminalCommands = terminalHistory.value.data || [];
-      console.log(`🖥️  Loaded ${state.data.terminalCommands.length} terminal commands`);
+      console.log(`Loaded ${state.data.terminalCommands.length} terminal commands`);
     } else {
       state.data.terminalCommands = [];
     }
@@ -324,7 +324,7 @@ function calculateStats() {
   
   const aiInteractions = composerIds.size + nonJsonPrompts;
   
-  console.log(`📊 AI Interactions Calculation:`, {
+  console.log(`AI Interactions Calculation:`, {
     totalPrompts: state.data.prompts?.length || 0,
     composerIds: composerIds.size,
     nonJsonPrompts: nonJsonPrompts,
@@ -597,7 +597,7 @@ function renderTerminalTimelineItem(cmd) {
   const commandText = cmd.command || 'Unknown command';
   const displayText = commandText.length > 80 ? commandText.substring(0, 80) + '...' : commandText;
   const isError = cmd.exit_code && cmd.exit_code !== 0;
-  const icon = isError ? '❌' : '🖥️';
+  const icon = isError ? '[ERROR]' : '>';
   const source = cmd.source || 'terminal';
   
   return `
@@ -950,7 +950,7 @@ function renderPromptsList(prompts) {
               ${escapeHtml(displayText)}
             </div>
             <div class="prompt-meta">
-              ${prompt.linked_entry_id ? '<span class="prompt-tag">🔗 Linked</span>' : '<span class="prompt-tag pending">⏳ Pending</span>'}
+              ${prompt.linked_entry_id ? '<span class="prompt-tag">Linked</span>' : '<span class="prompt-tag pending">Pending</span>'}
               <span class="prompt-tag">${source}</span>
               ${prompt.workspaceName ? `<span class="prompt-tag">📁 ${prompt.workspaceName}</span>` : prompt.workspaceId ? `<span class="prompt-tag">📁 ${prompt.workspaceId.substring(0, 8)}...</span>` : ''}
               ${prompt.metadata?.complexity ? `<span class="prompt-tag">Complexity: ${prompt.metadata.complexity}</span>` : ''}
@@ -984,13 +984,13 @@ function renderPromptEmptyState() {
 
 function getPromptStatusIcon(status) {
   const icons = {
-    'captured': '✓',
-    'pending': '⏳',
-    'linked': '🔗',
-    'processed': '✅',
-    'failed': '❌'
+    'captured': '[OK]',
+    'pending': '[PENDING]',
+    'linked': '[LINKED]',
+    'processed': '[DONE]',
+    'failed': '[FAILED]'
   };
-  return icons[status] || '📝';
+  return icons[status] || '[NOTE]';
 }
 
 function formatTimeAgo(timestamp) {
@@ -2114,7 +2114,7 @@ async function initializeD3FileGraph() {
       container.innerHTML = `
         <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--color-text-muted);">
           <div style="text-align: center;">
-            <div style="font-size: 48px; margin-bottom: 16px;">⚠️</div>
+            <div style="font-size: 48px; margin-bottom: 16px;">!</div>
             <div style="font-size: 18px; margin-bottom: 8px;">File Graph Unavailable</div>
             <div style="font-size: 14px;">${escapeHtml(error.message || 'Error initializing visualization')}</div>
           </div>
@@ -6008,16 +6008,16 @@ async function showEventModal(eventId) {
             ` : ''}
             ${details?.file_path && isImageFile(details.file_path) ? `
               <div style="padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md);">
-                <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-bottom: var(--space-sm);">📷 Screenshot Preview:</div>
+                <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-bottom: var(--space-sm);">Screenshot Preview:</div>
                 <div style="border-radius: var(--radius-md); overflow: hidden; background: #000; display: flex; align-items: center; justify-content: center; max-height: 400px;">
                   <img src="file://${details.file_path}" 
                        alt="Screenshot" 
                        style="max-width: 100%; max-height: 400px; object-fit: contain;"
-                       onerror="this.parentElement.innerHTML = '<div style=\\'padding: var(--space-lg); color: var(--color-text-muted); text-align: center;\\'>❌ Image not accessible<br><span style=\\'font-size: 0.85em; font-family: var(--font-mono);\\'>Path: ${details.file_path}</span></div>'">
+                       onerror="this.parentElement.innerHTML = '<div style=\\'padding: var(--space-lg); color: var(--color-text-muted); text-align: center;\\'>Image not accessible<br><span style=\\'font-size: 0.85em; font-family: var(--font-mono);\\'>Path: ${details.file_path}</span></div>'">
                 </div>
                 <div style="margin-top: var(--space-sm); text-align: center;">
                   <a href="file://${details.file_path}" target="_blank" style="color: var(--color-accent); font-size: var(--text-sm); text-decoration: none;">
-                    📂 Open in Finder
+                    Open in Finder
                   </a>
                 </div>
               </div>
@@ -6123,7 +6123,7 @@ async function showEventModal(eventId) {
         ${relatedScreenshots.length > 0 ? `
           <div>
             <h4 style="margin-bottom: var(--space-md); color: var(--color-text); display: flex; align-items: center; gap: var(--space-sm);">
-              <span>📷 Related Screenshots</span>
+              <span>Related Screenshots</span>
               <span style="background: #f59e0b; color: white; font-size: 10px; padding: 2px 6px; border-radius: 10px;">${relatedScreenshots.length}</span>
             </h4>
             <div style="font-size: var(--text-sm); color: var(--color-text-muted); margin-bottom: var(--space-md);">
@@ -6146,7 +6146,7 @@ async function showEventModal(eventId) {
                            alt="${screenshot.fileName}" 
                            style="width: 100%; height: 100%; object-fit: contain; cursor: pointer;"
                            onclick="window.open('file://${screenshot.path}', '_blank')"
-                           onerror="this.parentElement.innerHTML = '<div style=\\'display: flex; align-items: center; justify-content: center; height: 100%; color: var(--color-text-muted); padding: var(--space-md); text-align: center; flex-direction: column;\\'>📷<div style=\\'font-size: 0.75em; margin-top: 8px;\\'>Screenshot not accessible</div></div>'">
+                           onerror="this.parentElement.innerHTML = '<div style=\\'display: flex; align-items: center; justify-content: center; height: 100%; color: var(--color-text-muted); padding: var(--space-md); text-align: center; flex-direction: column;\\'>Image<div style=\\'font-size: 0.75em; margin-top: 8px;\\'>Screenshot not accessible</div></div>'">
                       <div style="position: absolute; top: 8px; right: 8px; background: rgba(0,0,0,0.7); color: white; padding: 4px 8px; border-radius: 4px; font-size: 10px; font-weight: 600;">
                         ${timingText} ${isBefore ? 'before' : 'after'}
                       </div>
@@ -6534,7 +6534,7 @@ function showPromptInModal(prompt, modal, title, body) {
                     ${panel.id.substring(0, 16)}...
                   </div>
                   <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: 4px;">
-                    ${panel.collapsed ? '📁 Collapsed' : '📂 Expanded'} • 
+                    ${panel.collapsed ? 'Collapsed' : 'Expanded'} • 
                     ${panel.hidden ? 'Hidden' : 'Visible'}
                     ${panel.size ? ` • ${Math.round(panel.size)}px` : ''}
                   </div>
@@ -6870,7 +6870,7 @@ function showTerminalModal(id) {
   
   try {
     const isError = cmd.exit_code && cmd.exit_code !== 0;
-    const icon = isError ? '❌' : '🖥️';
+    const icon = isError ? '[ERROR]' : '>';
     
     title.innerHTML = `${icon} Terminal Command`;
     
@@ -7062,8 +7062,8 @@ function initStatusPopup() {
     }).join(' ');
     
     // Filter for status-relevant messages (with emojis)
-    const statusEmojis = ['🚀', '📦', '🔄', '✓', '✅', '📚', '📡', '⚠️', '🔍', '📊', '🔴', '📁'];
-    const hasStatusEmoji = statusEmojis.some(emoji => message.includes(emoji));
+    const statusKeywords = ['Initializing', 'Loaded', 'Fetching', 'connected', 'ready', 'error', 'warning'];
+    const hasStatusKeyword = statusKeywords.some(keyword => message.includes(keyword));
     
     if (hasStatusEmoji && statusPopupContent) {
       addStatusMessage(message);
@@ -7095,11 +7095,11 @@ function addStatusMessage(message) {
   
   // Determine message type based on content
   let messageClass = 'status-info';
-  if (message.includes('🚀') || message.includes('🔄') || message.includes('🔍')) {
+  if (message.includes('Initializing') || message.includes('Fetching') || message.includes('Searching')) {
     messageClass = 'status-init';
-  } else if (message.includes('✓') || message.includes('✅')) {
+  } else if (message.includes('connected') || message.includes('loaded') || message.includes('ready')) {
     messageClass = 'status-success';
-  } else if (message.includes('⚠️')) {
+  } else if (message.includes('WARNING') || message.includes('warning')) {
     messageClass = 'status-warning';
   } else if (message.includes('🔴')) {
     messageClass = 'status-error';
@@ -7181,10 +7181,10 @@ async function exportDatabase() {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
     
-    console.log(`✅ Exported ${result.data.metadata.totalEntries} entries, ${result.data.metadata.totalPrompts} prompts, ${result.data.metadata.totalEvents} events`);
+    console.log(`Exported ${result.data.metadata.totalEntries} entries, ${result.data.metadata.totalPrompts} prompts, ${result.data.metadata.totalEvents} events`);
     
     // Show success feedback
-    exportBtn.innerHTML = '<span>✓ Exported!</span>';
+    exportBtn.innerHTML = '<span>Exported!</span>';
     setTimeout(() => {
       exportBtn.innerHTML = originalHTML;
       exportBtn.disabled = false;
@@ -7225,7 +7225,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Initialize status popup FIRST (before any console.logs)
   initStatusPopup();
   
-  console.log('🚀 Initializing Cursor Activity Dashboard');
+  console.log('Initializing Cursor Activity Dashboard');
 
   // Setup navigation
   document.querySelectorAll('.nav-link').forEach(link => {
@@ -7265,7 +7265,7 @@ document.addEventListener('DOMContentLoaded', () => {
     aggregator = new AnalyticsAggregator(storage);
     synchronizer = new DataSynchronizer(storage, aggregator);
     
-    console.log('📦 Persistence system enabled');
+    console.log('Persistence system enabled');
   } catch (error) {
     console.warn('Persistence system not available:', error);
     storage = null;
@@ -7292,7 +7292,7 @@ document.addEventListener('DOMContentLoaded', () => {
       updateConnectionStatus(true);
       calculateStats();
       renderCurrentView();
-      console.log('✅ Dashboard loaded with persistent data');
+      console.log('Dashboard loaded with persistent data');
       
       // Now fetch fresh data from the companion service and update storage
       await fetchAllData();
@@ -7319,7 +7319,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setInterval(async () => {
       // Skip if refresh is already in progress or too soon
       if (refreshInProgress || (Date.now() - lastRefreshTime) < MIN_REFRESH_INTERVAL) {
-        console.log('⏭️  Skipping refresh (debounced)');
+        console.log('Skipping refresh (debounced)');
         return;
       }
       
@@ -7335,10 +7335,10 @@ document.addEventListener('DOMContentLoaded', () => {
           renderCurrentView();
           // Re-initialize search index when data updates
           initializeSearch();
-          console.log('✅ Data refreshed and cached');
+          console.log('Data refreshed and cached');
         }
       } catch (error) {
-        console.error('❌ Refresh error:', error);
+        console.error('Refresh error:', error);
       } finally {
         refreshInProgress = false;
       }
@@ -7368,7 +7368,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     setInterval(async () => {
       if (refreshInProgress || (Date.now() - lastRefreshTime) < MIN_REFRESH_INTERVAL) {
-        console.log('⏭️  Skipping refresh (debounced)');
+        console.log('Skipping refresh (debounced)');
         return;
       }
       
@@ -7378,7 +7378,7 @@ document.addEventListener('DOMContentLoaded', () => {
       try {
         await fetchAllData();
       } catch (error) {
-        console.error('❌ Refresh error:', error);
+        console.error('Refresh error:', error);
       } finally {
         refreshInProgress = false;
       }
@@ -7448,7 +7448,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
   
-  console.log('✓ Dashboard initialized');
+  console.log('Dashboard initialized');
 });
 
 // ===================================
@@ -7549,7 +7549,7 @@ function showPromptModal(promptId) {
         </div>
       ` : `
         <div style="padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md); border-left: 3px solid var(--color-warning);">
-          <div style="color: var(--color-text-muted);">⏳ This prompt has not been linked to a conversation yet</div>
+          <div style="color: var(--color-text-muted);">This prompt has not been linked to a conversation yet</div>
         </div>
       `}
 
@@ -7566,8 +7566,8 @@ async function checkClipboardStatus() {
     const capturedCount = health.clipboard_stats?.captured || 0;
 
     alert(
-      `📋 Clipboard Monitoring Status\n\n` +
-      `Enabled: ${clipboardEnabled ? '✓ Yes' : '✗ No'}\n` +
+      `Clipboard Monitoring Status\n\n` +
+      `Enabled: ${clipboardEnabled ? 'Yes' : 'No'}\n` +
       `Prompts Captured: ${capturedCount}\n\n` +
       (clipboardEnabled ? 
         'Clipboard monitoring is active! Copy text containing prompts and they will be captured automatically.' : 
@@ -7592,21 +7592,21 @@ let searchCurrentResults = [];
 async function initializeSearch() {
   try {
     if (!window.SearchEngine) {
-      console.warn('⚠️ SearchEngine class not available');
+      console.warn('SearchEngine class not available');
       return;
     }
     
     if (!window.lunr) {
-      console.warn('⚠️ Lunr.js not loaded');
+      console.warn('Lunr.js not loaded');
       return;
     }
     
-    console.log('🔍 Initializing search engine...');
+    console.log('Initializing search engine...');
     searchEngine = new window.SearchEngine();
     await searchEngine.initialize(state.data);
-    console.log('✅ Search engine initialized with', searchEngine.documents.length, 'documents');
+    console.log('Search engine initialized with', searchEngine.documents.length, 'documents');
   } catch (error) {
-    console.error('❌ Search engine initialization failed:', error);
+    console.error('Search engine initialization failed:', error);
   }
 }
 
@@ -7629,9 +7629,9 @@ function openSearchPalette() {
     
     // Log search engine status for debugging
     if (searchEngine) {
-      console.log('✅ Search ready with', searchEngine.documents?.length || 0, 'documents');
+      console.log('Search ready with', searchEngine.documents?.length || 0, 'documents');
     } else {
-      console.warn('⚠️ Search engine not ready - initializing...');
+      console.warn('Search engine not ready - initializing...');
       // Try to initialize if not already done
       initializeSearch();
     }
@@ -7660,7 +7660,7 @@ function performSearch(query) {
   }
   
   if (!searchEngine) {
-    console.warn('⚠️ Search engine not initialized');
+    console.warn('Search engine not initialized');
     const container = document.getElementById('searchResults');
     if (container) {
       container.innerHTML = `
@@ -7680,14 +7680,14 @@ function performSearch(query) {
   }
 
   try {
-    console.log('🔍 Searching for:', query);
+    console.log('Searching for:', query);
     const results = searchEngine.search(query, { limit: 20 });
     console.log('📊 Found', results.length, 'results');
     searchCurrentResults = results;
     searchSelectedIndex = -1;
     renderSearchResults(results);
   } catch (error) {
-    console.error('❌ Search error:', error);
+    console.error('Search error:', error);
     const container = document.getElementById('searchResults');
     if (container) {
       container.innerHTML = `
