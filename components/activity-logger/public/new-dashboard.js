@@ -7061,11 +7061,11 @@ function initStatusPopup() {
       return String(arg);
     }).join(' ');
     
-    // Filter for status-relevant messages (with emojis)
+    // Filter for status-relevant messages
     const statusKeywords = ['Initializing', 'Loaded', 'Fetching', 'connected', 'ready', 'error', 'warning'];
     const hasStatusKeyword = statusKeywords.some(keyword => message.includes(keyword));
     
-    if (hasStatusEmoji && statusPopupContent) {
+    if (hasStatusKeyword && statusPopupContent) {
       addStatusMessage(message);
     }
   };
