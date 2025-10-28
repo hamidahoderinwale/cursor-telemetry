@@ -87,20 +87,39 @@ class PersistentStorage {
    */
   async init() {
     return new Promise((resolve, reject) => {
+      console.log('[DATA] Opening IndexedDB:', this.dbName, 'version', this.version);
+      
       const request = indexedDB.open(this.dbName, this.version);
+      
+      // Add timeout to prevent hanging
+      const timeout = setTimeout(() => {
+        console.warn('[WARNING] IndexedDB initialization taking longer than expected...');
+      }, 3000);
 
-      request.onerror = () => reject(request.error);
+      request.onerror = () => {
+        clearTimeout(timeout);
+        console.error('[ERROR] IndexedDB open failed:', request.error);
+        reject(request.error);
+      };
+      
       request.onsuccess = () => {
+        clearTimeout(timeout);
         this.db = request.result;
-        console.log('[SUCCESS] Persistent storage initialized');
+        console.log('[SUCCESS] Persistent storage initialized (version', this.db.version, ')');
         resolve(this.db);
       };
 
       request.onupgradeneeded = (event) => {
+        clearTimeout(timeout);
         const db = event.target.result;
+        const oldVersion = event.oldVersion;
+        const newVersion = event.newVersion;
+        
+        console.log(`[SYNC] Upgrading database from version ${oldVersion} to ${newVersion}...`);
 
         // Events store - all file changes, AI interactions
         if (!db.objectStoreNames.contains(this.stores.events)) {
+          console.log('[DATA] Creating events store...');
           const eventsStore = db.createObjectStore(this.stores.events, { 
             keyPath: 'id', 
             autoIncrement: true 
@@ -113,6 +132,7 @@ class PersistentStorage {
 
         // Prompts store - AI prompts from Cursor DB
         if (!db.objectStoreNames.contains(this.stores.prompts)) {
+          console.log('[DATA] Creating prompts store...');
           const promptsStore = db.createObjectStore(this.stores.prompts, { 
             keyPath: 'id', 
             autoIncrement: true 
@@ -124,6 +144,7 @@ class PersistentStorage {
 
         // Analytics snapshots - hourly/daily aggregations
         if (!db.objectStoreNames.contains(this.stores.analytics)) {
+          console.log('[DATA] Creating analytics store...');
           const analyticsStore = db.createObjectStore(this.stores.analytics, { 
             keyPath: 'id', 
             autoIncrement: true 
@@ -135,6 +156,7 @@ class PersistentStorage {
 
         // Time series data - metrics over time
         if (!db.objectStoreNames.contains(this.stores.timeSeries)) {
+          console.log('[DATA] Creating timeSeries store...');
           const timeSeriesStore = db.createObjectStore(this.stores.timeSeries, { 
             keyPath: 'id', 
             autoIncrement: true 
@@ -146,6 +168,7 @@ class PersistentStorage {
 
         // File changes aggregated
         if (!db.objectStoreNames.contains(this.stores.fileChanges)) {
+          console.log('[DATA] Creating fileChanges store...');
           const fileChangesStore = db.createObjectStore(this.stores.fileChanges, { 
             keyPath: 'id', 
             autoIncrement: true 
@@ -157,6 +180,7 @@ class PersistentStorage {
 
         // Sessions
         if (!db.objectStoreNames.contains(this.stores.sessions)) {
+          console.log('[DATA] Creating sessions store...');
           const sessionsStore = db.createObjectStore(this.stores.sessions, { 
             keyPath: 'sessionId' 
           });
@@ -166,6 +190,7 @@ class PersistentStorage {
 
         // Cursor Database cache - conversations, composers
         if (!db.objectStoreNames.contains(this.stores.cursorDatabase)) {
+          console.log('[DATA] Creating cursorDatabase store...');
           const cursorDbStore = db.createObjectStore(this.stores.cursorDatabase, { 
             keyPath: 'id', 
             autoIncrement: true 
@@ -175,15 +200,21 @@ class PersistentStorage {
           cursorDbStore.createIndex('lastUpdated', 'lastUpdated', { unique: false });
         }
 
-        // Metadata store - for versioning and cache control
+        // Metadata store - for versioning and cache control (NEW in v2)
         if (!db.objectStoreNames.contains(this.stores.metadata)) {
+          console.log('[DATA] Creating metadata store (new in v2)...');
           const metadataStore = db.createObjectStore(this.stores.metadata, { 
             keyPath: 'key'
           });
           metadataStore.createIndex('lastUpdated', 'lastUpdated', { unique: false });
         }
 
-        console.log('[DATA] Database schema created');
+        console.log('[SUCCESS] Database schema upgrade complete');
+      };
+      
+      request.onblocked = () => {
+        clearTimeout(timeout);
+        console.warn('[WARNING] IndexedDB upgrade blocked. Please close other tabs with this dashboard open.');
       };
     });
   }
