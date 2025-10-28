@@ -37,7 +37,7 @@ class AnalyticsManager {
     if ('requestIdleCallback' in window) {
       requestIdleCallback(() => {
         this.isIdle = true;
-        console.log('🔄 Browser idle - ready for deferred analytics');
+        console.log('[SYNC] Browser idle - ready for deferred analytics');
         this.triggerDeferredAnalytics();
       });
     } else {
@@ -69,7 +69,7 @@ class AnalyticsManager {
   async triggerDeferredAnalytics() {
     if (!this.analyticsDeferred || this.analyticsReady) return;
     
-    console.log('📊 Loading deferred analytics...');
+    console.log('[DATA] Loading deferred analytics...');
     this.analyticsReady = true;
     this.analyticsDeferred = false;
     
@@ -99,7 +99,7 @@ class AnalyticsManager {
         this.pendingTasks.delete(taskId);
         
         if (success) {
-          console.log(`✅ Worker task ${task.type} completed in ${stats.duration.toFixed(1)}ms`);
+          console.log(`[SUCCESS] Worker task ${task.type} completed in ${stats.duration.toFixed(1)}ms`);
           task.resolve(result);
         } else {
           console.error(`❌ Worker task ${task.type} failed:`, error);
@@ -117,7 +117,7 @@ class AnalyticsManager {
         this.worker = null;
       };
       
-      console.log('✅ Analytics worker initialized');
+      console.log('[SUCCESS] Analytics worker initialized');
       return true;
     } catch (error) {
       console.error('Failed to initialize worker:', error);

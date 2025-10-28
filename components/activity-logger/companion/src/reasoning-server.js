@@ -277,11 +277,11 @@ Provide a clear, insightful answer with specific numbers and actionable insights
     
     getProductivityInsight(level, stats) {
         if (level === 'high') {
-            return '💡 *Excellent work! You\'re in a highly productive flow. Remember to take breaks to maintain this momentum.*';
+            return '[IDEA] *Excellent work! You\'re in a highly productive flow. Remember to take breaks to maintain this momentum.*';
         } else if (level === 'low') {
-            return '💡 *Lighter activity detected. This could be planning time, learning, or a well-deserved break.*';
+            return '[IDEA] *Lighter activity detected. This could be planning time, learning, or a well-deserved break.*';
         }
-        return '💡 *Steady progress with consistent development activity.*';
+        return '[IDEA] *Steady progress with consistent development activity.*';
     }
     
     generateFileAnswer(stats, context) {
@@ -344,7 +344,7 @@ Provide a clear, insightful answer with specific numbers and actionable insights
         
         if (sessions.length > 0) {
             const longest = sessions.reduce((max, s) => s.duration > max.duration ? s : max);
-            text += `💡 *Longest session: ${this.formatDuration(longest.duration)} with ${longest.events} changes*`;
+            text += `[IDEA] *Longest session: ${this.formatDuration(longest.duration)} with ${longest.events} changes*`;
         }
         
         return text;
@@ -504,8 +504,8 @@ Provide a clear, insightful answer with specific numbers and actionable insights
     start() {
         this.app.listen(this.port, () => {
             console.log(`🧠 Reasoning Server running on port ${this.port}`);
-            console.log(`📊 Model type: ${this.modelType}`);
-            console.log(`🔗 API: http://localhost:${this.port}`);
+            console.log(`[DATA] Model type: ${this.modelType}`);
+            console.log(`[LINK] API: http://localhost:${this.port}`);
         });
     }
 }

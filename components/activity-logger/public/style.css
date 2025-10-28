@@ -80,7 +80,7 @@ code, pre {
 }
 
 /* ================================
-   📦 Feed Items (entries/events)
+   [PACKAGE] Feed Items (entries/events)
    ================================ */
 .feed-item {
   border-top: 1px solid var(--color-border);
@@ -335,7 +335,7 @@ button:active {
 }
 
 /* ================================
-   🧪 Diff Blocks
+   [TEST] Diff Blocks
    ================================ */
 .diff-block {
   font-family: var(--font-mono);

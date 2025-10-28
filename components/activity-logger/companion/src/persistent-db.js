@@ -33,7 +33,7 @@ class PersistentDB {
           return;
         }
         
-        console.log(`💾 Connected to SQLite database: ${this.dbPath}`);
+        console.log(`[SAVE] Connected to SQLite database: ${this.dbPath}`);
         
         // Enable foreign key constraints
         this.db.run('PRAGMA foreign_keys = ON');
@@ -234,7 +234,7 @@ class PersistentDB {
           
           // Wait for all tables to be created
           Promise.all(tables).then(() => {
-            console.log('✅ Database tables initialized');
+            console.log('[SUCCESS] Database tables initialized');
             resolve();
           }).catch(reject);
         });
@@ -735,7 +735,7 @@ class PersistentDB {
         if (err) {
           console.error('Error closing database:', err);
         } else {
-          console.log('💾 Database connection closed');
+          console.log('[SAVE] Database connection closed');
         }
       });
     }

@@ -17,7 +17,7 @@
                 const healthResponse = await fetch('http://127.0.0.1:43917/health');
                 const healthData = await healthResponse.json();
                 
-                results.innerHTML += `<h2>✅ Companion Service: ${healthData.status}</h2>`;
+                results.innerHTML += `<h2>[SUCCESS] Companion Service: ${healthData.status}</h2>`;
                 results.innerHTML += `<p>Entries: ${healthData.entries}, Events: ${healthData.events}</p>`;
                 
                 // Check queue data
@@ -39,7 +39,7 @@
                 for (const entry of queueData.entries) {
                     try {
                         await db.entries.add(entry);
-                        results.innerHTML += `<p>✅ Added: ${entry.file_path}</p>`;
+                        results.innerHTML += `<p>[SUCCESS] Added: ${entry.file_path}</p>`;
                     } catch (error) {
                         results.innerHTML += `<p>❌ Error: ${error.message}</p>`;
                     }

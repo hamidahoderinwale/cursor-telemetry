@@ -29,7 +29,7 @@ class PersistentStorage {
   downsampleTimeSeries(data, threshold = 500) {
     if (!data || data.length <= threshold) return data;
     
-    console.log(`📉 Downsampling ${data.length} points to ${threshold} points`);
+    console.log(`[DOWN] Downsampling ${data.length} points to ${threshold} points`);
     
     const sampled = [];
     const bucketSize = (data.length - 2) / (threshold - 2);
@@ -78,7 +78,7 @@ class PersistentStorage {
     
     sampled[sampled.length] = data[data.length - 1]; // Always keep last point
     
-    console.log(`✅ Downsampled to ${sampled.length} points (${((1 - sampled.length / data.length) * 100).toFixed(1)}% reduction)`);
+    console.log(`[SUCCESS] Downsampled to ${sampled.length} points (${((1 - sampled.length / data.length) * 100).toFixed(1)}% reduction)`);
     return sampled;
   }
 
@@ -92,7 +92,7 @@ class PersistentStorage {
       request.onerror = () => reject(request.error);
       request.onsuccess = () => {
         this.db = request.result;
-        console.log('✅ Persistent storage initialized');
+        console.log('[SUCCESS] Persistent storage initialized');
         resolve(this.db);
       };
 
@@ -183,7 +183,7 @@ class PersistentStorage {
           metadataStore.createIndex('lastUpdated', 'lastUpdated', { unique: false });
         }
 
-        console.log('📊 Database schema created');
+        console.log('[DATA] Database schema created');
       };
     });
   }

@@ -386,7 +386,7 @@ class PromptAnalyticsEngine {
         type: 'complex_prompts',
         title: 'Complex Prompts',
         message: 'Your prompts are quite detailed and complex, which typically yields better results.',
-        icon: '🎯'
+        icon: '[TARGET]'
       });
     }
 

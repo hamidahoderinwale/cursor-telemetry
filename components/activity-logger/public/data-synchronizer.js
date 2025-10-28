@@ -21,7 +21,7 @@ class DataSynchronizer {
    * Initialize and perform full sync
    */
   async initialize() {
-    console.log('🔄 Initializing data synchronizer...');
+    console.log('[SYNC] Initializing data synchronizer...');
     
     // Initialize storage
     await this.storage.init();
@@ -39,7 +39,7 @@ class DataSynchronizer {
     this.startPeriodicSync();
     
     this.isInitialized = true;
-    console.log('✅ Data synchronizer initialized');
+    console.log('[SUCCESS] Data synchronizer initialized');
     
     // Return stats
     return await this.storage.getStats();
@@ -49,7 +49,7 @@ class DataSynchronizer {
    * Sync from Cursor databases (historical data)
    */
   async syncCursorDatabases() {
-    console.log('📚 Syncing from Cursor databases...');
+    console.log('[ARCHIVE] Syncing from Cursor databases...');
     
     try {
       const response = await fetch(`${this.companionUrl}/api/cursor-database`);
@@ -79,7 +79,7 @@ class DataSynchronizer {
    * Sync from companion service (live data)
    */
   async syncCompanionService() {
-    console.log('🔴 Syncing from companion service...');
+    console.log('[ERROR] Syncing from companion service...');
     
     try {
       // Get events
@@ -114,10 +114,10 @@ class DataSynchronizer {
    * Start periodic sync (every 30 seconds for live feed)
    */
   startPeriodicSync() {
-    console.log('⏰ Starting periodic sync (every 30s)...');
+    console.log('[TIME] Starting periodic sync (every 30s)...');
     
     this.syncInterval = setInterval(async () => {
-      console.log('🔄 Periodic sync...');
+      console.log('[SYNC] Periodic sync...');
       
       // Sync from companion service only (live updates)
       await this.syncCompanionService();
@@ -125,7 +125,7 @@ class DataSynchronizer {
       // Aggregate new data every 5 minutes
       const timeSinceLastAggregation = Date.now() - this.aggregator.lastAggregation;
       if (timeSinceLastAggregation > 5 * 60 * 1000) {
-        console.log('📊 Running periodic aggregation...');
+        console.log('[DATA] Running periodic aggregation...');
         await this.aggregator.aggregateAll();
       }
       
@@ -147,7 +147,7 @@ class DataSynchronizer {
    * Force full re-sync
    */
   async forceSync() {
-    console.log('🔄 Force sync requested...');
+    console.log('[SYNC] Force sync requested...');
     
     await this.syncCursorDatabases();
     await this.syncCompanionService();
@@ -259,7 +259,7 @@ async function initializeDataSync() {
     synchronizer = new DataSynchronizer(storage, aggregator);
     
     const stats = await synchronizer.initialize();
-    console.log('📊 Initial data stats:', stats);
+    console.log('[DATA] Initial data stats:', stats);
     
     return synchronizer;
   }

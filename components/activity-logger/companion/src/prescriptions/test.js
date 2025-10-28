@@ -9,7 +9,7 @@
 const Database = require('better-sqlite3');
 const { initializePrescriptionSystem } = require('./index');
 
-console.log('🧪 Testing Prescription System\n');
+console.log('[TEST] Testing Prescription System\n');
 
 // Create temporary in-memory database for testing
 const db = new Database(':memory:');
@@ -22,7 +22,7 @@ if (!system) {
   console.error('❌ Failed to initialize system');
   process.exit(1);
 }
-console.log('✅ System initialized\n');
+console.log('[SUCCESS] System initialized\n');
 
 // Test 1: Create prescription
 console.log('2️⃣  Creating test prescription...');
@@ -38,7 +38,7 @@ if (!createResult.success) {
   console.error('❌ Failed to create prescription:', createResult.errors);
   process.exit(1);
 }
-console.log('✅ Prescription created:', createResult.id, '\n');
+console.log('[SUCCESS] Prescription created:', createResult.id, '\n');
 
 // Test 2: Retrieve prescription
 console.log('3️⃣  Retrieving prescriptions...');
@@ -48,7 +48,7 @@ if (prescriptions.length !== 1) {
   console.error('❌ Expected 1 prescription, got', prescriptions.length);
   process.exit(1);
 }
-console.log('✅ Found', prescriptions.length, 'prescription\n');
+console.log('[SUCCESS] Found', prescriptions.length, 'prescription\n');
 
 // Test 3: Update prescription
 console.log('4️⃣  Updating prescription...');
@@ -66,7 +66,7 @@ if (updated.priority !== 75) {
   console.error('❌ Priority not updated correctly');
   process.exit(1);
 }
-console.log('✅ Prescription updated\n');
+console.log('[SUCCESS] Prescription updated\n');
 
 // Test 4: Test injector
 console.log('5️⃣  Testing injection...');
@@ -84,7 +84,7 @@ if (!injection.formatted.includes('Test Prescription')) {
   console.error('❌ Formatted injection missing prescription content');
   process.exit(1);
 }
-console.log('✅ Injection working correctly\n');
+console.log('[SUCCESS] Injection working correctly\n');
 
 // Test 5: Test statistics
 console.log('6️⃣  Testing statistics...');
@@ -94,7 +94,7 @@ if (stats.total !== 1 || stats.active !== 1) {
   console.error('❌ Stats incorrect:', stats);
   process.exit(1);
 }
-console.log('✅ Statistics correct\n');
+console.log('[SUCCESS] Statistics correct\n');
 
 // Test 6: Test validation
 console.log('7️⃣  Testing validation...');
@@ -114,7 +114,7 @@ if (invalidResult.errors.length === 0) {
   console.error('❌ Should have validation errors');
   process.exit(1);
 }
-console.log('✅ Validation working correctly\n');
+console.log('[SUCCESS] Validation working correctly\n');
 
 // Test 7: Test toggle
 console.log('8️⃣  Testing toggle...');
@@ -130,7 +130,7 @@ if (toggled.active !== false) {
   console.error('❌ Prescription not toggled to inactive');
   process.exit(1);
 }
-console.log('✅ Toggle working correctly\n');
+console.log('[SUCCESS] Toggle working correctly\n');
 
 // Test 8: Test delete
 console.log('9️⃣  Testing delete...');
@@ -146,7 +146,7 @@ if (afterDelete.length !== 0) {
   console.error('❌ Prescription not deleted');
   process.exit(1);
 }
-console.log('✅ Delete working correctly\n');
+console.log('[SUCCESS] Delete working correctly\n');
 
 // Test 9: Test bulk import
 console.log('🔟 Testing bulk import...');
@@ -173,7 +173,7 @@ if (importResult.success !== 2) {
   console.error('❌ Failed to import prescriptions:', importResult);
   process.exit(1);
 }
-console.log('✅ Bulk import working correctly\n');
+console.log('[SUCCESS] Bulk import working correctly\n');
 
 // Test 10: Test export
 console.log('1️⃣1️⃣  Testing export...');
@@ -183,7 +183,7 @@ if (exported.length !== 2) {
   console.error('❌ Export returned wrong number of prescriptions');
   process.exit(1);
 }
-console.log('✅ Export working correctly\n');
+console.log('[SUCCESS] Export working correctly\n');
 
 // Test 11: Test conflict detection
 console.log('1️⃣2️⃣  Testing conflict detection...');
@@ -204,17 +204,17 @@ system.manager.create({
 });
 
 const conflicts = system.manager.detectConflicts();
-console.log('✅ Conflict detection working (found', conflicts.length, 'conflicts)\n');
+console.log('[SUCCESS] Conflict detection working (found', conflicts.length, 'conflicts)\n');
 
 // Test 12: Test pattern detector (basic)
 console.log('1️⃣3️⃣  Testing pattern detector...');
 // Note: This won't find patterns in empty database, but tests the detector runs
 const suggestions = await system.detector.suggestFromPrompts({ days: 7, minOccurrences: 1 });
-console.log('✅ Pattern detector working (found', suggestions.length, 'suggestions)\n');
+console.log('[SUCCESS] Pattern detector working (found', suggestions.length, 'suggestions)\n');
 
 // All tests passed!
 console.log('═══════════════════════════════════════');
-console.log('🎉 ALL TESTS PASSED!');
+console.log('[PARTY] ALL TESTS PASSED!');
 console.log('═══════════════════════════════════════');
 console.log('\nThe prescription system is working correctly.');
 console.log('You can now integrate it into your companion service.\n');

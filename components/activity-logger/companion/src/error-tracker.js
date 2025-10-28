@@ -172,7 +172,7 @@ class ErrorTracker {
       this.rollbacks = this.rollbacks.slice(-100);
     }
 
-    console.log(`🔄 Tracked rollback: ${affectedFiles.length} files affected`);
+    console.log(`[SYNC] Tracked rollback: ${affectedFiles.length} files affected`);
     return rollbackRecord;
   }
 
@@ -348,7 +348,7 @@ class ErrorTracker {
     if (error) {
       error.resolved = true;
       error.resolutionTime = Date.now() - error.timestamp;
-      console.log(`✅ Resolved error ${errorId} in ${error.resolutionTime}ms`);
+      console.log(`[SUCCESS] Resolved error ${errorId} in ${error.resolutionTime}ms`);
     }
   }
 

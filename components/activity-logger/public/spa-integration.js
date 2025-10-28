@@ -26,7 +26,7 @@ class CompanionIntegration {
       this.pollForUpdates();
     }, this.pollingInterval);
 
-    console.log('✅ Companion integration started');
+    console.log('[SUCCESS] Companion integration started');
     return true;
   }
 
@@ -104,7 +104,7 @@ class CompanionIntegration {
 
         // Add to database (use put for idempotency)
         await db.entries.put(dbEntry);
-        console.log(`✅ Added entry from companion: ${dbEntry.id}`);
+        console.log(`[SUCCESS] Added entry from companion: ${dbEntry.id}`);
 
         // Update search index
         if (window.searchIndex) {
@@ -138,7 +138,7 @@ class CompanionIntegration {
 
         // Add to database (use put for idempotency)
         await db.events.put(dbEvent);
-        console.log(`✅ Added event from companion: ${dbEvent.id}`);
+        console.log(`[SUCCESS] Added event from companion: ${dbEvent.id}`);
 
       } catch (error) {
         console.error('❌ Error processing event:', error);
@@ -220,7 +220,7 @@ class CompanionIntegration {
       });
       
       if (response.ok) {
-        console.log('✅ Companion config updated');
+        console.log('[SUCCESS] Companion config updated');
       } else {
         console.error('❌ Failed to update companion config');
       }

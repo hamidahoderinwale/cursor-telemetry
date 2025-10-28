@@ -33,7 +33,7 @@ class IDEStateCapture {
       }
     }, intervalMs);
     
-    console.log(`🎯 IDE state capture started with ${intervalMs}ms interval`);
+    console.log(`[TARGET] IDE state capture started with ${intervalMs}ms interval`);
   }
 
   /**
@@ -74,7 +74,7 @@ class IDEStateCapture {
       }
 
       this.lastCapture = timestamp;
-      console.log(`📊 Captured IDE state: ${Object.keys(ideState).length} components`);
+      console.log(`[DATA] Captured IDE state: ${Object.keys(ideState).length} components`);
       
       return ideState;
     } catch (error) {

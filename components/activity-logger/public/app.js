@@ -1149,7 +1149,7 @@ function renderEvent(event) {
         'export_json': '',
         'database_cleared': '',
         'clipboard_enabled': '',
-        'clipboard_disabled': '🔴',
+        'clipboard_disabled': '[ERROR]',
         'attachment_added': '📎',
         'search_performed': ''
     };
@@ -3228,7 +3228,7 @@ function renderEventItem(event) {
         'export_json': '',
         'database_cleared': '',
         'clipboard_enabled': '',
-        'clipboard_disabled': '🔴',
+        'clipboard_disabled': '[ERROR]',
         'attachment_added': '📎',
         'search_performed': '',
         'code_change': '',

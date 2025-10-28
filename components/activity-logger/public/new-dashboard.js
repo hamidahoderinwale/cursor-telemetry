@@ -158,7 +158,7 @@ class WebSocketManager {
  * Optimized initialization with warm-start and limited initial window
  */
 async function initializeDashboard() {
-  console.log('🚀 Initializing dashboard with warm-start...');
+  console.log('[LAUNCH] Initializing dashboard with warm-start...');
   
   try {
     // Step 1: Load from IndexedDB cache first (instant UI)
@@ -175,7 +175,7 @@ async function initializeDashboard() {
       await fetchRecentData();
       await persistentStorage.updateServerSequence(serverSequence);
     } else {
-      console.log('✅ Cache up-to-date, using cached data');
+      console.log('[SUCCESS] Cache up-to-date, using cached data');
     }
     
     // Step 3: Render initial UI with cached/recent data
@@ -201,18 +201,18 @@ async function initializeDashboard() {
  * Load data from IndexedDB cache for instant startup
  */
 async function loadFromCache() {
-  console.log('📦 Loading from cache...');
+  console.log('[PACKAGE] Loading from cache...');
   
   const cached = await persistentStorage.getAll();
   
   if (cached.events && cached.events.length > 0) {
     state.data.events = cached.events;
-    console.log(`✅ Loaded ${cached.events.length} events from cache`);
+    console.log(`[SUCCESS] Loaded ${cached.events.length} events from cache`);
   }
   
   if (cached.prompts && cached.prompts.length > 0) {
     state.data.prompts = cached.prompts;
-    console.log(`✅ Loaded ${cached.prompts.length} prompts from cache`);
+    console.log(`[SUCCESS] Loaded ${cached.prompts.length} prompts from cache`);
   }
   
   // Render with cached data immediately
@@ -226,7 +226,7 @@ async function loadFromCache() {
  * Fetch only recent data (last 24 hours by default)
  */
 async function fetchRecentData() {
-  console.log('🔄 Fetching recent data (24h window)...');
+  console.log('[SYNC] Fetching recent data (24h window)...');
   
   const window = analyticsManager.getInitialWindow();
   const startTime = window.start;
@@ -248,7 +248,7 @@ async function fetchRecentData() {
       });
       
       state.data.events = recentEvents;
-      console.log(`📊 Loaded ${recentEvents.length} recent events`);
+      console.log(`[DATA] Loaded ${recentEvents.length} recent events`);
       
       // Store in cache
       await persistentStorage.storeEvents(recentEvents);
@@ -262,7 +262,7 @@ async function fetchRecentData() {
       });
       
       state.data.prompts = recentPrompts;
-      console.log(`📊 Loaded ${recentPrompts.length} recent prompts`);
+      console.log(`[DATA] Loaded ${recentPrompts.length} recent prompts`);
       
       // Store in cache
       await persistentStorage.storePrompts(recentPrompts);
@@ -282,7 +282,7 @@ async function fetchRecentData() {
  * Fetch older history in background (pagination)
  */
 async function fetchOlderHistory() {
-  console.log('📚 Background: fetching older history...');
+  console.log('[ARCHIVE] Background: fetching older history...');
   
   // This runs in background, no need to block UI
   // Implement pagination if needed
@@ -374,7 +374,7 @@ async function fetchAllData() {
         
         if (newPrompts.length > 0) {
           state.data.prompts = [...state.data.prompts, ...newPrompts];
-          console.log(`💬 Added ${newPrompts.length} prompts from Cursor database`);
+          console.log(`[CHAT] Added ${newPrompts.length} prompts from Cursor database`);
         }
       }
       
@@ -790,19 +790,19 @@ function renderTimelineItem(event) {
       
       // @ files indicator
       if (event.context.atFiles && event.context.atFiles.length > 0) {
-        badges.push(`<span style="display: inline-flex; align-items: center; justify-content: center; background: #10b981; color: white; font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 10px; margin-left: 4px;" title="${event.context.atFiles.length} @ referenced files">📁 ${event.context.atFiles.length}</span>`);
+        badges.push(`<span style="display: inline-flex; align-items: center; justify-content: center; background: #10b981; color: white; font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 10px; margin-left: 4px;" title="${event.context.atFiles.length} @ referenced files">[FILE] ${event.context.atFiles.length}</span>`);
       }
       
       // Context files indicator
       const contextFileCount = (event.context.contextFiles?.attachedFiles?.length || 0) + 
                                (event.context.contextFiles?.codebaseFiles?.length || 0);
       if (contextFileCount > 0) {
-        badges.push(`<span style="display: inline-flex; align-items: center; justify-content: center; background: #3b82f6; color: white; font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 10px; margin-left: 4px;" title="${contextFileCount} context files">🔗 ${contextFileCount}</span>`);
+        badges.push(`<span style="display: inline-flex; align-items: center; justify-content: center; background: #3b82f6; color: white; font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 10px; margin-left: 4px;" title="${contextFileCount} context files">[LINK] ${contextFileCount}</span>`);
       }
       
       // UI state indicator
       if (event.context.browserState && event.context.browserState.tabs && event.context.browserState.tabs.length > 0) {
-        badges.push(`<span style="display: inline-flex; align-items: center; justify-content: center; background: #8b5cf6; color: white; font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 10px; margin-left: 4px;" title="${event.context.browserState.tabs.length} tabs open">🖥️ ${event.context.browserState.tabs.length}</span>`);
+        badges.push(`<span style="display: inline-flex; align-items: center; justify-content: center; background: #8b5cf6; color: white; font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 10px; margin-left: 4px;" title="${event.context.browserState.tabs.length} tabs open">[SYSTEM] ${event.context.browserState.tabs.length}</span>`);
       }
       
       contextIndicators = badges.join('');
@@ -1027,7 +1027,7 @@ function renderThreadsView(container) {
             <p class="card-subtitle">Prompts captured from clipboard and manual entry</p>
           </div>
           <div style="display: flex; gap: var(--space-md); align-items: center;">
-            <span class="thread-badge">📋 ${prompts.length} captured</span>
+            <span class="thread-badge">[CLIPBOARD] ${prompts.length} captured</span>
             <button class="btn btn-sm" onclick="refreshPrompts()">
               <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor">
                 <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z"/>
@@ -1089,7 +1089,7 @@ function renderPromptsList(prompts) {
             <div class="prompt-meta">
               ${prompt.linked_entry_id ? '<span class="prompt-tag">Linked</span>' : '<span class="prompt-tag pending">Pending</span>'}
               <span class="prompt-tag">${source}</span>
-              ${prompt.workspaceName ? `<span class="prompt-tag">📁 ${prompt.workspaceName}</span>` : prompt.workspaceId ? `<span class="prompt-tag">📁 ${prompt.workspaceId.substring(0, 8)}...</span>` : ''}
+              ${prompt.workspaceName ? `<span class="prompt-tag">[FILE] ${prompt.workspaceName}</span>` : prompt.workspaceId ? `<span class="prompt-tag">[FILE] ${prompt.workspaceId.substring(0, 8)}...</span>` : ''}
               ${prompt.metadata?.complexity ? `<span class="prompt-tag">Complexity: ${prompt.metadata.complexity}</span>` : ''}
             </div>
           </div>
@@ -1102,7 +1102,7 @@ function renderPromptsList(prompts) {
 function renderPromptEmptyState() {
   return `
     <div class="empty-state">
-      <div class="empty-state-icon">📋</div>
+      <div class="empty-state-icon">[CLIPBOARD]</div>
       <div class="empty-state-text">No prompts captured yet</div>
       <div class="empty-state-hint">
         Prompts will appear here when you:
@@ -1308,7 +1308,7 @@ function renderAnalyticsView(container) {
       <!-- NEW: Productivity Insights -->
       <div class="card">
         <div class="card-header">
-          <h3 class="card-title">⚡ Productivity Insights</h3>
+          <h3 class="card-title">[FAST] Productivity Insights</h3>
           <p class="card-subtitle">Time-to-edit, iterations, code churn, and debug frequency</p>
         </div>
         <div class="card-body">
@@ -1319,7 +1319,7 @@ function renderAnalyticsView(container) {
       <!-- NEW: File Relationship Visualization -->
       <div class="card">
         <div class="card-header">
-          <h3 class="card-title">🔗 File Relationship Network</h3>
+          <h3 class="card-title">[LINK] File Relationship Network</h3>
           <p class="card-subtitle">Files frequently used together in AI context</p>
         </div>
         <div class="card-body">
@@ -2052,7 +2052,7 @@ async function initializeD3FileGraph() {
     container.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%;"><div class="loading-spinner"></div><span style="margin-left: 12px;">Loading file contents from database...</span></div>';
     
     // Fetch file contents from persistent database
-    console.log('📁 Fetching file contents from SQLite for TF-IDF analysis...');
+    console.log('[FILE] Fetching file contents from SQLite for TF-IDF analysis...');
     const response = await fetch(`${CONFIG.API_BASE}/api/file-contents`);
     const data = await response.json();
     
@@ -2061,7 +2061,7 @@ async function initializeD3FileGraph() {
       return;
     }
     
-    console.log(`📊 Loaded ${data.files.length} files (${(data.totalSize / 1024 / 1024).toFixed(2)} MB) from database`);
+    console.log(`[DATA] Loaded ${data.files.length} files (${(data.totalSize / 1024 / 1024).toFixed(2)} MB) from database`);
     
     // Get unique file extensions from the data, grouping Git files
     const allExts = [...new Set(data.files.map(f => {
@@ -2159,14 +2159,14 @@ async function initializeD3FileGraph() {
         };
       });
 
-    console.log(`📊 Filtered to ${files.length} files with allowed extensions`);
-    console.log(`📊 Files have events:`, files.map(f => `${f.name}: ${f.events?.length || 0} events`));
+    console.log(`[DATA] Filtered to ${files.length} files with allowed extensions`);
+    console.log(`[DATA] Files have events:`, files.map(f => `${f.name}: ${f.events?.length || 0} events`));
 
     if (files.length === 0) {
       container.innerHTML = `
         <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--color-text-muted);">
           <div style="text-align: center;">
-            <div style="font-size: 48px; margin-bottom: 16px;">📁</div>
+            <div style="font-size: 48px; margin-bottom: 16px;">[FILE]</div>
             <div style="font-size: 18px; margin-bottom: 8px;">No file data available</div>
             <div style="font-size: 14px;">Make some code changes to see file relationships</div>
           </div>
@@ -2203,7 +2203,7 @@ async function initializeD3FileGraph() {
       }
     }
     
-    console.log(`🔗 Created ${links.length} connections between files`);
+    console.log(`[LINK] Created ${links.length} connections between files`);
     
     // Compute TF-IDF for semantic analysis
     const {tfidfStats, similarities} = computeTFIDFAnalysis(files);
@@ -3379,7 +3379,7 @@ function renderSimilarFilePairs(links, files) {
   if (sortedLinks.length === 0) {
     container.innerHTML = `
       <div style="text-align: center; padding: var(--space-xl); color: var(--color-text-muted);">
-        <div style="font-size: 48px; margin-bottom: var(--space-md);">🔗</div>
+        <div style="font-size: 48px; margin-bottom: var(--space-md);">[LINK]</div>
         <div style="font-size: var(--text-md); margin-bottom: var(--space-sm);">No Similar Pairs Found</div>
         <div style="font-size: var(--text-sm);">Modify some files together to see relationships</div>
       </div>
@@ -3838,7 +3838,7 @@ function computeLatentLayout(files) {
   
   // Create feature vectors
   const vectors = files.map(file => createFeatureVector(file));
-  console.log(`📊 Created ${vectors.length} feature vectors, avg dimensions: ${vectors[0]?.length || 0}`);
+  console.log(`[DATA] Created ${vectors.length} feature vectors, avg dimensions: ${vectors[0]?.length || 0}`);
   
   // Compute pairwise distances
   const distances = [];
@@ -3916,7 +3916,7 @@ function detectLatentClusters(nodes, links) {
   
   if (nodes.length === 0) return clusters;
   
-  console.log(`🎯 Detecting ${k} latent clusters from ${nodes.length} files`);
+  console.log(`[TARGET] Detecting ${k} latent clusters from ${nodes.length} files`);
   
   // Initialize centroids randomly
   const centroids = [];
@@ -4520,7 +4520,7 @@ function resetFileGraphZoom() {
 // ===================================
 
 function renderEmbeddingsVisualization() {
-  console.log('🎨 Rendering file similarity embeddings based on prompt context...');
+  console.log('[STYLE] Rendering file similarity embeddings based on prompt context...');
   
   // Get all prompts with valid text (filter out JSON/composer conversations)
   const validPrompts = (state.data.prompts || []).filter(p => {
@@ -4532,7 +4532,7 @@ function renderEmbeddingsVisualization() {
     return true;
   });
   
-  console.log(`📊 Found ${validPrompts.length} valid prompts for analysis`);
+  console.log(`[DATA] Found ${validPrompts.length} valid prompts for analysis`);
   
   if (validPrompts.length === 0) {
     document.getElementById('embeddingsVisualization').innerHTML = `
@@ -4574,7 +4574,7 @@ function renderEmbeddingsVisualization() {
     }
   });
   
-  console.log(`📁 Found ${filePromptMap.size} files mentioned in prompts`);
+  console.log(`[FILE] Found ${filePromptMap.size} files mentioned in prompts`);
   
   // Build file-to-file similarity based on shared prompt context
   const filesArray = Array.from(filePromptMap.keys());
@@ -4610,7 +4610,7 @@ function renderEmbeddingsVisualization() {
   // Sort by similarity
   fileSimilarities.sort((a, b) => b.similarity - a.similarity);
   
-  console.log(`🔗 Found ${fileSimilarities.length} file pairs with shared prompt context`);
+  console.log(`[LINK] Found ${fileSimilarities.length} file pairs with shared prompt context`);
   
   // Display top similar file pairs
   const similarityPairsContainer = document.getElementById('similarityPairs');
@@ -6194,7 +6194,7 @@ async function showEventModal(eventId) {
               ${event.context.atFiles && event.context.atFiles.length > 0 ? `
                 <div style="padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md); border-left: 3px solid #10b981;">
                   <div style="font-weight: 600; margin-bottom: var(--space-sm); color: var(--color-text); display: flex; align-items: center; gap: var(--space-xs);">
-                    <span>📁 @ Referenced Files</span>
+                    <span>[FILE] @ Referenced Files</span>
                     <span style="background: #10b981; color: white; font-size: 10px; padding: 2px 6px; border-radius: 10px;">${event.context.atFiles.length}</span>
                   </div>
                   <div style="display: flex; flex-wrap: wrap; gap: var(--space-xs);">
@@ -6210,7 +6210,7 @@ async function showEventModal(eventId) {
               ${(event.context.contextFiles?.attachedFiles?.length || 0) + (event.context.contextFiles?.codebaseFiles?.length || 0) > 0 ? `
                 <div style="padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md); border-left: 3px solid #3b82f6;">
                   <div style="font-weight: 600; margin-bottom: var(--space-sm); color: var(--color-text); display: flex; align-items: center; gap: var(--space-xs);">
-                    <span>🔗 Context Files</span>
+                    <span>[LINK] Context Files</span>
                     <span style="background: #3b82f6; color: white; font-size: 10px; padding: 2px 6px; border-radius: 10px;">
                       ${(event.context.contextFiles?.attachedFiles?.length || 0) + (event.context.contextFiles?.codebaseFiles?.length || 0)}
                     </span>
@@ -6240,7 +6240,7 @@ async function showEventModal(eventId) {
               ${event.context.browserState && event.context.browserState.tabs && event.context.browserState.tabs.length > 0 ? `
                 <div style="padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md); border-left: 3px solid #8b5cf6;">
                   <div style="font-weight: 600; margin-bottom: var(--space-sm); color: var(--color-text); display: flex; align-items: center; gap: var(--space-xs);">
-                    <span>🖥️ UI State</span>
+                    <span>[SYSTEM] UI State</span>
                     <span style="background: #8b5cf6; color: white; font-size: 10px; padding: 2px 6px; border-radius: 10px;">${event.context.browserState.tabs.length} tabs</span>
                   </div>
                   <div style="display: flex; flex-wrap: wrap; gap: var(--space-xs);">
@@ -6486,7 +6486,7 @@ function showPromptInModal(prompt, modal, title, body) {
       // Detect panel/view state
       else if (Object.keys(parsed).some(k => k.includes('workbench.panel'))) {
         promptType = 'panel-state';
-        titleText = '🖥️ AI Chat Panel State';
+        titleText = '[SYSTEM] AI Chat Panel State';
         const panels = Object.keys(parsed).filter(k => k.includes('workbench.panel'));
         metadata = {
           panelCount: panels.length,
@@ -6501,7 +6501,7 @@ function showPromptInModal(prompt, modal, title, body) {
       // Detect setup/terminal data
       else if (parsed.setupPath2 || parsed.terminals) {
         promptType = 'setup';
-        titleText = '⚙️ Development Setup';
+        titleText = '[CONFIG] Development Setup';
         metadata = {
           setupPath: parsed.setupPath2,
           terminals: parsed.terminals?.length || 0,
@@ -6652,7 +6652,7 @@ function showPromptInModal(prompt, modal, title, body) {
                 <button 
                   onclick="copyToClipboard('${metadata.composerId}', 'Composer ID copied!'); alert('Composer ID copied: ${metadata.composerId}\\n\\nTo find this conversation in Cursor:\\n1. Open Composer\\n2. Look for: ${escapeHtml(metadata.name).replace(/'/g, "\\'")}');" 
                   style="padding: var(--space-sm) var(--space-md); background: var(--color-primary); color: white; border: none; border-radius: var(--radius-sm); cursor: pointer; font-size: var(--text-sm); white-space: nowrap; margin-left: var(--space-md);">
-                  📋 Copy ID
+                  [CLIPBOARD] Copy ID
                 </button>
               </div>
             </div>
@@ -6662,7 +6662,7 @@ function showPromptInModal(prompt, modal, title, body) {
       
       ${promptType === 'panel-state' && metadata.panels ? `
         <div>
-          <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">🖥️ AI Chat Panels (${metadata.panelCount})</h4>
+          <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">[SYSTEM] AI Chat Panels (${metadata.panelCount})</h4>
           <div style="display: grid; gap: var(--space-sm);">
             ${metadata.panels.map(panel => `
               <div style="padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md); display: flex; justify-content: space-between; align-items: center;">
@@ -6685,7 +6685,7 @@ function showPromptInModal(prompt, modal, title, body) {
       
       ${promptType === 'setup' && metadata.setupPath ? `
         <div>
-          <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">⚙️ Development Setup</h4>
+          <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">[CONFIG] Development Setup</h4>
           <div style="padding: var(--space-lg); background: var(--color-bg); border-radius: var(--radius-md);">
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-md);">
               <div>
@@ -7238,7 +7238,7 @@ function addStatusMessage(message) {
     messageClass = 'status-success';
   } else if (message.includes('WARNING') || message.includes('warning')) {
     messageClass = 'status-warning';
-  } else if (message.includes('🔴')) {
+  } else if (message.includes('[ERROR]')) {
     messageClass = 'status-error';
   }
   
@@ -7417,7 +7417,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (storage && synchronizer) {
     // Initialize persistent storage
     synchronizer.initialize().then(async (stats) => {
-      console.log('📊 Persistent storage ready:', stats);
+      console.log('[DATA] Persistent storage ready:', stats);
       
       // Use new optimized initialization
       state.connected = true;
@@ -7427,7 +7427,7 @@ document.addEventListener('DOMContentLoaded', () => {
       // Initialize search engine
       initializeSearch();
       
-      console.log('✅ Dashboard initialized with warm-start');
+      console.log('[SUCCESS] Dashboard initialized with warm-start');
     }).catch(error => {
       console.error('Persistence initialization failed:', error);
       // Fall back to non-persistent mode
@@ -7806,7 +7806,7 @@ function performSearch(query) {
   try {
     console.log('Searching for:', query);
     const results = searchEngine.search(query, { limit: 20 });
-    console.log('📊 Found', results.length, 'results');
+    console.log('[DATA] Found', results.length, 'results');
     searchCurrentResults = results;
     searchSelectedIndex = -1;
     renderSearchResults(results);

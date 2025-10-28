@@ -137,7 +137,7 @@ app.use(express.json());
 // Serve static files from public directory
 const publicPath = path.join(__dirname, '../../public');
 app.use(express.static(publicPath));
-console.log(`📁 Serving static files from: ${publicPath}`);
+console.log(`[FILE] Serving static files from: ${publicPath}`);
 
 let ideStateCapture = new IDEStateCapture(); // Changed from const to let
 ideStateCapture.start(); // Start capturing IDE state
@@ -229,7 +229,7 @@ let knownWorkspaces = new Set(); // Track all discovered workspaces
 function createNewSession() {
   activeSession = 'session-' + Date.now();
   lastActivityTime = Date.now();
-  console.log(`🔄 Created new session: ${activeSession}`);
+  console.log(`[SYNC] Created new session: ${activeSession}`);
   return activeSession;
 }
 
@@ -239,7 +239,7 @@ function checkSessionTimeout() {
   const timeSinceLastActivity = now - lastActivityTime;
   
   if (timeSinceLastActivity > SESSION_TIMEOUT) {
-    console.log(`⏰ Session timeout reached (${Math.round(timeSinceLastActivity / 60000)} minutes), creating new session`);
+    console.log(`[TIME] Session timeout reached (${Math.round(timeSinceLastActivity / 60000)} minutes), creating new session`);
     createNewSession();
   }
 }
@@ -449,7 +449,7 @@ function addToLunrIndex(item) {
   
   if (doc.id) {
     indexedDocs.push(doc); // Keep track of indexed documents for retrieval
-    console.log(`🔍 Added ${item.kind} ${item.payload.id} to Lunr index.`);
+    console.log(`[SEARCH] Added ${item.kind} ${item.payload.id} to Lunr index.`);
   }
 }
 
@@ -476,7 +476,7 @@ function buildLunrIndex() {
     });
   });
   
-  console.log(`🔍 Lunr index built with ${entries.length} entries and ${events.length} events.`);
+  console.log(`[SEARCH] Lunr index built with ${entries.length} entries and ${events.length} events.`);
 }
 
 function updateLunrIndex(item) {
@@ -484,7 +484,7 @@ function updateLunrIndex(item) {
   // This is not ideal for performance, but it's the only way with this version
   try {
     buildLunrIndex();
-    console.log(`🔍 Rebuilt Lunr index with new ${item.kind} ${item.payload.id}.`);
+    console.log(`[SEARCH] Rebuilt Lunr index with new ${item.kind} ${item.payload.id}.`);
   } catch (error) {
     console.error('Error rebuilding Lunr index:', error);
   }
@@ -546,7 +546,7 @@ async function captureSystemResources() {
       rawData.systemResources = rawData.systemResources.slice(-1000);
     }
     
-    console.log(`📊 Captured system resources: ${Math.round(memUsage.heapUsed / 1024 / 1024)}MB memory`);
+    console.log(`[DATA] Captured system resources: ${Math.round(memUsage.heapUsed / 1024 / 1024)}MB memory`);
   } catch (error) {
     console.error('Error capturing system resources:', error);
   }
@@ -574,7 +574,7 @@ async function captureGitData() {
       rawData.gitData.status = rawData.gitData.status.slice(-100);
     }
     
-    console.log(`📝 Captured git data: branch ${gitBranch.trim()}`);
+    console.log(`[NOTE] Captured git data: branch ${gitBranch.trim()}`);
   } catch (error) {
     console.warn('Git data capture failed (not a git repository?):', error.message);
   }
@@ -613,7 +613,7 @@ async function captureCursorAppState() {
       rawData.appleScript.appState = rawData.appleScript.appState.slice(-500);
     }
     
-    console.log(`🍎 Captured Cursor app state: active=${isActive}, windows=${windowCount}`);
+    console.log(`[APPLE] Captured Cursor app state: active=${isActive}, windows=${windowCount}`);
   } catch (error) {
     console.warn('AppleScript capture failed:', error.message);
   }
@@ -633,7 +633,7 @@ async function captureCursorDatabase() {
         const dbFiles = findSQLiteFiles(basePath);
         if (dbFiles.length > 0) {
           const dbPath = dbFiles[0];
-          console.log(`📊 Found Cursor database: ${dbPath}`);
+          console.log(`[DATA] Found Cursor database: ${dbPath}`);
           
           // Try to read basic database info
           try {
@@ -654,7 +654,7 @@ async function captureCursorDatabase() {
               rawData.cursorDatabase.conversations = rawData.cursorDatabase.conversations.slice(-50);
             }
             
-            console.log(`📊 Captured Cursor database info: ${tables.length} tables`);
+            console.log(`[DATA] Captured Cursor database info: ${tables.length} tables`);
             break;
           } catch (dbError) {
             console.warn('Could not read Cursor database:', dbError.message);
@@ -733,7 +733,7 @@ function findSQLiteFiles(dir) {
 
 // Start raw data capture intervals
 function startRawDataCapture() {
-  console.log('🚀 Starting enhanced raw data capture...');
+  console.log('[LAUNCH] Starting enhanced raw data capture...');
   
   // Initialize IDE state capture
   ideStateCapture = new IDEStateCapture();
@@ -764,7 +764,7 @@ function startRawDataCapture() {
   captureCursorDatabase();
   captureLogData();
   
-  console.log('✅ Enhanced raw data capture started');
+  console.log('[SUCCESS] Enhanced raw data capture started');
 }
 
 // Load configuration
@@ -823,10 +823,10 @@ console.log(' Configuration:', {
 // Set initial workspace (will be detected dynamically from file paths)
 currentWorkspace = config.root_dir;
 if (autoDetect) {
-  console.log('🎯 Auto-detecting workspaces from activity in:', workspacesToWatch);
-  console.log('📊 All workspaces will be discovered dynamically from file changes');
+  console.log('[TARGET] Auto-detecting workspaces from activity in:', workspacesToWatch);
+  console.log('[DATA] All workspaces will be discovered dynamically from file changes');
 } else {
-  console.log('🎯 Monitoring configured workspaces:', workspacesToWatch);
+  console.log('[TARGET] Monitoring configured workspaces:', workspacesToWatch);
 }
 
 // Health check
@@ -1845,7 +1845,7 @@ app.get('/api/export/database', async (req, res) => {
       }
     };
     
-    console.log(`✅ Exported ${entries.length} entries, ${prompts.length} prompts, ${events.length} events`);
+    console.log(`[SUCCESS] Exported ${entries.length} entries, ${prompts.length} prompts, ${events.length} events`);
     
     res.json({
       success: true,
@@ -1946,7 +1946,7 @@ app.get('/api/file-contents', async (req, res) => {
     });
     
     const result = Array.from(fileContents.values());
-    console.log(`📁 Serving ${result.length} files with content for TF-IDF analysis (filtered Git objects)`);
+    console.log(`[FILE] Serving ${result.length} files with content for TF-IDF analysis (filtered Git objects)`);
     
     res.json({
       files: result,
@@ -1970,7 +1970,7 @@ app.post('/api/chat/query', async (req, res) => {
       return res.status(400).json({ error: 'Query is required' });
     }
     
-    console.log('💬 Chat query:', query);
+    console.log('[CHAT] Chat query:', query);
     
     // Gather telemetry data
     const allEntries = await persistentDB.getAllEntries();
@@ -1984,7 +1984,7 @@ app.post('/api/chat/query', async (req, res) => {
     // Process query with reasoning engine
     const response = await reasoningEngine.query(query, telemetryData);
     
-    console.log('✅ Generated response with', response.confidence, 'confidence');
+    console.log('[SUCCESS] Generated response with', response.confidence, 'confidence');
     
     res.json(response);
     
@@ -2190,7 +2190,7 @@ app.post('/privacy/delete-sensitive', (req, res) => {
 
 // MCP endpoints
 app.post('/mcp/log-prompt-response', (req, res) => {
-  console.log('📝 MCP request received:', req.body);
+  console.log('[NOTE] MCP request received:', req.body);
   // Check if we need to create a new session due to timeout
   checkSessionTimeout();
   updateActivityTime();
@@ -2213,7 +2213,7 @@ app.post('/mcp/log-prompt-response', (req, res) => {
     notes: 'Logged via MCP'
   };
   
-  console.log('✅ Creating entry:', entry);
+  console.log('[SUCCESS] Creating entry:', entry);
   
   // Create matching event
   const event = {
@@ -2232,7 +2232,7 @@ app.post('/mcp/log-prompt-response', (req, res) => {
   // Update workspace data
   updateWorkspaceData(workspacePath, entry, event);
   
-  console.log(`✅ MCP entry added: ${entry.id} - ${entry.file_path} in workspace: ${workspacePath}`);
+  console.log(`[SUCCESS] MCP entry added: ${entry.id} - ${entry.file_path} in workspace: ${workspacePath}`);
   
   res.json({ success: true, entry_id: entry.id });
 });
@@ -2277,8 +2277,8 @@ app.post('/mcp/log-code-change', (req, res) => {
   // Update workspace data
   updateWorkspaceData(workspacePath, entry, event);
   
-  console.log(`✅ MCP code change added: ${entry.id} - ${entry.file_path} in workspace: ${workspacePath}`);
-  console.log(`📊 Total entries: ${entries.length}, events: ${events.length}`);
+  console.log(`[SUCCESS] MCP code change added: ${entry.id} - ${entry.file_path} in workspace: ${workspacePath}`);
+  console.log(`[DATA] Total entries: ${entries.length}, events: ${events.length}`);
   
   res.json({ success: true, entry_id: entry.id });
 });
@@ -2315,8 +2315,8 @@ app.post('/mcp/log-event', (req, res) => {
   // Update workspace data
   updateWorkspaceData(workspacePath, null, event);
   
-  console.log(`✅ MCP event added: ${event.id} - ${event.type} in workspace: ${workspacePath}`);
-  console.log(`📊 Total events: ${events.length}`);
+  console.log(`[SUCCESS] MCP event added: ${event.id} - ${event.type} in workspace: ${workspacePath}`);
+  console.log(`[DATA] Total events: ${events.length}`);
   
   res.json({ success: true, event_id: event.id });
 });
@@ -2756,7 +2756,7 @@ function extractModelInfo(data) {
 // Load data from persistent database on startup
 async function loadPersistedData() {
   try {
-    console.log('💾 Loading persisted data from SQLite...');
+    console.log('[SAVE] Loading persisted data from SQLite...');
     await persistentDB.init();
     
     const [entries, prompts] = await Promise.all([
@@ -2779,7 +2779,7 @@ async function loadPersistedData() {
     }
     
     const stats = await persistentDB.getStats();
-    console.log(`✅ Loaded ${stats.entries} entries and ${stats.prompts} prompts from database`);
+    console.log(`[SUCCESS] Loaded ${stats.entries} entries and ${stats.prompts} prompts from database`);
   } catch (error) {
     console.error('⚠️  Error loading persisted data:', error.message);
     console.log('   Starting with empty database');
@@ -2791,10 +2791,10 @@ const HOST = process.env.HOST || 'localhost';
 
 loadPersistedData().then(() => {
   app.listen(PORT, HOST, () => {
-    console.log(`🚀 Companion service running on http://${HOST}:${PORT}`);
-    console.log(`📊 Health endpoint: http://${HOST}:${PORT}/health`);
-    console.log(`📈 Activity endpoint: http://${HOST}:${PORT}/api/activity`);
-    console.log(`🔍 Queue endpoint: http://${HOST}:${PORT}/queue`);
+    console.log(`[LAUNCH] Companion service running on http://${HOST}:${PORT}`);
+    console.log(`[DATA] Health endpoint: http://${HOST}:${PORT}/health`);
+    console.log(`[UP] Activity endpoint: http://${HOST}:${PORT}/api/activity`);
+    console.log(`[SEARCH] Queue endpoint: http://${HOST}:${PORT}/queue`);
     console.log(` WebSocket server running on ws://${HOST}:${PORT}`);
     const workspacesToWatch = config.workspace_roots || config.workspaces || [config.root_dir];
     const autoDetect = config.auto_detect_workspaces !== false;
@@ -2847,7 +2847,7 @@ loadPersistedData().then(() => {
       }
     });
     
-    console.log('🖥️  Terminal monitor started for command tracking');
+    console.log('[SYSTEM]  Terminal monitor started for command tracking');
   } else {
     console.log(' Terminal monitor disabled in config');
   }
@@ -2863,13 +2863,13 @@ loadPersistedData().then(() => {
     checkSessionTimeout();
   }, 5 * 60 * 1000);
   
-  console.log('⏰ Session timeout check started (every 5 minutes)');
+  console.log('[TIME] Session timeout check started (every 5 minutes)');
   
   // Start Cursor database monitoring
-  console.log('🔍 Starting Cursor database monitoring...');
+  console.log('[SEARCH] Starting Cursor database monitoring...');
   cursorDbParser.startMonitoring(async (data) => {
     if (data.prompts && data.prompts.length > 0) {
-      console.log(`💬 Found ${data.prompts.length} prompts in Cursor database`);
+      console.log(`[CHAT] Found ${data.prompts.length} prompts in Cursor database`);
       
       // Optionally add to our database (avoid duplicates)
       for (const prompt of data.prompts) {
@@ -2926,6 +2926,6 @@ loadPersistedData().then(() => {
   console.error('❌ Failed to load persisted data:', error);
   // Start anyway with empty database
   app.listen(PORT, HOST, () => {
-    console.log(`🚀 Companion service running on http://${HOST}:${PORT} (without persisted data)`);
+    console.log(`[LAUNCH] Companion service running on http://${HOST}:${PORT} (without persisted data)`);
   });
 });

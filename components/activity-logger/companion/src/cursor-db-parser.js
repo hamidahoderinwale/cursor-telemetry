@@ -137,7 +137,7 @@ class CursorDatabaseParser {
         }
       }
 
-      console.log(`📊 Extracted ${conversations.length} composer conversations`);
+      console.log(`[DATA] Extracted ${conversations.length} composer conversations`);
       return conversations;
 
     } catch (error) {
@@ -239,7 +239,7 @@ class CursorDatabaseParser {
         }
       }
 
-      console.log(`📝 Extracted ${prompts.length} workspace prompts`);
+      console.log(`[NOTE] Extracted ${prompts.length} workspace prompts`);
       return prompts;
 
     } catch (error) {
@@ -347,7 +347,7 @@ class CursorDatabaseParser {
         }
       }
 
-      console.log(`💬 Extracted ${prompts.length} prompts from persistent data`);
+      console.log(`[CHAT] Extracted ${prompts.length} prompts from persistent data`);
       return prompts;
     } catch (error) {
       console.error('Error parsing persistent composer data:', error.message);
@@ -498,7 +498,7 @@ class CursorDatabaseParser {
       // Sort by last accessed (most recent first)
       allWorkspaces.sort((a, b) => b.lastAccessed - a.lastAccessed);
       
-      console.log(`📁 Found ${allWorkspaces.length} total workspaces`);
+      console.log(`[FILE] Found ${allWorkspaces.length} total workspaces`);
       return allWorkspaces;
 
     } catch (error) {
@@ -556,7 +556,7 @@ class CursorDatabaseParser {
    * Start continuous monitoring
    */
   startMonitoring(callback) {
-    console.log('🔍 Starting Cursor database monitoring...');
+    console.log('[SEARCH] Starting Cursor database monitoring...');
     
     // Initial extraction
     this.getAllData().then(data => {
@@ -592,7 +592,7 @@ if (require.main === module) {
   const parser = new CursorDatabaseParser();
   
   parser.getAllData().then(data => {
-    console.log('\n📊 Cursor Database Extraction Results:');
+    console.log('\n[DATA] Cursor Database Extraction Results:');
     console.log('=====================================');
     console.log(`Conversations: ${data.conversations.length}`);
     console.log(`Prompts: ${data.prompts.length}`);

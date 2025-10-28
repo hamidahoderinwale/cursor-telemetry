@@ -14,7 +14,7 @@ class AnalyticsAggregator {
    * Aggregate all analytics
    */
   async aggregateAll() {
-    console.log('📊 Starting analytics aggregation...');
+    console.log('[DATA] Starting analytics aggregation...');
     
     const now = Date.now();
     
@@ -37,7 +37,7 @@ class AnalyticsAggregator {
 
     this.lastAggregation = now;
     
-    console.log('✅ Analytics aggregation complete');
+    console.log('[SUCCESS] Analytics aggregation complete');
   }
 
   /**

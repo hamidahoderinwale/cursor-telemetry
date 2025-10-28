@@ -68,7 +68,7 @@ class FileGraphVisualizer {
     // Render graph
     this.render();
 
-    console.log('✅ File graph visualizer initialized');
+    console.log('[SUCCESS] File graph visualizer initialized');
   }
 
   /**
@@ -85,7 +85,7 @@ class FileGraphVisualizer {
           this.links = result.data.edges || [];
           
           if (this.nodes.length > 0) {
-            console.log(`✅ Loaded ${this.nodes.length} nodes and ${this.links.length} edges from API`);
+            console.log(`[SUCCESS] Loaded ${this.nodes.length} nodes and ${this.links.length} edges from API`);
             return;
           }
         }
@@ -145,7 +145,7 @@ class FileGraphVisualizer {
       const files = Array.from(fileMap.values())
         .filter(f => f.content.length > 50); // Only files with content
 
-      console.log(`📁 Loaded ${files.length} files for graph`);
+      console.log(`[FILE] Loaded ${files.length} files for graph`);
 
       if (files.length === 0) {
         this.showEmptyState();
@@ -277,7 +277,7 @@ class FileGraphVisualizer {
       }
     }
 
-    console.log(`📊 Built graph: ${this.nodes.length} nodes, ${this.links.length} links`);
+    console.log(`[DATA] Built graph: ${this.nodes.length} nodes, ${this.links.length} links`);
   }
 
   /**

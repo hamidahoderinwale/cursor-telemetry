@@ -34,7 +34,7 @@ class ReasoningEngine {
             this.useHuggingFace = false;
         } else {
             console.warn('⚠️ No API key found (HF_TOKEN, HUGGINGFACE_API_KEY, or OPENROUTER_API_KEY)');
-            console.log('💡 Using rule-based fallback responses');
+            console.log('[IDEA] Using rule-based fallback responses');
             this.useHuggingFace = false;
         }
     }

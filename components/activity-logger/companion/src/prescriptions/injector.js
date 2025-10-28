@@ -57,7 +57,7 @@ class PrescriptionInjector {
     const scopeInfo = this.formatScopeInfo(context);
 
     let prompt = '\n═══════════════════════════════════════\n';
-    prompt += '📋 ACTIVE PRESCRIPTIONS\n';
+    prompt += '[CLIPBOARD] ACTIVE PRESCRIPTIONS\n';
     if (scopeInfo) {
       prompt += `Context: ${scopeInfo}\n`;
     }
@@ -94,13 +94,13 @@ class PrescriptionInjector {
    */
   formatCategory(category, prescriptions) {
     const icons = {
-      [CATEGORIES.DOMAIN]: '🏗️',
-      [CATEGORIES.BEHAVIOR]: '🎯',
-      [CATEGORIES.FORMATTING]: '✨',
-      [CATEGORIES.WORKFLOW]: '⚙️',
+      [CATEGORIES.DOMAIN]: '[BUILD]',
+      [CATEGORIES.BEHAVIOR]: '[TARGET]',
+      [CATEGORIES.FORMATTING]: '[SPARKLE]',
+      [CATEGORIES.WORKFLOW]: '[CONFIG]',
       [CATEGORIES.SECURITY]: '🔒',
-      [CATEGORIES.COMMUNICATION]: '💬',
-      [CATEGORIES.ALLOWLIST]: '✅',
+      [CATEGORIES.COMMUNICATION]: '[CHAT]',
+      [CATEGORIES.ALLOWLIST]: '[SUCCESS]',
       [CATEGORIES.BLOCKLIST]: '🚫',
       [CATEGORIES.CONSTRAINTS]: '⚠️'
     };
@@ -183,7 +183,7 @@ class PrescriptionInjector {
       
       items.forEach(p => {
         markdown += `- **${p.title}**`;
-        if (p.priority >= 80) markdown += ' 🔴 HIGH PRIORITY';
+        if (p.priority >= 80) markdown += ' [ERROR] HIGH PRIORITY';
         markdown += `\n  - ${p.prescription}\n`;
         markdown += `  - *Scope: ${p.scope}`;
         if (p.scope_value) markdown += ` (${p.scope_value})`;

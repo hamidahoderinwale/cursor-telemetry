@@ -62,7 +62,7 @@ class ProductivityTracker {
           results.push(metric);
           promptData.waitingForEdit = false;
 
-          console.log(`⚡ Time-to-first-edit: ${metric.valueSec}s for prompt ${promptId}`);
+          console.log(`[FAST] Time-to-first-edit: ${metric.valueSec}s for prompt ${promptId}`);
         }
       }
     });
@@ -162,7 +162,7 @@ class ProductivityTracker {
           this.promptIterations = this.promptIterations.slice(-300);
         }
 
-        console.log(`🔄 Detected prompt iteration: ${iteration.reason}`);
+        console.log(`[SYNC] Detected prompt iteration: ${iteration.reason}`);
         return iteration;
       }
     }
@@ -216,7 +216,7 @@ class ProductivityTracker {
       modificationCount: 0
     });
 
-    console.log(`✨ Marked AI-generated code in ${file_path}`);
+    console.log(`[SPARKLE] Marked AI-generated code in ${file_path}`);
   }
 
   /**
@@ -264,7 +264,7 @@ class ProductivityTracker {
       aiGenerated.contentHash = newHash;
       aiGenerated.content = fileChange.after_code;
 
-      console.log(`📝 Code churn detected in ${fileChange.file_path}: mod #${aiGenerated.modificationCount}`);
+      console.log(`[NOTE] Code churn detected in ${fileChange.file_path}: mod #${aiGenerated.modificationCount}`);
       return churn;
     }
 

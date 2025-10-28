@@ -31,7 +31,7 @@ class ChatWidget {
         // Setup event listeners
         this.setupEventListeners();
         
-        console.log('✅ Chat widget initialized');
+        console.log('[SUCCESS] Chat widget initialized');
     }
     
     setupEventListeners() {

@@ -23,7 +23,7 @@ class SearchEngine {
    * Initialize search index with all searchable data
    */
   async initialize(data) {
-    console.log('🔍 Initializing search engine...');
+    console.log('[SEARCH] Initializing search engine...');
     
     this.documents = [];
     const docs = [];
@@ -138,7 +138,7 @@ class SearchEngine {
     this.buildTFIDFVectors(docs);
 
     this.initialized = true;
-    console.log(`✅ Search engine initialized with ${this.documents.length} documents`);
+    console.log(`[SUCCESS] Search engine initialized with ${this.documents.length} documents`);
   }
 
   /**

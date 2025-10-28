@@ -49,7 +49,7 @@ class TerminalMonitor extends EventEmitter {
       return;
     }
 
-    console.log('🖥️  Starting terminal monitor...');
+    console.log('[SYSTEM]  Starting terminal monitor...');
     this.isMonitoring = true;
 
     // Strategy 1: Monitor shell history files
@@ -63,7 +63,7 @@ class TerminalMonitor extends EventEmitter {
     // Strategy 3: Monitor running processes
     this.startProcessMonitoring();
 
-    console.log('✅ Terminal monitor started');
+    console.log('[SUCCESS] Terminal monitor started');
     console.log(`   - Shell history: checking every ${this.options.historyInterval}ms`);
     console.log(`   - Process monitoring: active`);
     if (process.platform === 'darwin') {
@@ -354,7 +354,7 @@ class TerminalMonitor extends EventEmitter {
     // Emit event for external listeners
     this.emit('command', record);
     
-    console.log(`📟 Captured: ${record.command.slice(0, 60)}${record.command.length > 60 ? '...' : ''} (${record.source})`);
+    console.log(`[TERMINAL] Captured: ${record.command.slice(0, 60)}${record.command.length > 60 ? '...' : ''} (${record.source})`);
     
     return record;
   }

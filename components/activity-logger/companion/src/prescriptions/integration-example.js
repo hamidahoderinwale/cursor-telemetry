@@ -51,7 +51,7 @@
 //     const suggestions = await prescriptionSystem.detector.getAllSuggestions();
 //     
 //     if (suggestions.combined.length > 0) {
-//       console.log(`\n💡 Found ${suggestions.combined.length} prescription suggestions:`);
+//       console.log(`\n[IDEA] Found ${suggestions.combined.length} prescription suggestions:`);
 //       suggestions.combined.slice(0, 5).forEach(s => {
 //         console.log(`  - ${s.title} (${Math.round(s.confidence * 100)}% confidence)`);
 //       });
@@ -80,7 +80,7 @@
 //     });
 //     
 //     if (injection.count > 0) {
-//       console.log(`📋 Injecting ${injection.count} prescriptions into prompt`);
+//       console.log(`[CLIPBOARD] Injecting ${injection.count} prescriptions into prompt`);
 //       
 //       // Prepend prescriptions to user prompt
 //       const enhancedPrompt = injection.formatted + prompt;
@@ -147,7 +147,7 @@
 //       const suggestions = await prescriptionSystem.detector.getAllSuggestions();
 //       
 //       if (suggestions.combined.length > 0) {
-//         console.log(`\n💡 Daily suggestion check: ${suggestions.combined.length} new suggestions`);
+//         console.log(`\n[IDEA] Daily suggestion check: ${suggestions.combined.length} new suggestions`);
 //         console.log('View at: http://localhost:43917/prescriptions.html\n');
 //       }
 //     } catch (error) {
@@ -191,7 +191,7 @@
 //     setTimeout(async () => {
 //       const suggestions = await prescriptionSystem.detector.getAllSuggestions();
 //       if (suggestions.combined.length > 0) {
-//         console.log(`💡 ${suggestions.combined.length} prescription suggestions available`);
+//         console.log(`[IDEA] ${suggestions.combined.length} prescription suggestions available`);
 //       }
 //     }, 5000);
 //     
@@ -199,7 +199,7 @@
 //     setInterval(async () => {
 //       const suggestions = await prescriptionSystem.detector.getAllSuggestions();
 //       if (suggestions.combined.length > 0) {
-//         console.log(`💡 Daily check: ${suggestions.combined.length} new suggestions`);
+//         console.log(`[IDEA] Daily check: ${suggestions.combined.length} new suggestions`);
 //       }
 //     }, 24 * 60 * 60 * 1000);
 //   }

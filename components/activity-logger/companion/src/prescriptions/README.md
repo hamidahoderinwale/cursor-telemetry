@@ -25,7 +25,7 @@ Prescriptions are lightweight, prescriptive (not retrospective) rules that are a
 Prescriptions are persistent rules that modify AI behavior without needing to repeat instructions in every prompt. They solve the problem of:
 
 - ❌ **Before**: "Don't write markdown files... use TypeScript... follow React patterns..." (every single prompt)
-- ✅ **After**: Set prescriptions once, they're auto-applied to all future prompts
+- [SUCCESS] **After**: Set prescriptions once, they're auto-applied to all future prompts
 
 ### Key Characteristics
 
@@ -213,7 +213,7 @@ Get formatted prescriptions for context injection.
 ```json
 {
   "success": true,
-  "formatted": "═══════════════════\n📋 ACTIVE PRESCRIPTIONS\n...",
+  "formatted": "═══════════════════\n[CLIPBOARD] ACTIVE PRESCRIPTIONS\n...",
   "count": 5,
   "prescriptions": [...],
   "context": {
@@ -226,18 +226,18 @@ Get formatted prescriptions for context injection.
 **Example formatted output:**
 ```
 ═══════════════════════════════════════
-📋 ACTIVE PRESCRIPTIONS
+[CLIPBOARD] ACTIVE PRESCRIPTIONS
 Context: Workspace: .../my-project | File Type: .js
 ═══════════════════════════════════════
 
-🏗️ DOMAIN
+[BUILD] DOMAIN
   • [HIGH] This is a TypeScript project - use strict typing
 
-🎯 BEHAVIOR
+[TARGET] BEHAVIOR
   • Don't create markdown files unless explicitly requested
   • Always show code diffs, not full file rewrites
 
-✨ FORMATTING
+[SPARKLE] FORMATTING
   • Omit semicolons in JavaScript code
   • Prefer single quotes over double quotes
 
@@ -450,15 +450,15 @@ Analyzes file changes to detect:
 
 ### Detection Patterns Included
 
-- ✅ Markdown avoidance
-- ✅ Conciseness preferences
-- ✅ Diff display preferences
-- ✅ Framework identification (React, TypeScript, Python)
-- ✅ Testing workflow
-- ✅ Console.log cleanup
-- ✅ API key security
-- ✅ Module system (ESM vs CommonJS)
-- ✅ Code style guides (Prettier, Airbnb)
+- [SUCCESS] Markdown avoidance
+- [SUCCESS] Conciseness preferences
+- [SUCCESS] Diff display preferences
+- [SUCCESS] Framework identification (React, TypeScript, Python)
+- [SUCCESS] Testing workflow
+- [SUCCESS] Console.log cleanup
+- [SUCCESS] API key security
+- [SUCCESS] Module system (ESM vs CommonJS)
+- [SUCCESS] Code style guides (Prettier, Airbnb)
 
 ### Confidence Scoring
 
@@ -552,7 +552,7 @@ setInterval(async () => {
   const suggestions = await detector.getAllSuggestions();
   
   if (suggestions.combined.length > 0) {
-    console.log(`💡 ${suggestions.combined.length} new prescription suggestions available`);
+    console.log(`[IDEA] ${suggestions.combined.length} new prescription suggestions available`);
     // Notify user or auto-create with confirmation
   }
 }, 24 * 60 * 60 * 1000); // Daily
@@ -590,7 +590,7 @@ Begin with 3-5 critical prescriptions, not 50.
 
 ### 4. Be Specific
 ❌ "Use good code"
-✅ "Use descriptive variable names (min 3 characters, no abbreviations)"
+[SUCCESS] "Use descriptive variable names (min 3 characters, no abbreviations)"
 
 ### 5. Avoid Conflicts
 Check for contradictions:

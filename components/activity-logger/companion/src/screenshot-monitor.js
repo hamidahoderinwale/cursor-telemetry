@@ -91,7 +91,7 @@ class ScreenshotMonitor {
       console.log(`📷 Monitoring history screenshots: ${this.screenshotPaths.history}`);
     }
 
-    console.log('✅ Screenshot monitor started');
+    console.log('[SUCCESS] Screenshot monitor started');
   }
 
   /**
@@ -322,7 +322,7 @@ class ScreenshotMonitor {
     console.log('📷 Stopping screenshot monitor...');
     this.watchers.forEach(watcher => watcher.close());
     this.watchers = [];
-    console.log('✅ Screenshot monitor stopped');
+    console.log('[SUCCESS] Screenshot monitor stopped');
   }
 }
 

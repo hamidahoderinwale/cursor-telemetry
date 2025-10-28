@@ -99,7 +99,7 @@ class PromptCaptureSystem extends EventEmitter {
       // Emit capture event
       this.emit('promptCaptured', enhancedPrompt);
       
-      console.log(`📝 Prompt captured: ${promptId} via ${method}`);
+      console.log(`[NOTE] Prompt captured: ${promptId} via ${method}`);
       return enhancedPrompt;
       
     } catch (error) {

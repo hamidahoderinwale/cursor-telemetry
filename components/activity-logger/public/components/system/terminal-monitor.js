@@ -150,7 +150,7 @@ class TerminalMonitorComponent {
           </label>
         </div>
         <button class="refresh-btn" onclick="terminalMonitor.refresh()">
-          🔄 Refresh
+          [SYNC] Refresh
         </button>
       </div>
     `;
@@ -175,7 +175,7 @@ class TerminalMonitorComponent {
     return `
       <div class="terminal-monitor-container">
         <div class="section-header">
-          <h2>🖥️ Terminal Activity</h2>
+          <h2>[SYSTEM] Terminal Activity</h2>
           <p class="section-description">
             Real-time monitoring of shell commands, errors, and execution patterns
           </p>
