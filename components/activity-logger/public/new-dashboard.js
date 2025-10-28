@@ -6484,7 +6484,7 @@ async function showEventModal(eventId) {
                      onclick="closeEventModal(); setTimeout(() => showEventModal('${prompt.id}'), 100)">
                   <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: var(--space-xs);">
                     <div style="display: flex; align-items: center; gap: var(--space-xs);">
-                      <span style="background: linear-gradient(135deg, var(--color-accent), var(--color-primary)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 600; font-size: var(--text-xs);">
+                      <span style="color: var(--color-primary); font-weight: 600; font-size: var(--text-xs);">
                         #${idx + 1}
                       </span>
                       <span style="font-size: var(--text-xs); color: var(--color-text-muted);">
@@ -8295,7 +8295,7 @@ function renderContextFileAnalytics() {
                   <div style="flex: 1;">
                     <div style="font-family: var(--font-mono); font-size: var(--text-sm); color: var(--color-text); margin-bottom: 4px;">${fileName}</div>
                     <div style="background: var(--color-bg-alt); height: 6px; border-radius: 3px; overflow: hidden;">
-                      <div style="background: linear-gradient(90deg, #10b981, #3b82f6); height: 100%; width: ${percentage}%;"></div>
+                      <div style="background: var(--color-primary); height: 100%; width: ${percentage}%;"></div>
                     </div>
                   </div>
                   <div style="text-align: right; min-width: 60px;">
@@ -8455,7 +8455,7 @@ function renderUIStateAnalytics() {
                   <div style="flex: 1;">
                     <div style="font-family: var(--font-mono); font-size: var(--text-sm); color: var(--color-text); margin-bottom: 4px;">${tabName}</div>
                     <div style="background: var(--color-bg-alt); height: 6px; border-radius: 3px; overflow: hidden;">
-                      <div style="background: linear-gradient(90deg, #8b5cf6, #ec4899); height: 100%; width: ${percentage}%;"></div>
+                      <div style="background: var(--color-primary); height: 100%; width: ${percentage}%;"></div>
                     </div>
                   </div>
                   <div style="text-align: right; min-width: 60px;">
