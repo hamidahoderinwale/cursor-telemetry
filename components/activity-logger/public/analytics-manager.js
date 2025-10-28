@@ -16,8 +16,8 @@ class AnalyticsManager {
     this.config = {
       deferAnalytics: true,
       useWorkers: true,
-      initialWindowHours: 24,
-      pageSize: 200,
+      initialWindowHours: 168,  // 7 days (increased from 24 hours)
+      pageSize: 500,  // Increased from 200
       workerTimeout: 30000  // 30 seconds max per task
     };
     
@@ -57,7 +57,7 @@ class AnalyticsManager {
       this.tabVisible = !document.hidden;
       
       if (this.tabVisible && this.analyticsDeferred) {
-        console.log('👁️ Tab visible - loading deferred analytics');
+        console.log('[VIEW] Tab visible - loading deferred analytics');
         this.triggerDeferredAnalytics();
       }
     });
@@ -82,7 +82,7 @@ class AnalyticsManager {
    */
   initWorker() {
     if (!this.config.useWorkers || !window.Worker) {
-      console.warn('⚠️ Web Workers not available, using main thread');
+      console.warn('[WARNING] Web Workers not available, using main thread');
       return false;
     }
     
@@ -102,13 +102,13 @@ class AnalyticsManager {
           console.log(`[SUCCESS] Worker task ${task.type} completed in ${stats.duration.toFixed(1)}ms`);
           task.resolve(result);
         } else {
-          console.error(`❌ Worker task ${task.type} failed:`, error);
+          console.error(`[ERROR] Worker task ${task.type} failed:`, error);
           task.reject(new Error(error));
         }
       };
       
       this.worker.onerror = (error) => {
-        console.error('❌ Worker error:', error);
+        console.error('[ERROR] Worker error:', error);
         // Fallback to main thread for pending tasks
         this.pendingTasks.forEach(task => {
           task.reject(new Error('Worker crashed'));
@@ -161,7 +161,7 @@ class AnalyticsManager {
    * Fallback: run task on main thread
    */
   async runTaskMainThread(taskType, payload) {
-    console.warn(`⚠️ Running ${taskType} on main thread (worker unavailable)`);
+    console.warn(`[WARNING] Running ${taskType} on main thread (worker unavailable)`);
     
     // For now, return null and let calling code handle fallback
     // In a real implementation, we'd duplicate the worker logic here
