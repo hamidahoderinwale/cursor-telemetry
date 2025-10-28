@@ -349,7 +349,7 @@ async function fetchRecentData() {
     if (activity.data && Array.isArray(activity.data)) {
       // Filter to initial window
       const recentEvents = activity.data.filter(e => {
-        const ts = new Date(e.timestamp).getTime();
+        const ts = parseFloat(e.timestamp); // Parse string timestamp
         return ts >= startTime;
       });
       
@@ -362,8 +362,30 @@ async function fetchRecentData() {
     
     // Process prompts
     if (prompts.entries && Array.isArray(prompts.entries)) {
-      const recentPrompts = prompts.entries.filter(p => {
-        const ts = new Date(p.timestamp).getTime();
+      // Map API fields to match dashboard expectations
+      const mappedPrompts = prompts.entries.map(p => ({
+        ...p,
+        // Map snake_case to camelCase
+        contextUsage: p.context_usage || p.contextUsage || 0,
+        workspaceId: p.workspace_id || p.workspaceId,
+        workspaceName: p.workspace_name || p.workspaceName,
+        workspacePath: p.workspace_path || p.workspacePath,
+        composerId: p.composer_id || p.composerId,
+        linkedEntryId: p.linked_entry_id || p.linkedEntryId,
+        linesAdded: p.lines_added || p.linesAdded || 0,
+        linesRemoved: p.lines_removed || p.linesRemoved || 0,
+        forceMode: p.force_mode || p.forceMode,
+        isAuto: p.is_auto || p.isAuto,
+        modelType: p.model_type || p.modelType,
+        modelName: p.model_name || p.modelName,
+        addedFromDatabase: p.added_from_database || p.addedFromDatabase,
+        // Keep original text field as prompt for compatibility
+        prompt: p.text || p.prompt
+      }));
+      
+      // Filter to initial window
+      const recentPrompts = mappedPrompts.filter(p => {
+        const ts = parseFloat(p.timestamp); // Parse string timestamp
         return ts >= startTime;
       });
       
