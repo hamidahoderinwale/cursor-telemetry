@@ -7514,14 +7514,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // Setup modal tabs
-  document.querySelectorAll('.tab-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-    });
-  });
-
   // Initialize persistent storage and data synchronization
   let storage, aggregator, synchronizer;
   
