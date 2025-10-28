@@ -60,28 +60,61 @@ const state = {
 // ===================================
 
 class APIClient {
-  static async get(endpoint) {
-    try {
-      const response = await fetch(`${CONFIG.API_BASE}${endpoint}`);
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      return await response.json();
-    } catch (error) {
-      console.error(`API Error (${endpoint}):`, error);
-      throw error;
+  static async get(endpoint, options = {}) {
+    const timeout = options.timeout || 10000; // 10 second default timeout
+    const retries = options.retries || 2; // Retry up to 2 times
+    
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), timeout);
+        
+        const response = await fetch(`${CONFIG.API_BASE}${endpoint}`, {
+          signal: controller.signal,
+          ...options
+        });
+        
+        clearTimeout(timeoutId);
+        
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return await response.json();
+      } catch (error) {
+        const isLastAttempt = attempt === retries;
+        
+        if (isLastAttempt) {
+          console.error(`[ERROR] API (${endpoint}) failed after ${retries + 1} attempts:`, error.message);
+          throw error;
+        }
+        
+        // Wait before retry (exponential backoff)
+        const waitTime = Math.min(1000 * Math.pow(2, attempt), 5000);
+        console.warn(`[WARNING] API (${endpoint}) attempt ${attempt + 1} failed, retrying in ${waitTime}ms...`);
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+      }
     }
   }
 
-  static async post(endpoint, data) {
+  static async post(endpoint, data, options = {}) {
+    const timeout = options.timeout || 10000;
+    
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeout);
+      
       const response = await fetch(`${CONFIG.API_BASE}${endpoint}`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(data)
+        body: JSON.stringify(data),
+        signal: controller.signal,
+        ...options
       });
+      
+      clearTimeout(timeoutId);
+      
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       return await response.json();
     } catch (error) {
-      console.error(`API Error (${endpoint}):`, error);
+      console.error(`[ERROR] API POST (${endpoint}):`, error.message);
       throw error;
     }
   }
@@ -226,7 +259,9 @@ async function loadFromCache() {
  * Fetch only recent data (last 24 hours by default)
  */
 async function fetchRecentData() {
-  console.log('[SYNC] Fetching recent data (24h window)...');
+  const windowHours = analyticsManager.config.initialWindowHours;
+  const windowLabel = windowHours >= 24 ? `${windowHours / 24}d` : `${windowHours}h`;
+  console.log(`[SYNC] Fetching recent data (${windowLabel} window)...`);
   
   const window = analyticsManager.getInitialWindow();
   const startTime = window.start;

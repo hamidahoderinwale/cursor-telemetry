@@ -17,7 +17,7 @@ class AnalyticsManager {
       deferAnalytics: true,
       useWorkers: true,
       initialWindowHours: 168,  // 7 days (increased from 24 hours)
-      pageSize: 500,  // Increased from 200
+      pageSize: 200,  // Keep at 200 to avoid timeouts
       workerTimeout: 30000  // 30 seconds max per task
     };
     
