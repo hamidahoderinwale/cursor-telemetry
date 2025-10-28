@@ -154,6 +154,143 @@ class WebSocketManager {
 // Data Fetching & Processing
 // ===================================
 
+/**
+ * Optimized initialization with warm-start and limited initial window
+ */
+async function initializeDashboard() {
+  console.log('🚀 Initializing dashboard with warm-start...');
+  
+  try {
+    // Step 1: Load from IndexedDB cache first (instant UI)
+    await loadFromCache();
+    
+    // Step 2: Check server version to see if we need to sync
+    const serverHealth = await APIClient.get('/health');
+    const serverSequence = serverHealth.sequence || 0;
+    
+    const cacheStale = await persistentStorage.isCacheStale(serverSequence);
+    
+    if (cacheStale) {
+      console.log('📥 Cache stale, fetching updates...');
+      await fetchRecentData();
+      await persistentStorage.updateServerSequence(serverSequence);
+    } else {
+      console.log('✅ Cache up-to-date, using cached data');
+    }
+    
+    // Step 3: Render initial UI with cached/recent data
+    await renderCurrentView();
+    updateStats();
+    
+    // Step 4: Background: fetch older history if needed
+    setTimeout(() => {
+      fetchOlderHistory();
+    }, 3000);
+    
+    // Step 5: Heavy analytics will be loaded on-demand via analyticsManager
+    console.log('⏳ Heavy analytics deferred until idle/tab focus');
+    
+  } catch (error) {
+    console.error('Initialization error:', error);
+    // Fallback to old method
+    await fetchAllData();
+  }
+}
+
+/**
+ * Load data from IndexedDB cache for instant startup
+ */
+async function loadFromCache() {
+  console.log('📦 Loading from cache...');
+  
+  const cached = await persistentStorage.getAll();
+  
+  if (cached.events && cached.events.length > 0) {
+    state.data.events = cached.events;
+    console.log(`✅ Loaded ${cached.events.length} events from cache`);
+  }
+  
+  if (cached.prompts && cached.prompts.length > 0) {
+    state.data.prompts = cached.prompts;
+    console.log(`✅ Loaded ${cached.prompts.length} prompts from cache`);
+  }
+  
+  // Render with cached data immediately
+  if (state.data.events.length > 0 || state.data.prompts.length > 0) {
+    await renderCurrentView();
+    updateStats();
+  }
+}
+
+/**
+ * Fetch only recent data (last 24 hours by default)
+ */
+async function fetchRecentData() {
+  console.log('🔄 Fetching recent data (24h window)...');
+  
+  const window = analyticsManager.getInitialWindow();
+  const startTime = window.start;
+  
+  try {
+    // Fetch recent events only
+    const [activity, prompts, workspaces] = await Promise.all([
+      APIClient.get(`/api/activity?limit=${analyticsManager.config.pageSize}`),
+      APIClient.get(`/entries?limit=${analyticsManager.config.pageSize}`),
+      APIClient.get('/api/workspaces')
+    ]);
+    
+    // Process activity
+    if (activity.data && Array.isArray(activity.data)) {
+      // Filter to initial window
+      const recentEvents = activity.data.filter(e => {
+        const ts = new Date(e.timestamp).getTime();
+        return ts >= startTime;
+      });
+      
+      state.data.events = recentEvents;
+      console.log(`📊 Loaded ${recentEvents.length} recent events`);
+      
+      // Store in cache
+      await persistentStorage.storeEvents(recentEvents);
+    }
+    
+    // Process prompts
+    if (prompts.entries && Array.isArray(prompts.entries)) {
+      const recentPrompts = prompts.entries.filter(p => {
+        const ts = new Date(p.timestamp).getTime();
+        return ts >= startTime;
+      });
+      
+      state.data.prompts = recentPrompts;
+      console.log(`📊 Loaded ${recentPrompts.length} recent prompts`);
+      
+      // Store in cache
+      await persistentStorage.storePrompts(recentPrompts);
+    }
+    
+    // Process workspaces
+    if (workspaces && workspaces.length > 0) {
+      state.data.workspaces = workspaces;
+    }
+    
+  } catch (error) {
+    console.error('Error fetching recent data:', error);
+  }
+}
+
+/**
+ * Fetch older history in background (pagination)
+ */
+async function fetchOlderHistory() {
+  console.log('📚 Background: fetching older history...');
+  
+  // This runs in background, no need to block UI
+  // Implement pagination if needed
+  
+  // For now, skip to avoid memory issues
+  // Can be implemented later with proper pagination UI
+}
+
 async function fetchAllData() {
   console.log('Fetching data from companion service...');
   try {
@@ -7276,35 +7413,21 @@ document.addEventListener('DOMContentLoaded', () => {
   // const wsManager = new WebSocketManager();
   // wsManager.connect();
 
-  // Load data with persistence if available
+  // Use optimized initialization with warm-start
   if (storage && synchronizer) {
     // Initialize persistent storage
     synchronizer.initialize().then(async (stats) => {
-      console.log('📊 Loaded from IndexedDB:', stats);
+      console.log('📊 Persistent storage ready:', stats);
       
-      // Load cached data from storage immediately for fast initial render
-      const cachedData = await storage.getAll();
-      if (cachedData.events) state.data.events = cachedData.events;
-      if (cachedData.prompts) state.data.prompts = cachedData.prompts;
-      
-      // Render immediately with cached data
+      // Use new optimized initialization
       state.connected = true;
       updateConnectionStatus(true);
-      calculateStats();
-      renderCurrentView();
-      console.log('Dashboard loaded with persistent data');
+      await initializeDashboard();
       
-      // Now fetch fresh data from the companion service and update storage
-      await fetchAllData();
+      // Initialize search engine
+      initializeSearch();
       
-      // Save the fresh data to IndexedDB
-      await storage.storeEvents(state.data.events);
-      await storage.storePrompts(state.data.prompts);
-      
-      // Recalculate stats and re-render with fresh data
-      calculateStats();
-      renderCurrentView();
-      console.log('🔄 Updated with fresh data from companion service');
+      console.log('✅ Dashboard initialized with warm-start');
     }).catch(error => {
       console.error('Persistence initialization failed:', error);
       // Fall back to non-persistent mode
@@ -7319,7 +7442,6 @@ document.addEventListener('DOMContentLoaded', () => {
     setInterval(async () => {
       // Skip if refresh is already in progress or too soon
       if (refreshInProgress || (Date.now() - lastRefreshTime) < MIN_REFRESH_INTERVAL) {
-        console.log('Skipping refresh (debounced)');
         return;
       }
       
@@ -7328,14 +7450,11 @@ document.addEventListener('DOMContentLoaded', () => {
       
       try {
         if (storage && synchronizer) {
-          await fetchAllData();
-          await storage.storeEvents(state.data.events);
-          await storage.storePrompts(state.data.prompts);
+          // Use optimized fetch for refresh
+          await fetchRecentData();
           calculateStats();
           renderCurrentView();
-          // Re-initialize search index when data updates
           initializeSearch();
-          console.log('Data refreshed and cached');
         }
       } catch (error) {
         console.error('Refresh error:', error);
@@ -7350,15 +7469,19 @@ document.addEventListener('DOMContentLoaded', () => {
   
   // Non-persistent initialization function
   function initializeNonPersistent() {
-    fetchAllData().then(() => {
+    initializeDashboard().then(() => {
       state.connected = true;
       updateConnectionStatus(true);
-      renderCurrentView();
       // Initialize search engine
       initializeSearch();
     }).catch(error => {
       console.error('Initial data fetch failed:', error);
       updateConnectionStatus(false);
+      // Fallback to old method
+      fetchAllData().then(() => {
+        renderCurrentView();
+        initializeSearch();
+      });
     });
     
     // Setup auto-refresh with debouncing
@@ -7368,7 +7491,6 @@ document.addEventListener('DOMContentLoaded', () => {
     
     setInterval(async () => {
       if (refreshInProgress || (Date.now() - lastRefreshTime) < MIN_REFRESH_INTERVAL) {
-        console.log('Skipping refresh (debounced)');
         return;
       }
       
@@ -7376,7 +7498,9 @@ document.addEventListener('DOMContentLoaded', () => {
       lastRefreshTime = Date.now();
       
       try {
-        await fetchAllData();
+        await fetchRecentData();
+        calculateStats();
+        renderCurrentView();
       } catch (error) {
         console.error('Refresh error:', error);
       } finally {

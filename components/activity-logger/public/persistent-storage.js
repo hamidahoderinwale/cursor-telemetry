@@ -6,7 +6,7 @@
 class PersistentStorage {
   constructor() {
     this.dbName = 'CursorTelemetryDB';
-    this.version = 1;
+    this.version = 2;  // Incremented for new metadata store
     this.db = null;
     this.stores = {
       events: 'events',
@@ -15,9 +15,11 @@ class PersistentStorage {
       timeSeries: 'timeSeries',
       fileChanges: 'fileChanges',
       sessions: 'sessions',
-      cursorDatabase: 'cursorDatabase'
+      cursorDatabase: 'cursorDatabase',
+      metadata: 'metadata'  // New: for versioning and cache control
     };
     this.maxTimeSeriesPoints = 1000; // Limit time series to 1000 points max
+    this.cacheKey = 'snapshot_version';
   }
 
   /**
@@ -171,6 +173,14 @@ class PersistentStorage {
           cursorDbStore.createIndex('type', 'type', { unique: false });
           cursorDbStore.createIndex('workspaceId', 'workspaceId', { unique: false });
           cursorDbStore.createIndex('lastUpdated', 'lastUpdated', { unique: false });
+        }
+
+        // Metadata store - for versioning and cache control
+        if (!db.objectStoreNames.contains(this.stores.metadata)) {
+          const metadataStore = db.createObjectStore(this.stores.metadata, { 
+            keyPath: 'key'
+          });
+          metadataStore.createIndex('lastUpdated', 'lastUpdated', { unique: false });
         }
 
         console.log('📊 Database schema created');
@@ -605,6 +615,99 @@ class PersistentStorage {
         resolve();
       };
     });
+  }
+
+  /**
+   * Store snapshot metadata (for warm-start)
+   */
+  async storeMetadata(key, value) {
+    if (!this.db) await this.init();
+    
+    const transaction = this.db.transaction([this.stores.metadata], 'readwrite');
+    const store = transaction.objectStore(this.stores.metadata);
+    
+    await store.put({
+      key,
+      value,
+      lastUpdated: Date.now()
+    });
+  }
+
+  /**
+   * Get snapshot metadata
+   */
+  async getMetadata(key) {
+    if (!this.db) await this.init();
+    
+    return new Promise((resolve, reject) => {
+      const transaction = this.db.transaction([this.stores.metadata], 'readonly');
+      const store = transaction.objectStore(this.stores.metadata);
+      const request = store.get(key);
+      
+      request.onsuccess = () => resolve(request.result ? request.result.value : null);
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  /**
+   * Get events since a specific timestamp (for diff fetching)
+   */
+  async getEventsSince(timestamp) {
+    if (!this.db) await this.init();
+    
+    return new Promise((resolve, reject) => {
+      const transaction = this.db.transaction([this.stores.events], 'readonly');
+      const store = transaction.objectStore(this.stores.events);
+      const index = store.index('timestamp');
+      
+      const range = IDBKeyRange.lowerBound(timestamp, false);
+      const request = index.getAll(range);
+      
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  /**
+   * Get prompts since a specific timestamp
+   */
+  async getPromptsSince(timestamp) {
+    if (!this.db) await this.init();
+    
+    return new Promise((resolve, reject) => {
+      const transaction = this.db.transaction([this.stores.prompts], 'readonly');
+      const store = transaction.objectStore(this.stores.prompts);
+      const index = store.index('timestamp');
+      
+      const range = IDBKeyRange.lowerBound(timestamp, false);
+      const request = index.getAll(range);
+      
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  /**
+   * Check if cache is stale (compares with server version)
+   */
+  async isCacheStale(serverSequence) {
+    const cachedSequence = await this.getMetadata('server_sequence');
+    return cachedSequence !== serverSequence;
+  }
+
+  /**
+   * Update server sequence tracking
+   */
+  async updateServerSequence(sequence) {
+    await this.storeMetadata('server_sequence', sequence);
+    await this.storeMetadata('last_sync', Date.now());
+  }
+
+  /**
+   * Get last sync time
+   */
+  async getLastSyncTime() {
+    return await this.getMetadata('last_sync');
   }
 }
 
