@@ -5310,16 +5310,28 @@ function renderAPIDocsView(container) {
   "data": {
     "metadata": {
       "exportedAt": "2025-10-24T04:00:00.000Z",
-      "version": "1.0",
+      "version": "2.0",
       "totalEntries": 811,
       "totalPrompts": 337,
-      "totalEvents": 806
+      "totalEvents": 806,
+      "totalTerminalCommands": 245,
+      "totalContextSnapshots": 189
     },
-    "entries": [...],
-    "prompts": [...],
-    "events": [...],
+    "entries": [...],          // File changes with full details
+    "prompts": [...],          // AI prompts with all metadata
+    "events": [...],           // Activity events
+    "terminal_commands": [...], // Command history (NEW)
+    "context_snapshots": [...], // Context usage over time (NEW)
+    "context_analytics": {...}, // Aggregated context stats (NEW)
     "workspaces": [...],
-    "stats": {...}
+    "stats": {
+      "sessions": 39,
+      "fileChanges": 811,
+      "aiInteractions": 337,
+      "totalActivities": 806,
+      "terminalCommands": 245,
+      "avgContextUsage": 58.9
+    }
   }
 }</code></pre>
               </details>
@@ -7446,7 +7458,7 @@ async function exportDatabase() {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
     
-    console.log(`Exported ${result.data.metadata.totalEntries} entries, ${result.data.metadata.totalPrompts} prompts, ${result.data.metadata.totalEvents} events`);
+    console.log(`[SUCCESS] Exported ${result.data.metadata.totalEntries} entries, ${result.data.metadata.totalPrompts} prompts, ${result.data.metadata.totalEvents} events, ${result.data.metadata.totalTerminalCommands || 0} terminal commands, ${result.data.metadata.totalContextSnapshots || 0} context snapshots`);
     
     // Show success feedback
     exportBtn.innerHTML = '<span>Exported!</span>';

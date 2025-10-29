@@ -1817,35 +1817,45 @@ app.get('/api/export/database', async (req, res) => {
   try {
     console.log('📤 Export request received');
     
-    // Gather all data from database
-    const [entries, prompts, events] = await Promise.all([
+    // Gather all data from database including new tables
+    const [entries, prompts, events, terminalCommands, contextSnapshots, contextAnalytics] = await Promise.all([
       persistentDB.getAllEntries(),
       persistentDB.getAllPrompts(),
-      persistentDB.getAllEvents()
+      persistentDB.getAllEvents(),
+      persistentDB.getAllTerminalCommands(10000),  // Get up to 10k commands
+      persistentDB.getContextSnapshots({ since: 0, limit: 10000 }),  // All snapshots
+      persistentDB.getContextAnalytics()  // Context usage analytics
     ]);
     
     // Get in-memory data
     const exportData = {
       metadata: {
         exportedAt: new Date().toISOString(),
-        version: '1.0',
+        version: '2.0',  // Bumped version for new fields
         totalEntries: entries.length,
         totalPrompts: prompts.length,
-        totalEvents: events.length
+        totalEvents: events.length,
+        totalTerminalCommands: terminalCommands.length,
+        totalContextSnapshots: contextSnapshots.length
       },
       entries: entries,
       prompts: prompts,
       events: events,
+      terminal_commands: terminalCommands,  // NEW: Full command history
+      context_snapshots: contextSnapshots,  // NEW: Context usage over time
+      context_analytics: contextAnalytics,  // NEW: Aggregated context stats
       workspaces: db.workspaces || [],
       stats: {
         sessions: db.entries.length,
         fileChanges: entries.length,
         aiInteractions: prompts.length,
-        totalActivities: events.length
+        totalActivities: events.length,
+        terminalCommands: terminalCommands.length,
+        avgContextUsage: contextAnalytics.avgContextUtilization || 0
       }
     };
     
-    console.log(`[SUCCESS] Exported ${entries.length} entries, ${prompts.length} prompts, ${events.length} events`);
+    console.log(`[SUCCESS] Exported ${entries.length} entries, ${prompts.length} prompts, ${events.length} events, ${terminalCommands.length} terminal commands, ${contextSnapshots.length} context snapshots`);
     
     res.json({
       success: true,
