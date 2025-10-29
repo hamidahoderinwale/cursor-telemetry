@@ -2321,31 +2321,40 @@ app.post('/api/todos', async (req, res) => {
   }
 });
 
-// Database export
+// Database export with pagination
 app.get('/api/export/database', async (req, res) => {
   try {
     console.log('📤 Export request received');
     
-    // Gather all data from database including new tables
+    // Support limiting export size for large datasets
+    const limit = parseInt(req.query.limit) || 1000;  // Default: last 1000 items
+    const includeAllFields = req.query.full === 'true';  // Include all fields or just key ones
+    
+    console.log(`[EXPORT] Limit: ${limit}, Full fields: ${includeAllFields}`);
+    
+    // Gather data from database with limits
     const [entries, prompts, events, terminalCommands, contextSnapshots, contextAnalytics] = await Promise.all([
-      persistentDB.getAllEntries(),
-      persistentDB.getAllPrompts(),
-      persistentDB.getAllEvents(),
-      persistentDB.getAllTerminalCommands(10000),  // Get up to 10k commands
-      persistentDB.getContextSnapshots({ since: 0, limit: 10000 }),  // All snapshots
-      persistentDB.getContextAnalytics()  // Context usage analytics
+      persistentDB.getRecentEntries(Math.min(limit, 1000)),  // Cap at 1000
+      persistentDB.getRecentPrompts(Math.min(limit, 1000)),  // Cap at 1000
+      persistentDB.getAllEvents(),  // Usually smaller
+      persistentDB.getAllTerminalCommands(Math.min(limit, 1000)),  // Cap at 1000
+      persistentDB.getContextSnapshots({ since: 0, limit: Math.min(limit, 1000) }),
+      persistentDB.getContextAnalytics()
     ]);
     
     // Get in-memory data
     const exportData = {
       metadata: {
         exportedAt: new Date().toISOString(),
-        version: '2.0',  // Bumped version for new fields
+        version: '2.1',  // Bumped for threading + export pagination
+        exportLimit: limit,
+        fullExport: includeAllFields,
         totalEntries: entries.length,
         totalPrompts: prompts.length,
         totalEvents: events.length,
         totalTerminalCommands: terminalCommands.length,
-        totalContextSnapshots: contextSnapshots.length
+        totalContextSnapshots: contextSnapshots.length,
+        note: limit < 10000 ? 'Limited export - use ?limit=10000 for more data' : 'Full export'
       },
       entries: entries,
       prompts: prompts,
