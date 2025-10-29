@@ -1231,21 +1231,19 @@ app.get('/ide-state/cursor', (req, res) => {
 });
 
 // Get entries with linked prompts
-// API endpoint for activity data (used by dashboard) with pagination
+// API endpoint for activity data (used by dashboard) with pagination - OPTIMIZED
 app.get('/api/activity', async (req, res) => {
   try {
-    const limit = Math.min(parseInt(req.query.limit) || 100, 1000); // Max 1000 at a time
+    const limit = Math.min(parseInt(req.query.limit) || 100, 500); // Max 500 at a time
     const offset = parseInt(req.query.offset) || 0;
-    const allEntries = db.entries;
-    const allPrompts = db.prompts;
     
-    // Sort by timestamp descending (most recent first)
-    const sortedEntries = [...allEntries].sort((a, b) => 
-      new Date(b.timestamp) - new Date(a.timestamp)
-    );
+    // ✅ Query database directly with LIMIT - don't load into memory
+    const allEntries = await persistentDB.getRecentEntries(limit + offset);
+    const allPrompts = await persistentDB.getRecentPrompts(limit);
     
-    // Apply pagination
-    const paginatedEntries = sortedEntries.slice(offset, offset + limit);
+    // ✅ Already sorted by database query (ORDER BY timestamp DESC)
+    // Apply offset/limit
+    const paginatedEntries = allEntries.slice(offset, Math.min(offset + limit, allEntries.length));
     
     // Convert entries to events format for dashboard compatibility
     const events = paginatedEntries.map(entry => {
@@ -1281,7 +1279,13 @@ app.get('/api/activity', async (req, res) => {
           ...diffStats
         }),
         title: entry.title || `File Change: ${entry.file_path ? entry.file_path.split('/').pop() : 'Unknown'}`,
-        description: entry.description || entry.notes || 'File change detected'
+        description: entry.description || entry.notes || 'File change detected',
+        // ✅ Include metadata fields for modal display
+        modelInfo: entry.modelInfo,  // Model information (parsed from JSON)
+        tags: entry.tags || [],  // Tags array
+        prompt_id: entry.prompt_id,  // Linked prompt ID
+        notes: entry.notes,  // User notes
+        source: entry.source  // Source of the entry
       };
     });
     
@@ -1321,8 +1325,9 @@ app.get('/api/debug', (req, res) => {
 
 app.get('/entries', async (req, res) => {
   try {
-    const allEntries = db.entries;
-    const allPrompts = db.prompts;
+    // ✅ Use pagination - don't load everything
+    const limit = Math.min(parseInt(req.query.limit) || 200, 500);
+    const allPrompts = await persistentDB.getRecentPrompts(limit);
     
     // Also get prompts from Cursor database
     try {
@@ -1871,10 +1876,26 @@ app.get('/api/export/database', async (req, res) => {
   }
 });
 
-// API endpoint for file contents (for TF-IDF analysis)
+// Cache for file contents (refresh every 5 minutes)
+let fileContentsCache = null;
+let fileContentsCacheTime = 0;
+const FILE_CONTENTS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+// API endpoint for file contents (for TF-IDF analysis) - OPTIMIZED
 app.get('/api/file-contents', async (req, res) => {
   try {
-    const entries = await persistentDB.getAllEntries();
+    // Check cache first
+    const now = Date.now();
+    if (fileContentsCache && (now - fileContentsCacheTime) < FILE_CONTENTS_CACHE_TTL) {
+      console.log('[CACHE] Serving file contents from cache');
+      return res.json(fileContentsCache);
+    }
+    
+    // Limit to recent entries only (last 500 for performance)
+    const limit = parseInt(req.query.limit) || 500;
+    const entries = await persistentDB.getRecentEntries(limit);
+    
+    console.log(`[FILE] Processing ${entries.length} entries for file contents...`);
     
     // Helper to check if a string is a Git object hash (40-char hex)
     const isGitObjectHash = (str) => /^[0-9a-f]{40}$/i.test(str);
@@ -1958,11 +1979,19 @@ app.get('/api/file-contents', async (req, res) => {
     const result = Array.from(fileContents.values());
     console.log(`[FILE] Serving ${result.length} files with content for TF-IDF analysis (filtered Git objects)`);
     
-    res.json({
+    const response = {
       files: result,
       totalFiles: result.length,
-      totalSize: result.reduce((sum, f) => sum + f.size, 0)
-    });
+      totalSize: result.reduce((sum, f) => sum + f.size, 0),
+      cached: false,
+      processedEntries: entries.length
+    };
+    
+    // Cache the result
+    fileContentsCache = response;
+    fileContentsCacheTime = now;
+    
+    res.json(response);
   } catch (error) {
     console.error('Error fetching file contents:', error);
     res.status(500).json({ error: 'Failed to fetch file contents' });
@@ -1982,11 +2011,12 @@ app.post('/api/chat/query', async (req, res) => {
     
     console.log('[CHAT] Chat query:', query);
     
-    // Gather telemetry data
-    const allEntries = await persistentDB.getAllEntries();
+    // ✅ Gather telemetry data - LIMITED for performance
+    const recentEntries = await persistentDB.getRecentEntries(500);  // Last 500 only
+    const recentPrompts = await persistentDB.getRecentPrompts(200);  // Last 200 only
     const telemetryData = {
-      events: allEntries,
-      prompts: db.prompts || [],
+      events: recentEntries,
+      prompts: recentPrompts,
       sessions: [], // Session data structure to be implemented
       files: db.entries || []
     };
@@ -2773,33 +2803,25 @@ function extractModelInfo(data) {
   return modelInfo;
 }
 
-// Load data from persistent database on startup
+// Load data from persistent database on startup - LAZY LOADING
 async function loadPersistedData() {
   try {
-    console.log('[SAVE] Loading persisted data from SQLite...');
+    console.log('[SAVE] Initializing database (lazy loading mode)...');
     await persistentDB.init();
     
-    const [entries, prompts] = await Promise.all([
-      persistentDB.getAllEntries(),
-      persistentDB.getAllPrompts()
-    ]);
-    
-    // Restore to in-memory database
-    db._entries = entries;
-    db._prompts = prompts;
-    
-    // Update nextId to be higher than any existing ID
-    if (entries.length > 0) {
-      const maxId = Math.max(...entries.map(e => e.id));
-      db.nextId = maxId + 1;
-    }
-    if (prompts.length > 0) {
-      const maxId = Math.max(...prompts.map(p => p.id));
-      db.nextId = Math.max(db.nextId, maxId + 1);
-    }
-    
+    // ✅ DON'T load all data - just get stats and setup
     const stats = await persistentDB.getStats();
-    console.log(`[SUCCESS] Loaded ${stats.entries} entries and ${stats.prompts} prompts from database`);
+    
+    // Set nextId from database max ID (without loading all records)
+    const maxIds = await persistentDB.getMaxIds();
+    db.nextId = Math.max(maxIds.entryId || 0, maxIds.promptId || 0) + 1;
+    
+    // ✅ Keep in-memory arrays empty - query database on demand
+    db._entries = [];  // Don't load - use database queries
+    db._prompts = [];  // Don't load - use database queries
+    
+    console.log(`[SUCCESS] Database ready with ${stats.entries} entries and ${stats.prompts} prompts (lazy loading)`);
+    console.log(`[MEMORY] In-memory cache disabled - using on-demand queries`);
   } catch (error) {
     console.error('⚠️  Error loading persisted data:', error.message);
     console.log('   Starting with empty database');
@@ -2807,7 +2829,7 @@ async function loadPersistedData() {
 }
 
 // Start the server
-const HOST = process.env.HOST || 'localhost';
+const HOST = process.env.HOST || '127.0.0.1';
 
 loadPersistedData().then(() => {
   app.listen(PORT, HOST, () => {

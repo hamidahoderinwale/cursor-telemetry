@@ -1,0 +1,8 @@
+# Netlify Redirects for Cursor Telemetry Dashboard
+
+# Serve new-dashboard.html as the main page
+/  /new-dashboard.html  200
+
+# SPA routing - catch all other routes
+/*  /new-dashboard.html  200
+

@@ -501,6 +501,70 @@ class PersistentDB {
   }
 
   /**
+   * Load recent entries from the database (with limit for performance)
+   */
+  async getRecentEntries(limit = 500) {
+    await this.init();
+    
+    return new Promise((resolve, reject) => {
+      this.db.all(`SELECT * FROM entries ORDER BY timestamp DESC LIMIT ?`, [limit], (err, rows) => {
+        if (err) {
+          console.error('Error loading recent entries:', err);
+          reject(err);
+        } else {
+          // Parse JSON fields
+          const entries = rows.map(row => ({
+            ...row,
+            tags: row.tags ? JSON.parse(row.tags) : [],
+            modelInfo: row.modelInfo ? JSON.parse(row.modelInfo) : null
+          }));
+          resolve(entries);
+        }
+      });
+    });
+  }
+
+  /**
+   * Load recent prompts from the database (with limit for performance)
+   */
+  async getRecentPrompts(limit = 200) {
+    await this.init();
+    
+    return new Promise((resolve, reject) => {
+      this.db.all(`SELECT * FROM prompts ORDER BY timestamp DESC LIMIT ?`, [limit], (err, rows) => {
+        if (err) {
+          console.error('Error loading recent prompts:', err);
+          reject(err);
+        } else {
+          resolve(rows);
+        }
+      });
+    });
+  }
+
+  /**
+   * Get maximum IDs from tables (for setting nextId without loading all data)
+   */
+  async getMaxIds() {
+    await this.init();
+    
+    return new Promise((resolve, reject) => {
+      this.db.get(`
+        SELECT 
+          (SELECT COALESCE(MAX(id), 0) FROM entries) as entryId,
+          (SELECT COALESCE(MAX(id), 0) FROM prompts) as promptId
+      `, (err, row) => {
+        if (err) {
+          console.error('Error getting max IDs:', err);
+          reject(err);
+        } else {
+          resolve(row || { entryId: 0, promptId: 0 });
+        }
+      });
+    });
+  }
+
+  /**
    * Load all prompts from the database
    */
   async getAllPrompts() {

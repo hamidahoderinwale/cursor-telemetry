@@ -1,0 +1,40 @@
+{
+  "version": 2,
+  "name": "cursor-telemetry-dashboard",
+  "builds": [
+    {
+      "src": "components/activity-logger/public/**",
+      "use": "@vercel/static"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "http://localhost:43917/api/$1"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/components/activity-logger/public/$1"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "Access-Control-Allow-Origin",
+          "value": "*"
+        },
+        {
+          "key": "Access-Control-Allow-Methods",
+          "value": "GET, POST, PUT, DELETE, OPTIONS"
+        },
+        {
+          "key": "Access-Control-Allow-Headers",
+          "value": "Content-Type"
+        }
+      ]
+    }
+  ]
+}
+

@@ -7,9 +7,11 @@
 // Configuration & Constants
 // ===================================
 
-const CONFIG = {
-  API_BASE: 'http://localhost:43917',
-  WS_URL: 'ws://localhost:43917',
+// Use external config (from config.js) if available, otherwise use defaults
+const EXTERNAL_CONFIG = window.CONFIG || {};
+const DASHBOARD_CONFIG = {
+  API_BASE: EXTERNAL_CONFIG.API_BASE_URL || 'http://localhost:43917',
+  WS_URL: EXTERNAL_CONFIG.WS_URL || 'ws://localhost:43917',
   REFRESH_INTERVAL: 5000,
   ENABLE_TF_IDF: false, // Disable TF-IDF by default to save memory
   ENABLE_SEMANTIC_SEARCH: false, // Disable semantic analysis by default
@@ -23,6 +25,9 @@ const CONFIG = {
     error: '#EF4444',
   }
 };
+
+// Use DASHBOARD_CONFIG as CONFIG for compatibility
+const CONFIG = DASHBOARD_CONFIG;
 
 // ===================================
 // State Management
@@ -61,8 +66,8 @@ const state = {
 
 class APIClient {
   static async get(endpoint, options = {}) {
-    const timeout = options.timeout || 10000; // 10 second default timeout
-    const retries = options.retries || 2; // Retry up to 2 times
+    const timeout = options.timeout || 20000; // 20 second default timeout (increased from 10s)
+    const retries = options.retries || 1; // Retry up to 1 time (reduced to avoid long waits)
     
     for (let attempt = 0; attempt <= retries; attempt++) {
       try {
@@ -6737,6 +6742,23 @@ function showPromptInModal(prompt, modal, title, body) {
             <span style="color: var(--color-text-muted);">Source:</span>
             <span style="color: var(--color-text);">${prompt.source || 'cursor-database'}</span>
           </div>
+          ${prompt.modelName || prompt.modelType ? `
+            <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
+              <span style="color: var(--color-text-muted);">Model:</span>
+              <span style="color: var(--color-text);">
+                <span class="badge" style="background: var(--color-accent); color: white;">
+                  ${prompt.modelName || prompt.modelType}
+                </span>
+                ${prompt.isAuto ? '<span class="badge" style="margin-left: 4px; background: var(--color-info); color: white;">Auto</span>' : ''}
+              </span>
+            </div>
+          ` : ''}
+          ${prompt.forceMode ? `
+            <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
+              <span style="color: var(--color-text-muted);">Mode:</span>
+              <span style="color: var(--color-text);"><span class="badge">${prompt.forceMode}</span></span>
+            </div>
+          ` : ''}
           ${prompt.workspaceId ? `
             <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
               <span style="color: var(--color-text-muted);">Workspace:</span>
@@ -7065,6 +7087,46 @@ function showEventModal(id) {
               <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
                 <span style="color: var(--color-text-muted);">Session:</span>
                 <span style="color: var(--color-text); font-family: var(--font-mono); font-size: var(--text-xs);">${event.session_id.substring(0, 16)}...</span>
+              </div>
+            ` : ''}
+            ${event.source ? `
+              <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
+                <span style="color: var(--color-text-muted);">Source:</span>
+                <span style="color: var(--color-text);"><span class="badge">${event.source}</span></span>
+              </div>
+            ` : ''}
+            ${event.modelInfo ? `
+              <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
+                <span style="color: var(--color-text-muted);">AI Model:</span>
+                <span style="color: var(--color-text);">
+                  <span class="badge" style="background: var(--color-accent); color: white;">
+                    ${event.modelInfo.model || 'Unknown'} 
+                    ${event.modelInfo.mode ? `(${event.modelInfo.mode})` : ''}
+                  </span>
+                  ${event.modelInfo.isAuto ? '<span class="badge" style="margin-left: 4px;">Auto</span>' : ''}
+                </span>
+              </div>
+            ` : ''}
+            ${event.tags && event.tags.length > 0 ? `
+              <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
+                <span style="color: var(--color-text-muted);">Tags:</span>
+                <div style="display: flex; gap: var(--space-xs); flex-wrap: wrap;">
+                  ${event.tags.map(tag => `<span class="badge badge-small">${tag}</span>`).join('')}
+                </div>
+              </div>
+            ` : ''}
+            ${event.prompt_id ? `
+              <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
+                <span style="color: var(--color-text-muted);">Linked Prompt:</span>
+                <span style="color: var(--color-accent); cursor: pointer; text-decoration: underline;" onclick="showEventModal('${event.prompt_id}')">
+                  View Prompt #${event.prompt_id}
+                </span>
+              </div>
+            ` : ''}
+            ${event.notes && event.notes !== 'File change detected' ? `
+              <div style="padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
+                <span style="color: var(--color-text-muted); display: block; margin-bottom: var(--space-xs);">Notes:</span>
+                <span style="color: var(--color-text); font-size: var(--text-sm);">${escapeHtml(event.notes)}</span>
               </div>
             ` : ''}
           </div>

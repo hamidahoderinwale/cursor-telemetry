@@ -77,7 +77,8 @@ class FileGraphVisualizer {
   async loadData() {
     try {
       // Try loading from backend API first (much faster)
-      const response = await fetch('/api/analytics/context/file-relationships?minCount=1');
+      const apiBase = window.CONFIG?.API_BASE_URL || 'http://localhost:43917';
+      const response = await fetch(`${apiBase}/api/analytics/context/file-relationships?minCount=1`);
       if (response.ok) {
         const result = await response.json();
         if (result.success && result.data) {

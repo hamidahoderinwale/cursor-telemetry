@@ -17,12 +17,13 @@ class TerminalMonitorComponent {
   async loadData() {
     try {
       // Load terminal history
-      const historyResponse = await fetch(`/api/terminal/history?limit=100`);
+      const apiBase = window.CONFIG?.API_BASE_URL || 'http://localhost:43917';
+      const historyResponse = await fetch(`${apiBase}/api/terminal/history?limit=100`);
       const historyData = await historyResponse.json();
       this.commands = historyData.data || [];
 
       // Load statistics
-      const statsResponse = await fetch(`/api/terminal/stats`);
+      const statsResponse = await fetch(`${apiBase}/api/terminal/stats`);
       const statsData = await statsResponse.json();
       this.stats = statsData.data || {};
 
