@@ -9078,12 +9078,15 @@ async function renderTodoView(container) {
 
   } catch (error) {
     console.error('Error loading todos:', error);
-    document.getElementById('todoListContainer').innerHTML = `
-      <div style="display: flex; flex-direction: column; align-items: center; padding: var(--space-xl); text-align: center;">
-        <div style="font-size: var(--text-lg); color: var(--color-error); margin-bottom: var(--space-xs); font-weight: 500;">Failed to Load TODOs</div>
-        <div style="font-size: var(--text-sm); color: var(--color-text-muted);">${error.message}</div>
-      </div>
-    `;
+    const errorContainer = document.getElementById('todoListContainer');
+    if (errorContainer) {
+      errorContainer.innerHTML = `
+        <div style="display: flex; flex-direction: column; align-items: center; padding: var(--space-xl); text-align: center;">
+          <div style="font-size: var(--text-lg); color: var(--color-error); margin-bottom: var(--space-xs); font-weight: 500;">Failed to Load TODOs</div>
+          <div style="font-size: var(--text-sm); color: var(--color-text-muted);">${error.message}</div>
+        </div>
+      `;
+    }
   }
 }
 
