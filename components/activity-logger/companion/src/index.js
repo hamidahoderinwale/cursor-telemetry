@@ -2397,6 +2397,16 @@ async function processFileChange(filePath) {
   updateActivityTime();
   
   try {
+    // Check file size before reading (skip files > 5MB to prevent memory issues)
+    const stats = fs.statSync(filePath);
+    const maxFileSizeMB = 5;
+    const maxFileSizeBytes = maxFileSizeMB * 1024 * 1024;
+    
+    if (stats.size > maxFileSizeBytes) {
+      console.log(`[WARNING] Skipping large file (${(stats.size / 1024 / 1024).toFixed(2)}MB): ${filePath}`);
+      return;
+    }
+    
     const content = fs.readFileSync(filePath, 'utf8');
     // Use the detected workspace as the base for relative path
     const relativePath = path.relative(workspacePath, filePath);
