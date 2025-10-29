@@ -9160,39 +9160,19 @@ function renderTodoItem(todo) {
       ` : '<div style="margin-bottom: var(--space-md); padding: var(--space-md); background: var(--color-bg-secondary); border-radius: var(--radius-sm); font-size: var(--text-sm); color: var(--color-text-muted); text-align: center;">No activity yet</div>'}
 
       <!-- Actions -->
-      <div style="display: flex; gap: var(--space-sm); flex-wrap: wrap;">
-        ${eventCount > 0 ? `
-          <button 
-            onclick="expandTodoDetails(${todo.id})"
-            style="padding: var(--space-xs) var(--space-md); font-size: var(--text-sm); background: var(--color-bg-hover); border: 1px solid var(--color-border); border-radius: var(--radius-sm); color: var(--color-text); cursor: pointer; transition: all 0.2s;"
-            onmouseover="this.style.background='var(--color-border)'"
-            onmouseout="this.style.background='var(--color-bg-hover)'"
-          >
-            <span id="expand-btn-text-${todo.id}">Show Timeline (${eventCount} events)</span>
-          </button>
-        ` : ''}
+      <div style="display: flex; gap: var(--space-sm); flex-wrap: wrap; align-items: center;">
+        <button 
+          onclick="expandTodoDetails(${todo.id})"
+          style="padding: var(--space-xs) var(--space-md); font-size: var(--text-sm); background: var(--color-bg-hover); border: 1px solid var(--color-border); border-radius: var(--radius-sm); color: var(--color-text); cursor: pointer; transition: all 0.2s;"
+          onmouseover="this.style.background='var(--color-border)'"
+          onmouseout="this.style.background='var(--color-bg-hover)'"
+        >
+          <span id="expand-btn-text-${todo.id}">${eventCount > 0 ? `Show Timeline (${eventCount} events)` : 'Show Timeline'}</span>
+        </button>
         
-        ${isPending ? `
-          <button 
-            onclick="markTodoInProgress(${todo.id})"
-            style="padding: var(--space-xs) var(--space-md); font-size: var(--text-sm); background: var(--color-primary); border: none; border-radius: var(--radius-sm); color: white; cursor: pointer; transition: all 0.2s;"
-            onmouseover="this.style.opacity='0.9'"
-            onmouseout="this.style.opacity='1'"
-          >
-            Start Task
-          </button>
-        ` : ''}
-        
-        ${isInProgress ? `
-          <button 
-            onclick="markTodoCompleted(${todo.id})"
-            style="padding: var(--space-xs) var(--space-md); font-size: var(--text-sm); background: var(--color-success); border: none; border-radius: var(--radius-sm); color: white; cursor: pointer; transition: all 0.2s;"
-            onmouseover="this.style.opacity='0.9'"
-            onmouseout="this.style.opacity='1'"
-          >
-            Mark Complete
-          </button>
-        ` : ''}
+        <span style="font-size: var(--text-xs); color: var(--color-text-muted); font-style: italic;">
+          Status tracked automatically by AI
+        </span>
       </div>
 
       <!-- Event Timeline (Initially Hidden) -->
@@ -9232,49 +9212,7 @@ function getTodoDuration(todo) {
   return null;
 }
 
-async function markTodoInProgress(todoId) {
-  try {
-    const response = await fetch(`${CONFIG.API_BASE}/api/todos/${todoId}/status`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: 'in_progress' })
-    });
-    
-    if (response.ok) {
-      // Refresh the view
-      if (state.currentView === 'todos') {
-        const container = document.getElementById('viewContainer');
-        renderTodoView(container);
-      }
-    } else {
-      console.error('Failed to update TODO status');
-    }
-  } catch (error) {
-    console.error('Error updating TODO:', error);
-  }
-}
-
-async function markTodoCompleted(todoId) {
-  try {
-    const response = await fetch(`${CONFIG.API_BASE}/api/todos/${todoId}/status`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: 'completed' })
-    });
-    
-    if (response.ok) {
-      // Refresh the view
-      if (state.currentView === 'todos') {
-        const container = document.getElementById('viewContainer');
-        renderTodoView(container);
-      }
-    } else {
-      console.error('Failed to update TODO status');
-    }
-  } catch (error) {
-    console.error('Error updating TODO:', error);
-  }
-}
+// Manual TODO actions removed - status is now automatic based on AI activity
 
 async function expandTodoDetails(todoId) {
   const eventsContainer = document.getElementById(`todo-events-${todoId}`);
