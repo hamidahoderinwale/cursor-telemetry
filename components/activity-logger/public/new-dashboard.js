@@ -7001,6 +7001,14 @@ function showEventModal(id) {
     // Find related prompts within 5 minutes
     const relatedPrompts = findRelatedPrompts(event, 5);
     
+    // Find related terminal commands within 5 minutes
+    const eventTime = new Date(event.timestamp).getTime();
+    const relatedTerminalCommands = (state.data.terminalCommands || []).filter(cmd => {
+      const cmdTime = new Date(cmd.timestamp).getTime();
+      const diff = Math.abs(eventTime - cmdTime);
+      return diff < 5 * 60 * 1000; // 5 minutes
+    }).sort((a, b) => Math.abs(new Date(a.timestamp).getTime() - eventTime) - Math.abs(new Date(b.timestamp).getTime() - eventTime));
+    
     let html = `
       <div style="display: flex; flex-direction: column; gap: var(--space-xl);">
         
@@ -7074,11 +7082,50 @@ function showEventModal(id) {
       html += `</div>`;
     }
     
-    // Show related AI prompts
+    // Show related terminal commands
+    if (relatedTerminalCommands && relatedTerminalCommands.length > 0) {
+      html += `
+        <div>
+          <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">Related Terminal Commands (${relatedTerminalCommands.length})</h4>
+          <div style="display: flex; flex-direction: column; gap: var(--space-sm);">
+      `;
+      
+      relatedTerminalCommands.forEach(cmd => {
+        const timeDiff = Math.abs(eventTime - new Date(cmd.timestamp).getTime());
+        const minsDiff = Math.round(timeDiff / 60000);
+        const secsDiff = Math.round(timeDiff / 1000);
+        const timeLabel = minsDiff > 0 ? `${minsDiff} min` : `${secsDiff} sec`;
+        const beforeAfter = new Date(cmd.timestamp).getTime() < eventTime ? 'before' : 'after';
+        const isError = cmd.exit_code && cmd.exit_code !== 0;
+        
+        html += `
+          <div style="padding: var(--space-sm) var(--space-md); background: var(--color-bg); border-radius: var(--radius-md); border-left: 3px solid ${isError ? 'var(--color-error)' : 'var(--color-success)'};">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-xs);">
+              <code style="font-family: var(--font-mono); font-size: var(--text-sm); color: var(--color-text);">${escapeHtml(cmd.command || 'Unknown command')}</code>
+              <span class="badge" style="background: ${isError ? 'var(--color-error)' : 'var(--color-success)'}; color: white;">
+                ${isError ? `Exit ${cmd.exit_code}` : 'Success'}
+              </span>
+            </div>
+            <div style="display: flex; gap: var(--space-xs); font-size: var(--text-xs); color: var(--color-text-muted);">
+              <span>${timeLabel} ${beforeAfter}</span>
+              ${cmd.duration ? `<span>• ${(cmd.duration / 1000).toFixed(1)}s</span>` : ''}
+              ${cmd.source ? `<span>• ${cmd.source}</span>` : ''}
+            </div>
+          </div>
+        `;
+      });
+      
+      html += `
+          </div>
+        </div>
+      `;
+    }
+    
+    // Show related AI prompts with enhanced information
     if (relatedPrompts && relatedPrompts.length > 0) {
       html += `
         <div>
-          <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">Related AI Prompts (${relatedPrompts.length})</h4>
+          <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">Related AI Interactions (${relatedPrompts.length})</h4>
           <div style="display: flex; flex-direction: column; gap: var(--space-md);">
       `;
       
@@ -7086,22 +7133,30 @@ function showEventModal(id) {
         const promptText = p.text || p.prompt || p.preview || p.content || 'No text';
         const isJsonLike = promptText.startsWith('{') || promptText.startsWith('[');
         const displayText = isJsonLike ? 'Composer session metadata' : (promptText.length > 200 ? promptText.substring(0, 200) + '...' : promptText);
-        const timeDiff = Math.abs(new Date(event.timestamp).getTime() - new Date(p.timestamp).getTime());
+        const timeDiff = Math.abs(eventTime - new Date(p.timestamp).getTime());
         const minsDiff = Math.round(timeDiff / 60000);
+        const beforeAfter = new Date(p.timestamp).getTime() < eventTime ? 'before' : 'after';
         
         html += `
           <div style="padding: var(--space-md); background: var(--color-bg-alt); border-radius: var(--radius-md); border-left: 3px solid var(--color-accent); cursor: pointer;" onclick="showEventModal('${p.id || p.timestamp}')">
             <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: var(--space-sm);">
               <div style="flex: 1;">
-                <div style="font-size: var(--text-sm); color: var(--color-text); margin-bottom: var(--space-xs);">
+                <div style="font-size: var(--text-sm); color: var(--color-text); margin-bottom: var(--space-xs); font-weight: 500;">
                   ${escapeHtml(displayText)}
                 </div>
-                <div style="display: flex; gap: var(--space-xs); flex-wrap: wrap;">
+                <div style="display: flex; gap: var(--space-xs); flex-wrap: wrap; margin-bottom: var(--space-xs);">
                   ${p.mode ? `<span class="badge" style="background: ${p.mode === 'agent' ? 'var(--color-accent)' : p.mode === 'chat' ? 'var(--color-info)' : 'var(--color-secondary)'}; color: white;">${p.mode.toUpperCase()}${p.isAuto ? ' (AUTO)' : ''}</span>` : ''}
                   ${p.modelName ? `<span class="badge" style="background: var(--color-primary); color: white;">${p.modelName}</span>` : ''}
                   ${p.contextUsage > 0 ? `<span class="badge" style="background: var(--color-warning); color: white;">${p.contextUsage.toFixed(1)}% context</span>` : ''}
-                  <span class="badge">${minsDiff === 0 ? 'Same time' : `${minsDiff} min ${minsDiff < 0 ? 'before' : 'after'}`}</span>
+                  <span class="badge">${minsDiff === 0 ? 'Same time' : `${minsDiff} min ${beforeAfter}`}</span>
                 </div>
+                ${p.linesAdded || p.linesRemoved ? `
+                  <div style="font-size: var(--text-xs); color: var(--color-text-muted);">
+                    ${p.linesAdded ? `<span style="color: var(--color-success);">+${p.linesAdded} lines</span>` : ''}
+                    ${p.linesAdded && p.linesRemoved ? ' / ' : ''}
+                    ${p.linesRemoved ? `<span style="color: var(--color-error);">-${p.linesRemoved} lines</span>` : ''}
+                  </div>
+                ` : ''}
               </div>
             </div>
           </div>
