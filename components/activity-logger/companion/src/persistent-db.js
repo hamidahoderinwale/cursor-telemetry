@@ -403,8 +403,9 @@ class PersistentDB {
          context_files_json, context_file_count, context_file_count_explicit,
          context_file_count_tabs, context_file_count_auto,
          thinking_time, thinking_time_seconds, terminal_blocks_json, 
-         terminal_block_count, has_attachments, attachment_count)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         terminal_block_count, has_attachments, attachment_count,
+         conversation_title, message_role, parent_conversation_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
       
       stmt.run(
@@ -440,7 +441,10 @@ class PersistentDB {
         terminalBlocksJson,
         terminalBlocks.length || 0,
         prompt.hasAttachments ? 1 : 0,
-        prompt.attachmentCount || 0
+        prompt.attachmentCount || 0,
+        prompt.conversationTitle || null,
+        prompt.messageRole || null,
+        prompt.parentConversationId || null
       );
       
       stmt.finalize((err) => {
@@ -768,6 +772,10 @@ class PersistentDB {
       // Attachments
       hasAttachments: row.has_attachments === 1 || row.has_attachments === true,
       attachmentCount: row.attachment_count,
+      // Threading
+      conversationTitle: row.conversation_title,
+      messageRole: row.message_role,
+      parentConversationId: row.parent_conversation_id,
       // Parse JSON fields if present
       contextFiles: row.context_files_json ? JSON.parse(row.context_files_json) : [],
       terminalBlocks: row.terminal_blocks_json ? JSON.parse(row.terminal_blocks_json) : []

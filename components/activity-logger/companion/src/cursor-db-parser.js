@@ -207,6 +207,7 @@ class CursorDatabaseParser {
                       // ===== NEW: Extract context files from composer =====
                       const contextFiles = this.extractContextFilesFromComposer(composer);
                       
+                      // Add conversation thread (title)
                       prompts.push({
                         text: composer.name,
                         workspaceId: workspace.dir,
@@ -215,7 +216,10 @@ class CursorDatabaseParser {
                         composerId: composer.composerId,
                         timestamp: composer.lastUpdatedAt || composer.createdAt || workspace.mtime,
                         source: 'composer',
-                        type: 'conversation',
+                        type: 'conversation-thread',  // Changed to identify as thread
+                        conversationTitle: composer.name,  // NEW: Store title explicitly
+                        parentConversationId: null,  // This IS the parent
+                        messageRole: null,  // Threads don't have roles
                         subtitle: composer.subtitle || '',
                         linesAdded: composer.totalLinesAdded || 0,
                         linesRemoved: composer.totalLinesRemoved || 0,
@@ -308,6 +312,7 @@ class CursorDatabaseParser {
                     // Extract messages if available
                     if (composer.messages && Array.isArray(composer.messages)) {
                       let previousUserPrompt = null;
+                      const conversationTitle = composer.name || 'Untitled Conversation';
                       
                       composer.messages.forEach(msg => {
                         if (msg.text || msg.content) {
@@ -317,6 +322,10 @@ class CursorDatabaseParser {
                             source: 'composer-message',
                             type: msg.role === 'user' ? 'user-prompt' : 'ai-response',
                             composerId: composer.composerId,
+                            // NEW: Thread relationship
+                            conversationTitle: conversationTitle,
+                            parentConversationId: composer.composerId,
+                            messageRole: msg.role,  // 'user' or 'assistant'
                             status: 'captured',
                             confidence: 'high'
                           };
