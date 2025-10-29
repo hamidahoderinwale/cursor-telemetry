@@ -1497,12 +1497,12 @@ function renderActivityChart() {
   
   if (allEvents.length === 0 && allPrompts.length === 0) {
     const context = ctx.getContext('2d');
-    context.font = '500 16px Inter, system-ui, -apple-system, sans-serif';
+    context.font = '500 16px Geist, -apple-system, BlinkMacSystemFont, sans-serif';
     context.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-text') || '#1f2937';
     context.textAlign = 'center';
     context.textBaseline = 'middle';
     context.fillText('No Data Available', ctx.width / 2, ctx.height / 2 - 10);
-    context.font = '14px Inter, system-ui, -apple-system, sans-serif';
+    context.font = '14px Geist, -apple-system, BlinkMacSystemFont, sans-serif';
     context.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-text-muted') || '#6b7280';
     context.fillText('Activity data will appear here once you start coding', ctx.width / 2, ctx.height / 2 + 15);
     return;
@@ -5568,12 +5568,12 @@ function renderSystemResourcesChart() {
   const data = state.data.systemResources.slice(-30); // Last 30 data points
   
   if (data.length === 0) {
-    ctx.font = '500 16px Inter, system-ui, -apple-system, sans-serif';
+    ctx.font = '500 16px Geist, -apple-system, BlinkMacSystemFont, sans-serif';
     ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-text') || '#1f2937';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('No Data Available', canvas.width / 2, canvas.height / 2 - 10);
-    ctx.font = '14px Inter, system-ui, -apple-system, sans-serif';
+    ctx.font = '14px Geist, -apple-system, BlinkMacSystemFont, sans-serif';
     ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-text-muted') || '#6b7280';
     ctx.fillText('File type data will appear as you edit files', canvas.width / 2, canvas.height / 2 + 15);
     return;
@@ -5828,7 +5828,7 @@ function renderAIActivityChart() {
   
   if (buckets.every(b => b.promptCount === 0 && b.codeChanges === 0)) {
     const ctx = canvas.getContext('2d');
-    ctx.font = '14px Inter';
+    ctx.font = '14px Geist, -apple-system, BlinkMacSystemFont, sans-serif';
     ctx.fillStyle = '#666';
     ctx.textAlign = 'center';
     ctx.fillText('No AI activity data available', canvas.width / 2, canvas.height / 2);
@@ -6040,12 +6040,12 @@ function renderPromptTokensChart() {
   });
   
   if (buckets.every(b => b.count === 0)) {
-    ctx.font = '500 16px Inter, system-ui, -apple-system, sans-serif';
+    ctx.font = '500 16px Geist, -apple-system, BlinkMacSystemFont, sans-serif';
     ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-text') || '#1f2937';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('No Data Available', canvas.width / 2, canvas.height / 2 - 10);
-    ctx.font = '14px Inter, system-ui, -apple-system, sans-serif';
+    ctx.font = '14px Geist, -apple-system, BlinkMacSystemFont, sans-serif';
     ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-text-muted') || '#6b7280';
     ctx.fillText('Prompt data will appear once you start using Cursor AI', canvas.width / 2, canvas.height / 2 + 15);
     return;
