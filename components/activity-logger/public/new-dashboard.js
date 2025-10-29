@@ -1497,7 +1497,15 @@ function renderActivityChart() {
   const allPrompts = state.data.prompts || [];
   
   if (allEvents.length === 0 && allPrompts.length === 0) {
-    ctx.getContext('2d').fillText('No data available', ctx.width / 2, ctx.height / 2);
+    const context = ctx.getContext('2d');
+    context.font = '500 16px Inter, system-ui, -apple-system, sans-serif';
+    context.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-text') || '#1f2937';
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
+    context.fillText('No Data Available', ctx.width / 2, ctx.height / 2 - 10);
+    context.font = '14px Inter, system-ui, -apple-system, sans-serif';
+    context.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-text-muted') || '#6b7280';
+    context.fillText('Activity data will appear here once you start coding', ctx.width / 2, ctx.height / 2 + 15);
     return;
   }
 
@@ -2410,7 +2418,12 @@ function renderEmbeddingsVisualization() {
   
   const prompts = state.data.prompts || [];
   if (prompts.length === 0) {
-    container.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--color-text-muted); font-size: 13px;">No prompt data available for analysis</div>';
+    container.innerHTML = `
+      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; padding: var(--space-xl); text-align: center;">
+        <div style="font-size: var(--text-lg); color: var(--color-text); margin-bottom: var(--space-xs); font-weight: 500;">No Data Available</div>
+        <div style="font-size: var(--text-sm); color: var(--color-text-muted);">Prompt data will appear here once you start using Cursor AI</div>
+      </div>
+    `;
     return;
   }
   
@@ -4676,8 +4689,9 @@ function renderEmbeddingsVisualization() {
   
   if (validPrompts.length === 0) {
     document.getElementById('embeddingsVisualization').innerHTML = `
-      <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--color-text-muted); font-size: 13px;">
-        No prompt data available for analysis
+      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; padding: var(--space-xl); text-align: center;">
+        <div style="font-size: var(--text-lg); color: var(--color-text); margin-bottom: var(--space-xs); font-weight: 500;">No Data Available</div>
+        <div style="font-size: var(--text-sm); color: var(--color-text-muted);">Prompt data will appear here once you start using Cursor AI</div>
       </div>
     `;
     return;
@@ -5555,10 +5569,14 @@ function renderSystemResourcesChart() {
   const data = state.data.systemResources.slice(-30); // Last 30 data points
   
   if (data.length === 0) {
-    ctx.font = '14px Inter';
-    ctx.fillStyle = '#666';
+    ctx.font = '500 16px Inter, system-ui, -apple-system, sans-serif';
+    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-text') || '#1f2937';
     ctx.textAlign = 'center';
-    ctx.fillText('No data available', canvas.width / 2, canvas.height / 2);
+    ctx.textBaseline = 'middle';
+    ctx.fillText('No Data Available', canvas.width / 2, canvas.height / 2 - 10);
+    ctx.font = '14px Inter, system-ui, -apple-system, sans-serif';
+    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-text-muted') || '#6b7280';
+    ctx.fillText('File type data will appear as you edit files', canvas.width / 2, canvas.height / 2 + 15);
     return;
   }
 
@@ -6023,10 +6041,14 @@ function renderPromptTokensChart() {
   });
   
   if (buckets.every(b => b.count === 0)) {
-    ctx.font = '14px Inter';
-    ctx.fillStyle = '#666';
+    ctx.font = '500 16px Inter, system-ui, -apple-system, sans-serif';
+    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-text') || '#1f2937';
     ctx.textAlign = 'center';
-    ctx.fillText('No prompt data available', canvas.width / 2, canvas.height / 2);
+    ctx.textBaseline = 'middle';
+    ctx.fillText('No Data Available', canvas.width / 2, canvas.height / 2 - 10);
+    ctx.font = '14px Inter, system-ui, -apple-system, sans-serif';
+    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-text-muted') || '#6b7280';
+    ctx.fillText('Prompt data will appear once you start using Cursor AI', canvas.width / 2, canvas.height / 2 + 15);
     return;
   }
 
@@ -8295,7 +8317,12 @@ function renderContextFileAnalytics() {
   const promptsWithContext = state.data.prompts?.filter(p => p.context) || [];
   
   if (promptsWithContext.length === 0) {
-    container.innerHTML = '<div style="text-align: center; color: var(--color-text-muted); padding: var(--space-xl);">No context data available yet</div>';
+    container.innerHTML = `
+      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 200px; padding: var(--space-xl); text-align: center;">
+        <div style="font-size: var(--text-lg); color: var(--color-text); margin-bottom: var(--space-xs); font-weight: 500;">No Data Available</div>
+        <div style="font-size: var(--text-sm); color: var(--color-text-muted);">Context data will appear here once you use @ mentions in Cursor</div>
+      </div>
+    `;
     return;
   }
 
@@ -8391,7 +8418,12 @@ function renderContextFileHeatmap() {
   const promptsWithContext = state.data.prompts?.filter(p => p.context) || [];
   
   if (promptsWithContext.length === 0) {
-    container.innerHTML = '<div style="text-align: center; color: var(--color-text-muted); padding: var(--space-xl);">No context data available yet</div>';
+    container.innerHTML = `
+      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 200px; padding: var(--space-xl); text-align: center;">
+        <div style="font-size: var(--text-lg); color: var(--color-text); margin-bottom: var(--space-xs); font-weight: 500;">No Data Available</div>
+        <div style="font-size: var(--text-sm); color: var(--color-text-muted);">Context data will appear here once you use @ mentions in Cursor</div>
+      </div>
+    `;
     return;
   }
 
@@ -8559,9 +8591,9 @@ function renderModelUsageAnalytics() {
   
   if (prompts.length === 0) {
     container.innerHTML = `
-      <div style="text-align: center; padding: var(--space-xl); color: var(--color-text-muted);">
-        <div style="font-size: var(--text-md); margin-bottom: var(--space-sm);">No AI prompts yet</div>
-        <div style="font-size: var(--text-sm);">Start using Cursor AI to see model usage statistics</div>
+      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 200px; padding: var(--space-xl); text-align: center;">
+        <div style="font-size: var(--text-lg); color: var(--color-text); margin-bottom: var(--space-xs); font-weight: 500;">No Data Available</div>
+        <div style="font-size: var(--text-sm); color: var(--color-text-muted);">Model usage statistics will appear here once you start using Cursor AI</div>
       </div>
     `;
     return;
