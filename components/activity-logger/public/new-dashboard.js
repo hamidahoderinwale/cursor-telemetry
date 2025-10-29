@@ -1127,7 +1127,7 @@ function renderActivityView(container) {
           </div>
         </div>
         <div class="card-body">
-          ${timelineItems.length > 0 ? renderUnifiedTimeline(timelineItems) : '<div class="empty-state"><div class="empty-state-icon">📭</div><div class="empty-state-text">No activity recorded</div><div class="empty-state-hint">Activity will appear as you work in Cursor</div></div>'}
+          ${timelineItems.length > 0 ? renderUnifiedTimeline(timelineItems) : '<div class="empty-state"><div class="empty-state-text">No activity recorded</div><div class="empty-state-hint">Activity will appear as you work in Cursor</div></div>'}
         </div>
       </div>
 
@@ -1230,7 +1230,6 @@ function renderPromptsList(prompts) {
 function renderPromptEmptyState() {
   return `
     <div class="empty-state">
-      <div class="empty-state-icon">[CLIPBOARD]</div>
       <div class="empty-state-text">No prompts captured yet</div>
       <div class="empty-state-hint">
         Prompts will appear here when you:
