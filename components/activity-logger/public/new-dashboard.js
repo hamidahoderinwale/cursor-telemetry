@@ -925,7 +925,7 @@ function renderTimelineItem(event) {
       const contextFileCount = (event.context.contextFiles?.attachedFiles?.length || 0) + 
                                (event.context.contextFiles?.codebaseFiles?.length || 0);
       if (contextFileCount > 0) {
-        badges.push(`<span style="display: inline-flex; align-items: center; justify-content: center; background: #3b82f6; color: white; font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 10px; margin-left: 4px;" title="${contextFileCount} context files">[LINK] ${contextFileCount}</span>`);
+        badges.push(`<span style="display: inline-flex; align-items: center; justify-content: center; background: #3b82f6; color: white; font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 10px; margin-left: 4px;" title="${contextFileCount} context files">${contextFileCount} files</span>`);
       }
       
       // UI state indicator
@@ -1344,6 +1344,17 @@ function renderAnalyticsView(container) {
         </div>
       </div>
 
+      <!-- Model Usage Analytics -->
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">AI Model Usage</h3>
+          <p class="card-subtitle">Distribution of models used across prompts and modes</p>
+        </div>
+        <div class="card-body">
+          <div id="modelUsageAnalytics" style="min-height: 250px;"></div>
+        </div>
+      </div>
+
       <!-- Continuous Activity Timeline -->
       <div class="card">
         <div class="card-header">
@@ -1414,7 +1425,7 @@ function renderAnalyticsView(container) {
       <!-- NEW: Enhanced Context Window Analytics -->
       <div class="card">
         <div class="card-header">
-          <h3 class="card-title">🧠 Enhanced Context Window Analytics</h3>
+          <h3 class="card-title">Enhanced Context Window Analytics</h3>
           <p class="card-subtitle">Deep dive into @ mentions, token usage, and file relationships</p>
         </div>
         <div class="card-body">
@@ -1425,7 +1436,7 @@ function renderAnalyticsView(container) {
       <!-- NEW: Error & Bug Tracking -->
       <div class="card">
         <div class="card-header">
-          <h3 class="card-title">🚨 Error & Bug Tracking</h3>
+          <h3 class="card-title">Error & Bug Tracking</h3>
           <p class="card-subtitle">Linter errors, test failures, and rollbacks</p>
         </div>
         <div class="card-body">
@@ -1436,7 +1447,7 @@ function renderAnalyticsView(container) {
       <!-- NEW: Productivity Insights -->
       <div class="card">
         <div class="card-header">
-          <h3 class="card-title">[FAST] Productivity Insights</h3>
+          <h3 class="card-title">Productivity Insights</h3>
           <p class="card-subtitle">Time-to-edit, iterations, code churn, and debug frequency</p>
         </div>
         <div class="card-body">
@@ -1447,7 +1458,7 @@ function renderAnalyticsView(container) {
       <!-- NEW: File Relationship Visualization -->
       <div class="card">
         <div class="card-header">
-          <h3 class="card-title">[LINK] File Relationship Network</h3>
+          <h3 class="card-title">File Relationship Network</h3>
           <p class="card-subtitle">Files frequently used together in AI context</p>
         </div>
         <div class="card-body">
@@ -1470,6 +1481,7 @@ function renderAnalyticsView(container) {
     renderUIStateAnalytics();
     
     // NEW: Render new analytics sections
+    renderModelUsageAnalytics();
     renderEnhancedContextAnalytics();
     renderErrorTracking();
     renderProductivityInsights();
@@ -2331,7 +2343,7 @@ async function initializeD3FileGraph() {
       }
     }
     
-    console.log(`[LINK] Created ${links.length} connections between files`);
+    console.log(`[GRAPH] Created ${links.length} connections between files`);
     
     // Compute TF-IDF for semantic analysis
     const {tfidfStats, similarities} = computeTFIDFAnalysis(files);
@@ -3507,7 +3519,7 @@ function renderSimilarFilePairs(links, files) {
   if (sortedLinks.length === 0) {
     container.innerHTML = `
       <div style="text-align: center; padding: var(--space-xl); color: var(--color-text-muted);">
-        <div style="font-size: 48px; margin-bottom: var(--space-md);">[LINK]</div>
+        <div style="font-size: 48px; margin-bottom: var(--space-md);">○━○</div>
         <div style="font-size: var(--text-md); margin-bottom: var(--space-sm);">No Similar Pairs Found</div>
         <div style="font-size: var(--text-sm);">Modify some files together to see relationships</div>
       </div>
@@ -4738,7 +4750,7 @@ function renderEmbeddingsVisualization() {
   // Sort by similarity
   fileSimilarities.sort((a, b) => b.similarity - a.similarity);
   
-  console.log(`[LINK] Found ${fileSimilarities.length} file pairs with shared prompt context`);
+  console.log(`[GRAPH] Found ${fileSimilarities.length} file pairs with shared prompt context`);
   
   // Display top similar file pairs
   const similarityPairsContainer = document.getElementById('similarityPairs');
@@ -6350,7 +6362,7 @@ async function showEventModal(eventId) {
               ${(event.context.contextFiles?.attachedFiles?.length || 0) + (event.context.contextFiles?.codebaseFiles?.length || 0) > 0 ? `
                 <div style="padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md); border-left: 3px solid #3b82f6;">
                   <div style="font-weight: 600; margin-bottom: var(--space-sm); color: var(--color-text); display: flex; align-items: center; gap: var(--space-xs);">
-                    <span>[LINK] Context Files</span>
+                    <span>Context Files</span>
                     <span style="background: #3b82f6; color: white; font-size: 10px; padding: 2px 6px; border-radius: 10px;">
                       ${(event.context.contextFiles?.attachedFiles?.length || 0) + (event.context.contextFiles?.codebaseFiles?.length || 0)}
                     </span>
@@ -8535,6 +8547,94 @@ function renderUIStateAnalytics() {
 // ===================================
 // NEW ANALYTICS VISUALIZATION FUNCTIONS
 // ===================================
+
+/**
+ * Render Model Usage Analytics
+ */
+function renderModelUsageAnalytics() {
+  const container = document.getElementById('modelUsageAnalytics');
+  if (!container) return;
+
+  const prompts = state.data.prompts || [];
+  
+  if (prompts.length === 0) {
+    container.innerHTML = `
+      <div style="text-align: center; padding: var(--space-xl); color: var(--color-text-muted);">
+        <div style="font-size: var(--text-md); margin-bottom: var(--space-sm);">No AI prompts yet</div>
+        <div style="font-size: var(--text-sm);">Start using Cursor AI to see model usage statistics</div>
+      </div>
+    `;
+    return;
+  }
+
+  // Count models
+  const modelCounts = {};
+  const modelModes = {};
+  const modelContext = {};
+  
+  prompts.forEach(p => {
+    const model = p.modelName || p.model_name || 'Unknown';
+    const mode = p.mode || 'unknown';
+    const context = p.contextUsage || p.context_usage || 0;
+    
+    // Count by model
+    modelCounts[model] = (modelCounts[model] || 0) + 1;
+    
+    // Count modes per model
+    if (!modelModes[model]) modelModes[model] = {};
+    modelModes[model][mode] = (modelModes[model][mode] || 0) + 1;
+    
+    // Average context per model
+    if (!modelContext[model]) modelContext[model] = { total: 0, count: 0 };
+    modelContext[model].total += context;
+    modelContext[model].count++;
+  });
+
+  // Sort by usage
+  const sortedModels = Object.entries(modelCounts).sort((a, b) => b[1] - a[1]);
+  
+  const totalPrompts = prompts.length;
+
+  let html = '<div style="display: flex; flex-direction: column; gap: var(--space-md);">';
+
+  sortedModels.forEach(([model, count]) => {
+    const percentage = ((count / totalPrompts) * 100).toFixed(1);
+    const avgContext = modelContext[model] ? (modelContext[model].total / modelContext[model].count).toFixed(1) : 0;
+    const modes = modelModes[model] || {};
+    const modesList = Object.entries(modes)
+      .sort((a, b) => b[1] - a[1])
+      .map(([mode, modeCount]) => `${mode}: ${modeCount}`)
+      .join(', ');
+
+    html += `
+      <div style="padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md); border-left: 3px solid var(--color-primary);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-sm);">
+          <div style="flex: 1;">
+            <div style="font-weight: 600; color: var(--color-text); margin-bottom: var(--space-xs);">
+              ${model === 'Unknown' ? 'Model Not Specified' : model}
+            </div>
+            <div style="font-size: var(--text-sm); color: var(--color-text-muted);">
+              ${modesList}
+            </div>
+          </div>
+          <div style="text-align: right;">
+            <div style="font-size: var(--text-xl); font-weight: 600; color: var(--color-primary);">${count}</div>
+            <div style="font-size: var(--text-xs); color: var(--color-text-muted);">${percentage}%</div>
+          </div>
+        </div>
+        <div style="display: flex; align-items: center; gap: var(--space-sm);">
+          <div style="flex: 1; background: var(--color-bg-alt); height: 6px; border-radius: 3px; overflow: hidden;">
+            <div style="background: var(--color-primary); height: 100%; width: ${percentage}%;"></div>
+          </div>
+          ${avgContext > 0 ? `<span style="font-size: var(--text-xs); color: var(--color-text-muted);">${avgContext}% avg context</span>` : ''}
+        </div>
+      </div>
+    `;
+  });
+
+  html += '</div>';
+  container.innerHTML = html;
+}
 
 /**
  * Render Enhanced Context Window Analytics
