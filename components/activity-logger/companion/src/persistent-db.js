@@ -119,7 +119,20 @@ class PersistentDB {
                   `ALTER TABLE prompts ADD COLUMN is_auto INTEGER DEFAULT 0`,
                   `ALTER TABLE prompts ADD COLUMN type TEXT`,
                   `ALTER TABLE prompts ADD COLUMN confidence TEXT`,
-                  `ALTER TABLE prompts ADD COLUMN added_from_database INTEGER DEFAULT 0`
+                  `ALTER TABLE prompts ADD COLUMN added_from_database INTEGER DEFAULT 0`,
+                  // NEW: Context files tracking
+                  `ALTER TABLE prompts ADD COLUMN context_files_json TEXT`,
+                  `ALTER TABLE prompts ADD COLUMN context_file_count INTEGER DEFAULT 0`,
+                  `ALTER TABLE prompts ADD COLUMN context_file_count_explicit INTEGER DEFAULT 0`,
+                  `ALTER TABLE prompts ADD COLUMN context_file_count_tabs INTEGER DEFAULT 0`,
+                  `ALTER TABLE prompts ADD COLUMN context_file_count_auto INTEGER DEFAULT 0`,
+                  // NEW: Enhanced context tracking
+                  `ALTER TABLE prompts ADD COLUMN thinking_time INTEGER DEFAULT 0`,
+                  `ALTER TABLE prompts ADD COLUMN thinking_time_seconds REAL DEFAULT 0`,
+                  `ALTER TABLE prompts ADD COLUMN terminal_blocks_json TEXT`,
+                  `ALTER TABLE prompts ADD COLUMN terminal_block_count INTEGER DEFAULT 0`,
+                  `ALTER TABLE prompts ADD COLUMN has_attachments INTEGER DEFAULT 0`,
+                  `ALTER TABLE prompts ADD COLUMN attachment_count INTEGER DEFAULT 0`
                 ];
                 
                 // Try to add each column, ignore if already exists
@@ -211,6 +224,88 @@ class PersistentDB {
             });
           }));
 
+          // NEW: Attachments table (for images and files)
+          tables.push(new Promise((res, rej) => {
+            this.db.run(`
+              CREATE TABLE IF NOT EXISTS prompt_attachments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                prompt_id INTEGER NOT NULL,
+                type TEXT NOT NULL,
+                format TEXT,
+                filename TEXT,
+                data BLOB,
+                thumbnail BLOB,
+                size INTEGER,
+                width INTEGER,
+                height INTEGER,
+                timestamp INTEGER,
+                FOREIGN KEY (prompt_id) REFERENCES prompts(id)
+              )
+            `, (err) => {
+              if (err) {
+                console.error('Error creating attachments table:', err);
+                rej(err);
+              } else {
+                // Create index for faster lookups
+                this.db.run(`CREATE INDEX IF NOT EXISTS idx_attachments_prompt_id ON prompt_attachments(prompt_id)`, () => {
+                  res();
+                });
+              }
+            });
+          }));
+
+          // TODO tracking tables
+          tables.push(new Promise((res, rej) => {
+            this.db.run(`
+              CREATE TABLE IF NOT EXISTS todos (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                content TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending',
+                created_at INTEGER NOT NULL,
+                started_at INTEGER,
+                completed_at INTEGER,
+                order_index INTEGER DEFAULT 0,
+                session_id TEXT,
+                prompts_while_active TEXT,
+                files_modified TEXT
+              )
+            `, (err) => {
+              if (err) {
+                console.error('Error creating todos table:', err);
+                rej(err);
+              } else {
+                res();
+              }
+            });
+          }));
+
+          tables.push(new Promise((res, rej) => {
+            this.db.run(`
+              CREATE TABLE IF NOT EXISTS todo_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                todo_id INTEGER NOT NULL,
+                event_type TEXT NOT NULL,
+                event_id INTEGER,
+                timestamp INTEGER NOT NULL,
+                FOREIGN KEY (todo_id) REFERENCES todos(id)
+              )
+            `, (err) => {
+              if (err) {
+                console.error('Error creating todo_events table:', err);
+                rej(err);
+              } else {
+                // Create indexes
+                this.db.run(`CREATE INDEX IF NOT EXISTS idx_todo_events_todo_id ON todo_events(todo_id)`, () => {
+                  this.db.run(`CREATE INDEX IF NOT EXISTS idx_todos_status ON todos(status)`, () => {
+                    this.db.run(`CREATE INDEX IF NOT EXISTS idx_todos_session ON todos(session_id)`, () => {
+                      res();
+                    });
+                  });
+                });
+              }
+            });
+          }));
+
           // Create indexes for better query performance
           this.db.run(`CREATE INDEX IF NOT EXISTS idx_entries_session ON entries(session_id)`);
           this.db.run(`CREATE INDEX IF NOT EXISTS idx_entries_timestamp ON entries(timestamp)`);
@@ -291,13 +386,25 @@ class PersistentDB {
     await this.init();
     
     return new Promise((resolve, reject) => {
+      // Extract context files data
+      const contextFiles = prompt.contextFiles || { files: [], count: 0, countBySource: { explicit: 0, tabs: 0, auto: 0 } };
+      const contextFilesJson = JSON.stringify(contextFiles.files || []);
+      
+      // Extract terminal blocks
+      const terminalBlocks = prompt.terminalBlocks || [];
+      const terminalBlocksJson = JSON.stringify(terminalBlocks);
+      
       const stmt = this.db.prepare(`
         INSERT OR REPLACE INTO prompts 
         (id, timestamp, text, status, linked_entry_id, source,
          workspace_id, workspace_path, workspace_name, composer_id, subtitle,
          lines_added, lines_removed, context_usage, mode, model_type, model_name,
-         force_mode, is_auto, type, confidence, added_from_database)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         force_mode, is_auto, type, confidence, added_from_database,
+         context_files_json, context_file_count, context_file_count_explicit,
+         context_file_count_tabs, context_file_count_auto,
+         thinking_time, thinking_time_seconds, terminal_blocks_json, 
+         terminal_block_count, has_attachments, attachment_count)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
       
       stmt.run(
@@ -322,7 +429,18 @@ class PersistentDB {
         prompt.isAuto ? 1 : 0,
         prompt.type || null,
         prompt.confidence || null,
-        prompt.added_from_database ? 1 : 0
+        prompt.added_from_database ? 1 : 0,
+        contextFilesJson,
+        contextFiles.count || 0,
+        contextFiles.countBySource?.explicit || 0,
+        contextFiles.countBySource?.tabs || 0,
+        contextFiles.countBySource?.auto || 0,
+        prompt.thinkingTime || 0,
+        prompt.thinkingTimeSeconds || 0,
+        terminalBlocksJson,
+        terminalBlocks.length || 0,
+        prompt.hasAttachments ? 1 : 0,
+        prompt.attachmentCount || 0
       );
       
       stmt.finalize((err) => {
@@ -501,13 +619,57 @@ class PersistentDB {
   }
 
   /**
-   * Load recent entries from the database (with limit for performance)
+   * Get total count of entries in database
    */
-  async getRecentEntries(limit = 500) {
+  async getTotalEntriesCount() {
     await this.init();
     
     return new Promise((resolve, reject) => {
-      this.db.all(`SELECT * FROM entries ORDER BY timestamp DESC LIMIT ?`, [limit], (err, rows) => {
+      this.db.get(`SELECT COUNT(*) as count FROM entries`, [], (err, row) => {
+        if (err) {
+          console.error('Error counting entries:', err);
+          reject(err);
+        } else {
+          resolve(row.count || 0);
+        }
+      });
+    });
+  }
+
+  /**
+   * Load recent entries from the database (with limit for performance)
+   */
+  async getRecentEntries(limit = 500, entryId = null) {
+    await this.init();
+    
+    return new Promise((resolve, reject) => {
+      let query, params;
+      
+      if (entryId !== null) {
+        // Fetch specific entry by ID (used for TODO events)
+        query = `
+          SELECT 
+            id, session_id, workspace_path, file_path, source, 
+            notes, timestamp, tags, prompt_id, modelInfo, type
+          FROM entries 
+          WHERE id = ?
+        `;
+        params = [entryId];
+      } else {
+        // ✅ Exclude large fields (before_code, after_code) for performance
+        // Only include metadata needed for activity list view
+        query = `
+          SELECT 
+            id, session_id, workspace_path, file_path, source, 
+            notes, timestamp, tags, prompt_id, modelInfo, type
+          FROM entries 
+          ORDER BY timestamp DESC 
+          LIMIT ?
+        `;
+        params = [limit];
+      }
+      
+      this.db.all(query, params, (err, rows) => {
         if (err) {
           console.error('Error loading recent entries:', err);
           reject(err);
@@ -519,6 +681,33 @@ class PersistentDB {
             modelInfo: row.modelInfo ? JSON.parse(row.modelInfo) : null
           }));
           resolve(entries);
+        }
+      });
+    });
+  }
+  
+  /**
+   * Get file contents for semantic analysis (includes after_code)
+   */
+  async getFileContents(limit = 500) {
+    await this.init();
+    
+    return new Promise((resolve, reject) => {
+      this.db.all(`
+        SELECT 
+          id, file_path, after_code, timestamp
+        FROM entries 
+        WHERE after_code IS NOT NULL 
+          AND after_code != ''
+          AND file_path NOT LIKE '%.git/%'
+        ORDER BY timestamp DESC 
+        LIMIT ?
+      `, [limit], (err, rows) => {
+        if (err) {
+          console.error('Error loading file contents:', err);
+          reject(err);
+        } else {
+          resolve(rows);
         }
       });
     });
@@ -536,10 +725,53 @@ class PersistentDB {
           console.error('Error loading recent prompts:', err);
           reject(err);
         } else {
-          resolve(rows);
+          // Map database column names (snake_case) to camelCase
+          const mapped = rows.map(row => this._mapPromptRow(row));
+          resolve(mapped);
         }
       });
     });
+  }
+  
+  /**
+   * Map database row (snake_case) to camelCase object
+   */
+  _mapPromptRow(row) {
+    return {
+      ...row,
+      // Map snake_case to camelCase
+      linesAdded: row.lines_added,
+      linesRemoved: row.lines_removed,
+      contextUsage: row.context_usage,
+      workspaceId: row.workspace_id,
+      workspacePath: row.workspace_path,
+      workspaceName: row.workspace_name,
+      composerId: row.composer_id,
+      modelType: row.model_type,
+      modelName: row.model_name,
+      forceMode: row.force_mode,
+      isAuto: row.is_auto === 1 || row.is_auto === true,
+      linkedEntryId: row.linked_entry_id,
+      addedFromDatabase: row.added_from_database === 1 || row.added_from_database === true,
+      // Context files
+      contextFilesJson: row.context_files_json,
+      contextFileCount: row.context_file_count,
+      contextFileCountExplicit: row.context_file_count_explicit,
+      contextFileCountTabs: row.context_file_count_tabs,
+      contextFileCountAuto: row.context_file_count_auto,
+      // Thinking time
+      thinkingTime: row.thinking_time,
+      thinkingTimeSeconds: row.thinking_time_seconds,
+      // Terminal blocks
+      terminalBlocksJson: row.terminal_blocks_json,
+      terminalBlockCount: row.terminal_block_count,
+      // Attachments
+      hasAttachments: row.has_attachments === 1 || row.has_attachments === true,
+      attachmentCount: row.attachment_count,
+      // Parse JSON fields if present
+      contextFiles: row.context_files_json ? JSON.parse(row.context_files_json) : [],
+      terminalBlocks: row.terminal_blocks_json ? JSON.parse(row.terminal_blocks_json) : []
+    };
   }
 
   /**
@@ -576,7 +808,9 @@ class PersistentDB {
           console.error('Error loading prompts:', err);
           reject(err);
         } else {
-          resolve(rows);
+          // Map database column names (snake_case) to camelCase
+          const mapped = rows.map(row => this._mapPromptRow(row));
+          resolve(mapped);
         }
       });
     });
@@ -885,30 +1119,362 @@ class PersistentDB {
     await this.init();
     
     return new Promise((resolve, reject) => {
-      this.db.get(
-        `SELECT 
-          COUNT(*) as total_snapshots,
-          AVG(file_count) as avg_files,
-          AVG(token_estimate) as avg_tokens,
-          AVG(utilization_percent) as avg_utilization,
-          SUM(CASE WHEN truncated = 1 THEN 1 ELSE 0 END) * 100.0 / COUNT(*) as truncation_rate
-         FROM context_snapshots`,
-        (err, row) => {
+      // Get all context snapshots with actual data
+      this.db.all(
+        `SELECT context_files, at_mentions FROM context_snapshots 
+         WHERE (context_files IS NOT NULL AND context_files != '[]') 
+            OR (at_mentions IS NOT NULL AND at_mentions != '[]')`,
+        (err, rows) => {
           if (err) {
             console.error('Error fetching context analytics:', err);
             reject(err);
+            return;
+          }
+          
+          let totalAtFiles = 0;
+          let totalContextFiles = 0;
+          let totalUIStates = 0;
+          const atFileSet = new Set();
+          
+          rows.forEach(row => {
+            try {
+              // Count @ mentions
+              if (row.at_mentions) {
+                const mentions = JSON.parse(row.at_mentions);
+                if (Array.isArray(mentions)) {
+                  totalAtFiles += mentions.length;
+                  mentions.forEach(m => atFileSet.add(m));
+                }
+              }
+              
+              // Count context files
+              if (row.context_files) {
+                const files = JSON.parse(row.context_files);
+                if (Array.isArray(files)) {
+                  totalContextFiles += files.length;
+                } else if (files.attachedFiles || files.codebaseFiles) {
+                  totalContextFiles += (files.attachedFiles?.length || 0) + (files.codebaseFiles?.length || 0);
+                }
+              }
+            } catch (e) {
+              // Skip malformed JSON
+            }
+          });
+          
+          resolve({
+            totalAtFiles,
+            totalContextFiles,
+            totalUIStates,
+            withContext: rows.length,
+            uniqueAtFiles: atFileSet.size,
+            totalSnapshots: rows.length
+          });
+        }
+      );
+    });
+  }
+
+  // ===================================
+  // TODO TRACKING METHODS
+  // ===================================
+
+  /**
+   * Save a new TODO
+   */
+  async saveTodo(todo) {
+    await this.init();
+    
+    return new Promise((resolve, reject) => {
+      const stmt = this.db.prepare(`
+        INSERT INTO todos (
+          content, status, created_at, order_index, session_id,
+          prompts_while_active, files_modified
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      `);
+      
+      stmt.run(
+        todo.content,
+        todo.status || 'pending',
+        todo.created_at || Date.now(),
+        todo.order_index || 0,
+        todo.session_id || this._getCurrentSessionId(),
+        JSON.stringify(todo.prompts_while_active || []),
+        JSON.stringify(todo.files_modified || []),
+        function(err) {
+          if (err) {
+            console.error('Error saving todo:', err);
+            reject(err);
           } else {
-            resolve({
-              totalSnapshots: row.total_snapshots || 0,
-              avgFilesPerPrompt: row.avg_files || 0,
-              avgTokensPerPrompt: Math.round(row.avg_tokens || 0),
-              avgContextUtilization: row.avg_utilization || 0,
-              truncationRate: row.truncation_rate || 0
-            });
+            console.log(`[TODO] Saved: "${todo.content}" (ID: ${this.lastID})`);
+            resolve(this.lastID);
+          }
+        }
+      );
+      stmt.finalize();
+    });
+  }
+
+  /**
+   * Update TODO status
+   */
+  async updateTodoStatus(todoId, status) {
+    await this.init();
+    
+    const updates = { status };
+    const now = Date.now();
+    
+    // Get current todo to check if started_at exists
+    const todo = await this._getTodo(todoId);
+    
+    if (status === 'in_progress' && !todo.started_at) {
+      updates.started_at = now;
+    } else if (status === 'completed' && !todo.completed_at) {
+      updates.completed_at = now;
+    }
+    
+    return new Promise((resolve, reject) => {
+      const fields = Object.keys(updates).map(k => `${k} = ?`).join(', ');
+      const values = Object.values(updates);
+      
+      this.db.run(
+        `UPDATE todos SET ${fields} WHERE id = ?`,
+        [...values, todoId],
+        (err) => {
+          if (err) {
+            console.error('Error updating todo status:', err);
+            reject(err);
+          } else {
+            console.log(`[TODO] Updated status for ID ${todoId}: ${status}`);
+            resolve();
           }
         }
       );
     });
+  }
+
+  /**
+   * Get active TODO (in_progress)
+   */
+  async getActiveTodo() {
+    await this.init();
+    
+    return new Promise((resolve, reject) => {
+      this.db.get(
+        `SELECT * FROM todos WHERE status = 'in_progress' ORDER BY started_at DESC LIMIT 1`,
+        (err, row) => {
+          if (err) {
+            console.error('Error getting active todo:', err);
+            reject(err);
+          } else {
+            resolve(row ? this._mapTodoRow(row) : null);
+          }
+        }
+      );
+    });
+  }
+
+  /**
+   * Get all TODOs for current session
+   */
+  async getCurrentSessionTodos() {
+    await this.init();
+    
+    const sessionId = this._getCurrentSessionId();
+    
+    return new Promise((resolve, reject) => {
+      this.db.all(
+        `SELECT * FROM todos WHERE session_id = ? ORDER BY order_index ASC, created_at ASC`,
+        [sessionId],
+        (err, rows) => {
+          if (err) {
+            console.error('Error getting session todos:', err);
+            reject(err);
+          } else {
+            resolve(rows ? rows.map(r => this._mapTodoRow(r)) : []);
+          }
+        }
+      );
+    });
+  }
+
+  /**
+   * Link event to active TODO
+   */
+  async linkEventToTodo(eventType, eventId) {
+    await this.init();
+    
+    const activeTodo = await this.getActiveTodo();
+    if (!activeTodo) return null;
+    
+    return new Promise((resolve, reject) => {
+      this.db.run(
+        `INSERT INTO todo_events (todo_id, event_type, event_id, timestamp) VALUES (?, ?, ?, ?)`,
+        [activeTodo.id, eventType, eventId, Date.now()],
+        function(err) {
+          if (err) {
+            console.error('Error linking event to todo:', err);
+            reject(err);
+          } else {
+            resolve(this.lastID);
+          }
+        }
+      );
+    });
+  }
+
+  /**
+   * Add prompt to TODO's active prompts list
+   */
+  async addPromptToTodo(todoId, promptId) {
+    await this.init();
+    
+    const todo = await this._getTodo(todoId);
+    if (!todo) return;
+    
+    const prompts = JSON.parse(todo.prompts_while_active || '[]');
+    if (!prompts.includes(promptId)) {
+      prompts.push(promptId);
+      
+      return new Promise((resolve, reject) => {
+        this.db.run(
+          `UPDATE todos SET prompts_while_active = ? WHERE id = ?`,
+          [JSON.stringify(prompts), todoId],
+          (err) => {
+            if (err) {
+              console.error('Error adding prompt to todo:', err);
+              reject(err);
+            } else {
+              resolve();
+            }
+          }
+        );
+      });
+    }
+  }
+
+  /**
+   * Add file to TODO's modified files list
+   */
+  async addFileToTodo(todoId, filePath) {
+    await this.init();
+    
+    const todo = await this._getTodo(todoId);
+    if (!todo) return;
+    
+    const files = JSON.parse(todo.files_modified || '[]');
+    if (!files.includes(filePath)) {
+      files.push(filePath);
+      
+      return new Promise((resolve, reject) => {
+        this.db.run(
+          `UPDATE todos SET files_modified = ? WHERE id = ?`,
+          [JSON.stringify(files), todoId],
+          (err) => {
+            if (err) {
+              console.error('Error adding file to todo:', err);
+              reject(err);
+            } else {
+              resolve();
+            }
+          }
+        );
+      });
+    }
+  }
+
+  /**
+   * Get events for a TODO
+   */
+  async getTodoEvents(todoId) {
+    await this.init();
+    
+    return new Promise((resolve, reject) => {
+      this.db.all(
+        `SELECT * FROM todo_events WHERE todo_id = ? ORDER BY timestamp ASC`,
+        [todoId],
+        (err, rows) => {
+          if (err) {
+            console.error('Error getting todo events:', err);
+            reject(err);
+          } else {
+            resolve(rows || []);
+          }
+        }
+      );
+    });
+  }
+
+  /**
+   * Get TODO by ID
+   */
+  async getTodoById(todoId) {
+    await this.init();
+    
+    const todo = await this._getTodo(todoId);
+    return todo ? this._mapTodoRow(todo) : null;
+  }
+
+  /**
+   * Get prompt by ID (helper for enriching todo events)
+   */
+  async getPromptById(promptId) {
+    await this.init();
+    
+    return new Promise((resolve, reject) => {
+      this.db.get(
+        `SELECT * FROM prompts WHERE id = ?`,
+        [promptId],
+        (err, row) => {
+          if (err) {
+            console.error('Error getting prompt by ID:', err);
+            reject(err);
+          } else {
+            resolve(row ? this._mapPromptRow(row) : null);
+          }
+        }
+      );
+    });
+  }
+
+  /**
+   * Helper: Map TODO row to camelCase object
+   */
+  _mapTodoRow(row) {
+    return {
+      id: row.id,
+      content: row.content,
+      status: row.status,
+      createdAt: row.created_at,
+      startedAt: row.started_at,
+      completedAt: row.completed_at,
+      orderIndex: row.order_index,
+      sessionId: row.session_id,
+      promptsWhileActive: JSON.parse(row.prompts_while_active || '[]'),
+      filesModified: JSON.parse(row.files_modified || '[]')
+    };
+  }
+
+  /**
+   * Helper: Get TODO from database
+   */
+  _getTodo(todoId) {
+    return new Promise((resolve, reject) => {
+      this.db.get(`SELECT * FROM todos WHERE id = ?`, [todoId], (err, row) => {
+        if (err) {
+          console.error('Error getting todo:', err);
+          reject(err);
+        } else {
+          resolve(row);
+        }
+      });
+    });
+  }
+
+  /**
+   * Helper: Get current session ID (date-based)
+   */
+  _getCurrentSessionId() {
+    return new Date().toISOString().split('T')[0]; // YYYY-MM-DD
   }
 }
 

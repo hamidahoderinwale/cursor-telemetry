@@ -16,8 +16,8 @@ class AnalyticsManager {
     this.config = {
       deferAnalytics: true,
       useWorkers: true,
-      initialWindowHours: 168,  // 7 days (increased from 24 hours)
-      pageSize: 200,  // Keep at 200 to avoid timeouts
+      initialWindowHours: 8760,  // 1 year (365 days) - load all historical data
+      pageSize: 5000,  // Increased from 200 to load more data
       workerTimeout: 30000  // 30 seconds max per task
     };
     

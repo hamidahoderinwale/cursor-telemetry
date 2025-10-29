@@ -204,6 +204,9 @@ class CursorDatabaseParser {
                         modelName = 'claude-4.5-sonnet';  // Default for Edit mode (CMD+K)
                       }
                       
+                      // ===== NEW: Extract context files from composer =====
+                      const contextFiles = this.extractContextFilesFromComposer(composer);
+                      
                       prompts.push({
                         text: composer.name,
                         workspaceId: workspace.dir,
@@ -223,6 +226,8 @@ class CursorDatabaseParser {
                         forceMode: composer.forceMode || 'unknown',
                         isAuto: isAuto,
                         modelName: modelName,  // Inferred model name
+                        // NEW: Context files
+                        contextFiles: contextFiles,
                         status: 'captured',
                         confidence: 'high'
                       });
@@ -302,9 +307,11 @@ class CursorDatabaseParser {
                     
                     // Extract messages if available
                     if (composer.messages && Array.isArray(composer.messages)) {
+                      let previousUserPrompt = null;
+                      
                       composer.messages.forEach(msg => {
                         if (msg.text || msg.content) {
-                          prompts.push({
+                          const message = {
                             text: msg.text || msg.content,
                             timestamp: msg.timestamp || Date.now(),
                             source: 'composer-message',
@@ -312,7 +319,30 @@ class CursorDatabaseParser {
                             composerId: composer.composerId,
                             status: 'captured',
                             confidence: 'high'
-                          });
+                          };
+                          
+                          // NEW: Calculate thinking time for AI responses
+                          if (msg.role === 'assistant' && previousUserPrompt) {
+                            const thinkingTime = message.timestamp - previousUserPrompt.timestamp;
+                            if (thinkingTime > 0 && thinkingTime < 300000) { // Max 5 minutes
+                              message.thinkingTime = thinkingTime;
+                              message.thinkingTimeSeconds = (thinkingTime / 1000).toFixed(2);
+                            }
+                          }
+                          
+                          // NEW: Extract terminal blocks from prompt
+                          if (msg.role === 'user') {
+                            message.terminalBlocks = this.extractTerminalBlocks(message.text);
+                            previousUserPrompt = message;
+                          }
+                          
+                          // NEW: Detect images/attachments
+                          if (msg.attachments || msg.images) {
+                            message.hasAttachments = true;
+                            message.attachmentCount = (msg.attachments?.length || 0) + (msg.images?.length || 0);
+                          }
+                          
+                          prompts.push(message);
                         }
                       });
                     }
@@ -353,6 +383,165 @@ class CursorDatabaseParser {
       console.error('Error parsing persistent composer data:', error.message);
       return [];
     }
+  }
+
+  /**
+   * Extract context files from composer object
+   */
+  extractContextFilesFromComposer(composer) {
+    const files = [];
+    const fileSet = new Set(); // To avoid duplicates
+    
+    try {
+      // Extract from tabs array (files open in editor)
+      if (composer.tabs && Array.isArray(composer.tabs)) {
+        composer.tabs.forEach(tab => {
+          const filePath = tab.path || tab.uri || tab.resource?.path;
+          if (filePath && !fileSet.has(filePath)) {
+            fileSet.add(filePath);
+            files.push({
+              path: filePath,
+              name: path.basename(filePath),
+              source: 'open_tab',
+              isActive: tab.isActive || false,
+              isPinned: tab.isPinned || false
+            });
+          }
+        });
+      }
+      
+      // Extract from codebase context (auto-selected files)
+      if (composer.codebaseContext && Array.isArray(composer.codebaseContext)) {
+        composer.codebaseContext.forEach(ctx => {
+          const filePath = ctx.path || ctx.file || ctx.uri;
+          if (filePath && !fileSet.has(filePath)) {
+            fileSet.add(filePath);
+            files.push({
+              path: filePath,
+              name: path.basename(filePath),
+              source: 'codebase_search',
+              score: ctx.score || 0
+            });
+          }
+        });
+      }
+      
+      // Extract from mentions (@ references)
+      if (composer.mentions && Array.isArray(composer.mentions)) {
+        composer.mentions.forEach(mention => {
+          const filePath = mention.path || mention.file || mention;
+          if (filePath && typeof filePath === 'string' && !fileSet.has(filePath)) {
+            fileSet.add(filePath);
+            files.push({
+              path: filePath,
+              name: path.basename(filePath),
+              source: 'explicit_mention'
+            });
+          }
+        });
+      }
+      
+      // Extract from attached files
+      if (composer.files && Array.isArray(composer.files)) {
+        composer.files.forEach(file => {
+          const filePath = file.path || file.uri || file;
+          if (filePath && typeof filePath === 'string' && !fileSet.has(filePath)) {
+            fileSet.add(filePath);
+            files.push({
+              path: filePath,
+              name: path.basename(filePath),
+              source: 'composer_attached'
+            });
+          }
+        });
+      }
+      
+      // Extract from context array (generic context items)
+      if (composer.context && Array.isArray(composer.context)) {
+        composer.context.forEach(ctx => {
+          const filePath = ctx.path || ctx.file || ctx.uri || ctx;
+          if (filePath && typeof filePath === 'string' && !fileSet.has(filePath)) {
+            fileSet.add(filePath);
+            files.push({
+              path: filePath,
+              name: path.basename(filePath),
+              source: 'context_item',
+              score: ctx.score || 0
+            });
+          }
+        });
+      }
+      
+      return {
+        files: files,
+        count: files.length,
+        countBySource: {
+          explicit: files.filter(f => f.source === 'explicit_mention').length,
+          tabs: files.filter(f => f.source === 'open_tab').length,
+          auto: files.filter(f => f.source === 'codebase_search' || f.source === 'composer_attached' || f.source === 'context_item').length
+        }
+      };
+      
+    } catch (error) {
+      console.warn('Error extracting context files from composer:', error.message);
+      return { files: [], count: 0, countBySource: { explicit: 0, tabs: 0, auto: 0 } };
+    }
+  }
+
+  /**
+   * Extract terminal blocks from text (code blocks with terminal output)
+   */
+  extractTerminalBlocks(text) {
+    if (!text) return [];
+    
+    const terminalBlocks = [];
+    
+    // Pattern 1: Code blocks with bash/shell/terminal language
+    const codeBlockPattern = /```(?:bash|shell|terminal|zsh|sh)?\n([\s\S]*?)```/g;
+    let match;
+    
+    while ((match = codeBlockPattern.exec(text)) !== null) {
+      const content = match[1].trim();
+      if (content.length > 0) {
+        terminalBlocks.push({
+          type: 'code_block',
+          content: content,
+          hasPrompt: content.includes('$') || content.includes('%'),
+          position: match.index
+        });
+      }
+    }
+    
+    // Pattern 2: Terminal-like patterns in plain text ($ or % prompts)
+    const terminalLinePattern = /^[\$%]\s+(.+)$/gm;
+    while ((match = terminalLinePattern.exec(text)) !== null) {
+      terminalBlocks.push({
+        type: 'terminal_line',
+        content: match[1].trim(),
+        position: match.index
+      });
+    }
+    
+    // Pattern 3: Error messages
+    const errorPatterns = [
+      /Error:\s*(.+)/gi,
+      /Exception:\s*(.+)/gi,
+      /Failed:\s*(.+)/gi,
+      /\[ERROR\]\s*(.+)/gi
+    ];
+    
+    errorPatterns.forEach(pattern => {
+      let errorMatch;
+      while ((errorMatch = pattern.exec(text)) !== null) {
+        terminalBlocks.push({
+          type: 'error_message',
+          content: errorMatch[1].trim(),
+          position: errorMatch.index
+        });
+      }
+    });
+    
+    return terminalBlocks;
   }
 
   /**

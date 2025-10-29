@@ -8,6 +8,7 @@ require('dotenv').config({ path: path.resolve(__dirname, '../../../../../.env') 
 const express = require('express');
 const cors = require('cors');
 const compression = require('compression');
+const NodeCache = require('node-cache');
 const http = require('http');
 const chokidar = require('chokidar');
 const fs = require('fs');
@@ -16,6 +17,13 @@ const lunr = require('lunr'); // Import lunr
 // Import the new queue system and clipboard monitor
 const { queue: queueSystem } = require('./queue.js');
 const { clipboardMonitor } = require('./clipboardMonitor.js');
+
+// Initialize query cache (30 second TTL, check every 60s for expired)
+const queryCache = new NodeCache({ 
+  stdTTL: 30, 
+  checkperiod: 60,
+  useClones: false // Better performance, less memory
+});
 
 // Enhanced raw data capture modules
 const os = require('os');
@@ -124,15 +132,30 @@ const io = new Server(server, {
   }
 });
 
-// Real-time broadcast function
+// Real-time broadcast function with cache invalidation
 function broadcastUpdate(type, data) {
   io.emit('activityUpdate', { type, data });
+  
+  // Invalidate relevant caches when data changes
+  if (type === 'file-change' || type === 'new-entry') {
+    invalidateCache('activity_');
+    invalidateCache('context_');
+    invalidateCache('productivity_');
+  } else if (type === 'prompt' || type === 'ai-interaction') {
+    invalidateCache('activity_');
+    invalidateCache('context_');
+  } else if (type === 'error') {
+    invalidateCache('error_');
+  }
 }
 
 // Middleware
-app.use(compression()); // Enable gzip compression for all responses
+app.use(compression({ 
+  threshold: 1024, // Only compress responses > 1KB
+  level: 6 // Balance between compression ratio and speed
+}));
 app.use(cors({ origin: '*' })); // Explicitly allow all origins
-app.use(express.json());
+app.use(express.json({ limit: '10mb' })); // Increase JSON payload limit
 
 // Serve static files from public directory
 const publicPath = path.join(__dirname, '../../public');
@@ -829,10 +852,40 @@ if (autoDetect) {
   console.log('[TARGET] Monitoring configured workspaces:', workspacesToWatch);
 }
 
+// ===================================
+// Performance: Cache Utilities
+// ===================================
+
+// Cache invalidation helper
+function invalidateCache(pattern) {
+  const keys = queryCache.keys();
+  const matching = keys.filter(k => k.includes(pattern));
+  matching.forEach(k => queryCache.del(k));
+  if (matching.length > 0) {
+    console.log(`[CACHE] Invalidated ${matching.length} entries matching: ${pattern}`);
+  }
+}
+
+// Cache wrapper for async functions
+async function withCache(key, ttl, asyncFn) {
+  const cached = queryCache.get(key);
+  if (cached !== undefined) {
+    return cached;
+  }
+  
+  const result = await asyncFn();
+  queryCache.set(key, result, ttl || 30);
+  return result;
+}
+
 // Health check
 app.get('/health', (req, res) => {
   const queueStats = queueSystem.getStats();
   const clipboardStats = clipboardMonitor.getStats();
+  const cacheStats = queryCache.getStats();
+  
+  // No caching for health check
+  res.set('Cache-Control', 'no-cache');
   
   res.json({ 
     status: 'running', 
@@ -849,6 +902,12 @@ app.get('/health', (req, res) => {
       cursorDatabase: rawData.cursorDatabase.conversations.length,
       appleScript: rawData.appleScript.appState.length,
       logs: rawData.logs.cursor.length
+    },
+    cache_stats: {
+      keys: queryCache.keys().length,
+      hits: cacheStats.hits,
+      misses: cacheStats.misses,
+      hitRate: cacheStats.hits / (cacheStats.hits + cacheStats.misses) || 0
     }
   });
 });
@@ -1231,24 +1290,52 @@ app.get('/ide-state/cursor', (req, res) => {
 });
 
 // Get entries with linked prompts
-// API endpoint for activity data (used by dashboard) with pagination - OPTIMIZED
+// API endpoint for activity data (used by dashboard) with pagination - OPTIMIZED with caching
 app.get('/api/activity', async (req, res) => {
   try {
     const limit = Math.min(parseInt(req.query.limit) || 100, 500); // Max 500 at a time
     const offset = parseInt(req.query.offset) || 0;
     
-    // ✅ Query database directly with LIMIT - don't load into memory
-    const allEntries = await persistentDB.getRecentEntries(limit + offset);
-    const allPrompts = await persistentDB.getRecentPrompts(limit);
+    // Add cache control headers (30 seconds)
+    res.set('Cache-Control', 'public, max-age=30, must-revalidate');
+    res.set('ETag', `W/"activity-${sequence}-${limit}-${offset}"`);
     
-    // ✅ Already sorted by database query (ORDER BY timestamp DESC)
-    // Apply offset/limit
-    const paginatedEntries = allEntries.slice(offset, Math.min(offset + limit, allEntries.length));
+    // Cache key based on params
+    const cacheKey = `activity_${limit}_${offset}_${sequence}`;
+    
+    // Try to get from cache first
+    const cached = await withCache(cacheKey, 30, async () => {
+      // ✅ Get total count and limited entries separately
+      const totalCount = await persistentDB.getTotalEntriesCount();
+      const allEntries = await persistentDB.getRecentEntries(limit + offset);
+      const allPrompts = await persistentDB.getRecentPrompts(limit);
+      
+      // ✅ Already sorted by database query (ORDER BY timestamp DESC)
+      // Apply offset/limit
+      const paginatedEntries = allEntries.slice(offset, Math.min(offset + limit, allEntries.length));
+      
+      return { totalCount, allEntries, allPrompts, paginatedEntries };
+    });
+    
+    const { totalCount, allEntries, allPrompts, paginatedEntries } = cached;
     
     // Convert entries to events format for dashboard compatibility
     const events = paginatedEntries.map(entry => {
-      // Calculate diff stats if we have before/after content
+      // Extract diff stats from notes field (e.g., "Diff: +172 chars")
       let diffStats = {};
+      
+      if (entry.notes) {
+        const charsMatch = entry.notes.match(/Diff: \+(\d+) chars/);
+        if (charsMatch) {
+          const chars = parseInt(charsMatch[1]);
+          diffStats = {
+            chars_added: chars,
+            chars_deleted: 0  // Notes format doesn't distinguish add/delete, just total change
+          };
+        }
+      }
+      
+      // If we have full content (not loaded by default), calculate precise stats
       if (entry.before_code && entry.after_code) {
         const diff = calculateDiff(entry.before_code, entry.after_code);
         diffStats = {
@@ -1289,19 +1376,75 @@ app.get('/api/activity', async (req, res) => {
       };
     });
     
-    console.log(`API: Returning ${events.length} of ${allEntries.length} activity events (offset: ${offset})`);
+    console.log(`[API] Returning ${events.length} of ${totalCount} activity events (offset: ${offset})`);
     res.json({
       data: events,
       pagination: {
-        total: allEntries.length,
+        total: totalCount,
         limit,
         offset,
-        hasMore: offset + events.length < allEntries.length
+        hasMore: offset + events.length < totalCount
       }
     });
   } catch (error) {
     console.error('Error fetching activity data:', error);
     res.status(500).json({ error: 'Failed to fetch activity data' });
+  }
+});
+
+// Streaming endpoint for large datasets - returns data progressively
+app.get('/api/activity/stream', async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit) || 100, 1000); // Allow more for streaming
+    const offset = parseInt(req.query.offset) || 0;
+    
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Cache-Control', 'public, max-age=30');
+    res.write('{"data":[');
+    
+    const entries = await persistentDB.getRecentEntries(limit + offset);
+    const paginatedEntries = entries.slice(offset, offset + limit);
+    
+    let first = true;
+    for (const entry of paginatedEntries) {
+      if (!first) res.write(',');
+      
+      const event = {
+        id: entry.id,
+        type: entry.type || 'file_change',
+        timestamp: entry.timestamp,
+        session_id: entry.session_id || 'default',
+        workspace_path: entry.workspace_path || entry.file_path || '/unknown',
+        file_path: entry.file_path,
+        title: entry.title || `File Change: ${entry.file_path ? entry.file_path.split('/').pop() : 'Unknown'}`,
+        description: entry.description || entry.notes || 'File change detected',
+        modelInfo: entry.modelInfo,
+        tags: entry.tags || [],
+        prompt_id: entry.prompt_id,
+        source: entry.source
+      };
+      
+      res.write(JSON.stringify(event));
+      first = false;
+      
+      // Flush every 10 items for progressive loading
+      if (paginatedEntries.indexOf(entry) % 10 === 0) {
+        await new Promise(resolve => setImmediate(resolve));
+      }
+    }
+    
+    res.write('],"pagination":{');
+    res.write(`"total":${entries.length},`);
+    res.write(`"limit":${limit},`);
+    res.write(`"offset":${offset},`);
+    res.write(`"hasMore":${offset + paginatedEntries.length < entries.length}`);
+    res.write('}}');
+    res.end();
+    
+    console.log(`[STREAM] Streamed ${paginatedEntries.length} events`);
+  } catch (error) {
+    console.error('Error streaming activity data:', error);
+    res.status(500).json({ error: 'Failed to stream activity data' });
   }
 });
 
@@ -1344,7 +1487,20 @@ app.get('/entries', async (req, res) => {
           status: p.status || 'captured',
           source: 'cursor-database',
           method: 'database-extraction',
-          confidence: p.confidence || 'medium'
+          confidence: p.confidence || 'medium',
+          // Include context and code change metadata
+          contextUsage: p.contextUsage || 0,
+          linesAdded: p.linesAdded || 0,
+          linesRemoved: p.linesRemoved || 0,
+          mode: p.mode,
+          modelName: p.modelName,
+          modelType: p.modelType,
+          isAuto: p.isAuto,
+          workspaceName: p.workspaceName,
+          workspacePath: p.workspacePath,
+          composerId: p.composerId,
+          subtitle: p.subtitle,
+          contextFiles: p.contextFiles
         }))
       ];
       
@@ -1504,9 +1660,15 @@ app.get('/api/screenshots/near/:timestamp', (req, res) => {
 // ===================================
 
 // Context Analytics Endpoints
-app.get('/api/analytics/context', (req, res) => {
+app.get('/api/analytics/context', async (req, res) => {
   try {
-    const analytics = contextAnalyzer.getContextAnalytics();
+    res.set('Cache-Control', 'public, max-age=30');
+    
+    const analytics = await withCache('context_analytics', 30, async () => {
+      // Pull from database for persistent data
+      return await persistentDB.getContextAnalytics();
+    });
+    
     res.json({
       success: true,
       data: analytics
@@ -1619,9 +1781,14 @@ app.get('/api/analytics/context/file-relationships', (req, res) => {
 });
 
 // Error Tracking Endpoints
-app.get('/api/analytics/errors', (req, res) => {
+app.get('/api/analytics/errors', async (req, res) => {
   try {
-    const stats = errorTracker.getErrorStats();
+    res.set('Cache-Control', 'public, max-age=30');
+    
+    const stats = await withCache('error_stats', 30, async () => {
+      return errorTracker.getErrorStats();
+    });
+    
     res.json({
       success: true,
       data: stats
@@ -1648,9 +1815,15 @@ app.get('/api/analytics/errors/recent', (req, res) => {
 });
 
 // Productivity Metrics Endpoints
-app.get('/api/analytics/productivity', (req, res) => {
+app.get('/api/analytics/productivity', async (req, res) => {
   try {
-    const stats = productivityTracker.getProductivityStats();
+    res.set('Cache-Control', 'public, max-age=30');
+    
+    const stats = await withCache('productivity_stats', 30, async () => {
+      // Pass database to calculate from persistent data
+      return await productivityTracker.getProductivityStats(persistentDB);
+    });
+    
     res.json({
       success: true,
       data: stats
@@ -1817,6 +1990,337 @@ app.get('/api/database/prompts-with-entries', async (req, res) => {
   }
 });
 
+// NEW: Get context files for a specific prompt
+app.get('/api/prompts/:id/context-files', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Get prompt with context files
+    const prompts = await persistentDB.getAllPrompts();
+    const prompt = prompts.find(p => p.id == id);
+    
+    if (!prompt) {
+      return res.status(404).json({
+        success: false,
+        error: 'Prompt not found'
+      });
+    }
+    
+    // Parse context files if stored as JSON
+    let contextFiles = [];
+    let counts = { total: 0, explicit: 0, tabs: 0, auto: 0 };
+    
+    if (prompt.context_files_json) {
+      try {
+        contextFiles = JSON.parse(prompt.context_files_json);
+      } catch (e) {
+        console.warn('Error parsing context files JSON:', e.message);
+      }
+    }
+    
+    counts = {
+      total: prompt.context_file_count || contextFiles.length || 0,
+      explicit: prompt.context_file_count_explicit || 0,
+      tabs: prompt.context_file_count_tabs || 0,
+      auto: prompt.context_file_count_auto || 0
+    };
+    
+    res.json({
+      success: true,
+      promptId: parseInt(id),
+      promptText: prompt.text,
+      mode: prompt.mode,
+      contextUsage: prompt.context_usage,
+      fileCount: counts.total,
+      counts: counts,
+      files: contextFiles
+    });
+    
+  } catch (error) {
+    console.error('Error getting prompt context files:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// NEW: Get file usage statistics across all prompts
+app.get('/api/analytics/file-usage', async (req, res) => {
+  try {
+    const prompts = await persistentDB.getAllPrompts();
+    
+    // Aggregate file usage statistics
+    const fileUsage = new Map();
+    let totalFileCount = 0;
+    let totalPrompts = 0;
+    let explicitCount = 0;
+    let autoCount = 0;
+    
+    prompts.forEach(prompt => {
+      if (prompt.context_file_count > 0) {
+        totalFileCount += prompt.context_file_count;
+        totalPrompts++;
+        explicitCount += prompt.context_file_count_explicit || 0;
+        autoCount += prompt.context_file_count_auto || 0;
+        
+        // Parse individual files
+        if (prompt.context_files_json) {
+          try {
+            const files = JSON.parse(prompt.context_files_json);
+            files.forEach(file => {
+              const filePath = file.path || file;
+              const existing = fileUsage.get(filePath) || { count: 0, sources: new Set(), name: file.name || filePath };
+              existing.count++;
+              existing.sources.add(file.source || 'unknown');
+              fileUsage.set(filePath, existing);
+            });
+          } catch (e) {
+            // Skip parsing errors
+          }
+        }
+      }
+    });
+    
+    // Sort files by usage
+    const sortedFiles = Array.from(fileUsage.entries())
+      .map(([path, data]) => ({
+        path,
+        name: data.name,
+        count: data.count,
+        sources: Array.from(data.sources)
+      }))
+      .sort((a, b) => b.count - a.count);
+    
+    // Calculate distribution
+    const distribution = {
+      '0': 0,
+      '1-5': 0,
+      '6-10': 0,
+      '11-20': 0,
+      '20+': 0
+    };
+    
+    prompts.forEach(p => {
+      const count = p.context_file_count || 0;
+      if (count === 0) distribution['0']++;
+      else if (count <= 5) distribution['1-5']++;
+      else if (count <= 10) distribution['6-10']++;
+      else if (count <= 20) distribution['11-20']++;
+      else distribution['20+']++;
+    });
+    
+    res.json({
+      success: true,
+      data: {
+        mostUsedFiles: sortedFiles.slice(0, 20),
+        contextSizeDistribution: distribution,
+        avgFilesPerPrompt: totalPrompts > 0 ? (totalFileCount / totalPrompts).toFixed(2) : 0,
+        totalUniqueFiles: fileUsage.size,
+        explicitVsAuto: {
+          explicit: explicitCount,
+          auto: autoCount,
+          ratio: autoCount > 0 ? (explicitCount / autoCount).toFixed(2) : 0
+        }
+      }
+    });
+    
+  } catch (error) {
+    console.error('Error getting file usage stats:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// ===================================
+// TODO TRACKING API ENDPOINTS
+// ===================================
+
+// Track currently active TODO
+let currentActiveTodo = null;
+
+/**
+ * Get current session TODOs
+ */
+app.get('/api/todos', async (req, res) => {
+  try {
+    const todos = await persistentDB.getCurrentSessionTodos();
+    
+    // Enrich with event counts
+    for (const todo of todos) {
+      const events = await persistentDB.getTodoEvents(todo.id);
+      todo.eventCount = events.length;
+      todo.promptCount = events.filter(e => e.event_type === 'prompt').length;
+      todo.fileChangeCount = events.filter(e => e.event_type === 'file_change').length;
+      
+      // Calculate duration
+      if (todo.completedAt && todo.startedAt) {
+        todo.duration = todo.completedAt - todo.startedAt;
+      } else if (todo.startedAt) {
+        todo.duration = Date.now() - todo.startedAt;
+      }
+    }
+    
+    res.json({
+      success: true,
+      todos: todos,
+      activeTodoId: currentActiveTodo
+    });
+  } catch (error) {
+    console.error('Error fetching todos:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * Get events for a specific TODO
+ */
+app.get('/api/todos/:id/events', async (req, res) => {
+  try {
+    const todoId = parseInt(req.params.id);
+    const events = await persistentDB.getTodoEvents(todoId);
+    
+    // Enrich events with actual data
+    const enrichedEvents = [];
+    for (const event of events) {
+      let enrichedEvent = {
+        eventType: event.event_type,
+        timestamp: event.timestamp
+      };
+      
+      if (event.event_type === 'prompt') {
+        const prompt = await persistentDB.getPromptById(event.event_id);
+        if (prompt) {
+          enrichedEvent.details = prompt.text || prompt.preview || 'N/A';
+          enrichedEvent.data = prompt;
+        } else {
+          enrichedEvent.details = 'Prompt not found';
+        }
+      } else if (event.event_type === 'file_change') {
+        // Get entry from database
+        const entry = await persistentDB.getRecentEntries(1, event.event_id);
+        if (entry && entry.length > 0) {
+          const fileEntry = entry[0];
+          enrichedEvent.details = `File: ${fileEntry.filePath || fileEntry.file_path || 'unknown'}`;
+          enrichedEvent.data = fileEntry;
+        } else {
+          enrichedEvent.details = 'File change details not available';
+        }
+      } else {
+        enrichedEvent.details = 'Unknown event type';
+      }
+      
+      enrichedEvents.push(enrichedEvent);
+    }
+    
+    res.json({
+      success: true,
+      events: enrichedEvents
+    });
+  } catch (error) {
+    console.error('Error fetching todo events:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * Update TODO status manually
+ */
+app.post('/api/todos/:id/status', async (req, res) => {
+  try {
+    const todoId = parseInt(req.params.id);
+    const { status } = req.body;
+    
+    await persistentDB.updateTodoStatus(todoId, status);
+    
+    if (status === 'in_progress') {
+      currentActiveTodo = todoId;
+      console.log(`[TODO] Set active TODO to ${todoId}`);
+    } else if (status === 'completed' && currentActiveTodo === todoId) {
+      currentActiveTodo = null;
+      console.log(`[TODO] Completed TODO ${todoId}, cleared active TODO`);
+    }
+    
+    // Broadcast update
+    broadcastUpdate('todos', { 
+      todos: await persistentDB.getCurrentSessionTodos(),
+      activeTodoId: currentActiveTodo
+    });
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error updating todo status:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * Create TODOs manually (or capture from AI todo_write calls)
+ */
+app.post('/api/todos', async (req, res) => {
+  try {
+    const { todos, merge } = req.body;
+    
+    if (!todos || !Array.isArray(todos)) {
+      return res.status(400).json({ success: false, error: 'todos array required' });
+    }
+    
+    const savedTodos = [];
+    
+    for (let i = 0; i < todos.length; i++) {
+      const todo = todos[i];
+      
+      if (merge && todo.id) {
+        // Update existing TODO
+        if (todo.status) {
+          await persistentDB.updateTodoStatus(todo.id, todo.status);
+          
+          if (todo.status === 'in_progress') {
+            currentActiveTodo = todo.id;
+          } else if (todo.status === 'completed' && currentActiveTodo === todo.id) {
+            currentActiveTodo = null;
+          }
+        }
+      } else {
+        // Create new TODO
+        const todoId = await persistentDB.saveTodo({
+          content: todo.content,
+          status: todo.status || 'pending',
+          order_index: i,
+          created_at: Date.now()
+        });
+        
+        savedTodos.push(todoId);
+        
+        // If this is the first in_progress todo, set as active
+        if (todo.status === 'in_progress' && !currentActiveTodo) {
+          currentActiveTodo = todoId;
+          console.log(`[TODO] Set active TODO to ${todoId}`);
+        }
+      }
+    }
+    
+    console.log(`[TODO] Created ${savedTodos.length} new TODOs`);
+    
+    // Broadcast update
+    broadcastUpdate('todos', { 
+      todos: await persistentDB.getCurrentSessionTodos(),
+      activeTodoId: currentActiveTodo
+    });
+    
+    res.json({ 
+      success: true, 
+      created: savedTodos.length,
+      todoIds: savedTodos
+    });
+  } catch (error) {
+    console.error('Error creating todos:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Database export
 app.get('/api/export/database', async (req, res) => {
   try {
@@ -1891,77 +2395,40 @@ app.get('/api/file-contents', async (req, res) => {
       return res.json(fileContentsCache);
     }
     
-    // Limit to recent entries only (last 500 for performance)
+    // Limit to recent files only (last 500 for performance)
     const limit = parseInt(req.query.limit) || 500;
-    const entries = await persistentDB.getRecentEntries(limit);
+    console.log(`[FILE] Fetching file contents with limit ${limit}...`);
     
-    console.log(`[FILE] Processing ${entries.length} entries for file contents...`);
+    if (typeof persistentDB.getFileContents !== 'function') {
+      throw new Error('persistentDB.getFileContents is not a function');
+    }
     
-    // Helper to check if a string is a Git object hash (40-char hex)
-    const isGitObjectHash = (str) => /^[0-9a-f]{40}$/i.test(str);
+    const entries = await persistentDB.getFileContents(limit);
+    console.log(`[FILE] Processing ${entries.length} files for semantic analysis...`);
     
     // Build file content map with latest content for each file
     const fileContents = new Map();
     
     entries.forEach(entry => {
       const filePath = entry.file_path;
-      if (!filePath) return;
+      const content = entry.after_code;
       
-      // Use after_code as the most recent content
-      const content = entry.after_code || entry.after_content || '';
-      if (!content) return;
+      if (!filePath || !content) return;
       
-      // Skip very small files (likely Git metadata) unless they're known Git files
-      if (content.length < 10 && !filePath.includes('.git/')) return;
+      // Skip very small files (likely metadata)
+      if (content.length < 10) return;
       
       const fileName = filePath.split('/').pop();
-      let displayName = fileName;
-      let fileType = 'file';
-      
-      // Try to decode Git-specific files
-      if (filePath.includes('.git/')) {
-        // Check if filename is a Git object hash
-        if (isGitObjectHash(fileName)) {
-          const resolved = resolveGitObject(fileName, filePath);
-          if (resolved) {
-            displayName = resolved;
-            fileType = 'git-object';
-          } else {
-            // Skip unknown Git objects
-            return;
-          }
-        }
-        // Check if it's a Git ref file
-        else if (filePath.includes('.git/refs/') || filePath.endsWith('.git/HEAD') || 
-                 filePath.endsWith('.git/ORIG_HEAD') || filePath.endsWith('.git/FETCH_HEAD')) {
-          const decoded = decodeGitRef(filePath, content);
-          if (decoded) {
-            displayName = decoded;
-            fileType = 'git-ref';
-          }
-        }
-        // Filter out pack files and logs
-        else if (filePath.includes('.git/objects/pack/') || filePath.includes('.git/logs/')) {
-          return;
-        }
-        // Keep known Git config files
-        else if (fileName === 'index' || fileName === 'config' || fileName === 'COMMIT_EDITMSG') {
-          displayName = `Git ${fileName}`;
-          fileType = 'git-meta';
-        }
-      }
+      const ext = filePath.split('.').pop()?.toLowerCase();
       
       // Create or update file entry
       if (!fileContents.has(filePath)) {
         fileContents.set(filePath, {
           path: filePath,
-          name: displayName,
-          originalName: fileName,
-          ext: filePath.split('.').pop()?.toLowerCase(),
-          type: fileType,
+          name: fileName,
+          ext: ext,
           content: content,
           lastModified: entry.timestamp,
-          changes: 1,
           size: content.length
         });
       } else {
@@ -1972,7 +2439,6 @@ app.get('/api/file-contents', async (req, res) => {
           existing.lastModified = entry.timestamp;
           existing.size = content.length;
         }
-        existing.changes++;
       }
     });
     
@@ -2475,6 +2941,13 @@ async function processFileChange(filePath) {
           await db.add('entries', entry);
           console.log(`Saved entry to database: ${entry.id} for workspace: ${workspacePath}`);
           
+          // Link to active TODO
+          if (currentActiveTodo) {
+            await persistentDB.addFileToTodo(currentActiveTodo, relativePath);
+            await persistentDB.linkEventToTodo('file_change', entry.id);
+            console.log(`   [TODO] Linked file change ${entry.id} (${relativePath}) to TODO ${currentActiveTodo}`);
+          }
+          
           // Update workspace data
           updateWorkspaceData(workspacePath, entry, null);
           
@@ -2929,6 +3402,13 @@ loadPersistedData().then(() => {
           try {
             await persistentDB.savePrompt(enhancedPrompt);
             console.log(`   Saved prompt to SQLite: ${enhancedPrompt.id}`);
+            
+            // Link to active TODO
+            if (currentActiveTodo) {
+              await persistentDB.addPromptToTodo(currentActiveTodo, enhancedPrompt.id);
+              await persistentDB.linkEventToTodo('prompt', enhancedPrompt.id);
+              console.log(`   [TODO] Linked prompt ${enhancedPrompt.id} to TODO ${currentActiveTodo}`);
+            }
           } catch (saveError) {
             console.warn('Error saving prompt to database:', saveError.message);
           }

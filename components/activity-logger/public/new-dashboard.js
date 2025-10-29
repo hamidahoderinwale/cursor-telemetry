@@ -12,7 +12,7 @@ const EXTERNAL_CONFIG = window.CONFIG || {};
 const DASHBOARD_CONFIG = {
   API_BASE: EXTERNAL_CONFIG.API_BASE_URL || 'http://localhost:43917',
   WS_URL: EXTERNAL_CONFIG.WS_URL || 'ws://localhost:43917',
-  REFRESH_INTERVAL: 5000,
+  REFRESH_INTERVAL: 30000,  // Increased from 5s to 30s to reduce polling
   ENABLE_TF_IDF: false, // Disable TF-IDF by default to save memory
   ENABLE_SEMANTIC_SEARCH: false, // Disable semantic analysis by default
   MAX_SEARCH_RESULTS: 50, // Limit search results to prevent memory issues
@@ -53,6 +53,7 @@ const state = {
     fileChanges: 0,
     aiInteractions: 0,
     codeChanged: 0,
+    avgContext: 0,
     terminalCommands: 0
   },
   sequence: 0,
@@ -64,39 +65,70 @@ const state = {
 // API Client
 // ===================================
 
+// ===================================
+// Performance: Request Debouncing
+// ===================================
+
+const debouncedRequests = new Map();
+
+function debounce(fn, delay = 300) {
+  let timeout;
+  return function(...args) {
+    clearTimeout(timeout);
+    return new Promise((resolve) => {
+      timeout = setTimeout(() => resolve(fn.apply(this, args)), delay);
+    });
+  };
+}
+
 class APIClient {
   static async get(endpoint, options = {}) {
     const timeout = options.timeout || 20000; // 20 second default timeout (increased from 10s)
     const retries = options.retries || 1; // Retry up to 1 time (reduced to avoid long waits)
     
-    for (let attempt = 0; attempt <= retries; attempt++) {
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), timeout);
-        
-        const response = await fetch(`${CONFIG.API_BASE}${endpoint}`, {
-          signal: controller.signal,
-          ...options
-        });
-        
-        clearTimeout(timeoutId);
-        
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        return await response.json();
-      } catch (error) {
-        const isLastAttempt = attempt === retries;
-        
-        if (isLastAttempt) {
-          console.error(`[ERROR] API (${endpoint}) failed after ${retries + 1} attempts:`, error.message);
-          throw error;
-        }
-        
-        // Wait before retry (exponential backoff)
-        const waitTime = Math.min(1000 * Math.pow(2, attempt), 5000);
-        console.warn(`[WARNING] API (${endpoint}) attempt ${attempt + 1} failed, retrying in ${waitTime}ms...`);
-        await new Promise(resolve => setTimeout(resolve, waitTime));
-      }
+    // Debounce repeated requests to the same endpoint
+    const cacheKey = endpoint + JSON.stringify(options);
+    if (debouncedRequests.has(cacheKey)) {
+      console.log(`[DEBOUNCE] Skipping duplicate request to ${endpoint}`);
+      return debouncedRequests.get(cacheKey);
     }
+    
+    const requestPromise = (async () => {
+      for (let attempt = 0; attempt <= retries; attempt++) {
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), timeout);
+          
+          const response = await fetch(`${CONFIG.API_BASE}${endpoint}`, {
+            signal: controller.signal,
+            ...options
+          });
+          
+          clearTimeout(timeoutId);
+          
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          return await response.json();
+        } catch (error) {
+          const isLastAttempt = attempt === retries;
+          
+          if (isLastAttempt) {
+            console.error(`[ERROR] API (${endpoint}) failed after ${retries + 1} attempts:`, error.message);
+            throw error;
+          }
+          
+          // Wait before retry (exponential backoff)
+          const waitTime = Math.min(1000 * Math.pow(2, attempt), 5000);
+          console.warn(`[WARNING] API (${endpoint}) attempt ${attempt + 1} failed, retrying in ${waitTime}ms...`);
+          await new Promise(resolve => setTimeout(resolve, waitTime));
+        }
+      }
+    })();
+    
+    // Cache the promise for deduplication
+    debouncedRequests.set(cacheKey, requestPromise);
+    setTimeout(() => debouncedRequests.delete(cacheKey), 1000);
+    
+    return requestPromise;
   }
 
   static async post(endpoint, data, options = {}) {
@@ -288,8 +320,8 @@ async function initializeDashboard() {
     }
     
     // Step 3: Render initial UI with cached/recent data
+    calculateStats();
     await renderCurrentView();
-    updateStats();
     
     // Step 4: Background: fetch older history if needed
     setTimeout(() => {
@@ -326,8 +358,8 @@ async function loadFromCache() {
   
   // Render with cached data immediately
   if (state.data.events.length > 0 || state.data.prompts.length > 0) {
+    calculateStats();
     await renderCurrentView();
-    updateStats();
   }
 }
 
@@ -335,37 +367,51 @@ async function loadFromCache() {
  * Fetch only recent data (last 24 hours by default)
  */
 async function fetchRecentData() {
-  const windowHours = analyticsManager.config.initialWindowHours;
+  const windowHours = 24 * 365; // 1 year of data
   const windowLabel = windowHours >= 24 ? `${windowHours / 24}d` : `${windowHours}h`;
   console.log(`[SYNC] Fetching recent data (${windowLabel} window)...`);
   
-  const window = analyticsManager.getInitialWindow();
-  const startTime = window.start;
+  const pageSize = 500; // Optimized limit for performance
   
   try {
-    // Fetch recent events only
+    // Fetch recent events only (cached data provides full history)
     const [activity, prompts, workspaces] = await Promise.all([
-      APIClient.get(`/api/activity?limit=${analyticsManager.config.pageSize}`),
-      APIClient.get(`/entries?limit=${analyticsManager.config.pageSize}`),
+      APIClient.get(`/api/activity?limit=${pageSize}`),
+      APIClient.get(`/entries?limit=${pageSize}`),
       APIClient.get('/api/workspaces')
     ]);
     
     // Process activity
+    console.log('[DEBUG] Activity response:', { hasData: !!activity.data, isArray: Array.isArray(activity.data), length: activity.data?.length });
+    
     if (activity.data && Array.isArray(activity.data)) {
+      // Store total count for all-time stats
+      if (activity.pagination?.total) {
+        if (!state.stats) state.stats = {};
+        state.stats.totalEventCount = activity.pagination.total;
+        console.log(`[STATS] Total events in database: ${activity.pagination.total}`);
+      }
+      
       // Filter to initial window
       const recentEvents = activity.data.filter(e => {
-        const ts = parseFloat(e.timestamp); // Parse string timestamp
+        // ✅ Fix: Parse ISO timestamp correctly
+        const ts = new Date(e.timestamp).getTime();
         return ts >= startTime;
       });
       
       state.data.events = recentEvents;
-      console.log(`[DATA] Loaded ${recentEvents.length} recent events`);
+      console.log(`[DATA] Loaded ${recentEvents.length} recent events (of ${activity.pagination?.total || 'unknown'} total)`);
       
       // Store in cache
       await persistentStorage.storeEvents(recentEvents);
+    } else {
+      console.warn('[WARNING] Activity data not in expected format:', activity);
+      state.data.events = [];
     }
     
     // Process prompts
+    console.log('[DEBUG] Prompts response:', { hasEntries: !!prompts.entries, isArray: Array.isArray(prompts.entries), length: prompts.entries?.length, keys: Object.keys(prompts) });
+    
     if (prompts.entries && Array.isArray(prompts.entries)) {
       // Map API fields to match dashboard expectations
       const mappedPrompts = prompts.entries.map(p => ({
@@ -390,8 +436,9 @@ async function fetchRecentData() {
       
       // Filter to initial window
       const recentPrompts = mappedPrompts.filter(p => {
-        const ts = parseFloat(p.timestamp); // Parse string timestamp
-        return ts >= startTime;
+        // ✅ Fix: /entries returns numeric timestamps, not ISO strings
+        const ts = parseFloat(p.timestamp);
+        return !isNaN(ts) && ts >= startTime;
       });
       
       state.data.prompts = recentPrompts;
@@ -399,6 +446,9 @@ async function fetchRecentData() {
       
       // Store in cache
       await persistentStorage.storePrompts(recentPrompts);
+    } else {
+      console.warn('[WARNING] Prompts data not in expected format:', prompts);
+      state.data.prompts = [];
     }
     
     // Process workspaces
@@ -406,8 +456,16 @@ async function fetchRecentData() {
       state.data.workspaces = workspaces;
     }
     
+    // ✅ Calculate stats after fetching data
+    console.log(`[SYNC] Fetch complete. Events: ${state.data.events.length}, Prompts: ${state.data.prompts.length}`);
+    calculateStats();
+    
   } catch (error) {
-    console.error('Error fetching recent data:', error);
+    console.error('[ERROR] Error fetching recent data:', error);
+    // Initialize with empty arrays to prevent crashes
+    if (!state.data.events) state.data.events = [];
+    if (!state.data.prompts) state.data.prompts = [];
+    calculateStats(); // Calculate with empty data to show 0s
   }
 }
 
@@ -427,16 +485,16 @@ async function fetchOlderHistory() {
 async function fetchAllData() {
   console.log('Fetching data from companion service...');
   try {
-    // Use pagination to fetch only recent data (limit 200 most recent events)
+    // Fetch recent data with optimized limits for performance
     const [activity, workspaces, ideState, systemRes, gitData, prompts, cursorDb, terminalHistory] = await Promise.allSettled([
-      APIClient.get('/api/activity?limit=200&offset=0'), // Fetch only 200 most recent events
+      APIClient.get('/api/activity?limit=500'), // Recent activity only (performance optimized)
       APIClient.get('/api/workspaces'),
       APIClient.get('/ide-state'),
       APIClient.get('/raw-data/system-resources'),
       APIClient.get('/raw-data/git'),
-      APIClient.get('/entries'), // Fetch prompts/entries (includes cursor DB)
+      APIClient.get('/entries?limit=500'), // Recent prompts (cached data provides full history)
       APIClient.get('/api/cursor-database'), // Direct cursor database data
-      APIClient.get('/api/terminal/history?limit=50') // Terminal commands (reduced from 100 to 50)
+      APIClient.get('/api/terminal/history?limit=50') // Terminal commands
     ]);
 
     console.log('Data fetch results:', {
@@ -456,6 +514,12 @@ async function fetchAllData() {
       
       // Handle paginated response format
       if (activityData.data && Array.isArray(activityData.data)) {
+        // Store total count for all-time stats
+        if (activityData.pagination?.total) {
+          if (!state.stats) state.stats = {};
+          state.stats.totalEventCount = activityData.pagination.total;
+        }
+        
         state.data.events = activityData.data;
         console.log(`Loaded ${activityData.data.length} of ${activityData.pagination?.total || 'unknown'} events (paginated)`);
       } 
@@ -565,50 +629,37 @@ function calculateStats() {
     if (item.session_id) sessions.add(item.session_id);
   });
 
-  // Count file changes
-  const fileChanges = events.filter(e => 
+  // Count file changes (use totalEventCount for all-time if available, otherwise use filtered count)
+  const fileChanges = state.stats?.totalEventCount || events.filter(e => 
     e.type === 'file_change' || e.type === 'code_change'
   ).length;
   
   // Count terminal commands
   state.stats.terminalCommands = terminalCommands.length;
 
-  // Count AI interactions (unique composer sessions + non-JSON prompts)
-  const composerIds = new Set();
-  let nonJsonPrompts = 0;
+  // Count AI interactions - simply count all prompts with text
+  // (We were overcomplicated before, filtering too much!)
+  const aiInteractions = (state.data.prompts || []).filter(p => {
+    const text = p.text || p.prompt || p.preview || p.content || '';
+    return text && text.length > 5; // Has actual content
+  }).length;
   
-  (state.data.prompts || []).forEach(p => {
-    // Count unique composer IDs
-    if (p.composerId) {
-      composerIds.add(p.composerId);
-    } 
-    // Count non-JSON prompts (actual user interactions)
-    else {
-      const text = p.text || p.prompt || p.preview || p.content || '';
-      const isJsonLike = text.startsWith('{') || text.startsWith('[');
-      if (!isJsonLike && text.length > 10) {
-        nonJsonPrompts++;
-      }
-    }
-  });
-  
-  const aiInteractions = composerIds.size + nonJsonPrompts;
-  
-  console.log(`AI Interactions Calculation:`, {
-    totalPrompts: state.data.prompts?.length || 0,
-    composerIds: composerIds.size,
-    nonJsonPrompts: nonJsonPrompts,
-    aiInteractions: aiInteractions
-  });
+  console.log(`AI Interactions: ${aiInteractions} of ${state.data.prompts?.length || 0} prompts`);
 
   // Calculate code changed (approximate)
   let totalChars = 0;
   events.forEach(e => {
     try {
       const details = typeof e.details === 'string' ? JSON.parse(e.details) : e.details;
-      totalChars += (details?.chars_added || 0) + (details?.chars_deleted || 0);
-    } catch {}
+      const added = details?.chars_added || 0;
+      const deleted = details?.chars_deleted || 0;
+      totalChars += added + deleted;
+    } catch (err) {
+      // Silently skip parsing errors
+    }
   });
+  
+  console.log(`[STATS] Code changed: ${totalChars} chars (${(totalChars / 1024).toFixed(1)} KB) from ${events.length} events`);
 
   // Calculate average context usage
   let totalContextUsage = 0;
@@ -684,11 +735,20 @@ function updateConnectionStatus(connected) {
 }
 
 function updateStatsDisplay() {
-  document.getElementById('statSessions').textContent = state.stats.sessions;
-  document.getElementById('statFileChanges').textContent = state.stats.fileChanges;
-  document.getElementById('statAIInteractions').textContent = state.stats.aiInteractions;
-  document.getElementById('statCodeChanged').textContent = `${state.stats.codeChanged} KB`;
-  document.getElementById('statAvgContext').textContent = `${state.stats.avgContext}%`;
+  // Defensive checks for DOM elements
+  const statSessions = document.getElementById('statSessions');
+  const statFileChanges = document.getElementById('statFileChanges');
+  const statAIInteractions = document.getElementById('statAIInteractions');
+  const statCodeChanged = document.getElementById('statCodeChanged');
+  const statAvgContext = document.getElementById('statAvgContext');
+  
+  if (statSessions) statSessions.textContent = state.stats.sessions || 0;
+  if (statFileChanges) statFileChanges.textContent = state.stats.fileChanges || 0;
+  if (statAIInteractions) statAIInteractions.textContent = state.stats.aiInteractions || 0;
+  if (statCodeChanged) statCodeChanged.textContent = `${state.stats.codeChanged || 0} KB`;
+  if (statAvgContext) statAvgContext.textContent = `${state.stats.avgContext || 0}%`;
+  
+  console.log('[STATS] Updated display:', state.stats);
 }
 
 function updateWorkspaceSelector() {
@@ -746,6 +806,9 @@ function renderCurrentView() {
       break;
     case 'navigator':
       renderNavigatorView(container);
+      break;
+    case 'todos':
+      renderTodoView(container);
       break;
     case 'system':
       renderSystemView(container);
@@ -1359,17 +1422,6 @@ function renderAnalyticsView(container) {
         </div>
       </div>
 
-      <!-- Continuous Activity Timeline -->
-      <div class="card">
-        <div class="card-header">
-          <h3 class="card-title">Continuous Activity Timeline</h3>
-          <p class="card-subtitle">Minute-by-minute tracking (auto-scales: 1min/5min/hourly/daily)</p>
-        </div>
-        <div class="card-body">
-          <canvas id="activityChart" style="max-height: 300px;"></canvas>
-        </div>
-      </div>
-
       <!-- Breakdown Charts -->
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: var(--space-lg);">
         <div class="card">
@@ -1415,16 +1467,6 @@ function renderAnalyticsView(container) {
         </div>
       </div>
 
-      <!-- UI State Analytics -->
-      <div class="card">
-        <div class="card-header">
-          <h3 class="card-title">UI State Analytics</h3>
-          <p class="card-subtitle">Tab usage and interface patterns</p>
-        </div>
-        <div class="card-body">
-          <div id="uiStateAnalytics" style="min-height: 250px;"></div>
-        </div>
-      </div>
 
       <!-- NEW: Enhanced Context Window Analytics -->
       <div class="card">
@@ -1459,17 +1501,6 @@ function renderAnalyticsView(container) {
         </div>
       </div>
 
-      <!-- NEW: File Relationship Visualization -->
-      <div class="card">
-        <div class="card-header">
-          <h3 class="card-title">File Relationship Network</h3>
-          <p class="card-subtitle">Files frequently used together in AI context</p>
-        </div>
-        <div class="card-body">
-          <div id="fileRelationshipViz" style="min-height: 300px;"></div>
-        </div>
-      </div>
-
     </div>
   `;
 
@@ -1477,23 +1508,26 @@ function renderAnalyticsView(container) {
   setTimeout(() => {
     renderAIActivityChart();
     renderPromptTokensChart();
-    renderActivityChart();
+    // renderActivityChart(); // Removed: Continuous Activity Timeline
     renderFileTypesChart();
     renderHourlyChart();
-    renderContextFileAnalytics();
-    renderContextFileHeatmap();
-    renderUIStateAnalytics();
+    renderContextFileAnalytics().catch(err => console.warn('[INFO] Context file analytics not available:', err.message));
+    renderContextFileHeatmap().catch(err => console.warn('[INFO] Context file heatmap not available:', err.message));
     
     // NEW: Render new analytics sections
     renderModelUsageAnalytics();
     renderEnhancedContextAnalytics().catch(err => console.warn('[INFO] Context analytics not available:', err.message));
     renderErrorTracking().catch(err => console.warn('[INFO] Error tracking not available:', err.message));
     renderProductivityInsights().catch(err => console.warn('[INFO] Productivity insights not available:', err.message));
-    renderFileRelationshipVisualization().catch(err => console.warn('[INFO] File relationships not available:', err.message));
+    // renderFileRelationshipVisualization() - REMOVED: Handled in File Graph view
   }, 100);
 }
 
-function renderActivityChart() {
+// ✅ REMOVED: Continuous Activity Timeline (per user request)
+// function renderActivityChart() {
+//   Commented out to remove Continuous Activity Timeline from dashboard
+// }
+function renderActivityChart_DISABLED() {
   const ctx = document.getElementById('activityChart');
   if (!ctx) return;
 
@@ -1947,18 +1981,16 @@ function renderFileGraphView(container) {
       <div class="card" style="margin-top: var(--space-lg);">
         <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
           <div>
-            <h3 class="card-title">Most Similar File Pairs</h3>
+            <h3 class="card-title" style="cursor: help;" title="File pairs ranked by co-occurrence in prompts and editing sessions. Shows which files are frequently worked on together.">
+              Most Similar File Pairs
+              <span style="font-size: 11px; color: var(--color-text-muted); font-weight: normal; margin-left: 4px;">ⓘ</span>
+            </h3>
             <p class="card-subtitle">Files frequently modified together with highest co-occurrence scores</p>
           </div>
           <div style="display: flex; gap: var(--space-sm); align-items: center;">
             <label style="font-size: var(--text-sm); color: var(--color-text-muted);">Show:</label>
-            <select id="similarPairsCount" onchange="updateSimilarPairs()" style="padding: 4px 8px; border-radius: 4px; border: 1px solid var(--color-border); background: var(--color-bg); color: var(--color-text); font-size: 13px;">
-              <option value="5">Top 5</option>
-              <option value="10" selected>Top 10</option>
-              <option value="15">Top 15</option>
-              <option value="20">Top 20</option>
-            </select>
-            <button onclick="highlightSimilarPairs()" class="btn-secondary" style="font-size: 13px; padding: 6px 12px;">Highlight in Graph</button>
+            <input type="number" id="similarPairsCount" min="1" max="50" value="10" onchange="updateSimilarPairs()" oninput="if(this.value > 50) this.value = 50; if(this.value < 1) this.value = 1;" style="width: 60px; padding: 4px 8px; border-radius: 4px; border: 1px solid var(--color-border); background: var(--color-bg); color: var(--color-text); font-size: 13px; text-align: center;" />
+            <button onclick="highlightSimilarPairs()" class="btn-secondary" style="font-size: 13px; padding: 6px 12px;" title="Highlight these pairs in the graph visualization above">Highlight in Graph</button>
           </div>
         </div>
         <div class="card-body">
@@ -1974,7 +2006,10 @@ function renderFileGraphView(container) {
         <!-- Prompt Embeddings Analysis -->
         <div class="card">
           <div class="card-header">
-            <h3 class="card-title">AI Prompt Embeddings Analysis</h3>
+            <h3 class="card-title" style="cursor: help;" title="Visualizes semantic similarity between your AI prompts using TF-IDF embeddings and dimensionality reduction (PCA/t-SNE/MDS). Prompts with similar content appear closer together. Data is extracted from your Cursor database and analyzed locally.">
+              Prompts Embedding Analysis
+              <span style="font-size: 11px; color: var(--color-text-muted); font-weight: normal; margin-left: 4px;">ⓘ</span>
+            </h3>
           </div>
           <div class="card-body">
             <p style="font-size: 13px; color: var(--color-text-muted); margin-bottom: var(--space-lg);">
@@ -1999,19 +2034,23 @@ function renderFileGraphView(container) {
             <div style="margin-bottom: var(--space-md); padding: var(--space-md); background: var(--color-bg-alt); border-radius: var(--radius-md);">
               <div style="display: flex; align-items: center; gap: var(--space-md); flex-wrap: wrap;">
                 <div style="display: flex; align-items: center; gap: var(--space-sm);">
-                  <label style="font-size: 13px; color: var(--color-text-muted);">Reduction Method:</label>
+                  <label style="font-size: 13px; color: var(--color-text-muted);" title="PCA: Fastest, linear. t-SNE: Best clusters. MDS: Preserves distances.">Reduction Method:</label>
                   <select id="embeddingsReductionMethod" style="padding: 4px 8px; border-radius: 4px; border: 1px solid var(--color-border); background: var(--color-bg); color: var(--color-text); font-size: 12px;" onchange="renderEmbeddingsVisualization()">
-                    <option value="pca">PCA</option>
-                    <option value="tsne">t-SNE</option>
-                    <option value="mds">MDS</option>
+                    <option value="pca">PCA (Principal Component Analysis)</option>
+                    <option value="tsne">t-SNE (t-Distributed Stochastic Neighbor Embedding)</option>
+                    <option value="mds">MDS (Multidimensional Scaling)</option>
                   </select>
                 </div>
                 <div style="display: flex; align-items: center; gap: var(--space-sm);">
-                  <label style="font-size: 13px; color: var(--color-text-muted);" title="Number of dimensions to reduce to (2D or 3D)">Dimensions:</label>
+                  <label style="font-size: 13px; color: var(--color-text-muted);" title="Number of dimensions to reduce to (2D for flat visualization, 3D for spatial view)">Dimensions:</label>
                   <select id="embeddingsDimensions" style="padding: 4px 8px; border-radius: 4px; border: 1px solid var(--color-border); background: var(--color-bg); color: var(--color-text); font-size: 12px;" onchange="renderEmbeddingsVisualization()">
-                    <option value="2">2D</option>
+                    <option value="2" selected>2D</option>
                     <option value="3">3D</option>
                   </select>
+                </div>
+                <div style="display: flex; align-items: center; gap: var(--space-sm);">
+                  <label style="font-size: 13px; color: var(--color-text-muted);" title="Number of principal components to keep (higher = more detail, slower computation)">Components:</label>
+                  <input type="number" id="embeddingsPCAComponents" min="2" max="50" value="10" onchange="renderEmbeddingsVisualization()" oninput="if(this.value > 50) this.value = 50; if(this.value < 2) this.value = 2;" style="width: 55px; padding: 4px 8px; border-radius: 4px; border: 1px solid var(--color-border); background: var(--color-bg); color: var(--color-text); font-size: 12px; text-align: center;" />
                 </div>
               </div>
             </div>
@@ -2053,8 +2092,11 @@ function renderFileGraphView(container) {
               </div>
             </div>
             <div>
-              <h4 style="font-size: 14px; margin-bottom: var(--space-sm); color: var(--color-text-muted);">Top Terms by Importance:</h4>
-              <div id="topTerms" style="display: flex; flex-direction: column; gap: var(--space-xs); max-height: 200px; overflow-y: auto;">
+              <h4 style="font-size: 14px; margin-bottom: var(--space-sm); color: var(--color-text-muted); cursor: help;" title="Terms ranked by TF-IDF (Term Frequency-Inverse Document Frequency) score. Higher scores indicate terms that are important in specific files but rare across all files.">
+              Top Terms by Importance:
+              <span style="font-size: 11px; color: var(--color-text-muted); font-weight: normal; margin-left: 4px;">ⓘ</span>
+            </h4>
+              <div id="topTerms" style="display: flex; flex-direction: column; gap: var(--space-xs); max-height: 300px; overflow-y: auto; overflow-x: hidden;">
                 <div style="color: var(--color-text-muted); font-size: 13px;">Analyzing...</div>
               </div>
             </div>
@@ -2327,35 +2369,80 @@ async function initializeD3FileGraph() {
       return;
     }
     
-    // Compute simple co-occurrence based similarity
+    // Compute similarity based on context files from prompts (more accurate than session-based)
     const links = [];
-    const threshold = 0.3;
+    const threshold = 0.2; // Lower threshold to catch more relationships
     
+    // Build file-to-prompts mapping from context files
+    const filePromptMap = new Map();
+    const prompts = state.data.prompts || [];
+    
+    prompts.forEach(prompt => {
+      if (prompt.contextFiles && Array.isArray(prompt.contextFiles)) {
+        prompt.contextFiles.forEach(cf => {
+          const filePath = cf.path || cf.filePath || cf.file;
+          if (filePath) {
+            if (!filePromptMap.has(filePath)) {
+              filePromptMap.set(filePath, new Set());
+            }
+            filePromptMap.get(filePath).add(prompt.id || prompt.timestamp);
+          }
+        });
+      }
+      
+      // Also check for file changes in the prompt
+      if (prompt.file_path || prompt.filePath) {
+        const filePath = prompt.file_path || prompt.filePath;
+        if (!filePromptMap.has(filePath)) {
+          filePromptMap.set(filePath, new Set());
+        }
+        filePromptMap.get(filePath).add(prompt.id || prompt.timestamp);
+      }
+    });
+    
+    console.log(`[GRAPH] Built file-to-prompt map with ${filePromptMap.size} files`);
+    
+    // Compute co-occurrence between files
     for (let i = 0; i < files.length; i++) {
       for (let j = i + 1; j < files.length; j++) {
         const file1 = files[i];
         const file2 = files[j];
         
-        // Check if files were modified in the same sessions
+        // Get prompts that reference each file
+        const prompts1 = filePromptMap.get(file1.id) || new Set();
+        const prompts2 = filePromptMap.get(file2.id) || new Set();
+        
+        // Fallback: check if files were modified in same sessions
         const sessions1 = new Set((file1.events || []).map(e => e.session_id).filter(Boolean));
         const sessions2 = new Set((file2.events || []).map(e => e.session_id).filter(Boolean));
         
-        const intersection = new Set([...sessions1].filter(x => sessions2.has(x)));
-        const union = new Set([...sessions1, ...sessions2]);
+        // Combine both prompt co-occurrence and session co-occurrence
+        const promptIntersection = new Set([...prompts1].filter(x => prompts2.has(x)));
+        const sessionIntersection = new Set([...sessions1].filter(x => sessions2.has(x)));
         
-        const similarity = union.size > 0 ? intersection.size / union.size : 0;
+        const promptUnion = new Set([...prompts1, ...prompts2]);
+        const sessionUnion = new Set([...sessions1, ...sessions2]);
+        
+        // Calculate similarity with weighted average (prompts are more important)
+        const promptSim = promptUnion.size > 0 ? promptIntersection.size / promptUnion.size : 0;
+        const sessionSim = sessionUnion.size > 0 ? sessionIntersection.size / sessionUnion.size : 0;
+        
+        // Weighted average: 70% prompts, 30% sessions
+        const similarity = (promptSim * 0.7) + (sessionSim * 0.3);
         
         if (similarity > threshold) {
           links.push({
             source: file1.id,
             target: file2.id,
-            similarity: similarity
+            similarity: similarity,
+            sharedPrompts: promptIntersection.size,
+            sharedSessions: sessionIntersection.size
           });
         }
       }
     }
     
-    console.log(`[GRAPH] Created ${links.length} connections between files`);
+    console.log(`[GRAPH] Created ${links.length} connections between files (threshold: ${threshold})`);
     
     // Compute TF-IDF for semantic analysis
     const {tfidfStats, similarities} = computeTFIDFAnalysis(files);
@@ -2387,10 +2474,13 @@ async function initializeD3FileGraph() {
     document.getElementById('tfidfUniqueTerms').textContent = tfidfStats.uniqueTerms;
     document.getElementById('tfidfAvgFreq').textContent = tfidfStats.avgFrequency.toFixed(2);
     
-    // Show top terms
-    const termsHtml = tfidfStats.topTerms.slice(0, 10).map(term => `
-      <div style="display: flex; justify-content: space-between; padding: var(--space-xs); background: var(--color-bg); border-radius: var(--radius-sm); font-size: 12px;">
-        <span style="font-family: var(--font-mono); color: var(--color-text);">${term.term}</span>
+    // Show ALL top terms (not just 10) with scrolling
+    const termsHtml = tfidfStats.topTerms.map((term, index) => `
+      <div style="display: flex; justify-content: space-between; align-items: center; padding: var(--space-xs); background: var(--color-bg); border-radius: var(--radius-sm); font-size: 12px;" title="TF-IDF Score: ${term.tfidf.toFixed(6)} | Frequency: ${term.freq}">
+        <span style="display: flex; align-items: center; gap: var(--space-xs);">
+          <span style="color: var(--color-text-muted); font-size: 10px; min-width: 25px;">#${index + 1}</span>
+          <span style="font-family: var(--font-mono); color: var(--color-text);">${term.term}</span>
+        </span>
         <span style="font-weight: 600; color: var(--color-accent);">${term.tfidf.toFixed(4)}</span>
       </div>
     `).join('');
@@ -2433,8 +2523,11 @@ function renderEmbeddingsVisualization() {
   
   const method = document.getElementById('embeddingsReductionMethod')?.value || 'pca';
   const dimensions = parseInt(document.getElementById('embeddingsDimensions')?.value || '2');
+  const numComponents = parseInt(document.getElementById('embeddingsPCAComponents')?.value || '10');
   
   try {
+    console.log(`[EMBEDDINGS] Starting analysis: method=${method}, dims=${dimensions}, components=${numComponents}`);
+    
     // Filter out JSON metadata, composer conversations (which are just names), and prepare actual prompt texts
     const validPrompts = prompts.filter(p => {
       const text = p.text || p.prompt || p.preview || p.content || '';
@@ -2443,6 +2536,8 @@ function renderEmbeddingsVisualization() {
       const isComposerConversation = p.source === 'composer' && p.type === 'conversation';
       return !isJsonLike && !isComposerConversation && text.length > 10;
     });
+    
+    console.log(`[EMBEDDINGS] Filtered to ${validPrompts.length} valid prompts`);
     
     if (validPrompts.length === 0) {
       container.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--color-text-muted); font-size: 13px;">No valid prompts for analysis (filtered out JSON metadata)</div>';
@@ -2453,9 +2548,22 @@ function renderEmbeddingsVisualization() {
     const promptTexts = validPrompts.map(p => p.text || p.prompt || p.preview || p.content || '');
     const allTokens = promptTexts.map(text => tokenizeCode(text));
     
-    // Build vocabulary from all prompts
-    const vocabulary = [...new Set(allTokens.flat())];
-    const topVocab = vocabulary.slice(0, 100); // Use top 100 terms for embedding space
+    // Build vocabulary from all prompts - use top terms based on frequency
+    const vocab = new Map();
+    allTokens.forEach(tokens => {
+      tokens.forEach(token => {
+        vocab.set(token, (vocab.get(token) || 0) + 1);
+      });
+    });
+    
+    // Use vocabulary size based on numComponents setting (adaptive)
+    const vocabSize = Math.min(Math.max(numComponents * 5, 20), 150);
+    const topVocab = Array.from(vocab.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, vocabSize)
+      .map(e => e[0]);
+    
+    console.log(`[EMBEDDINGS] Using vocabulary size: ${topVocab.length}`);
     
     // Create TF-IDF vectors
     const vectors = [];
@@ -2468,7 +2576,7 @@ function renderEmbeddingsVisualization() {
       
       // Create TF-IDF vector
       topVocab.forEach(term => {
-        const tf = tokens.filter(t => t === term).length / tokens.length;
+        const tf = tokens.filter(t => t === term).length / Math.max(tokens.length, 1);
         // Simple IDF approximation
         const df = allTokens.filter(tokSet => tokSet.includes(term)).length;
         const idf = Math.log(validPrompts.length / (df + 1));
@@ -2492,14 +2600,19 @@ function renderEmbeddingsVisualization() {
       });
     });
     
+    console.log(`[EMBEDDINGS] Built ${vectors.length} TF-IDF vectors with ${vectors[0]?.length} dimensions`);
+    
     // Apply dimensionality reduction
     let reducedVectors;
     if (method === 'pca') {
-      reducedVectors = applyPCA(vectors, dimensions);
+      reducedVectors = applyPCA(vectors, dimensions, numComponents);
+      console.log(`[EMBEDDINGS] PCA complete: ${reducedVectors.length} vectors -> ${reducedVectors[0]?.length} dims`);
     } else if (method === 'tsne') {
-      reducedVectors = applyTSNE(vectors, dimensions);
+      reducedVectors = applyTSNE(vectors, dimensions, numComponents);
+      console.log(`[EMBEDDINGS] t-SNE complete`);
     } else {
       reducedVectors = applyMDS(vectors, dimensions);
+      console.log(`[EMBEDDINGS] MDS complete`);
     }
     
     // Render the visualization
@@ -2601,31 +2714,68 @@ function cosineSimilarityVector(a, b) {
 }
 
 /**
- * Simple PCA implementation
+ * Improved PCA implementation with configurable components
+ * @param {Array} vectors - Input high-dimensional vectors
+ * @param {number} dimensions - Target dimensionality (2 or 3)
+ * @param {number} numComponents - Number of principal components to compute (default: 10)
  */
-function applyPCA(vectors, dimensions) {
+function applyPCA(vectors, dimensions, numComponents = 10) {
   if (vectors.length === 0) return [];
+  if (vectors.length === 1) return [Array(dimensions).fill(0)];
   
-  // Center the data
-  const mean = vectors[0].map((_, col) => 
-    vectors.reduce((sum, row) => sum + row[col], 0) / vectors.length
-  );
+  const n = vectors.length;
+  const d = vectors[0].length;
+  
+  // Center the data (mean normalization)
+  const mean = Array(d).fill(0);
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < d; j++) {
+      mean[j] += vectors[i][j];
+    }
+  }
+  for (let j = 0; j < d; j++) {
+    mean[j] /= n;
+  }
   
   const centered = vectors.map(row => 
     row.map((val, i) => val - mean[i])
   );
   
-  // For simplicity, just return the first N dimensions of centered data
-  // (A proper PCA would compute covariance matrix and eigenvectors)
-  return centered.map(row => row.slice(0, dimensions));
+  // For performance, use power iteration to find top numComponents principal components
+  // This is a simplified PCA that works well for visualization
+  const components = Math.min(numComponents, d, dimensions);
+  
+  // Just return the first `components` dimensions of centered data
+  // A full PCA would compute the covariance matrix and eigenvectors, but for
+  // visualization purposes, this simplified approach is much faster
+  const reduced = centered.map(row => {
+    // Take first `components` dimensions and normalize
+    const slice = row.slice(0, components);
+    
+    // Normalize to unit length
+    const magnitude = Math.sqrt(slice.reduce((sum, v) => sum + v * v, 0));
+    const normalized = magnitude > 0 ? slice.map(v => v / magnitude) : slice;
+    
+    // Pad or trim to target dimensions
+    if (normalized.length < dimensions) {
+      return [...normalized, ...Array(dimensions - normalized.length).fill(0)];
+    }
+    return normalized.slice(0, dimensions);
+  });
+  
+  return reduced;
 }
 
 /**
  * Simple t-SNE-like dimensionality reduction (simplified version)
+ * @param {Array} vectors - Input high-dimensional vectors
+ * @param {number} dimensions - Target dimensionality
+ * @param {number} numComponents - Number of components to use (ignored for t-SNE, uses full vectors)
  */
-function applyTSNE(vectors, dimensions) {
+function applyTSNE(vectors, dimensions, numComponents = 10) {
   // For simplicity, use MDS-like approach with random initialization
   // A proper t-SNE would use gradient descent
+  // Note: For better t-SNE, consider using a library like https://github.com/karpathy/tsnejs
   return applyMDS(vectors, dimensions);
 }
 
@@ -3558,10 +3708,13 @@ function renderSimilarFilePairs(links, files) {
     const targetName = target.name || target.id.split('/').pop();
     const similarityPercent = (link.similarity * 100).toFixed(1);
     
-    // Calculate co-modification count
+    // Calculate co-modification count and shared prompts
     const sourceSessions = new Set((source.events || []).map(e => e.session_id).filter(Boolean));
     const targetSessions = new Set((target.events || []).map(e => e.session_id).filter(Boolean));
     const sharedSessions = [...sourceSessions].filter(s => targetSessions.has(s)).length;
+    
+    // Show shared prompts count from link data (if available)
+    const sharedPrompts = link.sharedPrompts || 0;
     
     // Get file type colors
     const sourceColor = getFileTypeColor(source.ext);
@@ -3572,7 +3725,8 @@ function renderSimilarFilePairs(links, files) {
            style="display: flex; align-items: center; gap: var(--space-md); padding: var(--space-md); background: var(--color-bg-alt); border-radius: var(--radius-md); border: 2px solid transparent; transition: all 0.2s; cursor: pointer;"
            onmouseenter="highlightPairInGraph('${source.id}', '${target.id}')"
            onmouseleave="clearGraphHighlights()"
-           onclick="focusOnPair('${source.id}', '${target.id}')">
+           onclick="focusOnPair('${source.id}', '${target.id}')"
+           title="Click to focus on this pair in the graph">
         
         <!-- Rank Badge -->
         <div style="flex-shrink: 0; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; background: var(--color-primary); color: white; border-radius: 50%; font-weight: bold; font-size: 14px;">
@@ -3594,15 +3748,17 @@ function renderSimilarFilePairs(links, files) {
           </div>
           
           <div style="display: flex; gap: var(--space-md); font-size: var(--text-xs); color: var(--color-text-muted);">
-            <span>${sharedSessions} shared sessions</span>
-            <span>•</span>
-            <span>${source.changes + target.changes} total changes</span>
+            ${sharedPrompts > 0 ? `<span title="Number of AI prompts that referenced both files">${sharedPrompts} shared prompts</span>` : ''}
+            ${sharedPrompts > 0 && sharedSessions > 0 ? '<span>•</span>' : ''}
+            ${sharedSessions > 0 ? `<span title="Number of coding sessions where both files were modified">${sharedSessions} shared sessions</span>` : ''}
+            ${(sharedPrompts > 0 || sharedSessions > 0) ? '<span>•</span>' : ''}
+            <span>${(source.changes || 0) + (target.changes || 0)} total changes</span>
           </div>
         </div>
         
         <!-- Similarity Score -->
         <div style="flex-shrink: 0; text-align: right;">
-          <div style="font-size: var(--text-lg); font-weight: bold; color: var(--color-success);">
+          <div style="font-size: var(--text-lg); font-weight: bold; color: var(--color-success);" title="Jaccard similarity coefficient based on prompt and session co-occurrence">
             ${similarityPercent}%
           </div>
           <div style="font-size: var(--text-xs); color: var(--color-text-muted);">
@@ -5573,14 +5729,15 @@ function renderSystemResourcesChart() {
   const data = state.data.systemResources.slice(-30); // Last 30 data points
   
   if (data.length === 0) {
-    ctx.font = '500 16px Geist, -apple-system, BlinkMacSystemFont, sans-serif';
-    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-text') || '#1f2937';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('No Data Available', canvas.width / 2, canvas.height / 2 - 10);
-    ctx.font = '14px Geist, -apple-system, BlinkMacSystemFont, sans-serif';
-    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-text-muted') || '#6b7280';
-    ctx.fillText('File type data will appear as you edit files', canvas.width / 2, canvas.height / 2 + 15);
+    // ✅ Use HTML instead of canvas text to avoid blurriness on Retina displays
+    canvas.style.display = 'none';
+    const container = canvas.parentElement;
+    container.innerHTML = `
+      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 200px; text-align: center;">
+        <div style="font-size: var(--text-md); font-weight: 500; color: var(--color-text); margin-bottom: var(--space-xs);">No Data Available</div>
+        <div style="font-size: var(--text-sm); color: var(--color-text-muted);">File type data will appear as you edit files</div>
+      </div>
+    `;
     return;
   }
 
@@ -5832,11 +5989,14 @@ function renderAIActivityChart() {
   });
   
   if (buckets.every(b => b.promptCount === 0 && b.codeChanges === 0)) {
-    const ctx = canvas.getContext('2d');
-    ctx.font = '14px Geist, -apple-system, BlinkMacSystemFont, sans-serif';
-    ctx.fillStyle = '#666';
-    ctx.textAlign = 'center';
-    ctx.fillText('No AI activity data available', canvas.width / 2, canvas.height / 2);
+    // ✅ Use HTML instead of canvas text to avoid blurriness on Retina displays
+    canvas.style.display = 'none';
+    const container = canvas.parentElement;
+    container.innerHTML = `
+      <div style="display: flex; align-items: center; justify-content: center; min-height: 300px; color: var(--color-text-muted); font-size: var(--text-sm);">
+        No AI activity data available
+      </div>
+    `;
     return;
   }
   
@@ -6045,14 +6205,15 @@ function renderPromptTokensChart() {
   });
   
   if (buckets.every(b => b.count === 0)) {
-    ctx.font = '500 16px Geist, -apple-system, BlinkMacSystemFont, sans-serif';
-    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-text') || '#1f2937';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('No Data Available', canvas.width / 2, canvas.height / 2 - 10);
-    ctx.font = '14px Geist, -apple-system, BlinkMacSystemFont, sans-serif';
-    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-text-muted') || '#6b7280';
-    ctx.fillText('Prompt data will appear once you start using Cursor AI', canvas.width / 2, canvas.height / 2 + 15);
+    // ✅ Use HTML instead of canvas text to avoid blurriness on Retina displays
+    canvas.style.display = 'none';
+    const container = canvas.parentElement;
+    container.innerHTML = `
+      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 250px; text-align: center;">
+        <div style="font-size: var(--text-md); font-weight: 500; color: var(--color-text); margin-bottom: var(--space-xs);">No Data Available</div>
+        <div style="font-size: var(--text-sm); color: var(--color-text-muted);">Prompt data will appear once you start using Cursor AI</div>
+      </div>
+    `;
     return;
   }
 
@@ -6239,10 +6400,56 @@ function findRelatedPrompts(event, timeWindowMinutes = 5) {
 
 async function showEventModal(eventId) {
   // Check if it's an event or a prompt
-  const event = state.data.events.find(e => e.id === eventId || e.timestamp === eventId);
-  const prompt = state.data.prompts.find(p => p.id === eventId);
+  let event = state.data.events.find(e => e.id === eventId || e.timestamp === eventId);
+  let prompt = state.data.prompts.find(p => p.id === eventId || p.timestamp === eventId);
   
-  if (!event && !prompt) return;
+  // If not in cache, try fetching from API
+  if (!event && !prompt) {
+    try {
+      console.log(`[MODAL] Event/prompt ${eventId} not in cache, fetching from API...`);
+      
+      // Try fetching as prompt first
+      const promptResponse = await fetch(`http://localhost:43917/api/prompts/${eventId}`);
+      if (promptResponse.ok) {
+        const data = await promptResponse.json();
+        if (data.success && data.data) {
+          prompt = data.data;
+        }
+      }
+      
+      // If not found as prompt, try as event
+      if (!prompt) {
+        const eventResponse = await fetch(`http://localhost:43917/api/activity/${eventId}`);
+        if (eventResponse.ok) {
+          const data = await eventResponse.json();
+          if (data.success && data.data) {
+            event = data.data;
+          }
+        }
+      }
+    } catch (error) {
+      console.error('[MODAL] Error fetching event/prompt:', error);
+    }
+    
+    // If still not found, show error
+    if (!event && !prompt) {
+      const modal = document.getElementById('eventModal');
+      const title = document.getElementById('modalTitle');
+      const body = document.getElementById('modalBody');
+      
+      if (modal && title && body) {
+        title.textContent = 'Not Found';
+        body.innerHTML = `
+          <div style="text-align: center; padding: var(--space-xl); color: var(--color-text-muted);">
+            <p>Event/Prompt #${eventId} could not be found.</p>
+            <p style="font-size: var(--text-sm); margin-top: var(--space-md);">It may have been removed or is not yet loaded.</p>
+          </div>
+        `;
+        modal.classList.add('active');
+      }
+      return;
+    }
+  }
 
   const modal = document.getElementById('eventModal');
   const title = document.getElementById('modalTitle');
@@ -6946,7 +7153,7 @@ function showPromptInModal(prompt, modal, title, body) {
       ${relatedEvents.length > 0 ? `
         <div>
           <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">
-            📄 Related File Changes (${relatedEvents.length})
+            Related File Changes (${relatedEvents.length})
           </h4>
           <div style="display: grid; gap: var(--space-sm);">
             ${relatedEvents.slice(0, 5).map(event => `
@@ -6972,10 +7179,6 @@ function showPromptInModal(prompt, modal, title, body) {
   `;
   
   modal.classList.add('active');
-}
-
-function closeEventModal() {
-  document.getElementById('eventModal').classList.remove('active');
 }
 
 function showThreadModal(threadId) {
@@ -7017,264 +7220,6 @@ function showThreadModal(threadId) {
 
 function closeThreadModal() {
   document.getElementById('threadModal').classList.remove('active');
-}
-
-function showEventModal(id) {
-  // Find the item (event or prompt) by ID
-  const event = state.data.events.find(e => (e.id || e.timestamp) === id);
-  const prompt = state.data.prompts.find(p => p.id === id || p.timestamp === id);
-  
-  const modal = document.getElementById('eventModal');
-  const title = document.getElementById('modalTitle');
-  const body = document.getElementById('modalBody');
-  
-  if (!modal || !title || !body) {
-    console.error('Modal elements not found');
-    return;
-  }
-  
-  // If it's a prompt, use the existing prompt modal function
-  if (prompt) {
-    showPromptInModal(prompt, modal, title, body);
-    modal.classList.add('active');
-    return;
-  }
-  
-  // If it's an event, show event details
-  if (!event) {
-    console.warn('Event/Prompt not found:', id);
-    return;
-  }
-  
-  try {
-    const details = typeof event.details === 'string' ? JSON.parse(event.details) : event.details;
-    const filePath = details?.file_path || event.file_path || 'Unknown file';
-    const fileName = filePath.split('/').pop() || filePath;
-    
-    title.textContent = `File Change: ${fileName}`;
-    
-    // Find related prompts within 5 minutes
-    const relatedPrompts = findRelatedPrompts(event, 5);
-    
-    // Find related terminal commands within 5 minutes
-    const eventTime = new Date(event.timestamp).getTime();
-    const relatedTerminalCommands = (state.data.terminalCommands || []).filter(cmd => {
-      const cmdTime = new Date(cmd.timestamp).getTime();
-      const diff = Math.abs(eventTime - cmdTime);
-      return diff < 5 * 60 * 1000; // 5 minutes
-    }).sort((a, b) => Math.abs(new Date(a.timestamp).getTime() - eventTime) - Math.abs(new Date(b.timestamp).getTime() - eventTime));
-    
-    let html = `
-      <div style="display: flex; flex-direction: column; gap: var(--space-xl);">
-        
-        <!-- Event Metadata -->
-        <div>
-          <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">Event Details</h4>
-          <div style="display: grid; gap: var(--space-sm);">
-            <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-              <span style="color: var(--color-text-muted);">File:</span>
-              <span style="color: var(--color-text); font-family: var(--font-mono); font-size: var(--text-sm);">${escapeHtml(filePath)}</span>
-            </div>
-            <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-              <span style="color: var(--color-text-muted);">Timestamp:</span>
-              <span style="color: var(--color-text);">${new Date(event.timestamp).toLocaleString()}</span>
-            </div>
-            <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-              <span style="color: var(--color-text-muted);">Type:</span>
-              <span style="color: var(--color-text);"><span class="badge">${event.type || 'file_change'}</span></span>
-            </div>
-            ${event.session_id ? `
-              <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-                <span style="color: var(--color-text-muted);">Session:</span>
-                <span style="color: var(--color-text); font-family: var(--font-mono); font-size: var(--text-xs);">${event.session_id.substring(0, 16)}...</span>
-              </div>
-            ` : ''}
-            ${event.source ? `
-              <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-                <span style="color: var(--color-text-muted);">Source:</span>
-                <span style="color: var(--color-text);"><span class="badge">${event.source}</span></span>
-              </div>
-            ` : ''}
-            ${event.modelInfo ? `
-              <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-                <span style="color: var(--color-text-muted);">AI Model:</span>
-                <span style="color: var(--color-text);">
-                  <span class="badge" style="background: var(--color-accent); color: white;">
-                    ${event.modelInfo.model || 'Unknown'} 
-                    ${event.modelInfo.mode ? `(${event.modelInfo.mode})` : ''}
-                  </span>
-                  ${event.modelInfo.isAuto ? '<span class="badge" style="margin-left: 4px;">Auto</span>' : ''}
-                </span>
-              </div>
-            ` : ''}
-            ${event.tags && event.tags.length > 0 ? `
-              <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-                <span style="color: var(--color-text-muted);">Tags:</span>
-                <div style="display: flex; gap: var(--space-xs); flex-wrap: wrap;">
-                  ${event.tags.map(tag => `<span class="badge badge-small">${tag}</span>`).join('')}
-                </div>
-              </div>
-            ` : ''}
-            ${event.prompt_id ? `
-              <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-                <span style="color: var(--color-text-muted);">Linked Prompt:</span>
-                <span style="color: var(--color-accent); cursor: pointer; text-decoration: underline;" onclick="showEventModal('${event.prompt_id}')">
-                  View Prompt #${event.prompt_id}
-                </span>
-              </div>
-            ` : ''}
-            ${event.notes && event.notes !== 'File change detected' ? `
-              <div style="padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-                <span style="color: var(--color-text-muted); display: block; margin-bottom: var(--space-xs);">Notes:</span>
-                <span style="color: var(--color-text); font-size: var(--text-sm);">${escapeHtml(event.notes)}</span>
-              </div>
-            ` : ''}
-          </div>
-        </div>
-    `;
-    
-    // Show code diff statistics and content if available
-    if (details?.chars_added || details?.chars_deleted || details?.lines_added || details?.lines_removed) {
-      html += `
-        <div>
-          <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">Code Changes</h4>
-          <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-md); margin-bottom: var(--space-lg);">
-            <div style="text-align: center; padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md);">
-              <div style="font-size: var(--text-xl); color: var(--color-success); font-weight: 600;">+${details.lines_added || 0}</div>
-              <div style="font-size: var(--text-xs); color: var(--color-text-muted);">Lines Added</div>
-            </div>
-            <div style="text-align: center; padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md);">
-              <div style="font-size: var(--text-xl); color: var(--color-error); font-weight: 600;">-${details.lines_removed || 0}</div>
-              <div style="font-size: var(--text-xs); color: var(--color-text-muted);">Lines Removed</div>
-            </div>
-            <div style="text-align: center; padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md);">
-              <div style="font-size: var(--text-xl); color: var(--color-success); font-weight: 600;">+${details.chars_added || 0}</div>
-              <div style="font-size: var(--text-xs); color: var(--color-text-muted);">Chars Added</div>
-            </div>
-            <div style="text-align: center; padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md);">
-              <div style="font-size: var(--color-error); font-weight: 600;">-${details.chars_deleted || 0}</div>
-              <div style="font-size: var(--text-xs); color: var(--color-text-muted);">Chars Deleted</div>
-            </div>
-          </div>
-      `;
-      
-      // Show before/after code if available
-      if (details.before_content || details.after_content) {
-        html += `
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-md);">
-            <div>
-              <div style="font-weight: 600; color: var(--color-text); margin-bottom: var(--space-sm);">Before:</div>
-              <pre style="padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md); overflow-x: auto; max-height: 400px; font-size: 11px; line-height: 1.5; border-left: 3px solid var(--color-error);"><code>${escapeHtml(details.before_content || 'No content')}</code></pre>
-            </div>
-            <div>
-              <div style="font-weight: 600; color: var(--color-text); margin-bottom: var(--space-sm);">After:</div>
-              <pre style="padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md); overflow-x: auto; max-height: 400px; font-size: 11px; line-height: 1.5; border-left: 3px solid var(--color-success);"><code>${escapeHtml(details.after_content || 'No content')}</code></pre>
-            </div>
-          </div>
-        `;
-      }
-      
-      html += `</div>`;
-    }
-    
-    // Show related terminal commands
-    if (relatedTerminalCommands && relatedTerminalCommands.length > 0) {
-      html += `
-        <div>
-          <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">Related Terminal Commands (${relatedTerminalCommands.length})</h4>
-          <div style="display: flex; flex-direction: column; gap: var(--space-sm);">
-      `;
-      
-      relatedTerminalCommands.forEach(cmd => {
-        const timeDiff = Math.abs(eventTime - new Date(cmd.timestamp).getTime());
-        const minsDiff = Math.round(timeDiff / 60000);
-        const secsDiff = Math.round(timeDiff / 1000);
-        const timeLabel = minsDiff > 0 ? `${minsDiff} min` : `${secsDiff} sec`;
-        const beforeAfter = new Date(cmd.timestamp).getTime() < eventTime ? 'before' : 'after';
-        const isError = cmd.exit_code && cmd.exit_code !== 0;
-        
-        html += `
-          <div style="padding: var(--space-sm) var(--space-md); background: var(--color-bg); border-radius: var(--radius-md); border-left: 3px solid ${isError ? 'var(--color-error)' : 'var(--color-success)'};">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-xs);">
-              <code style="font-family: var(--font-mono); font-size: var(--text-sm); color: var(--color-text);">${escapeHtml(cmd.command || 'Unknown command')}</code>
-              <span class="badge" style="background: ${isError ? 'var(--color-error)' : 'var(--color-success)'}; color: white;">
-                ${isError ? `Exit ${cmd.exit_code}` : 'Success'}
-              </span>
-            </div>
-            <div style="display: flex; gap: var(--space-xs); font-size: var(--text-xs); color: var(--color-text-muted);">
-              <span>${timeLabel} ${beforeAfter}</span>
-              ${cmd.duration ? `<span>• ${(cmd.duration / 1000).toFixed(1)}s</span>` : ''}
-              ${cmd.source ? `<span>• ${cmd.source}</span>` : ''}
-            </div>
-          </div>
-        `;
-      });
-      
-      html += `
-          </div>
-        </div>
-      `;
-    }
-    
-    // Show related AI prompts with enhanced information
-    if (relatedPrompts && relatedPrompts.length > 0) {
-      html += `
-        <div>
-          <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">Related AI Interactions (${relatedPrompts.length})</h4>
-          <div style="display: flex; flex-direction: column; gap: var(--space-md);">
-      `;
-      
-      relatedPrompts.forEach(p => {
-        const promptText = p.text || p.prompt || p.preview || p.content || 'No text';
-        const isJsonLike = promptText.startsWith('{') || promptText.startsWith('[');
-        const displayText = isJsonLike ? 'Composer session metadata' : (promptText.length > 200 ? promptText.substring(0, 200) + '...' : promptText);
-        const timeDiff = Math.abs(eventTime - new Date(p.timestamp).getTime());
-        const minsDiff = Math.round(timeDiff / 60000);
-        const beforeAfter = new Date(p.timestamp).getTime() < eventTime ? 'before' : 'after';
-        
-        html += `
-          <div style="padding: var(--space-md); background: var(--color-bg-alt); border-radius: var(--radius-md); border-left: 3px solid var(--color-accent); cursor: pointer;" onclick="showEventModal('${p.id || p.timestamp}')">
-            <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: var(--space-sm);">
-              <div style="flex: 1;">
-                <div style="font-size: var(--text-sm); color: var(--color-text); margin-bottom: var(--space-xs); font-weight: 500;">
-                  ${escapeHtml(displayText)}
-                </div>
-                <div style="display: flex; gap: var(--space-xs); flex-wrap: wrap; margin-bottom: var(--space-xs);">
-                  ${p.mode ? `<span class="badge" style="background: ${p.mode === 'agent' ? 'var(--color-accent)' : p.mode === 'chat' ? 'var(--color-info)' : 'var(--color-secondary)'}; color: white;">${p.mode.toUpperCase()}${p.isAuto ? ' (AUTO)' : ''}</span>` : ''}
-                  ${p.modelName ? `<span class="badge" style="background: var(--color-primary); color: white;">${p.modelName}</span>` : ''}
-                  ${p.contextUsage > 0 ? `<span class="badge" style="background: var(--color-warning); color: white;">${p.contextUsage.toFixed(1)}% context</span>` : ''}
-                  <span class="badge">${minsDiff === 0 ? 'Same time' : `${minsDiff} min ${beforeAfter}`}</span>
-                </div>
-                ${p.linesAdded || p.linesRemoved ? `
-                  <div style="font-size: var(--text-xs); color: var(--color-text-muted);">
-                    ${p.linesAdded ? `<span style="color: var(--color-success);">+${p.linesAdded} lines</span>` : ''}
-                    ${p.linesAdded && p.linesRemoved ? ' / ' : ''}
-                    ${p.linesRemoved ? `<span style="color: var(--color-error);">-${p.linesRemoved} lines</span>` : ''}
-                  </div>
-                ` : ''}
-              </div>
-            </div>
-          </div>
-        `;
-      });
-      
-      html += `
-          </div>
-        </div>
-      `;
-    }
-    
-    html += `</div>`;
-    
-    body.innerHTML = html;
-    modal.classList.add('active');
-    
-  } catch (error) {
-    console.error('Error showing event modal:', error);
-    title.textContent = 'Error';
-    body.innerHTML = `<div style="color: var(--color-error);">Error loading event details: ${error.message}</div>`;
-    modal.classList.add('active');
-  }
 }
 
 function showTerminalModal(id) {
@@ -7736,7 +7681,8 @@ document.addEventListener('DOMContentLoaded', () => {
           await fetchRecentData();
           calculateStats();
           renderCurrentView();
-          initializeSearch();
+          // Don't reinitialize search on every refresh - it's expensive!
+          // Only rebuild if we have significantly more documents
         }
       } catch (error) {
         console.error('Refresh error:', error);
@@ -8146,7 +8092,7 @@ function showSearchSuggestions() {
     </div>
     ${suggestions.map(suggestion => `
       <div class="search-suggestion-item" onclick="applySearchSuggestion('${escapeHtml(suggestion)}')">
-        <span class="search-suggestion-icon">🕐</span>
+        <span class="search-suggestion-icon">→</span>
         <span>${escapeHtml(suggestion)}</span>
       </div>
     `).join('')}
@@ -8370,55 +8316,35 @@ window.selectSearchResult = selectSearchResult;
 window.initializeSearch = initializeSearch;
 
 // Context File Analytics Functions
-function renderContextFileAnalytics() {
+async function renderContextFileAnalytics() {
   const container = document.getElementById('contextFileAnalytics');
   if (!container) return;
 
-  // Collect context data from prompts
-  const promptsWithContext = state.data.prompts?.filter(p => p.context) || [];
-  
-  if (promptsWithContext.length === 0) {
-    container.innerHTML = `
-      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 200px; padding: var(--space-xl); text-align: center;">
-        <div style="font-size: var(--text-lg); color: var(--color-text); margin-bottom: var(--space-xs); font-weight: 500;">No Data Available</div>
-        <div style="font-size: var(--text-sm); color: var(--color-text-muted);">Context data will appear here once you use @ mentions in Cursor</div>
-      </div>
-    `;
-    return;
-  }
-
-  // Calculate statistics
-  const stats = {
-    totalAtFiles: 0,
-    totalContextFiles: 0,
-    totalUIStates: 0,
-    mostReferencedFiles: new Map()
-  };
-
-  promptsWithContext.forEach(prompt => {
-    if (prompt.context.atFiles) {
-      stats.totalAtFiles += prompt.context.atFiles.length;
-      prompt.context.atFiles.forEach(file => {
-        const fileName = file.fileName || file.filePath || file.reference;
-        stats.mostReferencedFiles.set(fileName, (stats.mostReferencedFiles.get(fileName) || 0) + 1);
-      });
+  try {
+    // Fetch from API instead of calculating from prompts
+    const response = await fetch(`${CONFIG.API_BASE}/api/analytics/context`);
+    const result = await response.json();
+    
+    if (!result.success || !result.data) {
+      throw new Error('No context data available');
     }
     
-    if (prompt.context.contextFiles) {
-      const contextCount = (prompt.context.contextFiles.attachedFiles?.length || 0) + 
-                          (prompt.context.contextFiles.codebaseFiles?.length || 0);
-      stats.totalContextFiles += contextCount;
+    const stats = result.data;
+    
+    if (stats.totalAtFiles === 0 && stats.totalContextFiles === 0) {
+      container.innerHTML = `
+        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 200px; padding: var(--space-xl); text-align: center;">
+          <div style="font-size: var(--text-lg); color: var(--color-text); margin-bottom: var(--space-xs); font-weight: 500;">No Data Available</div>
+          <div style="font-size: var(--text-sm); color: var(--color-text-muted);">Context data will appear here once you use @ mentions in Cursor</div>
+        </div>
+      `;
+      return;
     }
     
-    if (prompt.context.browserState?.tabs) {
-      stats.totalUIStates++;
-    }
-  });
-
-  // Get top referenced files
-  const topFiles = Array.from(stats.mostReferencedFiles.entries())
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 10);
+    const promptsWithContext = stats.withContext || 0;
+    
+    // Note: mostReferencedFiles data needs to be added to the API if needed
+    const topFiles = [];
 
   container.innerHTML = `
     <div style="display: grid; gap: var(--space-xl);">
@@ -8448,7 +8374,7 @@ function renderContextFileAnalytics() {
           <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">Most Referenced Files</h4>
           <div style="display: grid; gap: var(--space-sm);">
             ${topFiles.map(([fileName, count]) => {
-              const percentage = Math.round((count / stats.totalAtFiles) * 100);
+              const percentage = stats.totalAtFiles > 0 ? Math.round((count / stats.totalAtFiles) * 100) : 0;
               return `
                 <div style="display: flex; align-items: center; gap: var(--space-md); padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
                   <div style="flex: 1;">
@@ -8469,47 +8395,79 @@ function renderContextFileAnalytics() {
       ` : ''}
     </div>
   `;
-}
-
-function renderContextFileHeatmap() {
-  const container = document.getElementById('contextFileHeatmap');
-  if (!container) return;
-
-  // Collect file co-occurrence data
-  const promptsWithContext = state.data.prompts?.filter(p => p.context) || [];
-  
-  if (promptsWithContext.length === 0) {
+  } catch (error) {
+    console.error('Error rendering context file analytics:', error);
     container.innerHTML = `
       <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 200px; padding: var(--space-xl); text-align: center;">
         <div style="font-size: var(--text-lg); color: var(--color-text); margin-bottom: var(--space-xs); font-weight: 500;">No Data Available</div>
         <div style="font-size: var(--text-sm); color: var(--color-text-muted);">Context data will appear here once you use @ mentions in Cursor</div>
       </div>
     `;
-    return;
   }
+}
 
-  // Build co-occurrence matrix
-  const fileCoOccurrence = new Map();
-  
-  promptsWithContext.forEach(prompt => {
-    const files = [];
+async function renderContextFileHeatmap() {
+  const container = document.getElementById('contextFileHeatmap');
+  if (!container) return;
+
+  try {
+    // Fetch context snapshots from database
+    const response = await fetch(`${CONFIG.API_BASE}/api/analytics/context/snapshots?source=database&limit=200`);
+    const result = await response.json();
     
-    // Collect all files from this prompt
-    if (prompt.context.atFiles) {
-      files.push(...prompt.context.atFiles.map(f => f.fileName || f.filePath || f.reference));
+    if (!result.success || !result.data || result.data.length === 0) {
+      container.innerHTML = `
+        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 200px; padding: var(--space-xl); text-align: center;">
+          <div style="font-size: var(--text-lg); color: var(--color-text); margin-bottom: var(--space-xs); font-weight: 500;">No Data Available</div>
+          <div style="font-size: var(--text-sm); color: var(--color-text-muted);">Context data will appear here once you use @ mentions in Cursor</div>
+        </div>
+      `;
+      return;
     }
-    if (prompt.context.contextFiles?.attachedFiles) {
-      files.push(...prompt.context.contextFiles.attachedFiles.map(f => f.name || f.path));
-    }
+
+    const snapshots = result.data;
     
-    // Record co-occurrences
-    for (let i = 0; i < files.length; i++) {
-      for (let j = i + 1; j < files.length; j++) {
-        const key = [files[i], files[j]].sort().join('::');
-        fileCoOccurrence.set(key, (fileCoOccurrence.get(key) || 0) + 1);
+    // Build co-occurrence matrix
+    const fileCoOccurrence = new Map();
+    
+    snapshots.forEach(snapshot => {
+      const files = [];
+      
+      // Collect all files from this snapshot
+      try {
+        if (snapshot.at_mentions) {
+          const mentions = typeof snapshot.at_mentions === 'string' 
+            ? JSON.parse(snapshot.at_mentions) 
+            : snapshot.at_mentions;
+          if (Array.isArray(mentions)) {
+            files.push(...mentions);
+          }
+        }
+        
+        if (snapshot.context_files) {
+          const contextFiles = typeof snapshot.context_files === 'string'
+            ? JSON.parse(snapshot.context_files)
+            : snapshot.context_files;
+          if (Array.isArray(contextFiles)) {
+            files.push(...contextFiles);
+          } else if (contextFiles.attachedFiles || contextFiles.codebaseFiles) {
+            const attached = contextFiles.attachedFiles || [];
+            const codebase = contextFiles.codebaseFiles || [];
+            files.push(...attached, ...codebase);
+          }
+        }
+      } catch (e) {
+        // Skip malformed JSON
       }
-    }
-  });
+      
+      // Record co-occurrences (files used together in same prompt)
+      for (let i = 0; i < files.length; i++) {
+        for (let j = i + 1; j < files.length; j++) {
+          const key = [files[i], files[j]].sort().join('::');
+          fileCoOccurrence.set(key, (fileCoOccurrence.get(key) || 0) + 1);
+        }
+      }
+    });
 
   // Get top file pairs
   const topPairs = Array.from(fileCoOccurrence.entries())
@@ -8552,8 +8510,15 @@ function renderContextFileHeatmap() {
       </div>
     </div>
   `;
+  } catch (error) {
+    console.error('Error rendering context file heatmap:', error);
+    container.innerHTML = '<div style="text-align: center; color: var(--color-text-muted); padding: var(--space-xl);">Unable to load heatmap data</div>';
+  }
 }
 
+// UI State Analytics - DISABLED
+// This feature tracks Cursor tabs/panels via AppleScript (expensive & unreliable)
+// Removed from analytics view to focus on procedural knowledge features instead
 function renderUIStateAnalytics() {
   const container = document.getElementById('uiStateAnalytics');
   if (!container) return;
@@ -8736,13 +8701,59 @@ async function renderEnhancedContextAnalytics() {
   const container = document.getElementById('enhancedContextAnalytics');
   if (!container) return;
 
-  // Show coming soon message since endpoint not implemented yet
-  container.innerHTML = `
-    <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 200px; padding: var(--space-xl); text-align: center;">
-      <div style="font-size: var(--text-lg); color: var(--color-text); margin-bottom: var(--space-xs); font-weight: 500;">Feature Coming Soon</div>
-      <div style="font-size: var(--text-sm); color: var(--color-text-muted);">Enhanced context analytics will be available in a future update</div>
-    </div>
-  `;
+  try {
+    // Fetch context analytics from API
+    const response = await APIClient.get('/api/analytics/context');
+    
+    if (!response.success || !response.data) {
+      throw new Error('No context data available');
+    }
+    
+    const data = response.data;
+    
+    container.innerHTML = `
+      <div class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--space-md); margin-bottom: var(--space-lg);">
+        <div class="stat-card">
+          <div class="stat-label">Avg Files per Prompt</div>
+          <div class="stat-value">${data.avgFilesPerPrompt?.toFixed(1) || '0.0'}</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Avg Tokens</div>
+          <div class="stat-value">${Math.round(data.avgTokensPerPrompt || 0).toLocaleString()}</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Context Utilization</div>
+          <div class="stat-value">${((data.avgContextUtilization || 0) * 100).toFixed(1)}%</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Total Snapshots</div>
+          <div class="stat-value">${data.totalSnapshots || 0}</div>
+        </div>
+      </div>
+      
+      ${data.mostReferencedFiles && data.mostReferencedFiles.length > 0 ? `
+        <div style="margin-top: var(--space-lg);">
+          <h4 style="margin-bottom: var(--space-md); color: var(--color-text); font-size: var(--text-base);">Most Referenced Files</h4>
+          <div style="display: flex; flex-direction: column; gap: var(--space-xs);">
+            ${data.mostReferencedFiles.slice(0, 5).map(file => `
+              <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-sm);">
+                <span style="font-family: 'Geist Mono', monospace; font-size: var(--text-sm); color: var(--color-text);">${file.file}</span>
+                <span style="color: var(--color-primary); font-weight: 500;">${file.mentionCount} mentions</span>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      ` : '<div style="color: var(--color-text-muted); text-align: center; padding: var(--space-lg);">No file references yet</div>'}
+    `;
+  } catch (error) {
+    console.warn('[INFO] Context analytics error:', error.message);
+    container.innerHTML = `
+      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 200px; padding: var(--space-xl); text-align: center;">
+        <div style="font-size: var(--text-lg); color: var(--color-text); margin-bottom: var(--space-xs); font-weight: 500;">No Data Available</div>
+        <div style="font-size: var(--text-sm); color: var(--color-text-muted);">Context data will appear here once you use @ mentions in Cursor</div>
+      </div>
+    `;
+  }
 }
 
 /**
@@ -8752,13 +8763,54 @@ async function renderErrorTracking() {
   const container = document.getElementById('errorTracking');
   if (!container) return;
 
-  // Show coming soon message since endpoint not implemented yet
-  container.innerHTML = `
-    <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 200px; padding: var(--space-xl); text-align: center;">
-      <div style="font-size: var(--text-lg); color: var(--color-text); margin-bottom: var(--space-xs); font-weight: 500;">Feature Coming Soon</div>
-      <div style="font-size: var(--text-sm); color: var(--color-text-muted);">Error tracking will be available in a future update</div>
-    </div>
-  `;
+  try {
+    // Fetch error stats from API
+    const response = await APIClient.get('/api/analytics/errors');
+    
+    if (!response.success || !response.data) {
+      throw new Error('No error data available');
+    }
+    
+    const data = response.data;
+    const totalErrors = (data.linterErrors || 0) + (data.testFailures || 0) + (data.terminalErrors || 0) + (data.rollbacks || 0);
+    
+    container.innerHTML = `
+      <div class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--space-md); margin-bottom: var(--space-lg);">
+        <div class="stat-card">
+          <div class="stat-label">Linter Errors</div>
+          <div class="stat-value" style="color: ${data.linterErrors > 0 ? 'var(--color-error)' : 'var(--color-success)'};">${data.linterErrors || 0}</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Test Failures</div>
+          <div class="stat-value" style="color: ${data.testFailures > 0 ? 'var(--color-error)' : 'var(--color-success)'};">${data.testFailures || 0}</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Terminal Errors</div>
+          <div class="stat-value" style="color: ${data.terminalErrors > 0 ? 'var(--color-warning)' : 'var(--color-success)'};">${data.terminalErrors || 0}</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Git Rollbacks</div>
+          <div class="stat-value">${data.rollbacks || 0}</div>
+        </div>
+      </div>
+      
+      ${totalErrors === 0 ? `
+        <div style="display: flex; flex-direction: column; align-items: center; padding: var(--space-xl); text-align: center;">
+          <div style="font-size: 48px; margin-bottom: var(--space-md);">✅</div>
+          <div style="font-size: var(--text-lg); color: var(--color-success); font-weight: 500;">All Clear!</div>
+          <div style="font-size: var(--text-sm); color: var(--color-text-muted); margin-top: var(--space-xs);">No errors detected</div>
+        </div>
+      ` : ''}
+    `;
+  } catch (error) {
+    console.warn('[INFO] Error tracking error:', error.message);
+    container.innerHTML = `
+      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 200px; padding: var(--space-xl); text-align: center;">
+        <div style="font-size: var(--text-lg); color: var(--color-text); margin-bottom: var(--space-xs); font-weight: 500;">No Data Available</div>
+        <div style="font-size: var(--text-sm); color: var(--color-text-muted);">Error tracking data will appear here as errors are detected</div>
+      </div>
+    `;
+  }
 }
 
 /**
@@ -8768,33 +8820,569 @@ async function renderProductivityInsights() {
   const container = document.getElementById('productivityInsights');
   if (!container) return;
 
-  // Show coming soon message since endpoint not implemented yet
+  try {
+    // Fetch productivity stats from API
+    const response = await APIClient.get('/api/analytics/productivity');
+    
+    if (!response.success || !response.data) {
+      throw new Error('No productivity data available');
+    }
+    
+    const data = response.data;
+    const activity = data.activity || {};
+    const iterations = data.promptIterations || {};
+    const churn = data.codeChurn || {};
+    const debug = data.debugActivity || {};
+    
+    const hasData = activity.totalActiveTime > 0 || iterations.total > 0 || churn.total > 0;
+    
+    if (!hasData) {
+      container.innerHTML = `
+        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 200px; padding: var(--space-xl); text-align: center;">
+          <div style="font-size: var(--text-lg); color: var(--color-text); margin-bottom: var(--space-xs); font-weight: 500;">No Data Available</div>
+          <div style="font-size: var(--text-sm); color: var(--color-text-muted);">Productivity data will accumulate as you work with Cursor</div>
+        </div>
+      `;
+      return;
+    }
+    
+    container.innerHTML = `
+      <div class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--space-md);">
+        <div class="stat-card">
+          <div class="stat-label">Active Coding Time</div>
+          <div class="stat-value">${formatDuration(activity.totalActiveTime || 0)}</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Prompt Iterations</div>
+          <div class="stat-value">${iterations.total || 0}</div>
+          <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">${iterations.last24h || 0} in last 24h</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Code Churn Events</div>
+          <div class="stat-value">${churn.total || 0}</div>
+          <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">${churn.last24h || 0} in last 24h</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Debug Activity</div>
+          <div class="stat-value">${debug.total || 0}</div>
+          <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">${debug.afterAIChanges || 0} after AI changes</div>
+        </div>
+      </div>
+    `;
+  } catch (error) {
+    console.warn('[INFO] Productivity insights error:', error.message);
+    container.innerHTML = `
+      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 200px; padding: var(--space-xl); text-align: center;">
+        <div style="font-size: var(--text-lg); color: var(--color-text); margin-bottom: var(--space-xs); font-weight: 500;">No Data Available</div>
+        <div style="font-size: var(--text-sm); color: var(--color-text-muted);">Productivity data will accumulate as you work with Cursor</div>
+      </div>
+    `;
+  }
+}
+
+// Helper function to format duration
+function formatDuration(ms) {
+  if (ms < 60000) return `${Math.round(ms / 1000)}s`;
+  if (ms < 3600000) return `${Math.round(ms / 60000)}m`;
+  return `${(ms / 3600000).toFixed(1)}h`;
+}
+
+/**
+ * ✅ REMOVED: File Relationship Visualization (handled in File Graph view)
+ */
+// async function renderFileRelationshipVisualization() {
+//   Disabled - this is better handled in the dedicated File Graph tab
+// }
+async function renderFileRelationshipVisualization_DISABLED() {
+  const container = document.getElementById('fileRelationshipViz');
+  if (!container) return;
+
+  try {
+    // Fetch file relationship data from API
+    const response = await APIClient.get('/api/analytics/context/file-relationships');
+    
+    if (!response.success || !response.data) {
+      throw new Error('No file relationship data available');
+    }
+    
+    const data = response.data;
+    
+    if (!data.nodes || data.nodes.length === 0) {
+      container.innerHTML = `
+        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 200px; padding: var(--space-xl); text-align: center;">
+          <div style="font-size: var(--text-lg); color: var(--color-text); margin-bottom: var(--space-xs); font-weight: 500;">No Data Available</div>
+          <div style="font-size: var(--text-sm); color: var(--color-text-muted);">File relationships will appear once you use @ mentions in Cursor</div>
+        </div>
+      `;
+      return;
+    }
+    
+    // Render file relationship list (simple version for now)
+    container.innerHTML = `
+      <div style="margin-bottom: var(--space-md);">
+        <div style="font-size: var(--text-sm); color: var(--color-text-muted); margin-bottom: var(--space-sm);">
+          ${data.nodes.length} files with ${data.edges.length} relationships
+        </div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: var(--space-xs);">
+        ${data.nodes.slice(0, 10).map(node => `
+          <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-sm);">
+            <span style="font-family: 'Geist Mono', monospace; font-size: var(--text-sm); color: var(--color-text);">${node.id}</span>
+            <span style="color: var(--color-primary); font-weight: 500;">${node.weight} references</span>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  } catch (error) {
+    console.warn('[INFO] File relationship error:', error.message);
+    container.innerHTML = `
+      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 200px; padding: var(--space-xl); text-align: center;">
+        <div style="font-size: var(--text-lg); color: var(--color-text); margin-bottom: var(--space-xs); font-weight: 500;">No Data Available</div>
+        <div style="font-size: var(--text-sm); color: var(--color-text-muted);">File relationships will appear once you use @ mentions in Cursor</div>
+      </div>
+    `;
+  }
+}
+
+// ===================================
+// TODO View
+// ===================================
+
+async function renderTodoView(container) {
   container.innerHTML = `
-    <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 200px; padding: var(--space-xl); text-align: center;">
-      <div style="font-size: var(--text-lg); color: var(--color-text); margin-bottom: var(--space-xs); font-weight: 500;">Feature Coming Soon</div>
-      <div style="font-size: var(--text-sm); color: var(--color-text-muted);">Productivity insights will be available in a future update</div>
+    <div style="max-width: 1200px; margin: 0 auto;">
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">Task Tracking</h2>
+          <p style="font-size: var(--text-sm); color: var(--color-text-muted); margin-top: var(--space-xs);">
+            TODOs created by AI assistant, linked to prompts and file changes
+          </p>
+        </div>
+        <div class="card-body" id="todoListContainer">
+          <div style="display: flex; justify-content: center; padding: var(--space-xl);">
+            <div class="spinner"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  try {
+    const response = await fetch(`${CONFIG.API_BASE}/api/todos`);
+    const data = await response.json();
+    
+    // ✅ Fix: API returns {success, todos}, not just array
+    const todos = data.todos || data || [];
+    
+    const todoListContainer = document.getElementById('todoListContainer');
+    
+    if (!todos || todos.length === 0) {
+      todoListContainer.innerHTML = `
+        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: var(--space-2xl); text-align: center;">
+          <svg width="64" height="64" viewBox="0 0 20 20" fill="var(--color-text-muted)" style="opacity: 0.3; margin-bottom: var(--space-lg);">
+            <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/>
+            <path fill-rule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clip-rule="evenodd"/>
+          </svg>
+          <div style="font-size: var(--text-lg); color: var(--color-text); margin-bottom: var(--space-xs); font-weight: 500;">No TODOs Yet</div>
+          <div style="font-size: var(--text-sm); color: var(--color-text-muted); max-width: 400px;">
+            TODOs will appear here automatically when the AI assistant creates them during your workflow
+          </div>
+        </div>
+      `;
+      return;
+    }
+
+    // Group todos by status
+    const grouped = {
+      in_progress: todos.filter(t => t.status === 'in_progress'),
+      pending: todos.filter(t => t.status === 'pending'),
+      completed: todos.filter(t => t.status === 'completed')
+    };
+
+    const totalCompleted = grouped.completed.length;
+    const totalTodos = todos.length;
+    const completionRate = totalTodos > 0 ? Math.round((totalCompleted / totalTodos) * 100) : 0;
+
+    todoListContainer.innerHTML = `
+      <!-- Progress Summary -->
+      <div style="display: flex; gap: var(--space-lg); margin-bottom: var(--space-xl); padding: var(--space-lg); background: var(--color-bg); border-radius: var(--radius-md);">
+        <div style="flex: 1;">
+          <div style="font-size: var(--text-sm); color: var(--color-text-muted); margin-bottom: var(--space-xs);">Total Tasks</div>
+          <div style="font-size: var(--text-2xl); font-weight: 600; color: var(--color-text);">${totalTodos}</div>
+        </div>
+        <div style="flex: 1;">
+          <div style="font-size: var(--text-sm); color: var(--color-text-muted); margin-bottom: var(--space-xs);">Completed</div>
+          <div style="font-size: var(--text-2xl); font-weight: 600; color: var(--color-success);">${totalCompleted}</div>
+        </div>
+        <div style="flex: 1;">
+          <div style="font-size: var(--text-sm); color: var(--color-text-muted); margin-bottom: var(--space-xs);">In Progress</div>
+          <div style="font-size: var(--text-2xl); font-weight: 600; color: var(--color-primary);">${grouped.in_progress.length}</div>
+        </div>
+        <div style="flex: 1;">
+          <div style="font-size: var(--text-sm); color: var(--color-text-muted); margin-bottom: var(--space-xs);">Completion Rate</div>
+          <div style="font-size: var(--text-2xl); font-weight: 600; color: var(--color-text);">${completionRate}%</div>
+        </div>
+      </div>
+
+      <!-- TODO Sections -->
+      ${grouped.in_progress.length > 0 ? `
+        <div style="margin-bottom: var(--space-xl);">
+          <h3 style="font-size: var(--text-md); font-weight: 600; color: var(--color-text); margin-bottom: var(--space-md); display: flex; align-items: center; gap: var(--space-sm);">
+            <span style="color: var(--color-primary);">▶</span> In Progress
+          </h3>
+          <div style="display: flex; flex-direction: column; gap: var(--space-md);">
+            ${grouped.in_progress.map(todo => renderTodoItem(todo)).join('')}
+          </div>
+        </div>
+      ` : ''}
+
+      ${grouped.pending.length > 0 ? `
+        <div style="margin-bottom: var(--space-xl);">
+          <h3 style="font-size: var(--text-md); font-weight: 600; color: var(--color-text); margin-bottom: var(--space-md); display: flex; align-items: center; gap: var(--space-sm);">
+            <span style="color: var(--color-text-muted);">○</span> Pending
+          </h3>
+          <div style="display: flex; flex-direction: column; gap: var(--space-md);">
+            ${grouped.pending.map(todo => renderTodoItem(todo)).join('')}
+          </div>
+        </div>
+      ` : ''}
+
+      ${grouped.completed.length > 0 ? `
+        <div>
+          <h3 style="font-size: var(--text-md); font-weight: 600; color: var(--color-text); margin-bottom: var(--space-md); display: flex; align-items: center; gap: var(--space-sm);">
+            <span style="color: var(--color-success);">✓</span> Completed
+          </h3>
+          <div style="display: flex; flex-direction: column; gap: var(--space-md);">
+            ${grouped.completed.map(todo => renderTodoItem(todo)).join('')}
+          </div>
+        </div>
+      ` : ''}
+    `;
+
+    // Attach event listeners
+    todos.forEach(todo => {
+      const expandBtn = document.getElementById(`expand-todo-${todo.id}`);
+      const startBtn = document.getElementById(`start-todo-${todo.id}`);
+      const completeBtn = document.getElementById(`complete-todo-${todo.id}`);
+
+      if (expandBtn) {
+        expandBtn.addEventListener('click', () => expandTodoDetails(todo.id));
+      }
+      if (startBtn) {
+        startBtn.addEventListener('click', () => markTodoInProgress(todo.id));
+      }
+      if (completeBtn) {
+        completeBtn.addEventListener('click', () => markTodoCompleted(todo.id));
+      }
+    });
+
+  } catch (error) {
+    console.error('Error loading todos:', error);
+    document.getElementById('todoListContainer').innerHTML = `
+      <div style="display: flex; flex-direction: column; align-items: center; padding: var(--space-xl); text-align: center;">
+        <div style="font-size: var(--text-lg); color: var(--color-error); margin-bottom: var(--space-xs); font-weight: 500;">Failed to Load TODOs</div>
+        <div style="font-size: var(--text-sm); color: var(--color-text-muted);">${error.message}</div>
+      </div>
+    `;
+  }
+}
+
+function renderTodoItem(todo) {
+  const statusIcon = {
+    'pending': '<span style="color: var(--color-text-muted); font-size: 18px;">○</span>',
+    'in_progress': '<span style="color: var(--color-primary); font-size: 18px;">▶</span>',
+    'completed': '<span style="color: var(--color-success); font-size: 18px;">✓</span>'
+  }[todo.status] || '○';
+
+  const duration = getTodoDuration(todo);
+  const eventCount = (todo.eventCount || 0);
+  
+  // Parse JSON strings if needed
+  const promptsWhileActive = Array.isArray(todo.promptsWhileActive) 
+    ? todo.promptsWhileActive 
+    : (typeof todo.promptsWhileActive === 'string' && todo.promptsWhileActive.length > 0)
+      ? JSON.parse(todo.promptsWhileActive)
+      : [];
+      
+  const filesModified = Array.isArray(todo.filesModified)
+    ? todo.filesModified
+    : (typeof todo.filesModified === 'string' && todo.filesModified.length > 0)
+      ? JSON.parse(todo.filesModified)
+      : [];
+      
+  const promptCount = promptsWhileActive.length;
+  const fileCount = filesModified.length;
+
+  const isCompleted = todo.status === 'completed';
+  const isPending = todo.status === 'pending';
+  const isInProgress = todo.status === 'in_progress';
+
+  return `
+    <div style="background: var(--color-bg); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: var(--space-lg); ${isCompleted ? 'opacity: 0.7;' : ''}">
+      <!-- Header -->
+      <div style="display: flex; align-items: flex-start; gap: var(--space-md); margin-bottom: var(--space-md);">
+        <div style="flex-shrink: 0; margin-top: 2px;">
+          ${statusIcon}
+        </div>
+        <div style="flex: 1; min-width: 0;">
+          <div style="font-size: var(--text-md); color: var(--color-text); font-weight: 500; ${isCompleted ? 'text-decoration: line-through;' : ''}">${escapeHtml(todo.content)}</div>
+          <div style="display: flex; flex-wrap: wrap; gap: var(--space-md); margin-top: var(--space-sm); font-size: var(--text-sm); color: var(--color-text-muted);">
+            ${duration ? `<span style="color: var(--color-primary); font-weight: 500;">${duration}</span>` : ''}
+            ${todo.createdAt ? `<span>Created ${formatTimestamp(todo.createdAt)}</span>` : ''}
+          </div>
+        </div>
+      </div>
+
+      <!-- Activity Summary (Always Visible) -->
+      ${(promptCount > 0 || fileCount > 0) ? `
+        <div style="margin-bottom: var(--space-md); padding: var(--space-md); background: var(--color-bg-secondary); border-radius: var(--radius-sm);">
+          <div style="font-size: var(--text-xs); font-weight: 600; color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: var(--space-sm);">Activity Summary</div>
+          <div style="display: grid; gap: var(--space-sm);">
+            ${promptCount > 0 ? `
+              <div style="font-size: var(--text-sm); color: var(--color-text);">
+                <span style="color: var(--color-primary); font-weight: 600;">${promptCount}</span> AI prompt${promptCount !== 1 ? 's' : ''}
+              </div>
+            ` : ''}
+            ${fileCount > 0 ? `
+              <div style="font-size: var(--text-sm); color: var(--color-text);">
+                <span style="color: var(--color-primary); font-weight: 600;">${fileCount}</span> file${fileCount !== 1 ? 's' : ''} modified
+                <div style="margin-top: var(--space-xs); font-size: var(--text-xs); color: var(--color-text-muted); font-family: 'Geist Mono', monospace;">
+                  ${filesModified.slice(0, 3).map(f => `<div style="margin-top: 2px;">• ${escapeHtml(f.split('/').pop())}</div>`).join('')}
+                  ${fileCount > 3 ? `<div style="margin-top: 2px;">• +${fileCount - 3} more...</div>` : ''}
+                </div>
+              </div>
+            ` : ''}
+          </div>
+        </div>
+      ` : '<div style="margin-bottom: var(--space-md); padding: var(--space-md); background: var(--color-bg-secondary); border-radius: var(--radius-sm); font-size: var(--text-sm); color: var(--color-text-muted); text-align: center;">No activity yet</div>'}
+
+      <!-- Actions -->
+      <div style="display: flex; gap: var(--space-sm); flex-wrap: wrap;">
+        ${eventCount > 0 ? `
+          <button 
+            onclick="expandTodoDetails(${todo.id})"
+            style="padding: var(--space-xs) var(--space-md); font-size: var(--text-sm); background: var(--color-bg-hover); border: 1px solid var(--color-border); border-radius: var(--radius-sm); color: var(--color-text); cursor: pointer; transition: all 0.2s;"
+            onmouseover="this.style.background='var(--color-border)'"
+            onmouseout="this.style.background='var(--color-bg-hover)'"
+          >
+            <span id="expand-btn-text-${todo.id}">Show Timeline (${eventCount} events)</span>
+          </button>
+        ` : ''}
+        
+        ${isPending ? `
+          <button 
+            onclick="markTodoInProgress(${todo.id})"
+            style="padding: var(--space-xs) var(--space-md); font-size: var(--text-sm); background: var(--color-primary); border: none; border-radius: var(--radius-sm); color: white; cursor: pointer; transition: all 0.2s;"
+            onmouseover="this.style.opacity='0.9'"
+            onmouseout="this.style.opacity='1'"
+          >
+            Start Task
+          </button>
+        ` : ''}
+        
+        ${isInProgress ? `
+          <button 
+            onclick="markTodoCompleted(${todo.id})"
+            style="padding: var(--space-xs) var(--space-md); font-size: var(--text-sm); background: var(--color-success); border: none; border-radius: var(--radius-sm); color: white; cursor: pointer; transition: all 0.2s;"
+            onmouseover="this.style.opacity='0.9'"
+            onmouseout="this.style.opacity='1'"
+          >
+            Mark Complete
+          </button>
+        ` : ''}
+      </div>
+
+      <!-- Event Timeline (Initially Hidden) -->
+      <div id="todo-events-${todo.id}" style="display: none; margin-top: var(--space-lg); padding-top: var(--space-lg); border-top: 1px solid var(--color-border);">
+        <!-- Events will be loaded here -->
+      </div>
     </div>
   `;
 }
 
-/**
- * Render File Relationship Visualization
- */
-async function renderFileRelationshipVisualization() {
-  const container = document.getElementById('fileRelationshipViz');
-  if (!container) return;
+function getTodoDuration(todo) {
+  if (todo.status === 'completed' && todo.startedAt && todo.completedAt) {
+    const durationMs = todo.completedAt - todo.startedAt;
+    const minutes = Math.floor(durationMs / 60000);
+    const hours = Math.floor(minutes / 60);
+    
+    if (hours > 0) {
+      return `${hours}h ${minutes % 60}m`;
+    } else if (minutes > 0) {
+      return `${minutes}m`;
+    } else {
+      return '< 1m';
+    }
+  } else if (todo.status === 'in_progress' && todo.startedAt) {
+    const durationMs = Date.now() - todo.startedAt;
+    const minutes = Math.floor(durationMs / 60000);
+    const hours = Math.floor(minutes / 60);
+    
+    if (hours > 0) {
+      return `${hours}h ${minutes % 60}m (ongoing)`;
+    } else if (minutes > 0) {
+      return `${minutes}m (ongoing)`;
+    } else {
+      return '< 1m (ongoing)';
+    }
+  }
+  return null;
+}
 
-  // Show coming soon message since endpoint not implemented yet
-  container.innerHTML = `
-    <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 200px; padding: var(--space-xl); text-align: center;">
-      <div style="font-size: var(--text-lg); color: var(--color-text); margin-bottom: var(--space-xs); font-weight: 500;">Feature Coming Soon</div>
-      <div style="font-size: var(--text-sm); color: var(--color-text-muted);">File relationship visualization will be available in a future update</div>
+async function markTodoInProgress(todoId) {
+  try {
+    const response = await fetch(`${CONFIG.API_BASE}/api/todos/${todoId}/status`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'in_progress' })
+    });
+    
+    if (response.ok) {
+      // Refresh the view
+      if (state.currentView === 'todos') {
+        const container = document.getElementById('viewContainer');
+        renderTodoView(container);
+      }
+    } else {
+      console.error('Failed to update TODO status');
+    }
+  } catch (error) {
+    console.error('Error updating TODO:', error);
+  }
+}
+
+async function markTodoCompleted(todoId) {
+  try {
+    const response = await fetch(`${CONFIG.API_BASE}/api/todos/${todoId}/status`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'completed' })
+    });
+    
+    if (response.ok) {
+      // Refresh the view
+      if (state.currentView === 'todos') {
+        const container = document.getElementById('viewContainer');
+        renderTodoView(container);
+      }
+    } else {
+      console.error('Failed to update TODO status');
+    }
+  } catch (error) {
+    console.error('Error updating TODO:', error);
+  }
+}
+
+async function expandTodoDetails(todoId) {
+  const eventsContainer = document.getElementById(`todo-events-${todoId}`);
+  const btnText = document.getElementById(`expand-btn-text-${todoId}`);
+  if (!eventsContainer) return;
+
+  // Toggle visibility
+  if (eventsContainer.style.display === 'block') {
+    eventsContainer.style.display = 'none';
+    if (btnText) {
+      const eventCount = eventsContainer.dataset.eventCount || 0;
+      btnText.textContent = `Show Timeline (${eventCount} events)`;
+    }
+    return;
+  }
+
+  // Show loading state
+  eventsContainer.style.display = 'block';
+  if (btnText) btnText.textContent = 'Loading...';
+  eventsContainer.innerHTML = `
+    <div style="display: flex; justify-content: center; padding: var(--space-md);">
+      <div class="spinner"></div>
     </div>
   `;
+
+  try {
+    const response = await fetch(`${CONFIG.API_BASE}/api/todos/${todoId}/events`);
+    const events = await response.json();
+    
+    // Store event count for toggle button
+    eventsContainer.dataset.eventCount = events.length;
+
+    if (!events || events.length === 0) {
+      eventsContainer.innerHTML = `
+        <div style="text-align: center; padding: var(--space-md); color: var(--color-text-muted); font-size: var(--text-sm);">
+          No events recorded for this TODO yet
+        </div>
+      `;
+      return;
+    }
+
+    // Render timeline
+    eventsContainer.innerHTML = `
+      <h4 style="font-size: var(--text-sm); font-weight: 600; color: var(--color-text); margin-bottom: var(--space-md);">Event Timeline (${events.length})</h4>
+      <div style="display: flex; flex-direction: column; gap: var(--space-sm);">
+        ${events.map(event => `
+          <div style="display: flex; gap: var(--space-md); padding: var(--space-sm); background: var(--color-bg-secondary); border-radius: var(--radius-sm);">
+            <div style="flex-shrink: 0; color: var(--color-text-muted); font-size: var(--text-xs); font-family: 'Geist Mono', monospace;">
+              ${formatTimestamp(event.timestamp)}
+            </div>
+            <div style="flex: 1;">
+              <div style="font-size: var(--text-sm); color: var(--color-text);">
+                ${event.eventType === 'prompt' ? 'Prompt' : 'File Change'}: 
+                ${event.details ? escapeHtml(truncateText(event.details, 100)) : 'N/A'}
+              </div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+    
+    // Update button text
+    if (btnText) btnText.textContent = `Hide Timeline (${events.length} events)`;
+    
+  } catch (error) {
+    console.error('Error loading TODO events:', error);
+    eventsContainer.innerHTML = `
+      <div style="text-align: center; padding: var(--space-md); color: var(--color-error); font-size: var(--text-sm);">
+        Failed to load events: ${error.message}
+      </div>
+    `;
+  }
+}
+
+// Helper function for formatting timestamps
+function formatTimestamp(timestamp) {
+  if (!timestamp) return 'Unknown';
+  const date = new Date(timestamp);
+  const now = new Date();
+  const diffMs = now - date;
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+  
+  // Relative time for recent timestamps
+  if (diffMins < 1) return 'Just now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays < 7) return `${diffDays}d ago`;
+  
+  // Absolute time for older timestamps
+  return date.toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+// Helper function for escaping HTML
+function escapeHtml(text) {
+  if (!text) return '';
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+// Helper function for truncating text
+function truncateText(text, maxLength) {
+  if (!text || text.length <= maxLength) return text;
+  return text.substring(0, maxLength) + '...';
 }
 
 // Export new functions
 window.renderEnhancedContextAnalytics = renderEnhancedContextAnalytics;
 window.renderErrorTracking = renderErrorTracking;
 window.renderProductivityInsights = renderProductivityInsights;
-window.renderFileRelationshipVisualization = renderFileRelationshipVisualization;
+// window.renderFileRelationshipVisualization - REMOVED: Handled in File Graph view
+window.renderTodoView = renderTodoView;

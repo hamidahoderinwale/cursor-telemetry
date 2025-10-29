@@ -323,12 +323,186 @@ class ProductivityTracker {
   }
 
   /**
+   * Calculate productivity stats from database (persistent data)
+   */
+  async calculateStatsFromDatabase(db, last24h) {
+    // Ensure database is initialized
+    await db.init();
+    
+    return new Promise((resolve, reject) => {
+      // Get all entries and prompts from the last 7 days for analysis
+      const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+      const sevenDaysAgoISO = new Date(sevenDaysAgo).toISOString();
+      
+      db.db.all(`
+        SELECT 
+          id, timestamp, file_path, prompt_id
+        FROM entries 
+        WHERE datetime(timestamp) > datetime(?)
+        ORDER BY timestamp ASC
+      `, [sevenDaysAgoISO], (err, entries) => {
+        if (err) {
+          console.error('[PRODUCTIVITY] Error fetching entries:', err);
+          return reject(err);
+        }
+        
+        console.log(`[PRODUCTIVITY] Fetched ${entries.length} entries from database`);
+        
+        // Prompts use Unix timestamps (milliseconds), not ISO strings
+        db.db.all(`
+          SELECT id, timestamp, text, linked_entry_id
+          FROM prompts 
+          WHERE timestamp > ?
+          ORDER BY timestamp ASC
+        `, [sevenDaysAgo], (err2, prompts) => {
+          if (err2) {
+            console.error('[PRODUCTIVITY] Error fetching prompts:', err2);
+            return reject(err2);
+          }
+          
+          console.log(`[PRODUCTIVITY] Fetched ${prompts.length} prompts from database`);
+          
+          // Calculate metrics from historical data
+          const stats = this.analyzeHistoricalData(entries, prompts, last24h);
+          resolve(stats);
+        });
+      });
+    });
+  }
+  
+  /**
+   * Analyze historical data to extract productivity metrics
+   */
+  analyzeHistoricalData(entries, prompts, last24h) {
+    // Convert timestamps to Unix time for filtering
+    const recentEntries = entries.filter(e => {
+      const ts = new Date(e.timestamp).getTime();
+      return ts > last24h;
+    });
+    const totalEntries = entries.length;
+    
+    console.log(`[PRODUCTIVITY] Analyzing ${recentEntries.length} recent entries (last 24h) out of ${totalEntries} total`);
+    
+    // Estimate active time based on file change frequency
+    // If changes are within 5 minutes, consider it active coding
+    let totalActiveTime = 0;
+    for (let i = 1; i < recentEntries.length; i++) {
+      const ts1 = new Date(recentEntries[i - 1].timestamp).getTime();
+      const ts2 = new Date(recentEntries[i].timestamp).getTime();
+      const timeDiff = ts2 - ts1;
+      if (timeDiff < 5 * 60 * 1000) { // 5 minutes
+        totalActiveTime += timeDiff;
+      }
+    }
+    
+    // Detect prompt iterations (similar prompts within a short time)
+    // Prompts use Unix timestamps stored as text in the database
+    const recentPrompts = prompts.filter(p => {
+      // Parse timestamp - could be number, string number, or ISO string
+      let ts;
+      if (typeof p.timestamp === 'number') {
+        ts = p.timestamp;
+      } else if (typeof p.timestamp === 'string' && !isNaN(parseFloat(p.timestamp))) {
+        ts = parseFloat(p.timestamp);
+      } else {
+        ts = new Date(p.timestamp).getTime();
+      }
+      return ts > last24h;
+    });
+    
+    console.log(`[PRODUCTIVITY] Analyzing ${recentPrompts.length} recent prompts (last 24h) out of ${prompts.length} total`);
+    
+    let iterationCount = 0;
+    for (let i = 1; i < recentPrompts.length; i++) {
+      // Parse timestamps consistently
+      const parseTs = (ts) => {
+        if (typeof ts === 'number') return ts;
+        if (typeof ts === 'string' && !isNaN(parseFloat(ts))) return parseFloat(ts);
+        return new Date(ts).getTime();
+      };
+      
+      const ts1 = parseTs(recentPrompts[i - 1].timestamp);
+      const ts2 = parseTs(recentPrompts[i].timestamp);
+      const timeDiff = ts2 - ts1;
+      if (timeDiff < 10 * 60 * 1000) { // Within 10 minutes
+        iterationCount++;
+      }
+    }
+    
+    // Calculate code churn (files modified multiple times)
+    const fileModifications = new Map();
+    recentEntries.forEach(entry => {
+      if (entry.file_path) {
+        const count = fileModifications.get(entry.file_path) || 0;
+        fileModifications.set(entry.file_path, count + 1);
+      }
+    });
+    
+    const churnedFiles = Array.from(fileModifications.entries())
+      .filter(([_, count]) => count > 2)
+      .length;
+    
+    // Detect debug activity (console.log, debugger, etc. in changes)
+    let debugCount = 0;
+    recentEntries.forEach(entry => {
+      // Simple heuristic: count entries with debugging keywords
+      const hasDebugKeywords = entry.file_path && 
+        (entry.file_path.includes('debug') || 
+         entry.file_path.includes('test') ||
+         entry.file_path.includes('console'));
+      if (hasDebugKeywords) debugCount++;
+    });
+    
+    return {
+      activity: {
+        totalActiveTime: totalActiveTime,
+        totalWaitingTime: 0, // Can't calculate from historical data
+        activeRatio: totalActiveTime > 0 ? 1 : 0,
+        intervals: recentEntries.length
+      },
+      promptIterations: {
+        total: prompts.length,
+        last24h: recentPrompts.length,
+        byReason: { refinement: iterationCount },
+        avgIterationsPerPrompt: recentPrompts.length > 0 ? iterationCount / recentPrompts.length : 0
+      },
+      codeChurn: {
+        total: totalEntries,
+        last24h: recentEntries.length,
+        avgChurnRate: churnedFiles / Math.max(1, fileModifications.size),
+        mostChurnedFiles: Array.from(fileModifications.entries())
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 5)
+          .map(([file, count]) => ({ file, modifications: count }))
+      },
+      debugActivity: {
+        total: debugCount,
+        last24h: debugCount,
+        byType: { heuristic: debugCount },
+        afterAIChanges: 0 // Can't easily detect from historical data
+      },
+      pendingPrompts: 0 // Only relevant for in-memory tracking
+    };
+  }
+
+  /**
    * Get productivity statistics
    */
-  getProductivityStats() {
+  async getProductivityStats(db = null) {
     const now = Date.now();
     const last24h = now - (24 * 60 * 60 * 1000);
 
+    // If database provided, calculate from persistent data
+    if (db) {
+      try {
+        return await this.calculateStatsFromDatabase(db, last24h);
+      } catch (error) {
+        console.error('[PRODUCTIVITY] Error calculating from database:', error);
+        // Fall back to in-memory stats
+      }
+    }
+
+    // Fallback: Use in-memory data (for backwards compatibility)
     // Time-to-first-edit metrics (from activity intervals)
     const recentIntervals = this.activityIntervals.filter(i => i.timestamp > last24h);
     const totalActive = recentIntervals.reduce((sum, i) => sum + i.activeTime, 0);
