@@ -1481,10 +1481,10 @@ function renderAnalyticsView(container) {
     
     // NEW: Render new analytics sections
     renderModelUsageAnalytics();
-    renderEnhancedContextAnalytics();
-    renderErrorTracking();
-    renderProductivityInsights();
-    renderFileRelationshipVisualization();
+    renderEnhancedContextAnalytics().catch(err => console.warn('[INFO] Context analytics not available:', err.message));
+    renderErrorTracking().catch(err => console.warn('[INFO] Error tracking not available:', err.message));
+    renderProductivityInsights().catch(err => console.warn('[INFO] Productivity insights not available:', err.message));
+    renderFileRelationshipVisualization().catch(err => console.warn('[INFO] File relationships not available:', err.message));
   }, 100);
 }
 
@@ -8674,41 +8674,13 @@ async function renderEnhancedContextAnalytics() {
   const container = document.getElementById('enhancedContextAnalytics');
   if (!container) return;
 
-  try {
-    const response = await APIClient.get('/api/analytics/context');
-    if (!response.success) throw new Error('Failed to fetch context analytics');
-
-    const data = response.data;
-
-    container.innerHTML = `
-      <div style="display: grid; gap: var(--space-lg);">
-        <!-- Stats Grid -->
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--space-md);">
-          <div class="stat-box">
-            <div class="stat-value">${data.avgFilesPerPrompt.toFixed(1)}</div>
-            <div class="stat-label">Avg Files/Prompt</div>
-          </div>
-          <div class="stat-box">
-            <div class="stat-value">${(data.avgTokensPerPrompt / 1000).toFixed(1)}K</div>
-            <div class="stat-label">Avg Tokens</div>
-          </div>
-          <div class="stat-box">
-            <div class="stat-value" style="color: ${data.truncationRate > 10 ? '#EF4444' : '#10B981'}">
-              ${data.truncationRate.toFixed(1)}%
-            </div>
-            <div class="stat-label">Truncation Rate</div>
-          </div>
-          <div class="stat-box">
-            <div class="stat-value">${data.avgContextUtilization.toFixed(0)}%</div>
-            <div class="stat-label">Avg Utilization</div>
-          </div>
-        </div>
-      </div>
-    `;
-  } catch (error) {
-    console.error('Error rendering context analytics:', error);
-    container.innerHTML = '<div class="error-state">Failed to load context analytics</div>';
-  }
+  // Show coming soon message since endpoint not implemented yet
+  container.innerHTML = `
+    <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 200px; padding: var(--space-xl); text-align: center;">
+      <div style="font-size: var(--text-lg); color: var(--color-text); margin-bottom: var(--space-xs); font-weight: 500;">Feature Coming Soon</div>
+      <div style="font-size: var(--text-sm); color: var(--color-text-muted);">Enhanced context analytics will be available in a future update</div>
+    </div>
+  `;
 }
 
 /**
@@ -8718,35 +8690,13 @@ async function renderErrorTracking() {
   const container = document.getElementById('errorTracking');
   if (!container) return;
 
-  try {
-    const [statsRes, recentRes] = await Promise.all([
-      APIClient.get('/api/analytics/errors'),
-      APIClient.get('/api/analytics/errors/recent?limit=10')
-    ]);
-
-    if (!statsRes.success || !recentRes.success) throw new Error('Failed to fetch error data');
-
-    const stats = statsRes.data;
-    const recentErrors = recentRes.data;
-
-    container.innerHTML = `
-      <div style="display: grid; gap: var(--space-lg);">
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--space-md);">
-          <div class="stat-box">
-            <div class="stat-value">${stats.linter.last24h}</div>
-            <div class="stat-label">Linter Errors (24h)</div>
-          </div>
-          <div class="stat-box">
-            <div class="stat-value">${stats.tests.last24h}</div>
-            <div class="stat-label">Test Failures (24h)</div>
-          </div>
-        </div>
-      </div>
-    `;
-  } catch (error) {
-    console.error('Error rendering error tracking:', error);
-    container.innerHTML = '<div class="error-state">Failed to load error tracking</div>';
-  }
+  // Show coming soon message since endpoint not implemented yet
+  container.innerHTML = `
+    <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 200px; padding: var(--space-xl); text-align: center;">
+      <div style="font-size: var(--text-lg); color: var(--color-text); margin-bottom: var(--space-xs); font-weight: 500;">Feature Coming Soon</div>
+      <div style="font-size: var(--text-sm); color: var(--color-text-muted);">Error tracking will be available in a future update</div>
+    </div>
+  `;
 }
 
 /**
@@ -8756,33 +8706,13 @@ async function renderProductivityInsights() {
   const container = document.getElementById('productivityInsights');
   if (!container) return;
 
-  try {
-    const response = await APIClient.get('/api/analytics/productivity');
-    if (!response.success) throw new Error('Failed to fetch productivity data');
-
-    const data = response.data;
-
-    const activeTimeMin = Math.round(data.activity.totalActiveTime / 60000);
-    const waitingTimeMin = Math.round(data.activity.totalWaitingTime / 60000);
-
-    container.innerHTML = `
-      <div style="display: grid; gap: var(--space-lg);">
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--space-md);">
-          <div class="stat-box">
-            <div class="stat-value">${activeTimeMin}m</div>
-            <div class="stat-label">Active Coding Time</div>
-          </div>
-          <div class="stat-box">
-            <div class="stat-value">${data.promptIterations.last24h}</div>
-            <div class="stat-label">Prompt Iterations (24h)</div>
-          </div>
-        </div>
-      </div>
-    `;
-  } catch (error) {
-    console.error('Error rendering productivity insights:', error);
-    container.innerHTML = '<div class="error-state">Failed to load productivity insights</div>';
-  }
+  // Show coming soon message since endpoint not implemented yet
+  container.innerHTML = `
+    <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 200px; padding: var(--space-xl); text-align: center;">
+      <div style="font-size: var(--text-lg); color: var(--color-text); margin-bottom: var(--space-xs); font-weight: 500;">Feature Coming Soon</div>
+      <div style="font-size: var(--text-sm); color: var(--color-text-muted);">Productivity insights will be available in a future update</div>
+    </div>
+  `;
 }
 
 /**
@@ -8792,36 +8722,13 @@ async function renderFileRelationshipVisualization() {
   const container = document.getElementById('fileRelationshipViz');
   if (!container) return;
 
-  try {
-    const response = await APIClient.get('/api/analytics/context/file-relationships?minCount=2');
-    if (!response.success) throw new Error('Failed to fetch file relationships');
-
-    const graph = response.data;
-
-    if (graph.nodes.length === 0) {
-      container.innerHTML = '<div style="text-align: center; padding: var(--space-xl); color: var(--color-text-muted);">Not enough data yet</div>';
-      return;
-    }
-
-    const sortedNodes = graph.nodes.sort((a, b) => b.mentions - a.mentions).slice(0, 10);
-
-    container.innerHTML = `
-      <div>
-        <h4>Most Referenced Files</h4>
-        <div style="display: grid; gap: var(--space-sm);">
-          ${sortedNodes.map(node => `
-            <div style="padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md);">
-              <span style="font-family: var(--font-mono);">${node.label}</span>
-              <span style="float: right; font-weight: 600;">${node.mentions}</span>
-            </div>
-          `).join('')}
-        </div>
-      </div>
-    `;
-  } catch (error) {
-    console.error('Error rendering file relationships:', error);
-    container.innerHTML = '<div class="error-state">Failed to load file relationships</div>';
-  }
+  // Show coming soon message since endpoint not implemented yet
+  container.innerHTML = `
+    <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 200px; padding: var(--space-xl); text-align: center;">
+      <div style="font-size: var(--text-lg); color: var(--color-text); margin-bottom: var(--space-xs); font-weight: 500;">Feature Coming Soon</div>
+      <div style="font-size: var(--text-sm); color: var(--color-text-muted);">File relationship visualization will be available in a future update</div>
+    </div>
+  `;
 }
 
 // Export new functions
