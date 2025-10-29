@@ -874,19 +874,131 @@ function renderActivityTimeline(events) {
 }
 
 function renderUnifiedTimeline(items) {
+  // Group prompts by conversation for threading
+  const conversationMap = new Map();
+  const nonPromptItems = [];
+  
+  items.forEach(item => {
+    if (item.itemType === 'prompt') {
+      // Check if this is a conversation thread or a message
+      const isThread = item.type === 'conversation-thread' && !item.parentConversationId;
+      const conversationId = isThread ? item.composerId : (item.parentConversationId || item.composerId);
+      
+      if (!conversationMap.has(conversationId)) {
+        conversationMap.set(conversationId, {
+          thread: isThread ? item : null,
+          messages: [],
+          timestamp: item.sortTime
+        });
+      }
+      
+      const conv = conversationMap.get(conversationId);
+      if (isThread) {
+        conv.thread = item;
+      } else {
+        conv.messages.push(item);
+      }
+      conv.timestamp = Math.max(conv.timestamp, item.sortTime);
+    } else {
+      nonPromptItems.push(item);
+    }
+  });
+  
+  // Convert conversations to timeline items
+  const conversationItems = Array.from(conversationMap.values()).map(conv => ({
+    itemType: 'conversation',
+    conversation: conv,
+    sortTime: conv.timestamp
+  }));
+  
+  // Merge and sort all items
+  const allItems = [...conversationItems, ...nonPromptItems]
+    .sort((a, b) => b.sortTime - a.sortTime);
+  
   return `
     <div class="timeline">
-      ${items.map(item => {
+      ${allItems.map(item => {
         if (item.itemType === 'event') {
           return renderTimelineItem(item);
         } else if (item.itemType === 'terminal') {
           return renderTerminalTimelineItem(item);
+        } else if (item.itemType === 'conversation') {
+          return renderConversationThread(item.conversation);
         } else {
           return renderPromptTimelineItem(item);
         }
       }).join('')}
     </div>
   `;
+}
+
+function renderConversationThread(conversation) {
+  const { thread, messages } = conversation;
+  const title = thread?.conversationTitle || thread?.text || 'Untitled Conversation';
+  const time = formatTimeAgo(thread?.timestamp || conversation.timestamp);
+  const messageCount = messages.length;
+  const threadId = thread?.composerId || `conv-${Date.now()}`;
+  
+  // Sort messages chronologically
+  const sortedMessages = messages.sort((a, b) => a.sortTime - b.sortTime);
+  
+  return `
+    <div class="timeline-item conversation-timeline-item" style="border-left: 3px solid var(--color-primary);">
+      <div class="timeline-content">
+        <div class="timeline-header" style="cursor: pointer;" onclick="toggleConversationMessages('${threadId}')">
+          <div class="timeline-title" style="display: flex; align-items: center; gap: var(--space-sm);">
+            <span id="conv-icon-${threadId}" style="transition: transform 0.2s;">▶</span>
+            <span style="font-weight: 600;">${escapeHtml(title)}</span>
+            ${messageCount > 0 ? `<span style="color: var(--color-text-muted); font-size: var(--text-sm);">(${messageCount} messages)</span>` : ''}
+          </div>
+          <div class="timeline-meta">${time}</div>
+        </div>
+        <div class="timeline-description" style="display: flex; gap: var(--space-xs); flex-wrap: wrap;">
+          <span class="badge badge-prompt">Conversation</span>
+          ${thread?.workspaceName ? `<span class="badge">${thread.workspaceName}</span>` : ''}
+          ${thread?.mode ? `<span class="badge" style="background: var(--color-primary); color: white;">${thread.mode}</span>` : ''}
+        </div>
+        
+        <!-- Messages (initially hidden) -->
+        <div id="conv-messages-${threadId}" style="display: none; margin-top: var(--space-md); padding-top: var(--space-md); border-top: 1px solid var(--color-border);">
+          ${sortedMessages.length > 0 ? sortedMessages.map(msg => renderConversationMessage(msg)).join('') : '<div style="color: var(--color-text-muted); font-size: var(--text-sm); padding: var(--space-sm);">No messages in this conversation yet</div>'}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderConversationMessage(message) {
+  const isUser = message.messageRole === 'user';
+  const icon = isUser ? '👤' : '🤖';
+  const bgColor = isUser ? 'rgba(59, 130, 246, 0.1)' : 'rgba(139, 92, 246, 0.1)';
+  const time = formatTimeAgo(message.timestamp);
+  const text = message.text || 'No message text';
+  const displayText = text.length > 300 ? text.substring(0, 300) + '...' : text;
+  
+  return `
+    <div style="padding: var(--space-sm); margin-bottom: var(--space-xs); background: ${bgColor}; border-radius: var(--radius-sm); border-left: 3px solid ${isUser ? 'var(--color-primary)' : 'var(--color-accent)'};">
+      <div style="display: flex; align-items: center; gap: var(--space-sm); margin-bottom: var(--space-xs);">
+        <span>${icon}</span>
+        <span style="font-weight: 600; font-size: var(--text-sm);">${isUser ? 'You' : 'AI Assistant'}</span>
+        <span style="color: var(--color-text-muted); font-size: var(--text-xs);">${time}</span>
+        ${message.thinkingTimeSeconds ? `<span class="badge" style="background: var(--color-success); color: white;">⚡ ${message.thinkingTimeSeconds}s</span>` : ''}
+      </div>
+      <div style="font-size: var(--text-sm); color: var(--color-text); white-space: pre-wrap; word-break: break-word;">${escapeHtml(displayText)}</div>
+      ${text.length > 300 ? `<button onclick="showEventModal('${message.id}')" style="margin-top: var(--space-xs); font-size: var(--text-xs); color: var(--color-primary); background: none; border: none; padding: 0; cursor: pointer; text-decoration: underline;">Read more</button>` : ''}
+    </div>
+  `;
+}
+
+function toggleConversationMessages(threadId) {
+  const messagesDiv = document.getElementById(`conv-messages-${threadId}`);
+  const icon = document.getElementById(`conv-icon-${threadId}`);
+  
+  if (messagesDiv && icon) {
+    const isHidden = messagesDiv.style.display === 'none';
+    messagesDiv.style.display = isHidden ? 'block' : 'none';
+    icon.style.transform = isHidden ? 'rotate(90deg)' : 'rotate(0deg)';
+  }
 }
 
 function renderPromptTimelineItem(prompt) {
