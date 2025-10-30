@@ -516,7 +516,6 @@ async function fetchOlderHistory() {
   // For now, skip to avoid memory issues
   // Can be implemented later with proper pagination UI
 }
-
 async function fetchAllData() {
   console.log('Fetching data from companion service...');
   try {
@@ -1038,7 +1037,7 @@ function renderConversationThread(conversation) {
       <div class="timeline-content">
         <div class="timeline-header" style="cursor: pointer;" onclick="toggleConversationMessages('${threadId}')">
           <div class="timeline-title" style="display: flex; align-items: center; gap: var(--space-sm);">
-            <span id="conv-icon-${threadId}" style="transition: transform 0.2s;">▶</span>
+            <span id="conv-icon-${threadId}" style="transition: transform 0.2s;"></span>
             <span style="font-weight: 600;">${escapeHtml(title)}</span>
             ${messageCount > 0 ? `<span style="color: var(--color-text-muted); font-size: var(--text-sm);">(${messageCount} messages)</span>` : ''}
           </div>
@@ -1061,7 +1060,7 @@ function renderConversationThread(conversation) {
 
 function renderConversationMessage(message) {
   const isUser = message.messageRole === 'user';
-  const icon = isUser ? '👤' : '🤖';
+  const icon = '';
   const bgColor = isUser ? 'rgba(59, 130, 246, 0.1)' : 'rgba(139, 92, 246, 0.1)';
   const time = formatTimeAgo(message.timestamp);
   const text = message.text || 'No message text';
@@ -1073,7 +1072,7 @@ function renderConversationMessage(message) {
         <span>${icon}</span>
         <span style="font-weight: 600; font-size: var(--text-sm);">${isUser ? 'You' : 'AI Assistant'}</span>
         <span style="color: var(--color-text-muted); font-size: var(--text-xs);">${time}</span>
-        ${message.thinkingTimeSeconds ? `<span class="badge" style="background: var(--color-success); color: white;">⚡ ${message.thinkingTimeSeconds}s</span>` : ''}
+        ${message.thinkingTimeSeconds ? `<span class="badge" style="background: var(--color-success); color: white;">Thinking ${message.thinkingTimeSeconds}s</span>` : ''}
       </div>
       <div style="font-size: var(--text-sm); color: var(--color-text); white-space: pre-wrap; word-break: break-word;">${escapeHtml(displayText)}</div>
       ${text.length > 300 ? `<button onclick="showEventModal('${message.id}')" style="margin-top: var(--space-xs); font-size: var(--text-xs); color: var(--color-primary); background: none; border: none; padding: 0; cursor: pointer; text-decoration: underline;">Read more</button>` : ''}
@@ -1157,7 +1156,6 @@ function renderTerminalTimelineItem(cmd) {
     </div>
   `;
 }
-
 function renderTimelineItem(event) {
   const time = new Date(event.timestamp).toLocaleTimeString();
   const title = getEventTitle(event);
@@ -1790,7 +1788,6 @@ function renderAnalyticsView(container) {
     // renderFileRelationshipVisualization() - REMOVED: Handled in File Graph view
   }, 300); // Increased from 100ms to 300ms to allow data to settle
 }
-
 // ✅ REMOVED: Continuous Activity Timeline (per user request)
 // function renderActivityChart() {
 //   Commented out to remove Continuous Activity Timeline from dashboard
@@ -2192,7 +2189,7 @@ function renderFileGraphView(container) {
         <div class="control-group">
           <label style="display: flex; align-items: center; gap: 4px;">
             Threshold: <span id="thresholdValue">0.2</span>
-            <span title="Minimum similarity score (0-1) required to show connections between files. Higher values show only strongly related files." style="color: var(--color-text-muted); font-size: 12px; cursor: help;">ⓘ</span>
+            <span title="Minimum similarity score (0-1) required to show connections between files. Higher values show only strongly related files." style="color: var(--color-text-muted); font-size: 12px; cursor: help;">Threshold</span>
           </label>
           <input type="range" id="similarityThreshold" min="0" max="1" step="0.05" value="0.2" 
                  oninput="document.getElementById('thresholdValue').textContent = this.value; updateFileGraph()"
@@ -2251,7 +2248,7 @@ function renderFileGraphView(container) {
           <div>
             <h3 class="card-title" style="cursor: help;" title="File pairs ranked by co-occurrence in prompts and editing sessions. Shows which files are frequently worked on together.">
               Most Similar File Pairs
-              <span style="font-size: 11px; color: var(--color-text-muted); font-weight: normal; margin-left: 4px;">ⓘ</span>
+              <span style="font-size: 11px; color: var(--color-text-muted); font-weight: normal; margin-left: 4px;">Most Similar File Pairs</span>
             </h3>
             <p class="card-subtitle">Files frequently modified together with highest co-occurrence scores</p>
           </div>
@@ -2276,7 +2273,7 @@ function renderFileGraphView(container) {
           <div class="card-header">
             <h3 class="card-title" style="cursor: help;" title="Visualizes semantic similarity between your AI prompts using TF-IDF embeddings and dimensionality reduction (PCA/t-SNE/MDS). Prompts with similar content appear closer together. Data is extracted from your Cursor database and analyzed locally.">
               Prompts Embedding Analysis
-              <span style="font-size: 11px; color: var(--color-text-muted); font-weight: normal; margin-left: 4px;">ⓘ</span>
+              <span style="font-size: 11px; color: var(--color-text-muted); font-weight: normal; margin-left: 4px;">Prompts Embedding Analysis</span>
             </h3>
           </div>
           <div class="card-body">
@@ -2362,7 +2359,7 @@ function renderFileGraphView(container) {
             <div>
               <h4 style="font-size: 14px; margin-bottom: var(--space-sm); color: var(--color-text-muted); cursor: help;" title="Terms ranked by TF-IDF (Term Frequency-Inverse Document Frequency) score. Higher scores indicate terms that are important in specific files but rare across all files.">
               Top Terms by Importance:
-              <span style="font-size: 11px; color: var(--color-text-muted); font-weight: normal; margin-left: 4px;">ⓘ</span>
+              <span style="font-size: 11px; color: var(--color-text-muted); font-weight: normal; margin-left: 4px;">Top Terms by Importance</span>
             </h4>
               <div id="topTerms" style="display: flex; flex-direction: column; gap: var(--space-xs); max-height: 300px; overflow-y: auto; overflow-x: hidden;">
                 <div style="color: var(--color-text-muted); font-size: 13px;">Analyzing...</div>
@@ -2380,7 +2377,6 @@ function renderFileGraphView(container) {
     initializeD3FileGraph();
   }, 100);
 }
-
 // TF-IDF computation for semantic analysis
 function computeTFIDFAnalysis(files) {
   // Tokenize files
@@ -2515,7 +2511,7 @@ async function initializeD3FileGraph() {
     
     // Fetch file contents from persistent database
     console.log('[FILE] Fetching file contents from SQLite for TF-IDF analysis...');
-    const response = await fetch(`${CONFIG.API_BASE}/api/file-contents`);
+    const response = await fetch(`${CONFIG.API_BASE}/api/file-contents?limit=100000`);
     const data = await response.json();
     
     if (!data.files || data.files.length === 0) {
@@ -2980,7 +2976,6 @@ function cosineSimilarityVector(a, b) {
   const magnitude = Math.sqrt(magA) * Math.sqrt(magB);
   return magnitude > 0 ? dotProduct / magnitude : 0;
 }
-
 /**
  * Improved PCA implementation with configurable components
  * @param {Array} vectors - Input high-dimensional vectors
@@ -3033,7 +3028,6 @@ function applyPCA(vectors, dimensions, numComponents = 10) {
   
   return reduced;
 }
-
 /**
  * Simple t-SNE-like dimensionality reduction (simplified version)
  * @param {Array} vectors - Input high-dimensional vectors
@@ -3552,7 +3546,6 @@ function renderD3FileGraph(container, nodes, links) {
       .attr('stroke-width', d => Math.max(1, d.similarity * 3));
   }
 }
-
 // Clustering algorithms
 function applyClustering(nodes, links, algorithm) {
   if (algorithm === 'none') {
@@ -3654,7 +3647,6 @@ function applyClustering(nodes, links, algorithm) {
   
   return clusters;
 }
-
 function kMeansClustering(nodes, links, k) {
   // Simple k-means based on connectivity
   const n = nodes.length;
@@ -3965,7 +3957,7 @@ function renderSimilarFilePairs(links, files) {
   if (sortedLinks.length === 0) {
     container.innerHTML = `
       <div style="text-align: center; padding: var(--space-xl); color: var(--color-text-muted);">
-        <div style="font-size: 48px; margin-bottom: var(--space-md);">○━○</div>
+        <div style="font-size: 48px; margin-bottom: var(--space-md);">No Similar Pairs Found</div>
         <div style="font-size: var(--text-md); margin-bottom: var(--space-sm);">No Similar Pairs Found</div>
         <div style="font-size: var(--text-sm);">Modify some files together to see relationships</div>
       </div>
@@ -4135,7 +4127,6 @@ function focusOnPair(sourceId, targetId) {
   // Keep highlight active
   highlightPairInGraph(sourceId, targetId);
 }
-
 function highlightSimilarPairs() {
   if (!window.topSimilarPairs || window.topSimilarPairs.length === 0) {
     alert('No similar pairs to highlight. Generate the graph first.');
@@ -4262,7 +4253,6 @@ const navigatorState = {
   simulation: null,
   labelsVisible: true
 };
-
 async function initializeNavigator() {
   const container = document.getElementById('navigatorContainer');
   if (!container) return;
@@ -4275,7 +4265,7 @@ async function initializeNavigator() {
     container.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%;"><div class="loading-spinner"></div><span style="margin-left: 12px;">Computing latent embeddings...</span></div>';
     
     // Fetch file data
-    const response = await fetch(`${CONFIG.API_BASE}/api/file-contents`);
+    const response = await fetch(`${CONFIG.API_BASE}/api/file-contents?limit=100000`);
     const data = await response.json();
     
     if (!data.files || data.files.length === 0) {
@@ -4342,7 +4332,7 @@ async function initializeNavigator() {
     console.log(`[NAVIGATOR] Processing ${files.length} files...`);
     
     // Limit files for performance (embeddings are O(n²))
-    const MAX_FILES = 500;
+    const MAX_FILES = 2000; // Increased to cover more of the database while keeping O(n^2) manageable
     if (files.length > MAX_FILES) {
       console.warn(`[NAVIGATOR] Too many files (${files.length}), limiting to ${MAX_FILES} most active files`);
       // Sort by activity (events + changes) and take top N
@@ -4355,8 +4345,8 @@ async function initializeNavigator() {
     // Compute physical positions (co-occurrence based)
     const { nodes: physicalNodes, links } = computePhysicalLayout(files);
     
-    // Compute latent positions (semantic similarity based)
-    const latentNodes = computeLatentLayout(files);
+    // Compute latent positions (semantic similarity based) using UMAP-like layout
+    const latentNodes = computeLatentLayoutUMAP(files);
     
     // Store positions
     physicalNodes.forEach(n => {
@@ -4444,50 +4434,95 @@ function computePhysicalLayout(files) {
   return { nodes: files, links };
 }
 
-function computeLatentLayout(files) {
-  // Compute latent positions using simplified t-SNE/UMAP-like approach
-  // Based on TF-IDF content similarity
-  
+// UMAP-like latent layout: kNN graph + attractive/repulsive optimization (simplified)
+function computeLatentLayoutUMAP(files) {
   const width = 800, height = 700;
-  
-  // Create feature vectors
+  const padding = 100;
   const vectors = files.map(file => createFeatureVector(file));
-  console.log(`[DATA] Created ${vectors.length} feature vectors, avg dimensions: ${vectors[0]?.length || 0}`);
-  
-  // Compute pairwise distances (with progress)
-  console.log(`[EMBEDDINGS] Computing ${files.length}×${files.length} distance matrix...`);
-  const distances = [];
-  for (let i = 0; i < files.length; i++) {
-    distances[i] = [];
-    for (let j = 0; j < files.length; j++) {
-      distances[i][j] = euclideanDistance(vectors[i], vectors[j]);
+  console.log(`[UMAP] Building feature space for ${vectors.length} nodes`);
+
+  // Build kNN graph using cosine similarity
+  const k = Math.min(15, Math.max(5, Math.floor(Math.sqrt(files.length))));
+  const neighbors = buildKNN(vectors, k);
+  console.log(`[UMAP] kNN graph built with k=${k}`);
+
+  // Initialize positions (PCA-lite via random small circle)
+  const positions = vectors.map((_, i) => {
+    const angle = (2 * Math.PI * i) / vectors.length;
+    return [Math.cos(angle) * 0.01, Math.sin(angle) * 0.01];
+  });
+
+  // Optimize (epochs) - attractive along edges, weak repulsive for non-neighbors (sampled)
+  const epochs = Math.min(100, 20 + Math.floor(files.length / 50));
+  const learningRate = 0.1;
+  const minDist = 0.1;
+  const negSamples = 3;
+  for (let e = 0; e < epochs; e++) {
+    for (let i = 0; i < vectors.length; i++) {
+      const pi = positions[i];
+      // Attractive forces for neighbors
+      const neigh = neighbors[i];
+      for (let n = 0; n < neigh.length; n++) {
+        const j = neigh[n].index;
+        const pj = positions[j];
+        const dx = pi[0] - pj[0];
+        const dy = pi[1] - pj[1];
+        const dist2 = dx * dx + dy * dy + 1e-6;
+        const grad = (dist2 > minDist ? (dist2 - minDist) : 0) * learningRate;
+        // Move closer (attractive)
+        pi[0] -= grad * dx;
+        pi[1] -= grad * dy;
+        pj[0] += grad * dx;
+        pj[1] += grad * dy;
+      }
+      // Negative sampling: mild repulsion from random nodes
+      for (let s = 0; s < negSamples; s++) {
+        const j = Math.floor(Math.random() * vectors.length);
+        if (j === i) continue;
+        const pj = positions[j];
+        const dx = pi[0] - pj[0];
+        const dy = pi[1] - pj[1];
+        const dist2 = dx * dx + dy * dy + 1e-6;
+        const inv = learningRate / Math.sqrt(dist2);
+        // Push apart slightly
+        pi[0] += inv * dx * 0.01;
+        pi[1] += inv * dy * 0.01;
+        pj[0] -= inv * dx * 0.01;
+        pj[1] -= inv * dy * 0.01;
+      }
     }
-    if (i % 50 === 0) {
-      console.log(`[EMBEDDINGS] Distance computation: ${i}/${files.length} (${Math.round(i/files.length*100)}%)`);
-    }
+    if (e % 10 === 0) console.log(`[UMAP] Epoch ${e}/${epochs}`);
   }
-  console.log(`[EMBEDDINGS] Distance matrix complete, applying MDS...`);
-  
-  // Apply MDS (Multidimensional Scaling) for 2D projection
-  const positions = applyMDS(distances, 2);
-  
-  // Scale to canvas size
+
+  // Scale to canvas
   const xs = positions.map(p => p[0]);
   const ys = positions.map(p => p[1]);
   const minX = Math.min(...xs), maxX = Math.max(...xs);
   const minY = Math.min(...ys), maxY = Math.max(...ys);
-  
-  const padding = 100;
   const scaleX = (width - 2 * padding) / (maxX - minX || 1);
   const scaleY = (height - 2 * padding) / (maxY - minY || 1);
-  
-  console.log(`[EMBEDDINGS] Latent layout complete for ${files.length} files`);
-  
+  console.log(`[UMAP] Latent layout complete for ${files.length} nodes`);
+
   return files.map((file, i) => ({
     ...file,
     x: padding + (positions[i][0] - minX) * scaleX,
     y: padding + (positions[i][1] - minY) * scaleY
   }));
+}
+
+function buildKNN(vectors, k) {
+  const sims = (a, b) => cosineSimilarityVector(a, b);
+  const neighbors = [];
+  for (let i = 0; i < vectors.length; i++) {
+    const scores = [];
+    for (let j = 0; j < vectors.length; j++) {
+      if (i === j) continue;
+      scores.push({ index: j, score: sims(vectors[i], vectors[j]) });
+    }
+    scores.sort((a, b) => b.score - a.score);
+    neighbors.push(scores.slice(0, k));
+  }
+  return neighbors;
 }
 
 function createFeatureVector(file) {
@@ -4756,7 +4791,6 @@ function animateInterpolation(from, to) {
   
   animate();
 }
-
 function updateNodePositions() {
   if (!navigatorState.nodeElements || !navigatorState.linkElements) return;
   
@@ -4864,7 +4898,6 @@ function renderMiniMap() {
   
   updateMiniMapViewport();
 }
-
 function updateMiniMapViewport() {
   if (!navigatorState.miniMapViewport || !navigatorState.svg) return;
   
@@ -4897,7 +4930,6 @@ function navigateToMiniMapPosition(x, y) {
     .duration(500)
     .call(navigatorState.zoom.transform, d3.zoomIdentity.translate(translateX, translateY).scale(scale));
 }
-
 function updateNavigatorStats() {
   document.getElementById('navFileCount').textContent = navigatorState.nodes.length;
   document.getElementById('navClusterCount').textContent = navigatorState.clusters.length;
@@ -5349,7 +5381,6 @@ function renderFileSimilarityVisualization(files, filePromptMap, similarities) {
     node.attr('transform', d => `translate(${d.x},${d.y})`);
   });
 }
-
 // ===================================
 // Navigator View (Latent Space)
 // ===================================
@@ -5496,7 +5527,6 @@ function renderNavigatorView(container) {
   // Initialize navigator after DOM is ready
   setTimeout(() => initializeNavigator(), 0);
 }
-
 // ===================================
 // System View
 // ===================================
@@ -5842,8 +5872,8 @@ function renderAPIDocsView(container) {
     }
   }
 }</code></pre>
-              </details>
-            </div>
+               </details>
+             </div>
 
           </div>
         </div>
@@ -6424,7 +6454,6 @@ socket.on('activity', (event) => {
     </div>
   `;
 }
-
 function renderSystemResourcesChart() {
   const canvas = document.getElementById('systemResourcesChart');
   if (!canvas) return;
@@ -6625,7 +6654,6 @@ function createChart(canvasId, config) {
   state.charts[canvasId] = new Chart(ctx, config);
   return state.charts[canvasId];
 }
-
 function renderAIActivityChart() {
   const canvas = document.getElementById('aiActivityChart');
   if (!canvas) return;
@@ -6711,7 +6739,7 @@ function renderAIActivityChart() {
     container.innerHTML = `
       <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 300px; padding: var(--space-xl); text-align: center;">
         <div style="font-size: var(--text-lg); font-weight: 500; color: var(--color-text); margin-bottom: var(--space-md);">
-          ${allPrompts.length === 0 && allEvents.length === 0 ? 'Waiting for Data' : '📊 No Recent Activity'}
+          ${allPrompts.length === 0 && allEvents.length === 0 ? 'Waiting for Data' : 'No Recent Activity'}
         </div>
         <div style="font-size: var(--text-sm); color: var(--color-text-muted); max-width: 500px; line-height: 1.6;">
           ${allPrompts.length === 0 && allEvents.length === 0 ? `
@@ -6896,7 +6924,6 @@ function renderAIActivityChart() {
     }
   });
 }
-
 function renderPromptTokensChart(hoursParam = 24) {
   const canvas = document.getElementById('promptTokensChart');
   if (!canvas) return;
@@ -7179,7 +7206,6 @@ function findRelatedPrompts(event, timeWindowMinutes = 5) {
   
   return related;
 }
-
 async function showEventModal(eventId) {
   // Check if it's an event or a prompt
   let event = state.data.events.find(e => e.id === eventId || e.timestamp === eventId);
@@ -7231,7 +7257,6 @@ async function showEventModal(eventId) {
   } catch (error) {
     console.warn('Could not fetch screenshots:', error);
   }
-  
   try {
     const details = typeof event.details === 'string' ? JSON.parse(event.details) : event.details;
     
@@ -7586,7 +7611,6 @@ async function showEventModal(eventId) {
 
   modal.classList.add('active');
 }
-
 function showPromptInModal(prompt, modal, title, body) {
   const promptText = prompt.text || prompt.prompt || prompt.preview || prompt.content || 'No prompt text';
   const isJsonLike = promptText.startsWith('{') || promptText.startsWith('[');
@@ -7626,7 +7650,7 @@ function showPromptInModal(prompt, modal, title, body) {
       // Detect panel/view state
       else if (Object.keys(parsed).some(k => k.includes('workbench.panel'))) {
         promptType = 'panel-state';
-        titleText = '[SYSTEM] AI Chat Panel State';
+        titleText = 'AI Chat Panel State';
         const panels = Object.keys(parsed).filter(k => k.includes('workbench.panel'));
         metadata = {
           panelCount: panels.length,
@@ -7641,7 +7665,7 @@ function showPromptInModal(prompt, modal, title, body) {
       // Detect setup/terminal data
       else if (parsed.setupPath2 || parsed.terminals) {
         promptType = 'setup';
-        titleText = '[CONFIG] Development Setup';
+        titleText = 'Development Setup';
         metadata = {
           setupPath: parsed.setupPath2,
           terminals: parsed.terminals?.length || 0,
@@ -7819,7 +7843,7 @@ function showPromptInModal(prompt, modal, title, body) {
       
       ${promptType === 'panel-state' && metadata.panels ? `
         <div>
-          <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">[SYSTEM] AI Chat Panels (${metadata.panelCount})</h4>
+          <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">AI Chat Panels (${metadata.panelCount})</h4>
           <div style="display: grid; gap: var(--space-sm);">
             ${metadata.panels.map(panel => `
               <div style="padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md); display: flex; justify-content: space-between; align-items: center;">
@@ -7842,7 +7866,7 @@ function showPromptInModal(prompt, modal, title, body) {
       
       ${promptType === 'setup' && metadata.setupPath ? `
         <div>
-          <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">[CONFIG] Development Setup</h4>
+          <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">Development Setup</h4>
           <div style="padding: var(--space-lg); background: var(--color-bg); border-radius: var(--radius-md);">
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-md);">
               <div>
@@ -7997,7 +8021,7 @@ function showTerminalModal(id) {
   
   try {
     const isError = cmd.exit_code && cmd.exit_code !== 0;
-    const icon = isError ? '[ERROR]' : '>';
+    const icon = isError ? 'Error' : '>';
     
     title.innerHTML = `${icon} Terminal Command`;
     
@@ -8212,7 +8236,6 @@ function initStatusPopup() {
     }, 10000);
   });
 }
-
 /**
  * Add a status message to the popup
  */
@@ -8855,7 +8878,6 @@ function showSearchSuggestions() {
     `).join('')}
   `;
 }
-
 /**
  * Apply search suggestion
  */
@@ -9450,7 +9472,6 @@ function renderModelUsageAnalytics() {
   html += '</div>';
   container.innerHTML = html;
 }
-
 /**
  * Render Enhanced Context Window Analytics
  */
@@ -9610,7 +9631,7 @@ async function renderEnhancedContextAnalytics() {
       </div>
     ` : `
       <div style="color: var(--color-text-muted); text-align: center; padding: var(--space-xl); background: var(--color-bg); border-radius: var(--radius-md);">
-        <div style="font-size: var(--text-base); margin-bottom: var(--space-xs);">📁 No specific file references detected yet</div>
+        <div style="font-size: var(--text-base); margin-bottom: var(--space-xs);">No specific file references detected yet</div>
         <div style="font-size: var(--text-sm);">Use @ mentions in Cursor to reference files explicitly</div>
       </div>
     `}
@@ -9852,7 +9873,7 @@ async function renderFileRelationshipVisualization_DISABLED() {
     // Render file relationship list (simple version for now)
     container.innerHTML = `
       <div style="margin-bottom: var(--space-md);">
-        <div style="font-size: var(--text-sm); color: var(--color-text-muted); margin-bottom: var(--space-sm);">
+        <div style="font-size: var(--text-sm); color: var(--color-text-muted); margin-bottom: var(--space-xs);">
           ${data.nodes.length} files with ${data.edges.length} relationships
         </div>
       </div>
@@ -9891,7 +9912,7 @@ async function renderTodoView(container) {
           </p>
         </div>
         <div class="card-body" id="todoListContainer">
-          <div style="display: flex; justify-content: center; padding: var(--space-xl);">
+          <div style="display: flex; justify-content: center; padding: var(--space-2xl);">
             <div class="spinner"></div>
           </div>
         </div>
@@ -9911,10 +9932,6 @@ async function renderTodoView(container) {
     if (!todos || todos.length === 0) {
       todoListContainer.innerHTML = `
         <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: var(--space-2xl); text-align: center;">
-          <svg width="64" height="64" viewBox="0 0 20 20" fill="var(--color-text-muted)" style="opacity: 0.3; margin-bottom: var(--space-lg);">
-            <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/>
-            <path fill-rule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clip-rule="evenodd"/>
-          </svg>
           <div style="font-size: var(--text-lg); color: var(--color-text); margin-bottom: var(--space-xs); font-weight: 500;">No TODOs Yet</div>
           <div style="font-size: var(--text-sm); color: var(--color-text-muted); max-width: 400px;">
             TODOs will appear here automatically when the AI assistant creates them during your workflow
@@ -9960,7 +9977,7 @@ async function renderTodoView(container) {
       ${grouped.in_progress.length > 0 ? `
         <div style="margin-bottom: var(--space-xl);">
           <h3 style="font-size: var(--text-md); font-weight: 600; color: var(--color-text); margin-bottom: var(--space-md); display: flex; align-items: center; gap: var(--space-sm);">
-            <span style="color: var(--color-primary);">▶</span> In Progress
+            <span style="color: var(--color-primary);"></span> In Progress
           </h3>
           <div style="display: flex; flex-direction: column; gap: var(--space-md);">
             ${grouped.in_progress.map(todo => renderTodoItem(todo)).join('')}
@@ -9971,7 +9988,7 @@ async function renderTodoView(container) {
       ${grouped.pending.length > 0 ? `
         <div style="margin-bottom: var(--space-xl);">
           <h3 style="font-size: var(--text-md); font-weight: 600; color: var(--color-text); margin-bottom: var(--space-md); display: flex; align-items: center; gap: var(--space-sm);">
-            <span style="color: var(--color-text-muted);">○</span> Pending
+            <span style="color: var(--color-text-muted);"></span> Pending
           </h3>
           <div style="display: flex; flex-direction: column; gap: var(--space-md);">
             ${grouped.pending.map(todo => renderTodoItem(todo)).join('')}
@@ -9982,7 +9999,7 @@ async function renderTodoView(container) {
       ${grouped.completed.length > 0 ? `
         <div>
           <h3 style="font-size: var(--text-md); font-weight: 600; color: var(--color-text); margin-bottom: var(--space-md); display: flex; align-items: center; gap: var(--space-sm);">
-            <span style="color: var(--color-success);">✓</span> Completed
+            <span style="color: var(--color-success);"></span> Completed
           </h3>
           <div style="display: flex; flex-direction: column; gap: var(--space-md);">
             ${grouped.completed.map(todo => renderTodoItem(todo)).join('')}
@@ -10021,12 +10038,11 @@ async function renderTodoView(container) {
     }
   }
 }
-
 function renderTodoItem(todo) {
   const statusIcon = {
-    'pending': '<span style="color: var(--color-text-muted); font-size: 18px;">○</span>',
-    'in_progress': '<span style="color: var(--color-primary); font-size: 18px;">▶</span>',
-    'completed': '<span style="color: var(--color-success); font-size: 18px;">✓</span>'
+    'pending': '<span style="color: var(--color-text-muted); font-size: 18px;"></span>',
+    'in_progress': '<span style="color: var(--color-primary); font-size: 18px;"></span>',
+    'completed': '<span style="color: var(--color-success); font-size: 18px;"></span>'
   }[todo.status] || '○';
 
   const duration = getTodoDuration(todo);
