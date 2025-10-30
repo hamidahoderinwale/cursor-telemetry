@@ -24,6 +24,10 @@ class CursorDatabaseParser {
     };
     this.updateInterval = 10000; // Update every 10 seconds
     this.contextExtractor = new ContextExtractor();
+    
+    // Add mutex to prevent concurrent database reads (thundering herd)
+    this.refreshPromise = null;
+    this.isRefreshing = false;
   }
 
   /**
@@ -306,6 +310,7 @@ class CursorDatabaseParser {
 
   /**
    * Get all extracted data
+   * Uses mutex to prevent concurrent database reads (thundering herd problem)
    */
   async getAllData() {
     const now = Date.now();
@@ -315,36 +320,58 @@ class CursorDatabaseParser {
       return this.cache;
     }
 
-    try {
-      // ✨ Extract AI service data (actual conversation messages with full threading!)
-      const aiServiceMessages = await this.extractAllAIServiceData();
-
-      // Enrich prompts with context information
-      const enrichedPrompts = await this.extractContextForPrompts(aiServiceMessages);
-
-      // Count unique conversations
-      const uniqueConversations = new Set(
-        enrichedPrompts.map(p => p.parentConversationId).filter(Boolean)
-      ).size;
-
-      this.cache = {
-        conversations: [],  // No longer needed - messages are self-contained
-        prompts: enrichedPrompts,
-        lastUpdate: now,
-        stats: {
-          totalConversations: uniqueConversations,
-          totalPrompts: enrichedPrompts.length,
-          aiServiceMessages: aiServiceMessages.length,
-          userMessages: enrichedPrompts.filter(p => p.messageRole === 'user').length,
-          assistantMessages: enrichedPrompts.filter(p => p.messageRole === 'assistant').length
-        }
-      };
-
+    // If already refreshing, wait for that promise instead of starting another refresh
+    if (this.isRefreshing && this.refreshPromise) {
+      console.log('[CACHE] Database refresh in progress, waiting...');
+      try {
+        await this.refreshPromise;
+      } catch (error) {
+        // If refresh failed, continue to try again
+      }
+      // Return cache (either updated by the other request, or stale if it failed)
       return this.cache;
-    } catch (error) {
-      console.error('Error getting all data:', error.message);
-      return this.cache; // Return cached data on error
     }
+
+    // Start refresh with mutex
+    this.isRefreshing = true;
+    this.refreshPromise = (async () => {
+      try {
+        // ✨ Extract AI service data (actual conversation messages with full threading!)
+        const aiServiceMessages = await this.extractAllAIServiceData();
+
+        // Enrich prompts with context information
+        const enrichedPrompts = await this.extractContextForPrompts(aiServiceMessages);
+
+        // Count unique conversations
+        const uniqueConversations = new Set(
+          enrichedPrompts.map(p => p.parentConversationId).filter(Boolean)
+        ).size;
+
+        this.cache = {
+          conversations: [],  // No longer needed - messages are self-contained
+          prompts: enrichedPrompts,
+          lastUpdate: Date.now(),
+          stats: {
+            totalConversations: uniqueConversations,
+            totalPrompts: enrichedPrompts.length,
+            aiServiceMessages: aiServiceMessages.length,
+            userMessages: enrichedPrompts.filter(p => p.messageRole === 'user').length,
+            assistantMessages: enrichedPrompts.filter(p => p.messageRole === 'assistant').length
+          }
+        };
+
+        console.log(`[CACHE] Database refreshed: ${enrichedPrompts.length} prompts, ${uniqueConversations} workspaces`);
+        return this.cache;
+      } catch (error) {
+        console.error('Error getting all data:', error.message);
+        return this.cache; // Return cached data on error
+      } finally {
+        this.isRefreshing = false;
+        this.refreshPromise = null;
+      }
+    })();
+
+    return this.refreshPromise;
   }
 
   /**
@@ -417,6 +444,7 @@ class CursorDatabaseParser {
       const conversationId = prompt.generationUUID || `${workspaceId}_${idx}`;
 
       // Add user message
+      const isConversationThread = prompt.type === 'composer';
       threaded.push({
         id: `${conversationId}_user`,
         text: prompt.text,
@@ -426,9 +454,10 @@ class CursorDatabaseParser {
         workspaceName: workspaceName,
         composerId: conversationId,
         source: 'aiService',
-        type: prompt.type === 'composer' ? 'conversation-thread' : 'user-prompt',
+        type: isConversationThread ? 'conversation-thread' : 'user-prompt',
         messageRole: 'user',
-        parentConversationId: conversationId,
+        // Don't set parentConversationId for thread initiators (so dashboard can identify them as threads)
+        parentConversationId: isConversationThread ? undefined : conversationId,
         conversationTitle: prompt.text.substring(0, 100), // Use first part as title
         confidence: 'high',
         status: 'captured'

@@ -26,10 +26,13 @@ class DataSynchronizer {
     // Initialize storage
     await this.storage.init();
     
-    // Load from static Cursor databases (one-time historical data)
-    await this.syncCursorDatabases();
+    // Load from static Cursor databases (one-time historical data) - DO IN BACKGROUND
+    // This endpoint is VERY SLOW (18+ seconds) so we run it asynchronously
+    this.syncCursorDatabases().catch(err => {
+      console.warn('[WARNING] Cursor database sync failed:', err.message);
+    });
     
-    // Load from companion service
+    // Load from companion service (fast endpoints)
     await this.syncCompanionService();
     
     // Run initial aggregation
@@ -49,10 +52,18 @@ class DataSynchronizer {
    * Sync from Cursor databases (historical data)
    */
   async syncCursorDatabases() {
-    console.log('[ARCHIVE] Syncing from Cursor databases...');
+    console.log('[ARCHIVE] Syncing from Cursor databases (background)...');
     
     try {
-      const response = await fetch(`${this.companionUrl}/api/cursor-database`);
+      // This endpoint is SLOW (18+ seconds), so we add a longer timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
+      
+      const response = await fetch(`${this.companionUrl}/api/cursor-database`, {
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
       if (!response.ok) throw new Error('Failed to fetch Cursor database');
       
       const data = await response.json();
@@ -111,10 +122,10 @@ class DataSynchronizer {
   }
 
   /**
-   * Start periodic sync (every 30 seconds for live feed)
+   * Start periodic sync (every 2 minutes for live feed)
    */
   startPeriodicSync() {
-    console.log('[TIME] Starting periodic sync (every 30s)...');
+    console.log('[TIME] Starting periodic sync (every 2min)...');
     
     this.syncInterval = setInterval(async () => {
       console.log('[SYNC] Periodic sync...');
@@ -129,7 +140,7 @@ class DataSynchronizer {
         await this.aggregator.aggregateAll();
       }
       
-    }, 30000); // 30 seconds
+    }, 120000); // 2 minutes (reduced request frequency to prevent overload)
   }
 
   /**

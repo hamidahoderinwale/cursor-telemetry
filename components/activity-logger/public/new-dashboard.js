@@ -12,7 +12,7 @@ const EXTERNAL_CONFIG = window.CONFIG || {};
 const DASHBOARD_CONFIG = {
   API_BASE: EXTERNAL_CONFIG.API_BASE_URL || 'http://localhost:43917',
   WS_URL: EXTERNAL_CONFIG.WS_URL || 'ws://localhost:43917',
-  REFRESH_INTERVAL: 30000,  // Increased from 5s to 30s to reduce polling
+  REFRESH_INTERVAL: 120000,  // 2 minutes to prevent request overload (down from 30s)
   ENABLE_TF_IDF: false, // Disable TF-IDF by default to save memory
   ENABLE_SEMANTIC_SEARCH: false, // Disable semantic analysis by default
   MAX_SEARCH_RESULTS: 50, // Limit search results to prevent memory issues
@@ -376,11 +376,36 @@ async function fetchRecentData() {
   
   try {
     // Fetch recent events only (cached data provides full history)
-    const [activity, prompts, workspaces] = await Promise.all([
-      APIClient.get(`/api/activity?limit=${pageSize}`),
-      APIClient.get(`/entries?limit=${pageSize}`),
-      APIClient.get('/api/workspaces')
-    ]);
+    // Use longer timeout for slow endpoints (cursor database queries)
+    // Fetch sequentially with delay to avoid overwhelming the companion service
+    const activity = await APIClient.get(`/api/activity?limit=${pageSize}`, { 
+      timeout: 30000,  // 30 seconds for database queries
+      retries: 1 
+    }).catch(err => {
+      console.warn('[WARNING] Activity fetch failed, using cache:', err.message);
+      return { data: state.data.events || [] };
+    });
+    
+    // Small delay between requests to reduce server load
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
+    const prompts = await APIClient.get(`/entries?limit=${pageSize}`, { 
+      timeout: 30000,  // 30 seconds for database queries
+      retries: 1 
+    }).catch(err => {
+      console.warn('[WARNING] Prompts fetch failed, using cache:', err.message);
+      return { entries: state.data.prompts || [] };
+    });
+    
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
+    const workspaces = await APIClient.get('/api/workspaces', { 
+      timeout: 30000,  // 30 seconds for workspace queries
+      retries: 1 
+    }).catch(err => {
+      console.warn('[WARNING] Workspaces fetch failed, using cache:', err.message);
+      return state.data.workspaces || [];
+    });
     
     // Process activity
     console.log('[DEBUG] Activity response:', { hasData: !!activity.data, isArray: Array.isArray(activity.data), length: activity.data?.length });
@@ -450,6 +475,12 @@ async function fetchRecentData() {
     // ✅ Calculate stats after fetching data
     console.log(`[SYNC] Fetch complete. Events: ${state.data.events.length}, Prompts: ${state.data.prompts.length}`);
     calculateStats();
+    
+    // 🔧 FIX: Re-render current view to update charts with fresh data
+    if (state.currentView === 'analytics') {
+      console.log('[CHART] Re-rendering charts with fresh data...');
+      setTimeout(() => renderCurrentView(), 200);
+    }
     
   } catch (error) {
     console.error('[ERROR] Error fetching recent data:', error);
@@ -670,6 +701,8 @@ function calculateStats() {
     codeChanged: (totalChars / 1024).toFixed(1), // KB
     avgContext: avgContextUsage.toFixed(1) // percentage
   };
+  
+  console.log('[STATS] Final stats:', state.stats);
 
   updateStatsDisplay();
 }
@@ -1559,18 +1592,6 @@ function renderAnalyticsView(container) {
         </div>
       </div>
 
-      <!-- Context File Heatmap -->
-      <div class="card">
-        <div class="card-header">
-          <h3 class="card-title">File Context Heatmap</h3>
-          <p class="card-subtitle">Files most often referenced together</p>
-        </div>
-        <div class="card-body">
-          <div id="contextFileHeatmap" style="min-height: 300px;"></div>
-        </div>
-      </div>
-
-
       <!-- NEW: Enhanced Context Window Analytics -->
       <div class="card">
         <div class="card-header">
@@ -1579,17 +1600,6 @@ function renderAnalyticsView(container) {
         </div>
         <div class="card-body">
           <div id="enhancedContextAnalytics" style="min-height: 200px;"></div>
-        </div>
-      </div>
-
-      <!-- NEW: Error & Bug Tracking -->
-      <div class="card">
-        <div class="card-header">
-          <h3 class="card-title">Error & Bug Tracking</h3>
-          <p class="card-subtitle">Linter errors, test failures, and rollbacks</p>
-        </div>
-        <div class="card-body">
-          <div id="errorTracking" style="min-height: 200px;"></div>
         </div>
       </div>
 
@@ -1607,23 +1617,28 @@ function renderAnalyticsView(container) {
     </div>
   `;
 
-  // Render charts after DOM is ready
+  // Render charts after DOM is ready (increased delay to ensure data is loaded)
   setTimeout(() => {
+    console.log('[CHART] Rendering analytics charts with data:', {
+      events: state.data.events?.length || 0,
+      prompts: state.data.prompts?.length || 0
+    });
+    
     renderAIActivityChart();
     renderPromptTokensChart();
     // renderActivityChart(); // Removed: Continuous Activity Timeline
     renderFileTypesChart();
     renderHourlyChart();
     renderContextFileAnalytics().catch(err => console.warn('[INFO] Context file analytics not available:', err.message));
-    renderContextFileHeatmap().catch(err => console.warn('[INFO] Context file heatmap not available:', err.message));
+    // renderContextFileHeatmap() - REMOVED: Not enough data for heatmap
     
     // NEW: Render new analytics sections
     renderModelUsageAnalytics();
     renderEnhancedContextAnalytics().catch(err => console.warn('[INFO] Context analytics not available:', err.message));
-    renderErrorTracking().catch(err => console.warn('[INFO] Error tracking not available:', err.message));
+    // renderErrorTracking() - REMOVED: Showing [object Object] for git rollbacks
     renderProductivityInsights().catch(err => console.warn('[INFO] Productivity insights not available:', err.message));
     // renderFileRelationshipVisualization() - REMOVED: Handled in File Graph view
-  }, 100);
+  }, 300); // Increased from 100ms to 300ms to allow data to settle
 }
 
 // ✅ REMOVED: Continuous Activity Timeline (per user request)
@@ -1819,7 +1834,7 @@ function renderFileTypesChart() {
   const labels = Object.keys(typeCount).slice(0, 5);
   const data = labels.map(label => typeCount[label]);
 
-  new Chart(ctx, {
+  createChart('fileTypesChart', {
     type: 'doughnut',
     data: {
       labels: labels,
@@ -1893,7 +1908,7 @@ function renderHourlyChart() {
     }
   });
 
-  new Chart(ctx, {
+  createChart('hourlyChart', {
     type: 'bar',
     data: {
       labels: intervals.map(interval => {
@@ -2905,8 +2920,13 @@ function applyMDS(vectors, dimensions) {
     Array(dimensions).fill().map(() => (Math.random() - 0.5) * 2)
   );
   
-  // Simple stress minimization (few iterations)
-  for (let iter = 0; iter < 50; iter++) {
+  // Simple stress minimization (reduced iterations for speed)
+  const iterations = Math.min(20, n * 2); // Adaptive: 20 max, or 2× node count
+  console.log(`[MDS] Running ${iterations} stress minimization iterations for ${n} nodes...`);
+  for (let iter = 0; iter < iterations; iter++) {
+    if (iter % 5 === 0) {
+      console.log(`[MDS] Iteration ${iter}/${iterations} (${Math.round(iter/iterations*100)}%)`);
+    }
     for (let i = 0; i < n; i++) {
       const forces = Array(dimensions).fill(0);
       
@@ -3300,28 +3320,34 @@ function renderD3FileGraph(container, nodes, links) {
     if (clusters.length > 0) {
       g.selectAll('.cluster-hulls path')
         .attr('d', d => {
-          const points = d.nodes.map(n => [n.x, n.y]);
+          const points = d.nodes.map(n => [n.x || 0, n.y || 0]).filter(p => !isNaN(p[0]) && !isNaN(p[1]));
           return convexHull(points);
         });
       
       g.selectAll('.cluster-labels text')
         .attr('x', d => {
-          const xs = d.nodes.map(n => n.x);
-          return d3.mean(xs);
+          const xs = d.nodes.map(n => n.x).filter(x => !isNaN(x));
+          return xs.length > 0 ? d3.mean(xs) : width / 2;
         })
         .attr('y', d => {
-          const ys = d.nodes.map(n => n.y);
-          return d3.min(ys) - 30;
+          const ys = d.nodes.map(n => n.y).filter(y => !isNaN(y));
+          return ys.length > 0 ? d3.min(ys) - 30 : height / 2;
         });
     }
     
     link
-      .attr('x1', d => d.source.x)
-      .attr('y1', d => d.source.y)
-      .attr('x2', d => d.target.x)
-      .attr('y2', d => d.target.y);
+      .attr('x1', d => d.source.x || 0)
+      .attr('y1', d => d.source.y || 0)
+      .attr('x2', d => d.target.x || 0)
+      .attr('y2', d => d.target.y || 0);
     
-    node.attr('transform', d => `translate(${d.x},${d.y})`);
+    node.attr('transform', d => {
+      const x = d.x || 0;
+      const y = d.y || 0;
+      // Only update if values are valid numbers
+      if (isNaN(x) || isNaN(y)) return 'translate(0,0)';
+      return `translate(${x},${y})`;
+    });
   });
   
   // Store nodes and links for external access
@@ -4092,6 +4118,9 @@ async function initializeNavigator() {
   if (!container) return;
   
   try {
+    const startTime = Date.now();
+    console.log('[NAVIGATOR] Starting initialization...');
+    
     // Show loading
     container.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%;"><div class="loading-spinner"></div><span style="margin-left: 12px;">Computing latent embeddings...</span></div>';
     
@@ -4124,7 +4153,7 @@ async function initializeNavigator() {
     };
     
     // Prepare files with events - filter out Git object hashes
-    const files = data.files
+    let files = data.files
       .filter(f => {
         // Filter out Git object hashes
         if (f.path && f.path.includes('.git/objects/') && isGitObjectHash(f.name)) {
@@ -4160,6 +4189,19 @@ async function initializeNavigator() {
         };
       });
     
+    console.log(`[NAVIGATOR] Processing ${files.length} files...`);
+    
+    // Limit files for performance (embeddings are O(n²))
+    const MAX_FILES = 500;
+    if (files.length > MAX_FILES) {
+      console.warn(`[NAVIGATOR] Too many files (${files.length}), limiting to ${MAX_FILES} most active files`);
+      // Sort by activity (events + changes) and take top N
+      files = files
+        .map(f => ({ ...f, activity: f.events.length + (f.changes || 0) }))
+        .sort((a, b) => b.activity - a.activity)
+        .slice(0, MAX_FILES);
+    }
+    
     // Compute physical positions (co-occurrence based)
     const { nodes: physicalNodes, links } = computePhysicalLayout(files);
     
@@ -4193,6 +4235,9 @@ async function initializeNavigator() {
     
     // Generate insights
     generateSemanticInsights();
+    
+    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+    console.log(`[NAVIGATOR] ✅ Initialization complete in ${elapsed}s`);
     
   } catch (error) {
     console.error('Error initializing navigator:', error);
@@ -4236,10 +4281,13 @@ function computePhysicalLayout(files) {
     .force('center', d3.forceCenter(width / 2, height / 2))
     .force('collision', d3.forceCollide().radius(30));
   
-  // Run simulation to completion
-  for (let i = 0; i < 300; i++) {
+  // Run simulation to completion (reduced iterations for speed)
+  const simIterations = Math.min(100, files.length * 2); // Adaptive
+  console.log(`[LAYOUT] Running force simulation for ${simIterations} ticks...`);
+  for (let i = 0; i < simIterations; i++) {
     tempSimulation.tick();
   }
+  console.log(`[LAYOUT] Physical layout complete`);
   
   tempSimulation.stop();
   
@@ -4256,14 +4304,19 @@ function computeLatentLayout(files) {
   const vectors = files.map(file => createFeatureVector(file));
   console.log(`[DATA] Created ${vectors.length} feature vectors, avg dimensions: ${vectors[0]?.length || 0}`);
   
-  // Compute pairwise distances
+  // Compute pairwise distances (with progress)
+  console.log(`[EMBEDDINGS] Computing ${files.length}×${files.length} distance matrix...`);
   const distances = [];
   for (let i = 0; i < files.length; i++) {
     distances[i] = [];
     for (let j = 0; j < files.length; j++) {
       distances[i][j] = euclideanDistance(vectors[i], vectors[j]);
     }
+    if (i % 50 === 0) {
+      console.log(`[EMBEDDINGS] Distance computation: ${i}/${files.length} (${Math.round(i/files.length*100)}%)`);
+    }
   }
+  console.log(`[EMBEDDINGS] Distance matrix complete, applying MDS...`);
   
   // Apply MDS (Multidimensional Scaling) for 2D projection
   const positions = applyMDS(distances, 2);
@@ -4277,6 +4330,8 @@ function computeLatentLayout(files) {
   const padding = 100;
   const scaleX = (width - 2 * padding) / (maxX - minX || 1);
   const scaleY = (height - 2 * padding) / (maxY - minY || 1);
+  
+  console.log(`[EMBEDDINGS] Latent layout complete for ${files.length} files`);
   
   return files.map((file, i) => ({
     ...file,
@@ -6325,7 +6380,7 @@ function renderPromptTokensChart() {
     b.contextCount > 0 ? b.contextUsage / b.contextCount : 0
   );
 
-  new Chart(ctx, {
+  createChart('promptTokensChart', {
     type: 'line',
     data: {
       labels: buckets.map(b => {
@@ -7767,11 +7822,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // Setup auto-refresh with debouncing to prevent excessive requests
     let refreshInProgress = false;
     let lastRefreshTime = Date.now();
-    const MIN_REFRESH_INTERVAL = 10000; // Minimum 10 seconds between refreshes
+    const MIN_REFRESH_INTERVAL = CONFIG.REFRESH_INTERVAL; // Match the interval to prevent overlap
     
     setInterval(async () => {
       // Skip if refresh is already in progress or too soon
       if (refreshInProgress || (Date.now() - lastRefreshTime) < MIN_REFRESH_INTERVAL) {
+        console.log('[SYNC] Skipping refresh - already in progress or too soon');
         return;
       }
       
@@ -7818,10 +7874,11 @@ document.addEventListener('DOMContentLoaded', () => {
     // Setup auto-refresh with debouncing
     let refreshInProgress = false;
     let lastRefreshTime = Date.now();
-    const MIN_REFRESH_INTERVAL = 10000; // Minimum 10 seconds between refreshes
+    const MIN_REFRESH_INTERVAL = CONFIG.REFRESH_INTERVAL; // Match the interval to prevent overlap
     
     setInterval(async () => {
       if (refreshInProgress || (Date.now() - lastRefreshTime) < MIN_REFRESH_INTERVAL) {
+        console.log('[SYNC] Skipping refresh - already in progress or too soon');
         return;
       }
       
@@ -8860,63 +8917,6 @@ async function renderEnhancedContextAnalytics() {
 }
 
 /**
- * Render Error & Bug Tracking
- */
-async function renderErrorTracking() {
-  const container = document.getElementById('errorTracking');
-  if (!container) return;
-
-  try {
-    // Fetch error stats from API
-    const response = await APIClient.get('/api/analytics/errors');
-    
-    if (!response.success || !response.data) {
-      throw new Error('No error data available');
-    }
-    
-    const data = response.data;
-    const totalErrors = (data.linterErrors || 0) + (data.testFailures || 0) + (data.terminalErrors || 0) + (data.rollbacks || 0);
-    
-    container.innerHTML = `
-      <div class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--space-md); margin-bottom: var(--space-lg);">
-        <div class="stat-card">
-          <div class="stat-label">Linter Errors</div>
-          <div class="stat-value" style="color: ${data.linterErrors > 0 ? 'var(--color-error)' : 'var(--color-success)'};">${data.linterErrors || 0}</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-label">Test Failures</div>
-          <div class="stat-value" style="color: ${data.testFailures > 0 ? 'var(--color-error)' : 'var(--color-success)'};">${data.testFailures || 0}</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-label">Terminal Errors</div>
-          <div class="stat-value" style="color: ${data.terminalErrors > 0 ? 'var(--color-warning)' : 'var(--color-success)'};">${data.terminalErrors || 0}</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-label">Git Rollbacks</div>
-          <div class="stat-value">${data.rollbacks || 0}</div>
-        </div>
-      </div>
-      
-      ${totalErrors === 0 ? `
-        <div style="display: flex; flex-direction: column; align-items: center; padding: var(--space-xl); text-align: center;">
-          <div style="font-size: 48px; margin-bottom: var(--space-md);">✅</div>
-          <div style="font-size: var(--text-lg); color: var(--color-success); font-weight: 500;">All Clear!</div>
-          <div style="font-size: var(--text-sm); color: var(--color-text-muted); margin-top: var(--space-xs);">No errors detected</div>
-        </div>
-      ` : ''}
-    `;
-  } catch (error) {
-    console.warn('[INFO] Error tracking error:', error.message);
-    container.innerHTML = `
-      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 200px; padding: var(--space-xl); text-align: center;">
-        <div style="font-size: var(--text-lg); color: var(--color-text); margin-bottom: var(--space-xs); font-weight: 500;">No Data Available</div>
-        <div style="font-size: var(--text-sm); color: var(--color-text-muted);">Error tracking data will appear here as errors are detected</div>
-      </div>
-    `;
-  }
-}
-
-/**
  * Render Productivity Insights
  */
 async function renderProductivityInsights() {
@@ -9426,7 +9426,7 @@ function truncateText(text, maxLength) {
 
 // Export new functions
 window.renderEnhancedContextAnalytics = renderEnhancedContextAnalytics;
-window.renderErrorTracking = renderErrorTracking;
+// window.renderErrorTracking - REMOVED: Section removed from dashboard
 window.renderProductivityInsights = renderProductivityInsights;
 // window.renderFileRelationshipVisualization - REMOVED: Handled in File Graph view
 window.renderTodoView = renderTodoView;
