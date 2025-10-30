@@ -52,7 +52,13 @@ class DataSynchronizer {
    * Sync from Cursor databases (historical data)
    */
   async syncCursorDatabases() {
+    const startTime = Date.now();
     console.log('[ARCHIVE] Syncing from Cursor databases (background)...');
+    
+    // Update UI with progress indicator
+    if (window.updateConnectionStatus) {
+      window.updateConnectionStatus(false, 'Syncing history (background)...');
+    }
     
     try {
       // This endpoint is SLOW (18+ seconds), so we add a longer timeout
@@ -81,8 +87,21 @@ class DataSynchronizer {
       }
       
       this.lastSync.cursorDb = Date.now();
+      
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+      console.log(`[ARCHIVE] ✅ Background sync complete in ${elapsed}s`);
+      
+      // Restore connection status if still connected
+      if (window.updateConnectionStatus && window.state && window.state.connected) {
+        window.updateConnectionStatus(true, 'Connected');
+      }
     } catch (error) {
       console.warn('Could not sync Cursor databases:', error.message);
+      
+      // Restore connection status on error if still connected
+      if (window.updateConnectionStatus && window.state && window.state.connected) {
+        window.updateConnectionStatus(true, 'Connected');
+      }
     }
   }
 

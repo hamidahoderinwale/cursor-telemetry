@@ -60,8 +60,13 @@
 
             <div style="padding: 0 var(--space-lg); margin-top: var(--space-sm); margin-bottom: var(--space-md);">
                 <div class="connection-status" id="connectionStatus">
-                    <span class="status-dot"></span>
-                    <span class="status-text">Connecting...</span>
+                    <div class="connection-status-row">
+                        <span class="status-dot"></span>
+                        <span class="status-text">Connecting...</span>
+                    </div>
+                    <div class="connection-progress" id="connectionProgress">
+                        <div class="connection-progress-bar" id="connectionProgressBar" style="width: 0%"></div>
+                    </div>
                 </div>
             </div>
 

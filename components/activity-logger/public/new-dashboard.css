@@ -134,10 +134,36 @@ body {
 
 .connection-status {
   display: flex;
-  align-items: center;
-  gap: var(--space-sm);
+  flex-direction: column;
+  gap: var(--space-xs);
   font-size: var(--text-xs);
   color: var(--color-text-muted);
+}
+
+.connection-status-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.connection-progress {
+  width: 100%;
+  height: 3px;
+  background: var(--color-border);
+  border-radius: 2px;
+  overflow: hidden;
+  display: none; /* Hidden by default */
+}
+
+.connection-progress.active {
+  display: block;
+}
+
+.connection-progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, var(--color-primary), var(--color-secondary));
+  transition: width 0.3s ease;
+  border-radius: 2px;
 }
 
 .status-dot {

@@ -303,25 +303,37 @@ async function initializeDashboard() {
   
   try {
     // Step 1: Load from IndexedDB cache first (instant UI)
+    initProgress.update('cache', 0);
     await loadFromCache();
+    initProgress.update('cache', 100);
     
     // Step 2: Check server version to see if we need to sync
+    initProgress.update('server', 0);
     const serverHealth = await APIClient.get('/health');
     const serverSequence = serverHealth.sequence || 0;
+    initProgress.update('server', 100);
     
     const cacheStale = await persistentStorage.isCacheStale(serverSequence);
     
     if (cacheStale) {
       console.log('📥 Cache stale, fetching updates...');
+      initProgress.update('data', 0);
       await fetchRecentData();
       await persistentStorage.updateServerSequence(serverSequence);
+      initProgress.update('data', 100);
     } else {
       console.log('[SUCCESS] Cache up-to-date, using cached data');
+      initProgress.update('data', 100);
     }
     
     // Step 3: Render initial UI with cached/recent data
+    initProgress.update('render', 0);
     calculateStats();
     await renderCurrentView();
+    initProgress.update('render', 100);
+    
+    // Mark as complete
+    initProgress.complete();
     
     // Step 4: Background: fetch older history if needed
     setTimeout(() => {
@@ -333,6 +345,7 @@ async function initializeDashboard() {
     
   } catch (error) {
     console.error('Initialization error:', error);
+    updateConnectionStatus(false, 'Connection failed');
     // Fallback to old method
     await fetchAllData();
   }
@@ -740,23 +753,77 @@ function handleTerminalCommand(cmd) {
 // UI Updates
 // ===================================
 
-function updateConnectionStatus(connected) {
+function updateConnectionStatus(connected, message = null, progress = null) {
   const statusEl = document.getElementById('connectionStatus');
   if (!statusEl) return;
 
   const dot = statusEl.querySelector('.status-dot');
   const text = statusEl.querySelector('.status-text');
+  const progressContainer = document.getElementById('connectionProgress');
+  const progressBar = document.getElementById('connectionProgressBar');
 
   if (connected) {
     dot.classList.add('connected');
     dot.classList.remove('disconnected');
-    text.textContent = 'Connected';
+    text.textContent = message || 'Connected';
+    
+    // Hide progress bar when connected
+    if (progressContainer) {
+      progressContainer.classList.remove('active');
+    }
   } else {
     dot.classList.remove('connected');
     dot.classList.add('disconnected');
-    text.textContent = 'Disconnected';
+    text.textContent = message || 'Disconnected';
+  }
+  
+  // Update progress bar if progress value provided
+  if (progress !== null && progressBar && progressContainer) {
+    progressContainer.classList.add('active');
+    progressBar.style.width = `${progress}%`;
   }
 }
+
+// Progress tracking for initialization
+const initProgress = {
+  steps: [
+    { id: 'cache', label: 'Loading cache', done: false },
+    { id: 'server', label: 'Connecting to server', done: false },
+    { id: 'data', label: 'Fetching data', done: false },
+    { id: 'render', label: 'Rendering UI', done: false }
+  ],
+  current: 0,
+  
+  update(stepId, stepProgress = null) {
+    const step = this.steps.find(s => s.id === stepId);
+    if (!step) return;
+    
+    step.done = stepProgress === 100 || stepProgress === null;
+    this.current = this.steps.findIndex(s => s.id === stepId);
+    
+    // Calculate overall progress: (completed steps + current step progress) / total steps
+    const completedSteps = this.steps.filter(s => s.done).length;
+    const currentStepPercent = stepProgress !== null ? stepProgress / 100 : 0;
+    const overallPercent = Math.round(((completedSteps + currentStepPercent) / this.steps.length) * 100);
+    
+    const label = stepProgress !== null ? `${step.label}... ${stepProgress}%` : step.label;
+    
+    updateConnectionStatus(false, label, overallPercent);
+    console.log(`[PROGRESS] ${label} (${overallPercent}% overall)`);
+  },
+  
+  complete() {
+    updateConnectionStatus(true, 'Connected', 100);
+    // Hide progress bar after a short delay
+    setTimeout(() => {
+      const progressContainer = document.getElementById('connectionProgress');
+      if (progressContainer) {
+        progressContainer.classList.remove('active');
+      }
+    }, 500);
+    console.log('[PROGRESS] ✅ Initialization complete');
+  }
+};
 
 function updateStatsDisplay() {
   // Defensive checks for DOM elements
@@ -1522,8 +1589,83 @@ function renderThreadsList(threads) {
 // ===================================
 
 function renderAnalyticsView(container) {
+  // Calculate data status
+  const totalPrompts = state.data.prompts?.length || 0;
+  const totalEvents = state.data.events?.length || 0;
+  const hasData = totalPrompts > 0 || totalEvents > 0;
+  
+  // Calculate data age
+  let dataFreshness = 'Unknown';
+  if (totalPrompts > 0 || totalEvents > 0) {
+    const allTimestamps = [
+      ...(state.data.prompts || []).map(p => new Date(p.timestamp).getTime()),
+      ...(state.data.events || []).map(e => new Date(e.timestamp).getTime())
+    ].filter(t => !isNaN(t));
+    
+    if (allTimestamps.length > 0) {
+      const newestData = Math.max(...allTimestamps);
+      const age = Date.now() - newestData;
+      if (age < 60 * 60 * 1000) {
+        dataFreshness = 'Very Fresh (< 1h old)';
+      } else if (age < 24 * 60 * 60 * 1000) {
+        dataFreshness = `Fresh (${Math.round(age / (60 * 60 * 1000))}h old)`;
+      } else {
+        dataFreshness = `${Math.round(age / (24 * 60 * 60 * 1000))} days old`;
+      }
+    }
+  }
+  
   container.innerHTML = `
     <div style="display: grid; gap: var(--space-xl);">
+      
+      ${!hasData ? `
+        <!-- Data Status Alert -->
+        <div style="padding: var(--space-lg); background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(139, 92, 246, 0.1)); border-radius: var(--radius-lg); border: 2px solid var(--color-primary);">
+          <div style="display: flex; align-items: start; gap: var(--space-md);">
+            <div style="flex: 1;">
+              <h3 style="margin: 0 0 var(--space-sm) 0; color: var(--color-text); font-size: var(--text-lg); font-weight: 600;">
+                Waiting for Telemetry Data
+              </h3>
+              <p style="margin: 0 0 var(--space-md) 0; color: var(--color-text-muted); line-height: 1.6;">
+                No data has been received yet. Make sure the companion service is running:
+              </p>
+              <div style="display: grid; gap: var(--space-sm); margin-bottom: var(--space-md);">
+                <div style="display: flex; align-items: center; gap: var(--space-sm);">
+                  <code style="padding: var(--space-xs) var(--space-sm); background: var(--color-bg); border-radius: var(--radius-sm); font-size: var(--text-sm); font-family: 'Geist Mono', monospace;">cd cursor-telemetry/components/activity-logger/companion</code>
+                </div>
+                <div style="display: flex; align-items: center; gap: var(--space-sm);">
+                  <code style="padding: var(--space-xs) var(--space-sm); background: var(--color-bg); border-radius: var(--radius-sm); font-size: var(--text-sm); font-family: 'Geist Mono', monospace;">node src/index.js</code>
+                </div>
+              </div>
+              <div style="padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md); border-left: 3px solid var(--color-accent);">
+                <div style="font-weight: 600; margin-bottom: var(--space-xs);">Status:</div>
+                <div style="font-size: var(--text-sm); color: var(--color-text-muted);">
+                  Events: ${totalEvents} | Prompts: ${totalPrompts}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ` : `
+        <!-- Data Status Info -->
+        <div style="padding: var(--space-md); background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(59, 130, 246, 0.1)); border-radius: var(--radius-md); border-left: 3px solid var(--color-success);">
+          <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--space-md);">
+            <div style="display: flex; align-items: center; gap: var(--space-md);">
+              <span style="font-size: 1.5rem;">📊</span>
+              <div>
+                <div style="font-weight: 600; color: var(--color-text);">Telemetry Active</div>
+                <div style="font-size: var(--text-sm); color: var(--color-text-muted);">Tracking ${totalPrompts.toLocaleString()} prompts and ${totalEvents.toLocaleString()} events</div>
+              </div>
+            </div>
+            <div style="display: flex; gap: var(--space-lg);">
+              <div style="text-align: right;">
+                <div style="font-size: var(--text-xs); color: var(--color-text-muted);">Data Freshness</div>
+                <div style="font-weight: 600; color: var(--color-success);">${dataFreshness}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      `}
       
       <!-- AI Activity & Code Output -->
       <div class="card">
@@ -1539,8 +1681,16 @@ function renderAnalyticsView(container) {
       <!-- Context Usage Over Time -->
       <div class="card">
         <div class="card-header">
-          <h3 class="card-title">Context Usage Over Time</h3>
-          <p class="card-subtitle">AI context window utilization percentage (from Cursor's internal tracking)</p>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-sm);">
+            <h3 class="card-title" style="margin: 0;">Context Usage Over Time</h3>
+            <div style="display: flex; gap: var(--space-xs);">
+              <button class="btn-timescale" data-hours="24" onclick="updateContextChartTimescale(24)" style="padding: 4px 12px; font-size: 12px; border: 1px solid var(--color-border); background: var(--color-primary); color: white; border-radius: 4px; cursor: pointer;">24h</button>
+              <button class="btn-timescale" data-hours="72" onclick="updateContextChartTimescale(72)" style="padding: 4px 12px; font-size: 12px; border: 1px solid var(--color-border); background: var(--color-bg); color: var(--color-text); border-radius: 4px; cursor: pointer;">3d</button>
+              <button class="btn-timescale" data-hours="168" onclick="updateContextChartTimescale(168)" style="padding: 4px 12px; font-size: 12px; border: 1px solid var(--color-border); background: var(--color-bg); color: var(--color-text); border-radius: 4px; cursor: pointer;">7d</button>
+              <button class="btn-timescale" data-hours="720" onclick="updateContextChartTimescale(720)" style="padding: 4px 12px; font-size: 12px; border: 1px solid var(--color-border); background: var(--color-bg); color: var(--color-text); border-radius: 4px; cursor: pointer;">30d</button>
+            </div>
+          </div>
+          <p class="card-subtitle">AI context window utilization with smart scaling (auto-adjusts range for better detail). Color-coded: <span style="color: #10b981;">Green</span> = Normal, <span style="color: #f59e0b;">Orange</span> = Medium-High, <span style="color: #ef4444;">Red</span> = High</p>
         </div>
         <div class="card-body">
           <canvas id="promptTokensChart" style="max-height: 250px;"></canvas>
@@ -1595,8 +1745,8 @@ function renderAnalyticsView(container) {
       <!-- NEW: Enhanced Context Window Analytics -->
       <div class="card">
         <div class="card-header">
-          <h3 class="card-title">Enhanced Context Window Analytics</h3>
-          <p class="card-subtitle">Deep dive into @ mentions, token usage, and file relationships</p>
+          <h3 class="card-title">Context Window Analytics</h3>
+          <p class="card-subtitle">Real metrics: file references, estimated tokens, context adoption rate, and most-mentioned files from your actual prompt data</p>
         </div>
         <div class="card-body">
           <div id="enhancedContextAnalytics" style="min-height: 200px;"></div>
@@ -1607,7 +1757,7 @@ function renderAnalyticsView(container) {
       <div class="card">
         <div class="card-header">
           <h3 class="card-title">Productivity Insights</h3>
-          <p class="card-subtitle">Time-to-edit, iterations, code churn, and debug frequency</p>
+          <p class="card-subtitle">Coding velocity: active time estimation, prompt iteration patterns, line changes, code churn hotspots, and daily metrics</p>
         </div>
         <div class="card-body">
           <div id="productivityInsights" style="min-height: 200px;"></div>
@@ -5480,10 +5630,24 @@ function renderAPIDocsView(container) {
           </div>
           <div class="card-body">
             <p><strong>Base URL:</strong> <code>http://localhost:43917</code></p>
+            <p><strong>Total Endpoints:</strong> <strong style="color: var(--color-primary);">49+</strong> REST endpoints</p>
             <p><strong>Content-Type:</strong> <code>application/json</code></p>
             <p><strong>CORS:</strong> Enabled for all origins</p>
-            <div style="margin-top: var(--space-md); padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md); border-left: 3px solid var(--color-info);">
-              <strong>Quick Test:</strong> <code>curl http://localhost:43917/health</code>
+            <p><strong>Authentication:</strong> None (local development service)</p>
+            
+            <div style="margin-top: var(--space-lg); display: grid; gap: var(--space-sm);">
+              <div style="padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md); border-left: 3px solid var(--color-info);">
+                <strong>Quick Health Check:</strong><br>
+                <code>curl http://localhost:43917/health</code>
+              </div>
+              <div style="padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md); border-left: 3px solid var(--color-success);">
+                <strong>Get Recent Activity:</strong><br>
+                <code>curl http://localhost:43917/api/activity?limit=10</code>
+              </div>
+              <div style="padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md); border-left: 3px solid var(--color-accent);">
+                <strong>Search Prompts:</strong><br>
+                <code>curl "http://localhost:43917/api/search?q=authentication"</code>
+              </div>
             </div>
           </div>
         </div>
@@ -5702,6 +5866,30 @@ function renderAPIDocsView(container) {
             <div class="api-endpoint">
               <div class="api-method-url">
                 <span class="api-method api-get">GET</span>
+                <code>/api/analytics/context/snapshots</code>
+              </div>
+              <p>Historical context usage snapshots over time</p>
+            </div>
+
+            <div class="api-endpoint">
+              <div class="api-method-url">
+                <span class="api-method api-get">GET</span>
+                <code>/api/analytics/context/historical</code>
+              </div>
+              <p>Historical context data for trend analysis</p>
+            </div>
+
+            <div class="api-endpoint">
+              <div class="api-method-url">
+                <span class="api-method api-get">GET</span>
+                <code>/api/analytics/context/timeline</code>
+              </div>
+              <p>Context usage timeline visualization data</p>
+            </div>
+
+            <div class="api-endpoint">
+              <div class="api-method-url">
+                <span class="api-method api-get">GET</span>
                 <code>/api/analytics/context/file-relationships</code>
               </div>
               <p>File co-occurrence graph for context analysis</p>
@@ -5724,9 +5912,213 @@ function renderAPIDocsView(container) {
             <div class="api-endpoint">
               <div class="api-method-url">
                 <span class="api-method api-get">GET</span>
+                <code>/api/analytics/errors/recent</code>
+              </div>
+              <p>Recent errors with detailed information</p>
+            </div>
+
+            <div class="api-endpoint">
+              <div class="api-method-url">
+                <span class="api-method api-get">GET</span>
                 <code>/api/analytics/productivity</code>
               </div>
               <p>Productivity metrics (time-to-edit, iterations, code churn)</p>
+            </div>
+
+            <div class="api-endpoint">
+              <div class="api-method-url">
+                <span class="api-method api-get">GET</span>
+                <code>/api/analytics/file-usage</code>
+              </div>
+              <p>File usage patterns and access frequency</p>
+            </div>
+
+            <div class="api-endpoint">
+              <div class="api-method-url">
+                <span class="api-method api-get">GET</span>
+                <code>/api/prompts/:id/context-files</code>
+              </div>
+              <p>Get context files for a specific prompt by ID</p>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Terminal Monitoring -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">Terminal Monitoring</h3>
+          </div>
+          <div class="card-body" style="display: grid; gap: var(--space-lg);">
+            
+            <div class="api-endpoint">
+              <div class="api-method-url">
+                <span class="api-method api-get">GET</span>
+                <code>/api/terminal/history</code>
+              </div>
+              <p>Shell command history with filtering</p>
+              <details>
+                <summary>Query Parameters</summary>
+                <ul>
+                  <li><code>limit</code> - Max results (default: 100)</li>
+                  <li><code>source</code> - Filter by source (e.g., 'zsh', 'bash')</li>
+                  <li><code>workspace</code> - Filter by workspace path</li>
+                  <li><code>exitCode</code> - Filter by exit code</li>
+                </ul>
+              </details>
+            </div>
+
+            <div class="api-endpoint">
+              <div class="api-method-url">
+                <span class="api-method api-get">GET</span>
+                <code>/api/terminal/stats</code>
+              </div>
+              <p>Terminal usage statistics and top commands</p>
+            </div>
+
+            <div class="api-endpoint">
+              <div class="api-method-url">
+                <span class="api-method api-post">POST</span>
+                <code>/api/terminal/enable</code>
+              </div>
+              <p>Enable terminal monitoring</p>
+            </div>
+
+            <div class="api-endpoint">
+              <div class="api-method-url">
+                <span class="api-method api-post">POST</span>
+                <code>/api/terminal/disable</code>
+              </div>
+              <p>Disable terminal monitoring</p>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Screenshots -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">Screenshots</h3>
+          </div>
+          <div class="card-body" style="display: grid; gap: var(--space-lg);">
+            
+            <div class="api-endpoint">
+              <div class="api-method-url">
+                <span class="api-method api-get">GET</span>
+                <code>/api/screenshots</code>
+              </div>
+              <p>Get all screenshot metadata</p>
+            </div>
+
+            <div class="api-endpoint">
+              <div class="api-method-url">
+                <span class="api-method api-get">GET</span>
+                <code>/api/screenshots/near/:timestamp</code>
+              </div>
+              <p>Find screenshot closest to a specific timestamp</p>
+              <details>
+                <summary>Parameters</summary>
+                <ul>
+                  <li><code>timestamp</code> - Unix timestamp in milliseconds</li>
+                </ul>
+              </details>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Todo/Task Management -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">Todo & Task Management</h3>
+          </div>
+          <div class="card-body" style="display: grid; gap: var(--space-lg);">
+            
+            <div class="api-endpoint">
+              <div class="api-method-url">
+                <span class="api-method api-get">GET</span>
+                <code>/api/todos</code>
+              </div>
+              <p>Get all todos with optional filtering</p>
+              <details>
+                <summary>Query Parameters</summary>
+                <ul>
+                  <li><code>status</code> - Filter by status (e.g., 'pending', 'completed')</li>
+                  <li><code>workspace</code> - Filter by workspace path</li>
+                </ul>
+              </details>
+            </div>
+
+            <div class="api-endpoint">
+              <div class="api-method-url">
+                <span class="api-method api-get">GET</span>
+                <code>/api/todos/:id/events</code>
+              </div>
+              <p>Get events associated with a specific todo</p>
+            </div>
+
+            <div class="api-endpoint">
+              <div class="api-method-url">
+                <span class="api-method api-post">POST</span>
+                <code>/api/todos</code>
+              </div>
+              <p>Create a new todo</p>
+              <details>
+                <summary>Request Body</summary>
+                <pre><code>{
+  "title": "Implement authentication",
+  "description": "Add JWT-based auth",
+  "workspace": "/path/to/workspace",
+  "status": "pending"
+}</code></pre>
+              </details>
+            </div>
+
+            <div class="api-endpoint">
+              <div class="api-method-url">
+                <span class="api-method api-post">POST</span>
+                <code>/api/todos/:id/status</code>
+              </div>
+              <p>Update todo status</p>
+              <details>
+                <summary>Request Body</summary>
+                <pre><code>{
+  "status": "completed"
+}</code></pre>
+              </details>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Workspace-Specific -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">Workspace-Specific Endpoints</h3>
+          </div>
+          <div class="card-body" style="display: grid; gap: var(--space-lg);">
+            
+            <div class="api-endpoint">
+              <div class="api-method-url">
+                <span class="api-method api-get">GET</span>
+                <code>/api/workspace/:workspacePath/activity</code>
+              </div>
+              <p>Get activity for a specific workspace</p>
+              <details>
+                <summary>Query Parameters</summary>
+                <ul>
+                  <li><code>since</code> - Timestamp filter</li>
+                  <li><code>limit</code> - Max results</li>
+                </ul>
+              </details>
+            </div>
+
+            <div class="api-endpoint">
+              <div class="api-method-url">
+                <span class="api-method api-get">GET</span>
+                <code>/api/workspace/:workspacePath/sessions</code>
+              </div>
+              <p>Get coding sessions for a specific workspace</p>
             </div>
 
           </div>
@@ -5745,6 +6137,46 @@ function renderAPIDocsView(container) {
                 <code>/ide-state</code>
               </div>
               <p>Current IDE state from AppleScript capture</p>
+            </div>
+
+            <div class="api-endpoint">
+              <div class="api-method-url">
+                <span class="api-method api-get">GET</span>
+                <code>/ide-state/history</code>
+              </div>
+              <p>Historical IDE state data</p>
+            </div>
+
+            <div class="api-endpoint">
+              <div class="api-method-url">
+                <span class="api-method api-get">GET</span>
+                <code>/ide-state/editor</code>
+              </div>
+              <p>Current editor state and open files</p>
+            </div>
+
+            <div class="api-endpoint">
+              <div class="api-method-url">
+                <span class="api-method api-get">GET</span>
+                <code>/ide-state/workspace</code>
+              </div>
+              <p>Current workspace state</p>
+            </div>
+
+            <div class="api-endpoint">
+              <div class="api-method-url">
+                <span class="api-method api-get">GET</span>
+                <code>/ide-state/debug</code>
+              </div>
+              <p>Debug state and breakpoint information</p>
+            </div>
+
+            <div class="api-endpoint">
+              <div class="api-method-url">
+                <span class="api-method api-get">GET</span>
+                <code>/ide-state/cursor</code>
+              </div>
+              <p>Cursor-specific IDE state</p>
             </div>
 
             <div class="api-endpoint">
@@ -5772,6 +6204,38 @@ function renderAPIDocsView(container) {
             <div class="api-endpoint">
               <div class="api-method-url">
                 <span class="api-method api-get">GET</span>
+                <code>/raw-data/cursor-database</code>
+              </div>
+              <p>Raw data from Cursor database queries</p>
+            </div>
+
+            <div class="api-endpoint">
+              <div class="api-method-url">
+                <span class="api-method api-get">GET</span>
+                <code>/raw-data/apple-script</code>
+              </div>
+              <p>AppleScript automation data</p>
+            </div>
+
+            <div class="api-endpoint">
+              <div class="api-method-url">
+                <span class="api-method api-get">GET</span>
+                <code>/raw-data/logs</code>
+              </div>
+              <p>System and application logs</p>
+            </div>
+
+            <div class="api-endpoint">
+              <div class="api-method-url">
+                <span class="api-method api-get">GET</span>
+                <code>/raw-data/all</code>
+              </div>
+              <p>All raw data sources combined</p>
+            </div>
+
+            <div class="api-endpoint">
+              <div class="api-method-url">
+                <span class="api-method api-get">GET</span>
                 <code>/api/cursor-database</code>
               </div>
               <p>Direct access to Cursor database mining results</p>
@@ -5783,6 +6247,78 @@ function renderAPIDocsView(container) {
                 <code>/api/workspaces</code>
               </div>
               <p>List of monitored workspaces</p>
+            </div>
+
+            <div class="api-endpoint">
+              <div class="api-method-url">
+                <span class="api-method api-get">GET</span>
+                <code>/api/file-contents</code>
+              </div>
+              <p>Get file contents from the database</p>
+              <details>
+                <summary>Query Parameters</summary>
+                <ul>
+                  <li><code>path</code> - File path (required)</li>
+                </ul>
+              </details>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Utility Endpoints -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">Utility & Debug Endpoints</h3>
+          </div>
+          <div class="card-body" style="display: grid; gap: var(--space-lg);">
+            
+            <div class="api-endpoint">
+              <div class="api-method-url">
+                <span class="api-method api-get">GET</span>
+                <code>/queue</code>
+              </div>
+              <p>View internal processing queue status</p>
+            </div>
+
+            <div class="api-endpoint">
+              <div class="api-method-url">
+                <span class="api-method api-get">GET</span>
+                <code>/api/debug</code>
+              </div>
+              <p>Debug information and diagnostics</p>
+            </div>
+
+            <div class="api-endpoint">
+              <div class="api-method-url">
+                <span class="api-method api-get">GET</span>
+                <code>/api/activity/stream</code>
+              </div>
+              <p>Server-Sent Events stream for real-time activity</p>
+              <details>
+                <summary>Usage</summary>
+                <pre><code>const eventSource = new EventSource('http://localhost:43917/api/activity/stream');
+eventSource.onmessage = (event) => {
+  console.log(JSON.parse(event.data));
+};</code></pre>
+              </details>
+            </div>
+
+            <div class="api-endpoint">
+              <div class="api-method-url">
+                <span class="api-method api-post">POST</span>
+                <code>/api/prompts/manual</code>
+              </div>
+              <p>Manually log a prompt</p>
+              <details>
+                <summary>Request Body</summary>
+                <pre><code>{
+  "text": "Your prompt text",
+  "source": "manual",
+  "workspace": "/path/to/workspace",
+  "metadata": {}
+}</code></pre>
+              </details>
             </div>
 
           </div>
@@ -5861,15 +6397,25 @@ socket.on('activity', (event) => {
         <!-- Rate Limiting & Performance -->
         <div class="card">
           <div class="card-header">
-            <h3 class="card-title">Performance Notes</h3>
+            <h3 class="card-title">Performance & Best Practices</h3>
           </div>
           <div class="card-body">
-            <ul>
-              <li><strong>No rate limiting:</strong> Local API, no throttling</li>
-              <li><strong>Polling interval:</strong> Dashboard polls every 5 seconds</li>
+            <h4 style="margin-bottom: var(--space-md); color: var(--color-text); font-weight: 600;">Performance Characteristics</h4>
+            <ul style="margin-bottom: var(--space-lg);">
+              <li><strong>No rate limiting:</strong> Local development service, no throttling applied</li>
+              <li><strong>Response time:</strong> Most endpoints < 50ms, heavy analytics < 200ms</li>
               <li><strong>Database size:</strong> ~5-10MB per hour of active development</li>
-              <li><strong>Max response time:</strong> Most endpoints <50ms</li>
-              <li><strong>Large exports:</strong> /api/export/database may take 1-2 seconds for large datasets</li>
+              <li><strong>Large exports:</strong> <code>/api/export/database</code> may take 1-2 seconds for large datasets</li>
+              <li><strong>Cursor DB sync:</strong> Initial sync can take 10-30 seconds depending on history</li>
+            </ul>
+            
+            <h4 style="margin-bottom: var(--space-md); color: var(--color-text); font-weight: 600;">Best Practices</h4>
+            <ul>
+              <li><strong>Use pagination:</strong> Add <code>?limit=100</code> for large datasets</li>
+              <li><strong>Filter by time:</strong> Use <code>?since=timestamp</code> for recent data only</li>
+              <li><strong>Cache responses:</strong> Most data changes infrequently (poll every 2-5 seconds)</li>
+              <li><strong>WebSocket for real-time:</strong> Use Socket.IO for instant updates instead of polling</li>
+              <li><strong>Export strategically:</strong> Schedule database exports during idle times</li>
             </ul>
           </div>
         </div>
@@ -6088,6 +6634,14 @@ function renderAIActivityChart() {
   const allEvents = state.data.events || [];
   const allPrompts = state.data.prompts || [];
   
+  // 🔍 DEBUG: Log data availability
+  console.log('[CHART-DEBUG] AI Activity Chart rendering with:', {
+    totalEvents: allEvents.length,
+    totalPrompts: allPrompts.length,
+    sampleEvent: allEvents[0],
+    samplePrompt: allPrompts[0]
+  });
+  
   // Group by hour for the last 24 hours or by day for longer periods
   const now = Date.now();
   const oneDayAgo = now - (24 * 60 * 60 * 1000);
@@ -6147,12 +6701,38 @@ function renderAIActivityChart() {
   });
   
   if (buckets.every(b => b.promptCount === 0 && b.codeChanges === 0)) {
-    // ✅ Use HTML instead of canvas text to avoid blurriness on Retina displays
+    // ✅ Use HTML with diagnostic information
     canvas.style.display = 'none';
     const container = canvas.parentElement;
+    
+    // Check if companion service is running
+    const companionRunning = allEvents.length > 0 || allPrompts.length > 0;
+    
     container.innerHTML = `
-      <div style="display: flex; align-items: center; justify-content: center; min-height: 300px; color: var(--color-text-muted); font-size: var(--text-sm);">
-        No AI activity data available
+      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 300px; padding: var(--space-xl); text-align: center;">
+        <div style="font-size: var(--text-lg); font-weight: 500; color: var(--color-text); margin-bottom: var(--space-md);">
+          ${allPrompts.length === 0 && allEvents.length === 0 ? 'Waiting for Data' : '📊 No Recent Activity'}
+        </div>
+        <div style="font-size: var(--text-sm); color: var(--color-text-muted); max-width: 500px; line-height: 1.6;">
+          ${allPrompts.length === 0 && allEvents.length === 0 ? `
+            <div style="margin-bottom: var(--space-md);">
+              The companion service hasn't sent any data yet. This could mean:
+            </div>
+            <div style="text-align: left; margin: 0 auto; max-width: 400px;">
+              <div style="margin-bottom: var(--space-sm);">• Companion service is still starting up</div>
+              <div style="margin-bottom: var(--space-sm);">• You haven't used Cursor AI yet</div>
+              <div style="margin-bottom: var(--space-sm);">• Database sync is in progress</div>
+            </div>
+            <div style="margin-top: var(--space-md); padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md); border-left: 3px solid var(--color-primary);">
+              <strong>Debug Info:</strong><br>
+              Events: ${allEvents.length} | Prompts: ${allPrompts.length}<br>
+              Check browser console for more details (F12)
+            </div>
+          ` : `
+            Data is loaded (${allPrompts.length} prompts, ${allEvents.length} events) but no activity in the selected time window.
+            <div style="margin-top: var(--space-sm);">Try using Cursor AI to generate new activity.</div>
+          `}
+        </div>
       </div>
     `;
     return;
@@ -6317,7 +6897,7 @@ function renderAIActivityChart() {
   });
 }
 
-function renderPromptTokensChart() {
+function renderPromptTokensChart(hoursParam = 24) {
   const canvas = document.getElementById('promptTokensChart');
   if (!canvas) return;
   
@@ -6328,7 +6908,7 @@ function renderPromptTokensChart() {
   
   // Group prompts by time buckets (hourly for last 24 hours)
   const now = Date.now();
-  const hours = 24;
+  const hours = hoursParam;
   const buckets = Array.from({ length: hours }, (_, i) => {
     const time = now - (hours - i) * 60 * 60 * 1000;
     return {
@@ -6380,6 +6960,28 @@ function renderPromptTokensChart() {
     b.contextCount > 0 ? b.contextUsage / b.contextCount : 0
   );
 
+  // Intelligently determine y1 axis max based on actual data
+  const maxContextUsage = Math.max(...avgContextUsage.filter(v => v > 0));
+  const hasContextData = avgContextUsage.some(v => v > 0);
+  
+  // Smart scaling: if max usage is < 50%, cap at 60% for better detail
+  // Otherwise use 100% to show the full scale
+  let contextAxisMax = 100;
+  let contextStepSize = 20;
+  
+  if (hasContextData) {
+    if (maxContextUsage <= 30) {
+      contextAxisMax = 40;
+      contextStepSize = 10;
+    } else if (maxContextUsage <= 50) {
+      contextAxisMax = 60;
+      contextStepSize = 10;
+    } else if (maxContextUsage <= 70) {
+      contextAxisMax = 80;
+      contextStepSize = 10;
+    }
+  }
+
   createChart('promptTokensChart', {
     type: 'line',
     data: {
@@ -6410,7 +7012,16 @@ function renderPromptTokensChart() {
           borderWidth: 2,
           pointRadius: 2,
           pointHoverRadius: 4,
-          yAxisID: 'y1'
+          yAxisID: 'y1',
+          segment: {
+            // Color segments based on usage level
+            borderColor: ctx => {
+              const value = ctx.p1.parsed.y;
+              if (value >= 80) return '#ef4444'; // Red for high usage
+              if (value >= 60) return '#f59e0b'; // Orange for medium-high
+              return '#10b981'; // Green for normal
+            }
+          }
         }
       ]
     },
@@ -6442,7 +7053,12 @@ function renderPromptTokensChart() {
               if (label === 'Prompt Length (chars)') {
                 return `${label}: ${value.toLocaleString()} characters`;
               } else if (label === 'Context Usage %') {
-                return `${label}: ${value.toFixed(1)}%`;
+                let status = '';
+                if (value >= 80) status = ' (High!)';
+                else if (value >= 60) status = ' (Medium-High)';
+                else if (value >= 40) status = ' (Medium)';
+                else status = ' (Normal)';
+                return `${label}: ${value.toFixed(1)}%${status}`;
               } else {
                 return `${label}: ${value.toLocaleString()}`;
               }
@@ -6477,19 +7093,27 @@ function renderPromptTokensChart() {
           display: true,
           position: 'right',
           beginAtZero: true,
-          max: 100,
+          max: contextAxisMax,
           title: {
             display: true,
-            text: 'Context %',
+            text: `Context % (0-${contextAxisMax}%)`,
             font: { size: 11 }
           },
           ticks: {
+            stepSize: contextStepSize,
             callback: function(value) {
               return value.toFixed(0) + '%';
             }
           },
           grid: {
-            drawOnChartArea: false
+            drawOnChartArea: false,
+            // Add visual zones
+            color: function(context) {
+              const value = context.tick.value;
+              if (value >= 80) return 'rgba(239, 68, 68, 0.1)'; // Red zone
+              if (value >= 60) return 'rgba(245, 158, 11, 0.1)'; // Orange zone
+              return 'rgba(148, 163, 184, 0.05)'; // Normal
+            }
           }
         }
       }
@@ -6563,50 +7187,23 @@ async function showEventModal(eventId) {
   
   // If not in cache, try fetching from API
   if (!event && !prompt) {
-    try {
-      console.log(`[MODAL] Event/prompt ${eventId} not in cache, fetching from API...`);
-      
-      // Try fetching as prompt first
-      const promptResponse = await fetch(`http://localhost:43917/api/prompts/${eventId}`);
-      if (promptResponse.ok) {
-        const data = await promptResponse.json();
-        if (data.success && data.data) {
-          prompt = data.data;
-        }
-      }
-      
-      // If not found as prompt, try as event
-      if (!prompt) {
-        const eventResponse = await fetch(`http://localhost:43917/api/activity/${eventId}`);
-        if (eventResponse.ok) {
-          const data = await eventResponse.json();
-          if (data.success && data.data) {
-            event = data.data;
-          }
-        }
-      }
-    } catch (error) {
-      console.error('[MODAL] Error fetching event/prompt:', error);
-    }
+    console.log(`[MODAL] Event/prompt ${eventId} not found in cache`);
     
-    // If still not found, show error
-    if (!event && !prompt) {
-      const modal = document.getElementById('eventModal');
-      const title = document.getElementById('modalTitle');
-      const body = document.getElementById('modalBody');
-      
-      if (modal && title && body) {
-        title.textContent = 'Not Found';
-        body.innerHTML = `
-          <div style="text-align: center; padding: var(--space-xl); color: var(--color-text-muted);">
-            <p>Event/Prompt #${eventId} could not be found.</p>
-            <p style="font-size: var(--text-sm); margin-top: var(--space-md);">It may have been removed or is not yet loaded.</p>
-          </div>
-        `;
-        modal.classList.add('active');
-      }
-      return;
+    const modal = document.getElementById('eventModal');
+    const title = document.getElementById('modalTitle');
+    const body = document.getElementById('modalBody');
+    
+    if (modal && title && body) {
+      title.textContent = 'Not Found';
+      body.innerHTML = `
+        <div style="text-align: center; padding: var(--space-xl); color: var(--color-text-muted);">
+          <p>Event/Prompt #${eventId} could not be found.</p>
+          <p style="font-size: var(--text-sm); margin-top: var(--space-md);">It may not be loaded yet. Try refreshing the data or checking the Activity view.</p>
+        </div>
+      `;
+      modal.classList.add('active');
     }
+    return;
   }
 
   const modal = document.getElementById('eventModal');
@@ -8861,59 +9458,163 @@ async function renderEnhancedContextAnalytics() {
   const container = document.getElementById('enhancedContextAnalytics');
   if (!container) return;
 
-  try {
-    // Fetch context analytics from API
-    const response = await APIClient.get('/api/analytics/context');
+  const prompts = state.data.prompts || [];
+  
+  if (prompts.length === 0) {
+    container.innerHTML = `
+      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 200px; padding: var(--space-xl); text-align: center;">
+        <div style="font-size: var(--text-lg); color: var(--color-text); margin-bottom: var(--space-xs); font-weight: 500;">No Data Available</div>
+        <div style="font-size: var(--text-sm); color: var(--color-text-muted);">Context data will appear here once you start using Cursor AI</div>
+      </div>
+    `;
+    return;
+  }
+
+  // Calculate context analytics from actual data
+  let totalContextFiles = 0;
+  let promptsWithContext = 0;
+  let totalContextUsage = 0;
+  let contexUsageCount = 0;
+  let totalCharsInPrompts = 0;
+  const fileReferences = new Map();
+  const promptsWithMentions = [];
+  
+  prompts.forEach(p => {
+    const text = p.text || p.prompt || '';
+    totalCharsInPrompts += text.length;
     
-    if (!response.success || !response.data) {
-      throw new Error('No context data available');
+    // Count context files
+    if (p.contextFiles) {
+      let fileCount = 0;
+      if (typeof p.contextFiles === 'object') {
+        if (p.contextFiles.count) {
+          fileCount = p.contextFiles.count;
+        } else if (p.contextFiles.files && Array.isArray(p.contextFiles.files)) {
+          fileCount = p.contextFiles.files.length;
+          // Track individual file references
+          p.contextFiles.files.forEach(file => {
+            const fileName = typeof file === 'string' ? file : file.path || file.name;
+            if (fileName) {
+              fileReferences.set(fileName, (fileReferences.get(fileName) || 0) + 1);
+            }
+          });
+        }
+      }
+      if (fileCount > 0) {
+        totalContextFiles += fileCount;
+        promptsWithContext++;
+      }
     }
     
-    const data = response.data;
+    // Count @ mentions in text
+    const atMentions = (text.match(/@[\w\-\.\/]+/g) || []);
+    if (atMentions.length > 0) {
+      atMentions.forEach(mention => {
+        const cleanMention = mention.substring(1); // Remove @
+        fileReferences.set(cleanMention, (fileReferences.get(cleanMention) || 0) + 1);
+      });
+      promptsWithMentions.push(p);
+    }
+    
+    // Track context usage percentage
+    const usage = p.contextUsage || p.context_usage || 0;
+    if (usage > 0) {
+      totalContextUsage += usage;
+      contexUsageCount++;
+    }
+  });
+  
+  const avgFilesPerPrompt = promptsWithContext > 0 ? (totalContextFiles / promptsWithContext) : 0;
+  const avgContextUsage = contexUsageCount > 0 ? (totalContextUsage / contexUsageCount) : 0;
+  const avgCharsPerPrompt = prompts.length > 0 ? (totalCharsInPrompts / prompts.length) : 0;
+  const estimatedTokens = Math.round(avgCharsPerPrompt / 4); // Rough estimate: 4 chars per token
+  const contextUtilizationRate = (promptsWithContext / prompts.length) * 100;
+  
+  // Sort files by reference count
+  const topFiles = Array.from(fileReferences.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8)
+    .map(([file, count]) => ({ file, count }));
+  
+  // Analyze context patterns
+  const last24h = Date.now() - 24 * 60 * 60 * 1000;
+  const recentPromptsWithContext = prompts.filter(p => {
+    const time = new Date(p.timestamp).getTime();
+    const hasContext = (p.contextFiles?.count || 0) > 0 || (p.text || '').includes('@');
+    return time >= last24h && hasContext;
+  }).length;
     
     container.innerHTML = `
       <div class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--space-md); margin-bottom: var(--space-lg);">
         <div class="stat-card">
-          <div class="stat-label">Avg Files per Prompt</div>
-          <div class="stat-value">${data.avgFilesPerPrompt?.toFixed(1) || '0.0'}</div>
+        <div class="stat-label" title="Average files referenced per prompt with context">Avg Files/Prompt</div>
+        <div class="stat-value">${avgFilesPerPrompt.toFixed(1)}</div>
+        <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">
+          ${promptsWithContext} of ${prompts.length} with context
+        </div>
         </div>
         <div class="stat-card">
-          <div class="stat-label">Avg Tokens</div>
-          <div class="stat-value">${Math.round(data.avgTokensPerPrompt || 0).toLocaleString()}</div>
+        <div class="stat-label" title="Estimated tokens based on average prompt length">Est. Tokens/Prompt</div>
+        <div class="stat-value">${estimatedTokens.toLocaleString()}</div>
+        <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">
+          ~${Math.round(avgCharsPerPrompt).toLocaleString()} chars avg
+        </div>
         </div>
         <div class="stat-card">
-          <div class="stat-label">Context Utilization</div>
-          <div class="stat-value">${((data.avgContextUtilization || 0) * 100).toFixed(1)}%</div>
+        <div class="stat-label" title="Average context window utilization when context is used">Avg Context Usage</div>
+        <div class="stat-value" style="color: ${avgContextUsage >= 80 ? '#ef4444' : avgContextUsage >= 60 ? '#f59e0b' : '#10b981'};">
+          ${avgContextUsage.toFixed(1)}%
+        </div>
+        <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">
+          ${contexUsageCount} prompts tracked
+        </div>
         </div>
         <div class="stat-card">
-          <div class="stat-label">Total Snapshots</div>
-          <div class="stat-value">${data.totalSnapshots || 0}</div>
+        <div class="stat-label" title="% of prompts that include file context or @ mentions">Context Adoption</div>
+        <div class="stat-value">${contextUtilizationRate.toFixed(0)}%</div>
+        <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">
+          ${recentPromptsWithContext} in last 24h
+        </div>
         </div>
       </div>
       
-      ${data.mostReferencedFiles && data.mostReferencedFiles.length > 0 ? `
+    ${topFiles.length > 0 ? `
         <div style="margin-top: var(--space-lg);">
-          <h4 style="margin-bottom: var(--space-md); color: var(--color-text); font-size: var(--text-base);">Most Referenced Files</h4>
-          <div style="display: flex; flex-direction: column; gap: var(--space-xs);">
-            ${data.mostReferencedFiles.slice(0, 5).map(file => `
-              <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-sm);">
-                <span style="font-family: 'Geist Mono', monospace; font-size: var(--text-sm); color: var(--color-text);">${file.file}</span>
-                <span style="color: var(--color-primary); font-weight: 500;">${file.mentionCount} mentions</span>
+        <h4 style="margin-bottom: var(--space-md); color: var(--color-text); font-size: var(--text-base); font-weight: 600;">
+          Most Referenced Files & Mentions
+        </h4>
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: var(--space-sm);">
+          ${topFiles.map(({ file, count }) => {
+            const fileName = file.split('/').pop() || file;
+            const percentage = ((count / prompts.length) * 100).toFixed(1);
+            return `
+              <div style="display: flex; justify-content: space-between; align-items: center; padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md); border-left: 3px solid var(--color-primary);">
+                <div style="flex: 1; min-width: 0;">
+                  <div style="font-family: 'Geist Mono', monospace; font-size: var(--text-sm); color: var(--color-text); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(file)}">
+                    ${escapeHtml(fileName)}
               </div>
-            `).join('')}
+                  ${file !== fileName ? `
+                    <div style="font-size: var(--text-xs); color: var(--color-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 2px;" title="${escapeHtml(file)}">
+                      ${escapeHtml(file)}
           </div>
+                  ` : ''}
         </div>
-      ` : '<div style="color: var(--color-text-muted); text-align: center; padding: var(--space-lg);">No file references yet</div>'}
-    `;
-  } catch (error) {
-    console.warn('[INFO] Context analytics error:', error.message);
-    container.innerHTML = `
-      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 200px; padding: var(--space-xl); text-align: center;">
-        <div style="font-size: var(--text-lg); color: var(--color-text); margin-bottom: var(--space-xs); font-weight: 500;">No Data Available</div>
-        <div style="font-size: var(--text-sm); color: var(--color-text-muted);">Context data will appear here once you use @ mentions in Cursor</div>
+                <div style="text-align: right; margin-left: var(--space-md); flex-shrink: 0;">
+                  <div style="color: var(--color-primary); font-weight: 600; font-size: var(--text-lg);">${count}</div>
+                  <div style="font-size: var(--text-xs); color: var(--color-text-muted);">${percentage}%</div>
+                </div>
+              </div>
+            `;
+          }).join('')}
       </div>
-    `;
-  }
+      </div>
+    ` : `
+      <div style="color: var(--color-text-muted); text-align: center; padding: var(--space-xl); background: var(--color-bg); border-radius: var(--radius-md);">
+        <div style="font-size: var(--text-base); margin-bottom: var(--space-xs);">📁 No specific file references detected yet</div>
+        <div style="font-size: var(--text-sm);">Use @ mentions in Cursor to reference files explicitly</div>
+      </div>
+    `}
+  `;
 }
 
 /**
@@ -8923,23 +9624,10 @@ async function renderProductivityInsights() {
   const container = document.getElementById('productivityInsights');
   if (!container) return;
 
-  try {
-    // Fetch productivity stats from API
-    const response = await APIClient.get('/api/analytics/productivity');
-    
-    if (!response.success || !response.data) {
-      throw new Error('No productivity data available');
-    }
-    
-    const data = response.data;
-    const activity = data.activity || {};
-    const iterations = data.promptIterations || {};
-    const churn = data.codeChurn || {};
-    const debug = data.debugActivity || {};
-    
-    const hasData = activity.totalActiveTime > 0 || iterations.total > 0 || churn.total > 0;
-    
-    if (!hasData) {
+  const prompts = state.data.prompts || [];
+  const events = state.data.events || [];
+  
+  if (prompts.length === 0 && events.length === 0) {
       container.innerHTML = `
         <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 200px; padding: var(--space-xl); text-align: center;">
           <div style="font-size: var(--text-lg); color: var(--color-text); margin-bottom: var(--space-xs); font-weight: 500;">No Data Available</div>
@@ -8948,39 +9636,180 @@ async function renderProductivityInsights() {
       `;
       return;
     }
+
+  // Calculate productivity metrics from actual data
+  const now = Date.now();
+  const last24h = now - 24 * 60 * 60 * 1000;
+  const last7days = now - 7 * 24 * 60 * 60 * 1000;
+  
+  // File edit activity
+  const fileEditEvents = events.filter(e => e.type === 'file-change' || e.type === 'file-edit');
+  const recentFileEdits = fileEditEvents.filter(e => new Date(e.timestamp).getTime() >= last24h);
+  
+  // Calculate active coding time (based on event density)
+  let activeCodingTime = 0;
+  const sortedEvents = [...events].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+  for (let i = 1; i < sortedEvents.length; i++) {
+    const timeDiff = new Date(sortedEvents[i].timestamp) - new Date(sortedEvents[i - 1].timestamp);
+    // Count as active if events are within 5 minutes of each other
+    if (timeDiff < 5 * 60 * 1000) {
+      activeCodingTime += timeDiff;
+    }
+  }
+  
+  // Prompt metrics
+  const userPrompts = prompts.filter(p => p.messageRole === 'user' || !p.messageRole);
+  const aiResponses = prompts.filter(p => p.messageRole === 'assistant');
+  const recentPrompts = userPrompts.filter(p => new Date(p.timestamp).getTime() >= last24h);
+  const weekPrompts = userPrompts.filter(p => new Date(p.timestamp).getTime() >= last7days);
+  
+  // Calculate thinking time for AI responses
+  const aiResponsesWithTime = aiResponses.filter(p => p.thinkingTimeSeconds && p.thinkingTimeSeconds > 0);
+  const avgThinkingTime = aiResponsesWithTime.length > 0 
+    ? aiResponsesWithTime.reduce((sum, p) => sum + parseFloat(p.thinkingTimeSeconds), 0) / aiResponsesWithTime.length 
+    : 0;
+  
+  // Lines changed analysis
+  const promptsWithLines = prompts.filter(p => (p.linesAdded || 0) > 0 || (p.linesRemoved || 0) > 0);
+  const totalLinesAdded = prompts.reduce((sum, p) => sum + (p.linesAdded || 0), 0);
+  const totalLinesRemoved = prompts.reduce((sum, p) => sum + (p.linesRemoved || 0), 0);
+  const netLinesChanged = totalLinesAdded - totalLinesRemoved;
+  
+  // Code churn (high churn = editing same files repeatedly)
+  const fileEditCounts = new Map();
+  events.filter(e => e.file).forEach(e => {
+    fileEditCounts.set(e.file, (fileEditCounts.get(e.file) || 0) + 1);
+  });
+  const highChurnFiles = Array.from(fileEditCounts.entries())
+    .filter(([_, count]) => count >= 5)
+    .sort((a, b) => b[1] - a[1]);
+  
+  // Conversation length (prompts per conversation)
+  const conversationMap = new Map();
+  prompts.forEach(p => {
+    const convId = p.parentConversationId || p.composerId || 'default';
+    conversationMap.set(convId, (conversationMap.get(convId) || 0) + 1);
+  });
+  const avgPromptsPerConversation = conversationMap.size > 0 
+    ? Array.from(conversationMap.values()).reduce((a, b) => a + b, 0) / conversationMap.size 
+    : 0;
+  
+  // Calculate prompts per day
+  const promptsPerDay = weekPrompts.length > 0 ? (weekPrompts.length / 7).toFixed(1) : '0.0';
     
     container.innerHTML = `
-      <div class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--space-md);">
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--space-md); margin-bottom: var(--space-lg);">
         <div class="stat-card">
-          <div class="stat-label">Active Coding Time</div>
-          <div class="stat-value">${formatDuration(activity.totalActiveTime || 0)}</div>
+        <div class="stat-label" title="Estimated active coding time based on event density">Active Time (Est.)</div>
+        <div class="stat-value">${formatDuration(activeCodingTime)}</div>
+        <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">
+          Based on ${events.length.toLocaleString()} events
         </div>
+      </div>
+      
         <div class="stat-card">
-          <div class="stat-label">Prompt Iterations</div>
-          <div class="stat-value">${iterations.total || 0}</div>
-          <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">${iterations.last24h || 0} in last 24h</div>
+        <div class="stat-label" title="Total user prompts to AI">Total Prompts</div>
+        <div class="stat-value">${userPrompts.length.toLocaleString()}</div>
+        <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">
+          ${recentPrompts.length} in last 24h
         </div>
+      </div>
+      
         <div class="stat-card">
-          <div class="stat-label">Code Churn Events</div>
-          <div class="stat-value">${churn.total || 0}</div>
-          <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">${churn.last24h || 0} in last 24h</div>
+        <div class="stat-label" title="Average prompts per conversation thread">Avg Iteration Depth</div>
+        <div class="stat-value">${avgPromptsPerConversation.toFixed(1)}</div>
+        <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">
+          ${conversationMap.size} conversations
         </div>
+      </div>
+      
         <div class="stat-card">
-          <div class="stat-label">Debug Activity</div>
-          <div class="stat-value">${debug.total || 0}</div>
-          <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">${debug.afterAIChanges || 0} after AI changes</div>
+        <div class="stat-label" title="Average AI response thinking time">Avg AI Think Time</div>
+        <div class="stat-value">${avgThinkingTime > 0 ? avgThinkingTime.toFixed(1) + 's' : 'N/A'}</div>
+        <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">
+          ${aiResponsesWithTime.length} responses tracked
+        </div>
+      </div>
+    </div>
+    
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--space-md); margin-bottom: var(--space-lg);">
+      <div class="stat-card">
+        <div class="stat-label" title="Total lines added across all prompts">Lines Added</div>
+        <div class="stat-value" style="color: #10b981;">${totalLinesAdded.toLocaleString()}</div>
+        <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">
+          ${promptsWithLines.length} prompts with changes
+        </div>
+      </div>
+      
+      <div class="stat-card">
+        <div class="stat-label" title="Total lines removed across all prompts">Lines Removed</div>
+        <div class="stat-value" style="color: #ef4444;">${totalLinesRemoved.toLocaleString()}</div>
+        <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">
+          Net: ${netLinesChanged >= 0 ? '+' : ''}${netLinesChanged.toLocaleString()}
+        </div>
+      </div>
+      
+      <div class="stat-card">
+        <div class="stat-label" title="Files edited repeatedly (potential churn)">High-Churn Files</div>
+        <div class="stat-value">${highChurnFiles.length}</div>
+        <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">
+          ${fileEditEvents.length} total edits
+        </div>
+      </div>
+      
+      <div class="stat-card">
+        <div class="stat-label" title="Average prompts per day over last week">Daily Velocity</div>
+        <div class="stat-value">${promptsPerDay}</div>
+        <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">
+          prompts/day (7-day avg)
+        </div>
+      </div>
+    </div>
+    
+    ${highChurnFiles.length > 0 ? `
+      <div style="margin-top: var(--space-md);">
+        <h4 style="margin-bottom: var(--space-md); color: var(--color-text); font-size: var(--text-base); font-weight: 600;">
+          Most Frequently Edited Files
+        </h4>
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: var(--space-sm);">
+          ${highChurnFiles.slice(0, 6).map(([file, count]) => {
+            const fileName = file.split('/').pop() || file;
+            const editIntensity = count >= 20 ? 'Very High' : count >= 10 ? 'High' : 'Moderate';
+            const color = count >= 20 ? '#ef4444' : count >= 10 ? '#f59e0b' : '#10b981';
+            return `
+              <div style="padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md); border-left: 3px solid ${color};">
+                <div style="font-family: 'Geist Mono', monospace; font-size: var(--text-sm); color: var(--color-text); font-weight: 500; margin-bottom: var(--space-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(file)}">
+                  ${escapeHtml(fileName)}
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                  <span style="font-size: var(--text-xs); color: var(--color-text-muted);">${editIntensity} churn</span>
+                  <span style="color: ${color}; font-weight: 600;">${count} edits</span>
         </div>
       </div>
     `;
-  } catch (error) {
-    console.warn('[INFO] Productivity insights error:', error.message);
-    container.innerHTML = `
-      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 200px; padding: var(--space-xl); text-align: center;">
-        <div style="font-size: var(--text-lg); color: var(--color-text); margin-bottom: var(--space-xs); font-weight: 500;">No Data Available</div>
-        <div style="font-size: var(--text-sm); color: var(--color-text-muted);">Productivity data will accumulate as you work with Cursor</div>
+          }).join('')}
       </div>
+      </div>
+    ` : ''}
     `;
-  }
+}
+
+// Update context chart timescale
+function updateContextChartTimescale(hours) {
+  // Update button states
+  document.querySelectorAll('.btn-timescale').forEach(btn => {
+    const btnHours = parseInt(btn.getAttribute('data-hours'));
+    if (btnHours === hours) {
+      btn.style.background = 'var(--color-primary)';
+      btn.style.color = 'white';
+    } else {
+      btn.style.background = 'var(--color-bg)';
+      btn.style.color = 'var(--color-text)';
+    }
+  });
+  
+  // Re-render chart with new timescale
+  renderPromptTokensChart(hours);
 }
 
 // Helper function to format duration
