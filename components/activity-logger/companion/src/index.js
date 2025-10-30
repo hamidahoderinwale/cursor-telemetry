@@ -690,6 +690,139 @@ async function captureCursorDatabase() {
   }
 }
 
+/**
+ * ✨ NEW: Sync prompts from Cursor's database to persistent storage
+ * Extracts prompts from aiService.prompts and aiService.generations
+ * and saves them to the companion.db for persistence and linking
+ */
+const syncedPromptIds = new Set(); // Track which prompts we've already saved
+let syncInProgress = false; // Prevent concurrent sync operations
+let initialSyncComplete = false; // Only do full sync once on startup
+
+async function syncPromptsFromCursorDB() {
+  // Prevent concurrent syncs
+  if (syncInProgress) {
+    console.log('[SYNC] Skipping - sync already in progress');
+    return;
+  }
+  
+  // After initial sync, only sync new prompts (not full rescan)
+  if (initialSyncComplete && syncedPromptIds.size > 0) {
+    console.log('[SYNC] Initial sync complete - skipping periodic full rescan (use API for real-time data)');
+    return;
+  }
+  
+  syncInProgress = true;
+  
+  try {
+    console.log('[SYNC] Starting prompt sync cycle...');
+    
+    // Extract prompts directly without enrichment for faster sync
+    const startTime = Date.now();
+    
+    // Direct extraction without expensive enrichment
+    const aiServiceMessages = await cursorDbParser.extractAllAIServiceData();
+    const prompts = aiServiceMessages || [];
+    
+    const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+    console.log(`[SYNC] Extracted ${prompts.length} prompts from Cursor DB in ${duration}s`);
+    
+    if (prompts.length === 0) {
+      console.log('[SYNC] No prompts to sync');
+      return;
+    }
+    
+    let newPrompts = 0;
+    let skippedPrompts = 0;
+    const promptsToSave = [];
+    
+    // Filter and prepare prompts (fast, in-memory only)
+    for (const prompt of prompts) {
+      // Create a unique ID based on content and timestamp
+      const promptId = prompt.id || `${prompt.composerId || ''}_${prompt.timestamp || Date.now()}_${prompt.messageRole || 'user'}`;
+      
+      // Skip if already synced
+      if (syncedPromptIds.has(promptId)) {
+        skippedPrompts++;
+        continue;
+      }
+      
+      // Prepare prompt for database storage
+      const dbPrompt = {
+        id: db.nextId++,
+        timestamp: prompt.timestamp || Date.now(),
+        text: prompt.text || '',
+        status: prompt.status || 'captured',
+        source: prompt.source || 'cursor-database',
+        workspaceId: prompt.workspaceId,
+        workspacePath: prompt.workspacePath,
+        workspaceName: prompt.workspaceName,
+        composerId: prompt.composerId,
+        subtitle: prompt.subtitle,
+        contextUsage: prompt.contextUsage || 0,
+        mode: prompt.mode,
+        modelType: prompt.modelType,
+        modelName: prompt.modelName,
+        forceMode: prompt.forceMode,
+        isAuto: prompt.isAuto || false,
+        type: prompt.type || 'unknown',
+        confidence: prompt.confidence || 'high',
+        added_from_database: true,
+        // Threading fields
+        conversationTitle: prompt.conversationTitle,
+        messageRole: prompt.messageRole, // 'user' or 'assistant'
+        parentConversationId: prompt.parentConversationId,
+        // Thinking time
+        thinkingTimeSeconds: prompt.thinkingTimeSeconds,
+        // Context data
+        contextFiles: prompt.contextFiles || prompt.context?.contextFiles,
+        terminalBlocks: prompt.terminalBlocks || [],
+        hasAttachments: prompt.hasAttachments || false,
+        attachmentCount: prompt.attachmentCount || 0
+      };
+      
+      promptsToSave.push({ promptId, dbPrompt });
+      syncedPromptIds.add(promptId);
+    }
+    
+    // Batch save to database (if any new prompts)
+    if (promptsToSave.length > 0) {
+      console.log(`[SYNC] Saving ${promptsToSave.length} prompts to database...`);
+      
+      for (const { promptId, dbPrompt } of promptsToSave) {
+        try {
+          await persistentDB.savePrompt(dbPrompt);
+          newPrompts++;
+          
+          // Link to active TODO if one exists (skip for performance)
+          // if (currentActiveTodo) {
+          //   await persistentDB.addPromptToTodo(currentActiveTodo, dbPrompt.id);
+          //   await persistentDB.linkEventToTodo('prompt', dbPrompt.id);
+          // }
+          
+        } catch (saveError) {
+          console.warn(`[SYNC] Error saving prompt ${promptId}:`, saveError.message);
+          syncedPromptIds.delete(promptId); // Remove from cache if save failed
+        }
+      }
+    }
+    
+    console.log(`[SYNC] ✅ Sync complete: ${newPrompts} new, ${skippedPrompts} skipped, ${syncedPromptIds.size} total tracked (${prompts.length} available in Cursor DB)`);
+    
+    // Mark initial sync as complete
+    if (!initialSyncComplete && syncedPromptIds.size > 0) {
+      initialSyncComplete = true;
+      console.log('[SYNC] 📌 Initial sync complete - future syncs disabled (prompts available via API)');
+    }
+    
+  } catch (error) {
+    console.error('[SYNC] ❌ Error syncing prompts from Cursor database:', error.message);
+    if (error.stack) console.error(error.stack);
+  } finally {
+    syncInProgress = false; // Release lock
+  }
+}
+
 // Log file monitoring
 async function captureLogData() {
   try {
@@ -780,12 +913,16 @@ function startRawDataCapture() {
   // Logs every 60 seconds
   captureIntervals.logs = setInterval(captureLogData, 60000);
   
+  // ✨ NEW: Sync prompts from Cursor database every 30 seconds
+  captureIntervals.promptSync = setInterval(syncPromptsFromCursorDB, 30000);
+  
   // Initial capture
   captureSystemResources();
   captureGitData();
   captureCursorAppState();
   captureCursorDatabase();
   captureLogData();
+  syncPromptsFromCursorDB(); // Initial sync
   
   console.log('[SUCCESS] Enhanced raw data capture started');
 }
@@ -1305,12 +1442,12 @@ app.get('/api/activity', async (req, res) => {
     
     // Try to get from cache first
     const cached = await withCache(cacheKey, 30, async () => {
-      // ✅ Get total count and limited entries separately
+      //  Get total count and limited entries separately
       const totalCount = await persistentDB.getTotalEntriesCount();
       const allEntries = await persistentDB.getRecentEntries(limit + offset);
       const allPrompts = await persistentDB.getRecentPrompts(limit);
       
-      // ✅ Already sorted by database query (ORDER BY timestamp DESC)
+      // Already sorted by database query (ORDER BY timestamp DESC)
       // Apply offset/limit
       const paginatedEntries = allEntries.slice(offset, Math.min(offset + limit, allEntries.length));
       
@@ -1468,7 +1605,7 @@ app.get('/api/debug', (req, res) => {
 
 app.get('/entries', async (req, res) => {
   try {
-    // ✅ Use pagination - don't load everything
+    // Use pagination - don't load everything
     const limit = Math.min(parseInt(req.query.limit) || 200, 500);
     const allPrompts = await persistentDB.getRecentPrompts(limit);
     
@@ -2445,7 +2582,7 @@ let fileContentsCache = null;
 let fileContentsCacheTime = 0;
 const FILE_CONTENTS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
-// API endpoint for file contents (for TF-IDF analysis) - OPTIMIZED
+// API endpoint for file contents (for TF-IDF analysis) - OPTIMIZED WITH SIZE LIMITS
 app.get('/api/file-contents', async (req, res) => {
   try {
     // Check cache first
@@ -2455,8 +2592,8 @@ app.get('/api/file-contents', async (req, res) => {
       return res.json(fileContentsCache);
     }
     
-    // Limit to recent files only (last 500 for performance)
-    const limit = parseInt(req.query.limit) || 500;
+    // Fetch all recent file changes (default 2000, configurable via ?limit=N)
+    const limit = parseInt(req.query.limit) || 2000;
     console.log(`[FILE] Fetching file contents with limit ${limit}...`);
     
     if (typeof persistentDB.getFileContents !== 'function') {
@@ -2468,6 +2605,7 @@ app.get('/api/file-contents', async (req, res) => {
     
     // Build file content map with latest content for each file
     const fileContents = new Map();
+    const MAX_CONTENT_SIZE = 200000; // 200KB per file - enough for most code files
     
     entries.forEach(entry => {
       const filePath = entry.file_path;
@@ -2481,36 +2619,51 @@ app.get('/api/file-contents', async (req, res) => {
       const fileName = filePath.split('/').pop();
       const ext = filePath.split('.').pop()?.toLowerCase();
       
-      // Create or update file entry
+      // Truncate content if too large (keep first 200KB - rare but prevents crashes)
+      const truncatedContent = content.length > MAX_CONTENT_SIZE 
+        ? content.substring(0, MAX_CONTENT_SIZE) 
+        : content;
+      
+      // Create or update file entry (keep most recent version of each file)
       if (!fileContents.has(filePath)) {
         fileContents.set(filePath, {
           path: filePath,
           name: fileName,
           ext: ext,
-          content: content,
+          content: truncatedContent,
           lastModified: entry.timestamp,
-          size: content.length
+          size: truncatedContent.length,
+          truncated: content.length > MAX_CONTENT_SIZE
         });
       } else {
         // Update if this entry is more recent
         const existing = fileContents.get(filePath);
         if (new Date(entry.timestamp) > new Date(existing.lastModified)) {
-          existing.content = content;
+          existing.content = truncatedContent;
           existing.lastModified = entry.timestamp;
-          existing.size = content.length;
+          existing.size = truncatedContent.length;
+          existing.truncated = content.length > MAX_CONTENT_SIZE;
         }
       }
     });
     
     const result = Array.from(fileContents.values());
-    console.log(`[FILE] Serving ${result.length} files with content for TF-IDF analysis (filtered Git objects)`);
+    const totalSize = result.reduce((sum, f) => sum + f.size, 0);
+    const truncatedCount = result.filter(f => f.truncated).length;
+    
+    console.log(`[FILE] Serving ${result.length} unique files with ${(totalSize/1024/1024).toFixed(2)}MB content for TF-IDF analysis`);
+    if (truncatedCount > 0) {
+      console.log(`[FILE] ${truncatedCount} files truncated to ${MAX_CONTENT_SIZE/1000}KB (originally larger)`);
+    }
     
     const response = {
       files: result,
       totalFiles: result.length,
-      totalSize: result.reduce((sum, f) => sum + f.size, 0),
+      totalSize: totalSize,
       cached: false,
-      processedEntries: entries.length
+      processedEntries: entries.length,
+      truncatedFiles: truncatedCount,
+      maxContentSize: MAX_CONTENT_SIZE
     };
     
     // Cache the result
@@ -2520,7 +2673,13 @@ app.get('/api/file-contents', async (req, res) => {
     res.json(response);
   } catch (error) {
     console.error('Error fetching file contents:', error);
-    res.status(500).json({ error: 'Failed to fetch file contents' });
+    // More detailed error for JSON serialization issues
+    if (error.message && error.message.includes('Invalid string length')) {
+      console.error('[ERROR] Response too large to serialize - this should not happen with limits!');
+      res.status(500).json({ error: 'Response too large - contact support' });
+    } else {
+      res.status(500).json({ error: 'Failed to fetch file contents', details: error.message });
+    }
   }
 });
 
@@ -3393,6 +3552,11 @@ loadPersistedData().then(() => {
   } else {
     console.log(' Clipboard monitor disabled in config');
   }
+  
+  // ✨ Automatic prompt sync DISABLED (causes OOM - use /api/cursor-database instead)
+  // The dashboard should query /api/cursor-database for real-time data
+  // Historical data already in database from previous syncs
+  console.log('[SYNC] Automatic prompt sync DISABLED (use /api/cursor-database for fresh data)');
   
   // Start terminal monitor
   if (config.enable_terminal_monitoring !== false) {

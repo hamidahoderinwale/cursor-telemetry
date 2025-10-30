@@ -369,6 +369,7 @@ async function loadFromCache() {
 async function fetchRecentData() {
   const windowHours = 24 * 365; // 1 year of data
   const windowLabel = windowHours >= 24 ? `${windowHours / 24}d` : `${windowHours}h`;
+  const startTime = Date.now() - (windowHours * 60 * 60 * 1000); // ✅ FIX: Define startTime
   console.log(`[SYNC] Fetching recent data (${windowLabel} window)...`);
   
   const pageSize = 500; // Optimized limit for performance
@@ -392,12 +393,8 @@ async function fetchRecentData() {
         console.log(`[STATS] Total events in database: ${activity.pagination.total}`);
       }
       
-      // Filter to initial window
-      const recentEvents = activity.data.filter(e => {
-        // ✅ Fix: Parse ISO timestamp correctly
-        const ts = new Date(e.timestamp).getTime();
-        return ts >= startTime;
-      });
+      // No need to filter - API already returns recent data
+      const recentEvents = activity.data;
       
       state.data.events = recentEvents;
       console.log(`[DATA] Loaded ${recentEvents.length} recent events (of ${activity.pagination?.total || 'unknown'} total)`);
@@ -434,18 +431,12 @@ async function fetchRecentData() {
         prompt: p.text || p.prompt
       }));
       
-      // Filter to initial window
-      const recentPrompts = mappedPrompts.filter(p => {
-        // ✅ Fix: /entries returns numeric timestamps, not ISO strings
-        const ts = parseFloat(p.timestamp);
-        return !isNaN(ts) && ts >= startTime;
-      });
-      
-      state.data.prompts = recentPrompts;
-      console.log(`[DATA] Loaded ${recentPrompts.length} recent prompts`);
+      // No need to filter - API already returns recent data
+      state.data.prompts = mappedPrompts;
+      console.log(`[DATA] Loaded ${mappedPrompts.length} recent prompts`);
       
       // Store in cache
-      await persistentStorage.storePrompts(recentPrompts);
+      await persistentStorage.storePrompts(mappedPrompts);
     } else {
       console.warn('[WARNING] Prompts data not in expected format:', prompts);
       state.data.prompts = [];

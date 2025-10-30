@@ -69,433 +69,93 @@ class CursorDatabaseParser {
   }
 
   /**
-   * Extract composer/chat data from global state database
+   * Extract AI prompts and generations (user inputs + AI responses)
+   * This is where Cursor actually stores the conversation messages!
    */
-  async extractComposerData() {
+  async extractAIServiceData(dbPath) {
     try {
-      const { global } = this.dbPaths;
-      
-      if (!fs.existsSync(global)) {
-        console.log('⚠️  Cursor global database not found');
-        return [];
+      if (!fs.existsSync(dbPath)) {
+        return { prompts: [], generations: [] };
       }
 
-      // Query for composer chat data
-      const query = `
-        SELECT key, value 
-        FROM ItemTable 
-        WHERE key LIKE '%composer%' 
-           OR key LIKE '%chat%'
-           OR key LIKE '%backgroundComposer%'
-      `;
+      // Extract aiService.prompts (user inputs)
+      const promptQuery = `SELECT value FROM ItemTable WHERE key = 'aiService.prompts'`;
+      const { stdout: promptData } = await execAsync(
+        `sqlite3 "${dbPath}" "${promptQuery}"`
+      ).catch(() => ({ stdout: '' }));
 
-      const { stdout } = await execAsync(
-        `sqlite3 "${global}" "${query.replace(/\n/g, ' ')}"`
-      );
+      // Extract aiService.generations (AI responses)
+      const genQuery = `SELECT value FROM ItemTable WHERE key = 'aiService.generations'`;
+      const { stdout: genData } = await execAsync(
+        `sqlite3 "${dbPath}" "${genQuery}"`
+      ).catch(() => ({ stdout: '' }));
 
-      const conversations = [];
-      const lines = stdout.trim().split('\n').filter(l => l);
+      const prompts = [];
+      const generations = [];
 
-      for (const line of lines) {
+      // Parse user prompts
+      if (promptData.trim()) {
         try {
-          const [key, valueBlob] = line.split('|', 2);
-          
-          // Skip hidden states
-          if (key.includes('.hidden')) continue;
-          
-          // Parse the value blob (usually JSON or binary)
-          if (valueBlob && valueBlob.length > 50) {
-            // Try to extract JSON data
-            const jsonMatch = valueBlob.match(/\{.*\}/);
-            if (jsonMatch) {
-              try {
-                const data = JSON.parse(jsonMatch[0]);
-                conversations.push({
-                  id: key,
-                  type: this.determineType(key),
-                  data: data,
-                  timestamp: Date.now(),
-                  extracted: true
+          const promptsArray = JSON.parse(promptData.trim());
+          if (Array.isArray(promptsArray)) {
+            promptsArray.forEach((item, idx) => {
+              const text = item.text || item.textDescription || item.prompt || item.content || item.message;
+              if (text && text.trim()) {
+                prompts.push({
+                  text: text.trim(),
+                  type: item.type || 'unknown',
+                  timestamp: item.timestamp,
+                  generationUUID: item.generationUUID,
+                  commandType: item.commandType,
+                  index: idx,
+                  messageRole: 'user',
+                  source: 'aiService'
                 });
-              } catch (jsonError) {
-                // Not valid JSON, try to extract text
-                const textData = this.extractTextFromBlob(valueBlob);
-                if (textData) {
-                  conversations.push({
-                    id: key,
-                    type: this.determineType(key),
-                    text: textData,
-                    timestamp: Date.now(),
-                    extracted: true
-                  });
-                }
               }
-            }
+            });
           }
-        } catch (error) {
-          // Skip invalid entries
+        } catch (e) {
+          console.warn('Error parsing aiService.prompts:', e.message);
         }
       }
 
-      console.log(`[DATA] Extracted ${conversations.length} composer conversations`);
-      return conversations;
-
-    } catch (error) {
-      console.error('Error extracting composer data:', error.message);
-      return [];
-    }
-  }
-
-  /**
-   * Extract workspace-specific prompts with actual conversation titles
-   */
-  async extractWorkspacePrompts() {
-    try {
-      const { workspaces } = this.dbPaths;
-      
-      if (!fs.existsSync(workspaces)) {
-        return [];
-      }
-
-      const prompts = [];
-      const workspaceDirs = fs.readdirSync(workspaces);
-
-      // Check ALL workspaces (not just recent 5)
-      const allWorkspaces = workspaceDirs
-        .map(dir => ({
-          dir,
-          path: path.join(workspaces, dir),
-          mtime: fs.statSync(path.join(workspaces, dir)).mtime
-        }))
-        .sort((a, b) => b.mtime - a.mtime);
-
-      for (const workspace of allWorkspaces) {
-        const dbPath = path.join(workspace.path, 'state.vscdb');
-        
-        if (fs.existsSync(dbPath)) {
-          try {
-            // Get composer data which has conversation titles
-            const { stdout } = await execAsync(
-              `sqlite3 "${dbPath}" "SELECT value FROM ItemTable WHERE key = 'composer.composerData'"`
-            );
-
-            if (stdout && stdout.length > 50) {
-              try {
-                const data = JSON.parse(stdout.trim());
-                
-                // Extract actual conversation titles
-                if (data.allComposers && Array.isArray(data.allComposers)) {
-                  // Resolve workspace ID to actual path
-                  const workspacePath = this.getWorkspacePath(workspace.dir);
-                  const workspaceName = this.getWorkspaceName(workspacePath);
-                  
-                  data.allComposers.forEach(composer => {
-                    if (composer.name) {
-                      const mode = composer.unifiedMode || composer.forceMode || 'unknown';
-                      const isAuto = composer.unifiedMode === 'agent';
-                      
-                      // Infer model name from mode (based on Cursor defaults as of Oct 2024)
-                      let modelName = 'unknown';
-                      if (isAuto || mode === 'agent') {
-                        modelName = 'claude-4.5-sonnet';  // Default for Agent/Auto mode
-                      } else if (mode === 'chat') {
-                        modelName = 'claude-4.5-sonnet';  // Default for Chat mode
-                      } else if (mode === 'edit') {
-                        modelName = 'claude-4.5-sonnet';  // Default for Edit mode (CMD+K)
-                      }
-                      
-                      // ===== NEW: Extract context files from composer =====
-                      const contextFiles = this.extractContextFilesFromComposer(composer);
-                      
-                      // Add conversation thread (title)
-                      prompts.push({
-                        text: composer.name,
-                        workspaceId: workspace.dir,
-                        workspacePath: workspacePath,
-                        workspaceName: workspaceName,
-                        composerId: composer.composerId,
-                        timestamp: composer.lastUpdatedAt || composer.createdAt || workspace.mtime,
-                        source: 'composer',
-                        type: 'conversation-thread',  // Changed to identify as thread
-                        conversationTitle: composer.name,  // NEW: Store title explicitly
-                        parentConversationId: null,  // This IS the parent
-                        messageRole: null,  // Threads don't have roles
-                        subtitle: composer.subtitle || '',
-                        linesAdded: composer.totalLinesAdded || 0,
-                        linesRemoved: composer.totalLinesRemoved || 0,
-                        contextUsage: composer.contextUsagePercent || 0,
-                        // Model/mode information
-                        mode: mode,
-                        modelType: composer.unifiedMode || 'unknown', // 'agent', 'chat', 'edit'
-                        forceMode: composer.forceMode || 'unknown',
-                        isAuto: isAuto,
-                        modelName: modelName,  // Inferred model name
-                        // NEW: Context files
-                        contextFiles: contextFiles,
-                        status: 'captured',
-                        confidence: 'high'
-                      });
-                    }
-                  });
-                }
-              } catch (jsonError) {
-                console.warn(`Could not parse composer data for workspace ${workspace.dir}`);
+      // Parse AI generations
+      if (genData.trim()) {
+        try {
+          const genArray = JSON.parse(genData.trim());
+          if (Array.isArray(genArray)) {
+            genArray.forEach((item, idx) => {
+              const text = item.text || item.textDescription || item.content || item.message;
+              if (text && text.trim()) {
+                generations.push({
+                  text: text.trim(),
+                  type: item.type || 'unknown',
+                  timestamp: item.timestamp,
+                  generationUUID: item.uuid || item.generationUUID,
+                  model: item.model,
+                  finishReason: item.finishReason,
+                  index: idx,
+                  messageRole: 'assistant',
+                  source: 'aiService'
+                });
               }
-            }
-          } catch (dbError) {
-            // Skip workspace if DB is locked or inaccessible
+            });
           }
+        } catch (e) {
+          console.warn('Error parsing aiService.generations:', e.message);
         }
       }
 
-      console.log(`[NOTE] Extracted ${prompts.length} workspace prompts`);
-      return prompts;
-
+      return { prompts, generations };
     } catch (error) {
-      console.error('Error extracting workspace prompts:', error.message);
-      return [];
+      console.warn('Error extracting AI service data:', error.message);
+      return { prompts: [], generations: [] };
     }
   }
 
-  /**
-   * Parse persistent composer data and extract actual prompts
-   */
-  async parsePersistentComposerData() {
-    try {
-      const { global } = this.dbPaths;
-      
-      // Get composer data which contains actual conversation content
-      const composerQuery = `
-        SELECT key, value 
-        FROM ItemTable 
-        WHERE key LIKE '%composer.composerData%'
-           OR key LIKE '%backgroundComposer.persistentData%'
-           OR key LIKE '%aichat%'
-           OR key LIKE '%conversation%'
-      `;
+  // REMOVED: Old extraction methods (extractComposerData, extractWorkspacePrompts, parsePersistentComposerData)
+  // Now using extractAIServiceData which gets the actual message content from aiService.prompts + aiService.generations
 
-      const { stdout } = await execAsync(
-        `sqlite3 "${global}" "${composerQuery.replace(/\n/g, ' ')}"`
-      );
-
-      const prompts = [];
-      
-      if (stdout && stdout.length > 10) {
-        const lines = stdout.trim().split('\n');
-        
-        for (const line of lines) {
-          const [key, valueBlob] = line.split('|', 2);
-          
-          if (valueBlob && valueBlob.length > 50) {
-            // Try to parse as JSON
-            try {
-              // Extract JSON from the blob
-              const jsonMatch = valueBlob.match(/\{[\s\S]*\}/);
-              if (jsonMatch) {
-                const data = JSON.parse(jsonMatch[0]);
-                
-                // Extract prompts from composer data
-                if (data.allComposers && Array.isArray(data.allComposers)) {
-                  data.allComposers.forEach(composer => {
-                    if (composer.name) {
-                      prompts.push({
-                        text: composer.name,
-                        timestamp: composer.lastUpdatedAt || composer.createdAt || Date.now(),
-                        source: 'composer',
-                        type: 'conversation-title',
-                        composerId: composer.composerId,
-                        status: 'captured',
-                        confidence: 'high'
-                      });
-                    }
-                    
-                    // Extract messages if available
-                    if (composer.messages && Array.isArray(composer.messages)) {
-                      let previousUserPrompt = null;
-                      const conversationTitle = composer.name || 'Untitled Conversation';
-                      
-                      composer.messages.forEach(msg => {
-                        if (msg.text || msg.content) {
-                          const message = {
-                            text: msg.text || msg.content,
-                            timestamp: msg.timestamp || Date.now(),
-                            source: 'composer-message',
-                            type: msg.role === 'user' ? 'user-prompt' : 'ai-response',
-                            composerId: composer.composerId,
-                            // NEW: Thread relationship
-                            conversationTitle: conversationTitle,
-                            parentConversationId: composer.composerId,
-                            messageRole: msg.role,  // 'user' or 'assistant'
-                            status: 'captured',
-                            confidence: 'high'
-                          };
-                          
-                          // NEW: Calculate thinking time for AI responses
-                          if (msg.role === 'assistant' && previousUserPrompt) {
-                            const thinkingTime = message.timestamp - previousUserPrompt.timestamp;
-                            if (thinkingTime > 0 && thinkingTime < 300000) { // Max 5 minutes
-                              message.thinkingTime = thinkingTime;
-                              message.thinkingTimeSeconds = (thinkingTime / 1000).toFixed(2);
-                            }
-                          }
-                          
-                          // NEW: Extract terminal blocks from prompt
-                          if (msg.role === 'user') {
-                            message.terminalBlocks = this.extractTerminalBlocks(message.text);
-                            previousUserPrompt = message;
-                          }
-                          
-                          // NEW: Detect images/attachments
-                          if (msg.attachments || msg.images) {
-                            message.hasAttachments = true;
-                            message.attachmentCount = (msg.attachments?.length || 0) + (msg.images?.length || 0);
-                          }
-                          
-                          prompts.push(message);
-                        }
-                      });
-                    }
-                  });
-                }
-                
-                // Extract from setup/terminal data
-                if (data.ranTerminalCommands && Array.isArray(data.ranTerminalCommands)) {
-                  data.ranTerminalCommands.forEach(cmd => {
-                    if (cmd && cmd.length > 5) {
-                      prompts.push({
-                        text: cmd,
-                        timestamp: Date.now(),
-                        source: 'terminal-command',
-                        type: 'command',
-                        status: 'captured',
-                        confidence: 'medium'
-                      });
-                    }
-                  });
-                }
-              }
-            } catch (jsonError) {
-              // If JSON parsing fails, try to extract text
-              const textData = this.extractTextFromBlob(valueBlob);
-              if (textData && textData.length > 20) {
-                const extractedPrompts = this.extractPromptsFromText(textData);
-                prompts.push(...extractedPrompts);
-              }
-            }
-          }
-        }
-      }
-
-      console.log(`[CHAT] Extracted ${prompts.length} prompts from persistent data`);
-      return prompts;
-    } catch (error) {
-      console.error('Error parsing persistent composer data:', error.message);
-      return [];
-    }
-  }
-
-  /**
-   * Extract context files from composer object
-   */
-  extractContextFilesFromComposer(composer) {
-    const files = [];
-    const fileSet = new Set(); // To avoid duplicates
-    
-    try {
-      // Extract from tabs array (files open in editor)
-      if (composer.tabs && Array.isArray(composer.tabs)) {
-        composer.tabs.forEach(tab => {
-          const filePath = tab.path || tab.uri || tab.resource?.path;
-          if (filePath && !fileSet.has(filePath)) {
-            fileSet.add(filePath);
-            files.push({
-              path: filePath,
-              name: path.basename(filePath),
-              source: 'open_tab',
-              isActive: tab.isActive || false,
-              isPinned: tab.isPinned || false
-            });
-          }
-        });
-      }
-      
-      // Extract from codebase context (auto-selected files)
-      if (composer.codebaseContext && Array.isArray(composer.codebaseContext)) {
-        composer.codebaseContext.forEach(ctx => {
-          const filePath = ctx.path || ctx.file || ctx.uri;
-          if (filePath && !fileSet.has(filePath)) {
-            fileSet.add(filePath);
-            files.push({
-              path: filePath,
-              name: path.basename(filePath),
-              source: 'codebase_search',
-              score: ctx.score || 0
-            });
-          }
-        });
-      }
-      
-      // Extract from mentions (@ references)
-      if (composer.mentions && Array.isArray(composer.mentions)) {
-        composer.mentions.forEach(mention => {
-          const filePath = mention.path || mention.file || mention;
-          if (filePath && typeof filePath === 'string' && !fileSet.has(filePath)) {
-            fileSet.add(filePath);
-            files.push({
-              path: filePath,
-              name: path.basename(filePath),
-              source: 'explicit_mention'
-            });
-          }
-        });
-      }
-      
-      // Extract from attached files
-      if (composer.files && Array.isArray(composer.files)) {
-        composer.files.forEach(file => {
-          const filePath = file.path || file.uri || file;
-          if (filePath && typeof filePath === 'string' && !fileSet.has(filePath)) {
-            fileSet.add(filePath);
-            files.push({
-              path: filePath,
-              name: path.basename(filePath),
-              source: 'composer_attached'
-            });
-          }
-        });
-      }
-      
-      // Extract from context array (generic context items)
-      if (composer.context && Array.isArray(composer.context)) {
-        composer.context.forEach(ctx => {
-          const filePath = ctx.path || ctx.file || ctx.uri || ctx;
-          if (filePath && typeof filePath === 'string' && !fileSet.has(filePath)) {
-            fileSet.add(filePath);
-            files.push({
-              path: filePath,
-              name: path.basename(filePath),
-              source: 'context_item',
-              score: ctx.score || 0
-            });
-          }
-        });
-      }
-      
-      return {
-        files: files,
-        count: files.length,
-        countBySource: {
-          explicit: files.filter(f => f.source === 'explicit_mention').length,
-          tabs: files.filter(f => f.source === 'open_tab').length,
-          auto: files.filter(f => f.source === 'codebase_search' || f.source === 'composer_attached' || f.source === 'context_item').length
-        }
-      };
-      
-    } catch (error) {
-      console.warn('Error extracting context files from composer:', error.message);
-      return { files: [], count: 0, countBySource: { explicit: 0, tabs: 0, auto: 0 } };
-    }
-  }
 
   /**
    * Extract terminal blocks from text (code blocks with terminal output)
@@ -553,18 +213,6 @@ class CursorDatabaseParser {
     return terminalBlocks;
   }
 
-  /**
-   * Extract readable text from binary blob
-   */
-  extractTextFromBlob(blob) {
-    // Remove non-printable characters but keep newlines and spaces
-    const text = blob.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/g, ' ');
-    
-    // Extract meaningful text chunks
-    const chunks = text.match(/[a-zA-Z0-9\s\.\,\!\?\:\;\-\_\'\"]{20,}/g);
-    
-    return chunks ? chunks.join(' ').trim() : '';
-  }
 
   /**
    * Extract context information for prompts
@@ -604,55 +252,6 @@ class CursorDatabaseParser {
     return enrichedPrompts;
   }
 
-  /**
-   * Extract individual prompts from text
-   */
-  extractPromptsFromText(text) {
-    if (!text || text.length < 20) return [];
-
-    const prompts = [];
-    
-    // Look for common prompt patterns
-    const patterns = [
-      /(?:create|make|build|write|generate|fix|refactor|explain|add|remove|update|modify)\s+[a-zA-Z\s]{10,200}/gi,
-      /(?:can you|could you|please|how do|how to|what is)\s+[a-zA-Z\s]{10,200}/gi,
-      /(?:bug|error|issue|problem)[\s\w]{10,200}/gi
-    ];
-
-    for (const pattern of patterns) {
-      const matches = text.match(pattern);
-      if (matches) {
-        matches.forEach(match => {
-          if (match.length > 20 && match.length < 500) {
-            prompts.push({
-              text: match.trim(),
-              timestamp: Date.now(),
-              source: 'composer',
-              status: 'extracted',
-              confidence: 'medium'
-            });
-          }
-        });
-      }
-    }
-
-    // Remove duplicates
-    const unique = Array.from(new Set(prompts.map(p => p.text)))
-      .map(text => prompts.find(p => p.text === text));
-
-    return unique;
-  }
-
-  /**
-   * Determine conversation type from key
-   */
-  determineType(key) {
-    if (key.includes('backgroundComposer')) return 'background-composer';
-    if (key.includes('composerChatViewPane')) return 'chat-panel';
-    if (key.includes('chat.')) return 'chat';
-    if (key.includes('composer.')) return 'composer';
-    return 'unknown';
-  }
 
   /**
    * Get all workspaces (including stale/old ones)
@@ -717,29 +316,27 @@ class CursorDatabaseParser {
     }
 
     try {
-      const [composerData, workspacePrompts, persistentPrompts] = await Promise.all([
-        this.extractComposerData(),
-        this.extractWorkspacePrompts(),
-        this.parsePersistentComposerData()
-      ]);
-
-      // Combine all prompts
-      const allPrompts = [
-        ...persistentPrompts,
-        ...workspacePrompts
-      ];
+      // ✨ Extract AI service data (actual conversation messages with full threading!)
+      const aiServiceMessages = await this.extractAllAIServiceData();
 
       // Enrich prompts with context information
-      const enrichedPrompts = await this.extractContextForPrompts(allPrompts);
+      const enrichedPrompts = await this.extractContextForPrompts(aiServiceMessages);
+
+      // Count unique conversations
+      const uniqueConversations = new Set(
+        enrichedPrompts.map(p => p.parentConversationId).filter(Boolean)
+      ).size;
 
       this.cache = {
-        conversations: composerData,
+        conversations: [],  // No longer needed - messages are self-contained
         prompts: enrichedPrompts,
         lastUpdate: now,
         stats: {
-          totalConversations: composerData.length,
+          totalConversations: uniqueConversations,
           totalPrompts: enrichedPrompts.length,
-          workspaces: workspacePrompts.length
+          aiServiceMessages: aiServiceMessages.length,
+          userMessages: enrichedPrompts.filter(p => p.messageRole === 'user').length,
+          assistantMessages: enrichedPrompts.filter(p => p.messageRole === 'assistant').length
         }
       };
 
@@ -748,6 +345,122 @@ class CursorDatabaseParser {
       console.error('Error getting all data:', error.message);
       return this.cache; // Return cached data on error
     }
+  }
+
+  /**
+   * Extract AI service data from all workspaces and thread them
+   */
+  async extractAllAIServiceData() {
+    try {
+      const { workspaces: workspaceRoot } = this.dbPaths;
+      
+      if (!fs.existsSync(workspaceRoot)) {
+        return [];
+      }
+
+      const workspaceDirs = fs.readdirSync(workspaceRoot)
+        .filter(name => {
+          const dbPath = path.join(workspaceRoot, name, 'state.vscdb');
+          return fs.existsSync(dbPath);
+        });
+
+      console.log(`[AI-SERVICE] Extracting from ${workspaceDirs.length} workspaces...`);
+
+      const allMessages = [];
+      
+      for (const workspaceId of workspaceDirs) {
+        const dbPath = path.join(workspaceRoot, workspaceId, 'state.vscdb');
+        const { prompts, generations } = await this.extractAIServiceData(dbPath);
+        
+        // Get workspace metadata
+        const workspacePath = this.getWorkspacePath(workspaceId);
+        const workspaceName = this.getWorkspaceName(workspacePath);
+
+        // Link prompts to generations by UUID and create threaded conversations
+        const linked = this.linkPromptsToGenerations(prompts, generations, workspaceId, workspacePath, workspaceName);
+        allMessages.push(...linked);
+      }
+
+      console.log(`[AI-SERVICE] Extracted ${allMessages.length} messages with conversation threading`);
+      return allMessages;
+    } catch (error) {
+      console.warn('Error extracting AI service data:', error.message);
+      return [];
+    }
+  }
+
+  /**
+   * Link user prompts to AI generations and create conversation threads
+   */
+  linkPromptsToGenerations(prompts, generations, workspaceId, workspacePath, workspaceName) {
+    const threaded = [];
+    const genMap = new Map();
+
+    // Build generation lookup by UUID
+    generations.forEach(gen => {
+      if (gen.generationUUID) {
+        genMap.set(gen.generationUUID, gen);
+      }
+    });
+
+    // Link prompts to their responses
+    prompts.forEach((prompt, idx) => {
+      const correspondingGen = genMap.get(prompt.generationUUID);
+      
+      // Estimate timestamp if not available
+      let timestamp = prompt.timestamp;
+      if (!timestamp && correspondingGen && correspondingGen.timestamp) {
+        timestamp = correspondingGen.timestamp - 30000; // 30 seconds before AI response
+      }
+
+      // Create conversation ID from generation UUID or workspace + index
+      const conversationId = prompt.generationUUID || `${workspaceId}_${idx}`;
+
+      // Add user message
+      threaded.push({
+        id: `${conversationId}_user`,
+        text: prompt.text,
+        timestamp: timestamp || Date.now(),
+        workspaceId: workspaceId,
+        workspacePath: workspacePath,
+        workspaceName: workspaceName,
+        composerId: conversationId,
+        source: 'aiService',
+        type: prompt.type === 'composer' ? 'conversation-thread' : 'user-prompt',
+        messageRole: 'user',
+        parentConversationId: conversationId,
+        conversationTitle: prompt.text.substring(0, 100), // Use first part as title
+        confidence: 'high',
+        status: 'captured'
+      });
+
+      // Add AI response if it exists
+      if (correspondingGen) {
+        threaded.push({
+          id: `${conversationId}_assistant`,
+          text: correspondingGen.text,
+          timestamp: correspondingGen.timestamp || timestamp + 30000,
+          workspaceId: workspaceId,
+          workspacePath: workspacePath,
+          workspaceName: workspaceName,
+          composerId: conversationId,
+          source: 'aiService',
+          type: 'ai-response',
+          messageRole: 'assistant',
+          parentConversationId: conversationId,
+          conversationTitle: prompt.text.substring(0, 100),
+          model: correspondingGen.model,
+          finishReason: correspondingGen.finishReason,
+          thinkingTimeSeconds: correspondingGen.timestamp && timestamp 
+            ? ((correspondingGen.timestamp - timestamp) / 1000).toFixed(2)
+            : null,
+          confidence: 'high',
+          status: 'captured'
+        });
+      }
+    });
+
+    return threaded;
   }
 
   /**
