@@ -1,161 +1,22 @@
 /**
  * Cursor Activity Dashboard - Main Application
  * Clean, modern implementation with full feature support
+ * 
+ * NOTE: CONFIG, state, and APIClient are imported from core modules:
+ * - core/config.js provides CONFIG
+ * - core/state.js provides state
+ * - core/api-client.js provides APIClient
  */
 
-// ===================================
-// Configuration & Constants
-// ===================================
-
-// Use external config (from config.js) if available, otherwise use defaults
-const EXTERNAL_CONFIG = window.CONFIG || {};
-const DASHBOARD_CONFIG = {
-  API_BASE: EXTERNAL_CONFIG.API_BASE_URL || 'http://localhost:43917',
-  WS_URL: EXTERNAL_CONFIG.WS_URL || 'ws://localhost:43917',
-  REFRESH_INTERVAL: 120000,  // 2 minutes to prevent request overload (down from 30s)
-  ENABLE_TF_IDF: false, // Disable TF-IDF by default to save memory
-  ENABLE_SEMANTIC_SEARCH: false, // Disable semantic analysis by default
-  MAX_SEARCH_RESULTS: 50, // Limit search results to prevent memory issues
-  CHART_COLORS: {
-    primary: '#8B5CF6',
-    secondary: '#6366F1',
-    accent: '#EC4899',
-    success: '#10B981',
-    warning: '#F59E0B',
-    error: '#EF4444',
-  }
-};
-
-// Use DASHBOARD_CONFIG as CONFIG for compatibility
-const CONFIG = DASHBOARD_CONFIG;
-
-// ===================================
-// State Management
-// ===================================
-
-const state = {
-  connected: false,
-  currentView: 'overview',
-  currentWorkspace: 'all',
-  data: {
-    events: [],
-    entries: [],
-    threads: [],
-    prompts: [],
-    terminalCommands: [],
-    workspaces: [],
-    systemResources: [],
-    gitData: [],
-    ideState: null
-  },
-  stats: {
-    sessions: 0,
-    fileChanges: 0,
-    aiInteractions: 0,
-    codeChanged: 0,
-    avgContext: 0,
-    terminalCommands: 0
-  },
-  sequence: 0,
-  socket: null,
-  charts: {} // Track active Chart.js instances
-};
-
-// ===================================
-// API Client
-// ===================================
-
-// ===================================
-// Performance: Request Debouncing
-// ===================================
-
-const debouncedRequests = new Map();
-
-function debounce(fn, delay = 300) {
-  let timeout;
-  return function(...args) {
-    clearTimeout(timeout);
-    return new Promise((resolve) => {
-      timeout = setTimeout(() => resolve(fn.apply(this, args)), delay);
-    });
-  };
+// Ensure modules are loaded (they export to window)
+if (!window.CONFIG || !window.state || !window.APIClient) {
+  console.error('[ERROR] Core modules not loaded. Ensure core/config.js, core/state.js, and core/api-client.js are loaded before new-dashboard.js');
 }
 
-class APIClient {
-  static async get(endpoint, options = {}) {
-    const timeout = options.timeout || 20000; // 20 second default timeout (increased from 10s)
-    const retries = options.retries || 1; // Retry up to 1 time (reduced to avoid long waits)
-    
-    // Debounce repeated requests to the same endpoint
-    const cacheKey = endpoint + JSON.stringify(options);
-    if (debouncedRequests.has(cacheKey)) {
-      console.log(`[DEBOUNCE] Skipping duplicate request to ${endpoint}`);
-      return debouncedRequests.get(cacheKey);
-    }
-    
-    const requestPromise = (async () => {
-      for (let attempt = 0; attempt <= retries; attempt++) {
-        try {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), timeout);
-          
-          const response = await fetch(`${CONFIG.API_BASE}${endpoint}`, {
-            signal: controller.signal,
-            ...options
-          });
-          
-          clearTimeout(timeoutId);
-          
-          if (!response.ok) throw new Error(`HTTP ${response.status}`);
-          return await response.json();
-        } catch (error) {
-          const isLastAttempt = attempt === retries;
-          
-          if (isLastAttempt) {
-            console.error(`[ERROR] API (${endpoint}) failed after ${retries + 1} attempts:`, error.message);
-            throw error;
-          }
-          
-          // Wait before retry (exponential backoff)
-          const waitTime = Math.min(1000 * Math.pow(2, attempt), 5000);
-          console.warn(`[WARNING] API (${endpoint}) attempt ${attempt + 1} failed, retrying in ${waitTime}ms...`);
-          await new Promise(resolve => setTimeout(resolve, waitTime));
-        }
-      }
-    })();
-    
-    // Cache the promise for deduplication
-    debouncedRequests.set(cacheKey, requestPromise);
-    setTimeout(() => debouncedRequests.delete(cacheKey), 1000);
-    
-    return requestPromise;
-  }
-
-  static async post(endpoint, data, options = {}) {
-    const timeout = options.timeout || 10000;
-    
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), timeout);
-      
-      const response = await fetch(`${CONFIG.API_BASE}${endpoint}`, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(data),
-        signal: controller.signal,
-        ...options
-      });
-      
-      clearTimeout(timeoutId);
-      
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      return await response.json();
-    } catch (error) {
-      console.error(`[ERROR] API POST (${endpoint}):`, error.message);
-      throw error;
-    }
-  }
-}
+// Use globals from modules (available via window exports)
+const CONFIG = window.CONFIG;
+const state = window.state;
+const APIClient = window.APIClient;
 
 // ===================================
 // WebSocket Manager
