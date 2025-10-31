@@ -919,7 +919,7 @@ function renderOverviewView(container) {
   const recentEvents = state.data.events.slice(-10).reverse();
 
   container.innerHTML = `
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: var(--space-xl);">
+    <div class="overview-view">
       
       <!-- Recent Activity -->
       <div class="card">
@@ -1033,25 +1033,25 @@ function renderConversationThread(conversation) {
   const sortedMessages = messages.sort((a, b) => a.sortTime - b.sortTime);
   
   return `
-    <div class="timeline-item conversation-timeline-item" style="border-left: 3px solid var(--color-primary);">
+    <div class="timeline-item conversation-timeline-item">
       <div class="timeline-content">
-        <div class="timeline-header" style="cursor: pointer;" onclick="toggleConversationMessages('${threadId}')">
-          <div class="timeline-title" style="display: flex; align-items: center; gap: var(--space-sm);">
-            <span id="conv-icon-${threadId}" style="transition: transform 0.2s;"></span>
-            <span style="font-weight: 600;">${escapeHtml(title)}</span>
-            ${messageCount > 0 ? `<span style="color: var(--color-text-muted); font-size: var(--text-sm);">(${messageCount} messages)</span>` : ''}
+        <div class="timeline-header clickable" onclick="toggleConversationMessages('${threadId}')">
+          <div class="timeline-title">
+            <span id="conv-icon-${threadId}" class="timeline-title-icon"></span>
+            <span class="timeline-title-text">${escapeHtml(title)}</span>
+            ${messageCount > 0 ? `<span class="timeline-title-meta">(${messageCount} messages)</span>` : ''}
           </div>
           <div class="timeline-meta">${time}</div>
         </div>
-        <div class="timeline-description" style="display: flex; gap: var(--space-xs); flex-wrap: wrap;">
+        <div class="timeline-description">
           <span class="badge badge-prompt">Conversation</span>
-          ${thread?.workspaceName ? `<span class="badge">${thread.workspaceName}</span>` : ''}
-          ${thread?.mode ? `<span class="badge" style="background: var(--color-primary); color: white;">${thread.mode}</span>` : ''}
+          ${thread?.workspaceName ? `<span class="badge">${escapeHtml(thread.workspaceName)}</span>` : ''}
+          ${thread?.mode ? `<span class="badge" style="background: var(--color-primary); color: white;">${escapeHtml(thread.mode)}</span>` : ''}
         </div>
         
         <!-- Messages (initially hidden) -->
-        <div id="conv-messages-${threadId}" style="display: none; margin-top: var(--space-md); padding-top: var(--space-md); border-top: 1px solid var(--color-border);">
-          ${sortedMessages.length > 0 ? sortedMessages.map(msg => renderConversationMessage(msg)).join('') : '<div style="color: var(--color-text-muted); font-size: var(--text-sm); padding: var(--space-sm);">No messages in this conversation yet</div>'}
+        <div id="conv-messages-${threadId}" class="conversation-messages">
+          ${sortedMessages.length > 0 ? sortedMessages.map(msg => renderConversationMessage(msg)).join('') : '<div class="conversation-empty">No messages in this conversation yet</div>'}
         </div>
       </div>
     </div>
@@ -1067,15 +1067,15 @@ function renderConversationMessage(message) {
   const displayText = text.length > 300 ? text.substring(0, 300) + '...' : text;
   
   return `
-    <div style="padding: var(--space-sm); margin-bottom: var(--space-xs); background: ${bgColor}; border-radius: var(--radius-sm); border-left: 3px solid ${isUser ? 'var(--color-primary)' : 'var(--color-accent)'};">
-      <div style="display: flex; align-items: center; gap: var(--space-sm); margin-bottom: var(--space-xs);">
-        <span>${icon}</span>
-        <span style="font-weight: 600; font-size: var(--text-sm);">${isUser ? 'You' : 'AI Assistant'}</span>
-        <span style="color: var(--color-text-muted); font-size: var(--text-xs);">${time}</span>
+    <div class="conversation-message ${isUser ? 'user' : 'ai'}">
+      <div class="conversation-message-header">
+        <span class="conversation-message-icon">${icon}</span>
+        <span class="conversation-message-author">${isUser ? 'You' : 'AI Assistant'}</span>
+        <span class="conversation-message-time">${time}</span>
         ${message.thinkingTimeSeconds ? `<span class="badge" style="background: var(--color-success); color: white;">Thinking ${message.thinkingTimeSeconds}s</span>` : ''}
       </div>
-      <div style="font-size: var(--text-sm); color: var(--color-text); white-space: pre-wrap; word-break: break-word;">${escapeHtml(displayText)}</div>
-      ${text.length > 300 ? `<button onclick="showEventModal('${message.id}')" style="margin-top: var(--space-xs); font-size: var(--text-xs); color: var(--color-primary); background: none; border: none; padding: 0; cursor: pointer; text-decoration: underline;">Read more</button>` : ''}
+      <div class="conversation-message-content">${escapeHtml(displayText)}</div>
+      ${text.length > 300 ? `<button class="conversation-message-read-more" onclick="showEventModal('${message.id}')">Read more</button>` : ''}
     </div>
   `;
 }
@@ -1085,9 +1085,14 @@ function toggleConversationMessages(threadId) {
   const icon = document.getElementById(`conv-icon-${threadId}`);
   
   if (messagesDiv && icon) {
-    const isHidden = messagesDiv.style.display === 'none';
-    messagesDiv.style.display = isHidden ? 'block' : 'none';
-    icon.style.transform = isHidden ? 'rotate(90deg)' : 'rotate(0deg)';
+    const isHidden = !messagesDiv.classList.contains('visible');
+    if (isHidden) {
+      messagesDiv.classList.add('visible');
+      icon.style.transform = 'rotate(90deg)';
+    } else {
+      messagesDiv.classList.remove('visible');
+      icon.style.transform = 'rotate(0deg)';
+    }
   }
 }
 
@@ -1110,15 +1115,15 @@ function renderPromptTimelineItem(prompt) {
     <div class="timeline-item prompt-timeline-item" onclick="showEventModal('${prompt.id}')">
       <div class="timeline-content">
         <div class="timeline-header">
-          <div class="timeline-title" style="display: flex; align-items: center; gap: var(--space-sm);">
+          <div class="timeline-title">
             <span>${icon}</span>
-            <span>${displayText}</span>
+            <span>${escapeHtml(displayText)}</span>
           </div>
           <div class="timeline-meta">${time}</div>
         </div>
-        <div class="timeline-description" style="display: flex; gap: var(--space-xs); flex-wrap: wrap;">
-          <span class="badge badge-prompt">${source}</span>
-          ${prompt.workspaceName ? `<span class="badge">${prompt.workspaceName}</span>` : prompt.workspaceId ? `<span class="badge">${prompt.workspaceId.substring(0, 8)}</span>` : ''}
+        <div class="timeline-description">
+          <span class="badge badge-prompt">${escapeHtml(source)}</span>
+          ${prompt.workspaceName ? `<span class="badge">${escapeHtml(prompt.workspaceName)}</span>` : prompt.workspaceId ? `<span class="badge">${escapeHtml(prompt.workspaceId.substring(0, 8))}</span>` : ''}
           ${prompt.composerId ? `<span class="badge">Composer</span>` : ''}
           ${prompt.contextUsage > 0 ? `<span class="badge" style="background: var(--color-warning); color: white;">${prompt.contextUsage.toFixed(1)}% context</span>` : ''}
         </div>
@@ -1136,19 +1141,19 @@ function renderTerminalTimelineItem(cmd) {
   const source = cmd.source || 'terminal';
   
   return `
-    <div class="timeline-item terminal-timeline-item ${isError ? 'error' : ''}" style="border-left-color: ${isError ? '#ef4444' : '#8b5cf6'}; cursor: pointer;" onclick="showTerminalModal('${cmd.id}')">
+    <div class="timeline-item terminal-timeline-item ${isError ? 'error' : ''}" style="border-left-color: ${isError ? '#ef4444' : '#8b5cf6'};" onclick="showTerminalModal('${cmd.id}')">
       <div class="timeline-content">
         <div class="timeline-header">
-          <div class="timeline-title" style="display: flex; align-items: center; gap: var(--space-sm);">
+          <div class="timeline-title">
             <span>${icon}</span>
-            <code style="background: rgba(0,0,0,0.05); padding: 2px 6px; border-radius: 3px; font-size: 13px;">${displayText}</code>
+            <code class="terminal-command-code">${escapeHtml(displayText)}</code>
           </div>
           <div class="timeline-meta">${time}</div>
         </div>
-        <div class="timeline-description" style="display: flex; gap: var(--space-xs); flex-wrap: wrap;">
-          <span class="badge" style="background: #6366f1; color: white;">${source}</span>
-          ${cmd.shell ? `<span class="badge">${cmd.shell}</span>` : ''}
-          ${cmd.workspace ? `<span class="badge" style="font-size: 11px;">${cmd.workspace.split('/').pop()}</span>` : ''}
+        <div class="timeline-description">
+          <span class="badge" style="background: #6366f1; color: white;">${escapeHtml(source)}</span>
+          ${cmd.shell ? `<span class="badge">${escapeHtml(cmd.shell)}</span>` : ''}
+          ${cmd.workspace ? `<span class="badge" style="font-size: 11px;">${escapeHtml(cmd.workspace.split('/').pop())}</span>` : ''}
           ${isError ? `<span class="badge" style="background: #ef4444; color: white;">Exit ${cmd.exit_code}</span>` : ''}
           ${cmd.duration ? `<span class="badge">${cmd.duration}ms</span>` : ''}
         </div>
@@ -1177,7 +1182,7 @@ function renderTimelineItem(event) {
       }).length;
       
       if (recentPromptCount > 0) {
-        promptBadge = `<span style="display: inline-flex; align-items: center; justify-content: center; background: var(--color-accent); color: white; font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 10px; margin-left: 8px;" title="Has related AI prompts">AI</span>`;
+        promptBadge = `<span class="context-indicator ai" title="Has related AI prompts">AI</span>`;
       }
     }
     
@@ -1187,19 +1192,19 @@ function renderTimelineItem(event) {
       
       // @ files indicator
       if (event.context.atFiles && event.context.atFiles.length > 0) {
-        badges.push(`<span style="display: inline-flex; align-items: center; justify-content: center; background: #10b981; color: white; font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 10px; margin-left: 4px;" title="${event.context.atFiles.length} @ referenced files">[FILE] ${event.context.atFiles.length}</span>`);
+        badges.push(`<span class="context-indicator files" title="${event.context.atFiles.length} @ referenced files">[FILE] ${event.context.atFiles.length}</span>`);
       }
       
       // Context files indicator
       const contextFileCount = (event.context.contextFiles?.attachedFiles?.length || 0) + 
                                (event.context.contextFiles?.codebaseFiles?.length || 0);
       if (contextFileCount > 0) {
-        badges.push(`<span style="display: inline-flex; align-items: center; justify-content: center; background: #3b82f6; color: white; font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 10px; margin-left: 4px;" title="${contextFileCount} context files">${contextFileCount} files</span>`);
+        badges.push(`<span class="context-indicator context-files" title="${contextFileCount} context files">${contextFileCount} files</span>`);
       }
       
       // UI state indicator
       if (event.context.browserState && event.context.browserState.tabs && event.context.browserState.tabs.length > 0) {
-        badges.push(`<span style="display: inline-flex; align-items: center; justify-content: center; background: #8b5cf6; color: white; font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 10px; margin-left: 4px;" title="${event.context.browserState.tabs.length} tabs open">[SYSTEM] ${event.context.browserState.tabs.length}</span>`);
+        badges.push(`<span class="context-indicator system" title="${event.context.browserState.tabs.length} tabs open">[SYSTEM] ${event.context.browserState.tabs.length}</span>`);
       }
       
       contextIndicators = badges.join('');
@@ -1266,7 +1271,7 @@ function getEventDescription(event) {
 
 function renderPromptList(entries) {
   return `
-    <div style="display: flex; flex-direction: column; gap: var(--space-md);">
+    <div class="prompt-list">
       ${entries.map(entry => {
         // Get text from various possible fields
         const promptText = entry.prompt || entry.text || entry.preview || entry.content;
@@ -1274,16 +1279,16 @@ function renderPromptList(entries) {
         const source = entry.source || entry.method || 'unknown';
         
         return `
-          <div style="padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md); cursor: pointer; border-left: 3px solid var(--color-accent);" onclick="showThreadModal('${entry.id}')">
-            <div style="font-size: var(--text-sm); color: var(--color-text); margin-bottom: var(--space-xs); line-height: 1.5;">
+          <div class="prompt-item" onclick="showThreadModal('${entry.id}')">
+            <div class="prompt-item-text">
               ${escapeHtml(displayText)}
             </div>
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-              <div style="font-size: var(--text-xs); color: var(--color-text-subtle);">
+            <div class="prompt-item-footer">
+              <div class="prompt-item-timestamp">
                 ${new Date(entry.timestamp).toLocaleString()}
               </div>
-              <div style="font-size: var(--text-xs); color: var(--color-text-muted); padding: 2px var(--space-xs); background: var(--color-surface); border-radius: var(--radius-sm);">
-                ${source}
+              <div class="prompt-item-source">
+                ${escapeHtml(source)}
               </div>
             </div>
           </div>
@@ -1304,18 +1309,18 @@ function renderSystemStatus() {
   const load = latest.system?.loadAverage?.[0]?.toFixed(2) || 'N/A';
 
   return `
-    <div style="display: flex; flex-direction: column; gap: var(--space-md);">
-      <div style="display: flex; justify-content: space-between; padding: var(--space-sm) 0; border-bottom: 1px solid var(--color-border);">
-        <span style="color: var(--color-text-muted);">Memory</span>
-        <span style="color: var(--color-text); font-weight: 600;">${memory}</span>
+    <div class="system-status-list">
+      <div class="system-status-item">
+        <span class="system-status-label">Memory</span>
+        <span class="system-status-value">${memory}</span>
       </div>
-      <div style="display: flex; justify-content: space-between; padding: var(--space-sm) 0; border-bottom: 1px solid var(--color-border);">
-        <span style="color: var(--color-text-muted);">CPU Time</span>
-        <span style="color: var(--color-text); font-weight: 600;">${cpu}</span>
+      <div class="system-status-item">
+        <span class="system-status-label">CPU Time</span>
+        <span class="system-status-value">${cpu}</span>
       </div>
-      <div style="display: flex; justify-content: space-between; padding: var(--space-sm) 0;">
-        <span style="color: var(--color-text-muted);">Load Avg</span>
-        <span style="color: var(--color-text); font-weight: 600;">${load}</span>
+      <div class="system-status-item">
+        <span class="system-status-label">Load Avg</span>
+        <span class="system-status-value">${load}</span>
       </div>
     </div>
   `;
@@ -1327,16 +1332,14 @@ function renderWorkspacesList() {
   }
 
   return `
-    <div style="display: flex; flex-direction: column; gap: var(--space-sm);">
+    <div class="workspaces-list">
       ${state.data.workspaces.map(ws => `
-        <div style="padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md);">
-          <div style="font-size: var(--text-sm); color: var(--color-text); font-weight: 500; margin-bottom: var(--space-xs); position: relative; overflow: hidden; white-space: nowrap; max-width: 100%;">
-            <span style="display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis;">
-              ${ws.path.split('/').pop() || ws.path}
-            </span>
-            <div style="position: absolute; top: 0; right: 0; width: 40px; height: 100%; background: linear-gradient(to right, transparent, var(--color-bg)); pointer-events: none;"></div>
+        <div class="workspace-item">
+          <div class="workspace-item-title">
+            <span class="workspace-item-title-text">${escapeHtml(ws.path.split('/').pop() || ws.path)}</span>
+            <div class="workspace-item-title-fade"></div>
           </div>
-          <div style="display: flex; gap: var(--space-lg); font-size: var(--text-xs); color: var(--color-text-subtle);">
+          <div class="workspace-item-meta">
             <span>${ws.entries || 0} entries</span>
             <span>${ws.events || 0} events</span>
           </div>
@@ -1377,7 +1380,7 @@ function renderActivityView(container) {
   ].sort((a, b) => b.sortTime - a.sortTime).slice(0, 100);
   
   container.innerHTML = `
-    <div style="display: grid; gap: var(--space-xl);">
+    <div class="activity-view">
       
       <!-- Unified Activity Timeline -->
       <div class="card">
@@ -1386,8 +1389,8 @@ function renderActivityView(container) {
             <h3 class="card-title">Activity Timeline</h3>
             <p class="card-subtitle">${timelineItems.length} items (${events.length} file changes, ${prompts.length} AI prompts, ${terminalCommands.length} terminal commands)</p>
           </div>
-          <div style="display: flex; gap: var(--space-md);">
-            <select class="select-input" style="width: auto;" onchange="filterActivityByTimeRange(this.value)">
+          <div class="activity-header-controls">
+            <select class="select-input" onchange="filterActivityByTimeRange(this.value)">
               <option value="all">All Time</option>
               <option value="today">Today</option>
               <option value="week">This Week</option>
@@ -1414,7 +1417,7 @@ function renderThreadsView(container) {
   const prompts = state.data.prompts || [];
   
   container.innerHTML = `
-    <div style="display: grid; gap: var(--space-xl);">
+    <div class="threads-view">
       
       <!-- Captured Prompts Section -->
       <div class="card">
@@ -1423,7 +1426,7 @@ function renderThreadsView(container) {
             <h3 class="card-title">Captured Prompts</h3>
             <p class="card-subtitle">Prompts captured from clipboard and manual entry</p>
           </div>
-          <div style="display: flex; gap: var(--space-md); align-items: center;">
+          <div class="thread-header-controls">
             <span class="thread-badge">[CLIPBOARD] ${prompts.length} captured</span>
             <button class="btn btn-sm" onclick="refreshPrompts()">
               <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor">
@@ -1463,7 +1466,7 @@ function renderPromptsList(prompts) {
   );
 
   return `
-    <div style="display: grid; gap: var(--space-md);">
+    <div class="prompt-list">
       ${sortedPrompts.map(prompt => {
         // Get text from various possible fields
         const promptText = prompt.text || prompt.prompt || prompt.preview || prompt.content;
@@ -1476,7 +1479,7 @@ function renderPromptsList(prompts) {
             <div class="prompt-header">
               <div class="prompt-status ${status}">
                 ${getPromptStatusIcon(status)}
-                ${status}
+                ${escapeHtml(status)}
               </div>
               <div class="prompt-time">${formatTimeAgo(prompt.timestamp)}</div>
             </div>
@@ -1485,9 +1488,9 @@ function renderPromptsList(prompts) {
             </div>
             <div class="prompt-meta">
               ${prompt.linked_entry_id ? '<span class="prompt-tag">Linked</span>' : '<span class="prompt-tag pending">Pending</span>'}
-              <span class="prompt-tag">${source}</span>
-              ${prompt.workspaceName ? `<span class="prompt-tag">[FILE] ${prompt.workspaceName}</span>` : prompt.workspaceId ? `<span class="prompt-tag">[FILE] ${prompt.workspaceId.substring(0, 8)}...</span>` : ''}
-              ${prompt.metadata?.complexity ? `<span class="prompt-tag">Complexity: ${prompt.metadata.complexity}</span>` : ''}
+              <span class="prompt-tag">${escapeHtml(source)}</span>
+              ${prompt.workspaceName ? `<span class="prompt-tag">[FILE] ${escapeHtml(prompt.workspaceName)}</span>` : prompt.workspaceId ? `<span class="prompt-tag">[FILE] ${escapeHtml(prompt.workspaceId.substring(0, 8))}...</span>` : ''}
+              ${prompt.metadata?.complexity ? `<span class="prompt-tag">Complexity: ${escapeHtml(prompt.metadata.complexity)}</span>` : ''}
             </div>
           </div>
         `;
@@ -1563,18 +1566,18 @@ function groupIntoThreads(entries) {
 
 function renderThreadsList(threads) {
   return `
-    <div style="display: grid; gap: var(--space-lg);">
+    <div class="thread-list">
       ${threads.map(thread => `
         <div class="thread-card" onclick="showThreadModal('${thread.id}')">
-          <div class="thread-header">
+          <div class="thread-card-header">
             <div>
-              <div class="thread-title">${truncate(thread.messages[0]?.prompt || thread.messages[0]?.text || 'Conversation Thread', 60)}</div>
-              <div class="thread-meta">
+              <div class="thread-card-title">${escapeHtml(truncate(thread.messages[0]?.prompt || thread.messages[0]?.text || 'Conversation Thread', 60))}</div>
+              <div class="thread-card-meta">
                 <span>${thread.messages.length} messages</span>
                 <span>${new Date(thread.lastMessage).toLocaleDateString()}</span>
               </div>
             </div>
-            <div class="thread-badge">${thread.id.substring(0, 8)}</div>
+            <div class="thread-card-badge">${escapeHtml(thread.id.substring(0, 8))}</div>
           </div>
         </div>
       `).join('')}
@@ -1614,30 +1617,28 @@ function renderAnalyticsView(container) {
   }
   
   container.innerHTML = `
-    <div style="display: grid; gap: var(--space-xl);">
+    <div class="analytics-view">
       
       ${!hasData ? `
         <!-- Data Status Alert -->
-        <div style="padding: var(--space-lg); background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(139, 92, 246, 0.1)); border-radius: var(--radius-lg); border: 2px solid var(--color-primary);">
-          <div style="display: flex; align-items: start; gap: var(--space-md);">
-            <div style="flex: 1;">
-              <h3 style="margin: 0 0 var(--space-sm) 0; color: var(--color-text); font-size: var(--text-lg); font-weight: 600;">
-                Waiting for Telemetry Data
-              </h3>
-              <p style="margin: 0 0 var(--space-md) 0; color: var(--color-text-muted); line-height: 1.6;">
+        <div class="data-status-alert">
+          <div class="data-status-content">
+            <div class="data-status-content-main">
+              <h3>Waiting for Telemetry Data</h3>
+              <p>
                 No data has been received yet. Make sure the companion service is running:
               </p>
-              <div style="display: grid; gap: var(--space-sm); margin-bottom: var(--space-md);">
-                <div style="display: flex; align-items: center; gap: var(--space-sm);">
-                  <code style="padding: var(--space-xs) var(--space-sm); background: var(--color-bg); border-radius: var(--radius-sm); font-size: var(--text-sm); font-family: 'Geist Mono', monospace;">cd cursor-telemetry/components/activity-logger/companion</code>
+              <div class="data-status-instructions">
+                <div class="data-status-instruction">
+                  <code>cd cursor-telemetry/components/activity-logger/companion</code>
                 </div>
-                <div style="display: flex; align-items: center; gap: var(--space-sm);">
-                  <code style="padding: var(--space-xs) var(--space-sm); background: var(--color-bg); border-radius: var(--radius-sm); font-size: var(--text-sm); font-family: 'Geist Mono', monospace;">node src/index.js</code>
+                <div class="data-status-instruction">
+                  <code>node src/index.js</code>
                 </div>
               </div>
-              <div style="padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md); border-left: 3px solid var(--color-accent);">
-                <div style="font-weight: 600; margin-bottom: var(--space-xs);">Status:</div>
-                <div style="font-size: var(--text-sm); color: var(--color-text-muted);">
+              <div class="data-status-box">
+                <div class="data-status-label">Status:</div>
+                <div class="data-status-value">
                   Events: ${totalEvents} | Prompts: ${totalPrompts}
                 </div>
               </div>
@@ -1646,19 +1647,19 @@ function renderAnalyticsView(container) {
         </div>
       ` : `
         <!-- Data Status Info -->
-        <div style="padding: var(--space-md); background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(59, 130, 246, 0.1)); border-radius: var(--radius-md); border-left: 3px solid var(--color-success);">
-          <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--space-md);">
-            <div style="display: flex; align-items: center; gap: var(--space-md);">
-              <span style="font-size: 1.5rem;">📊</span>
-              <div>
-                <div style="font-weight: 600; color: var(--color-text);">Telemetry Active</div>
-                <div style="font-size: var(--text-sm); color: var(--color-text-muted);">Tracking ${totalPrompts.toLocaleString()} prompts and ${totalEvents.toLocaleString()} events</div>
+        <div class="data-status-info">
+          <div class="data-status-info-content">
+            <div class="data-status-info-left">
+              <span class="data-status-info-icon">📊</span>
+              <div class="data-status-info-text">
+                <h4>Telemetry Active</h4>
+                <p>Tracking ${totalPrompts.toLocaleString()} prompts and ${totalEvents.toLocaleString()} events</p>
               </div>
             </div>
-            <div style="display: flex; gap: var(--space-lg);">
-              <div style="text-align: right;">
-                <div style="font-size: var(--text-xs); color: var(--color-text-muted);">Data Freshness</div>
-                <div style="font-weight: 600; color: var(--color-success);">${dataFreshness}</div>
+            <div class="data-status-info-right">
+              <div class="data-status-freshness">
+                <div class="data-status-freshness-label">Data Freshness</div>
+                <div class="data-status-freshness-value">${dataFreshness}</div>
               </div>
             </div>
           </div>
@@ -1672,26 +1673,26 @@ function renderAnalyticsView(container) {
           <p class="card-subtitle">Prompt frequency and code changes correlation</p>
         </div>
         <div class="card-body">
-          <canvas id="aiActivityChart" style="max-height: 300px;"></canvas>
+          <canvas id="aiActivityChart" class="chart-container"></canvas>
         </div>
       </div>
 
       <!-- Context Usage Over Time -->
       <div class="card">
         <div class="card-header">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-sm);">
-            <h3 class="card-title" style="margin: 0;">Context Usage Over Time</h3>
-            <div style="display: flex; gap: var(--space-xs);">
-              <button class="btn-timescale" data-hours="24" onclick="updateContextChartTimescale(24)" style="padding: 4px 12px; font-size: 12px; border: 1px solid var(--color-border); background: var(--color-primary); color: white; border-radius: 4px; cursor: pointer;">24h</button>
-              <button class="btn-timescale" data-hours="72" onclick="updateContextChartTimescale(72)" style="padding: 4px 12px; font-size: 12px; border: 1px solid var(--color-border); background: var(--color-bg); color: var(--color-text); border-radius: 4px; cursor: pointer;">3d</button>
-              <button class="btn-timescale" data-hours="168" onclick="updateContextChartTimescale(168)" style="padding: 4px 12px; font-size: 12px; border: 1px solid var(--color-border); background: var(--color-bg); color: var(--color-text); border-radius: 4px; cursor: pointer;">7d</button>
-              <button class="btn-timescale" data-hours="720" onclick="updateContextChartTimescale(720)" style="padding: 4px 12px; font-size: 12px; border: 1px solid var(--color-border); background: var(--color-bg); color: var(--color-text); border-radius: 4px; cursor: pointer;">30d</button>
+          <div class="chart-header-controls">
+            <h3 class="card-title">Context Usage Over Time</h3>
+            <div class="timescale-controls">
+              <button class="btn-timescale active" data-hours="24" onclick="updateContextChartTimescale(24)">24h</button>
+              <button class="btn-timescale" data-hours="72" onclick="updateContextChartTimescale(72)">3d</button>
+              <button class="btn-timescale" data-hours="168" onclick="updateContextChartTimescale(168)">7d</button>
+              <button class="btn-timescale" data-hours="720" onclick="updateContextChartTimescale(720)">30d</button>
             </div>
           </div>
           <p class="card-subtitle">AI context window utilization with smart scaling (auto-adjusts range for better detail). Color-coded: <span style="color: #10b981;">Green</span> = Normal, <span style="color: #f59e0b;">Orange</span> = Medium-High, <span style="color: #ef4444;">Red</span> = High</p>
         </div>
         <div class="card-body">
-          <canvas id="promptTokensChart" style="max-height: 250px;"></canvas>
+          <canvas id="promptTokensChart" class="chart-container-small"></canvas>
         </div>
       </div>
 
@@ -1707,7 +1708,7 @@ function renderAnalyticsView(container) {
       </div>
 
       <!-- Breakdown Charts -->
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: var(--space-lg);">
+      <div class="analytics-grid">
         <div class="card">
           <div class="card-header">
             <h3 class="card-title">File Changes by Type</h3>
@@ -2187,9 +2188,9 @@ function renderFileGraphView(container) {
         </div>
 
         <div class="control-group">
-          <label style="display: flex; align-items: center; gap: 4px;">
+          <label class="with-help">
             Threshold: <span id="thresholdValue">0.2</span>
-            <span title="Minimum similarity score (0-1) required to show connections between files. Higher values show only strongly related files." style="color: var(--color-text-muted); font-size: 12px; cursor: help;">Threshold</span>
+            <span class="help-text" title="Minimum similarity score (0-1) required to show connections between files. Higher values show only strongly related files.">Threshold</span>
           </label>
           <input type="range" id="similarityThreshold" min="0" max="1" step="0.05" value="0.2" 
                  oninput="document.getElementById('thresholdValue').textContent = this.value; updateFileGraph()"
@@ -2198,28 +2199,27 @@ function renderFileGraphView(container) {
 
         <div class="control-group">
           <label>File Types:</label>
-          <select id="fileTypeFilter" multiple style="padding: 4px 8px; border-radius: 4px; border: 1px solid var(--color-border); background: var(--color-bg); color: var(--color-text); font-size: 13px; min-height: 80px; width: 100%;" onchange="updateFileGraph()">
+          <select id="fileTypeFilter" multiple onchange="updateFileGraph()">
             <!-- Options will be populated programmatically -->
           </select>
         </div>
 
         <div class="control-actions">
-          <button class="btn btn-primary" onclick="updateFileGraph()" style="font-size: 13px; padding: 6px 12px;">Refresh</button>
-          <button class="btn btn-secondary" onclick="resetFileGraphZoom()" style="font-size: 13px; padding: 6px 12px;">Reset View</button>
-          <button class="btn btn-secondary" onclick="zoomToFit()" style="font-size: 13px; padding: 6px 12px;">Zoom to Fit</button>
-          <button class="btn btn-secondary" onclick="toggleLabels()" style="font-size: 13px; padding: 6px 12px;" id="labelToggle">Hide Labels</button>
+          <button class="btn btn-primary" onclick="updateFileGraph()">Refresh</button>
+          <button class="btn btn-secondary" onclick="resetFileGraphZoom()">Reset View</button>
+          <button class="btn btn-secondary" onclick="zoomToFit()">Zoom to Fit</button>
+          <button class="btn btn-secondary" onclick="toggleLabels()" id="labelToggle">Hide Labels</button>
         </div>
       </div>
       
       <!-- Search & Navigation Panel -->
-      <div style="padding: var(--space-md); background: var(--color-bg-alt); border-radius: var(--radius-lg); margin-bottom: var(--space-md);">
-        <input type="text" id="fileSearch" placeholder="Search files by name..." 
-               style="width: 100%; padding: var(--space-sm); background: var(--color-bg); border: 1px solid var(--color-border); border-radius: var(--radius-md); color: var(--color-text); font-size: var(--text-sm);"
+      <div class="graph-search-panel">
+        <input type="text" id="fileSearch" class="graph-search-input" placeholder="Search files by name..." 
                oninput="filterGraphNodes(this.value)">
-        <div id="fileSearchResults" style="margin-top: var(--space-sm); max-height: 120px; overflow-y: auto;"></div>
+        <div id="fileSearchResults" class="graph-search-results"></div>
       </div>
 
-      <div class="graph-container" id="fileGraphContainer" style="width: 100%; height: 600px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg); position: relative;">
+      <div class="graph-container" id="fileGraphContainer">
         <!-- File graph will be rendered here -->
       </div>
 
@@ -2243,94 +2243,92 @@ function renderFileGraphView(container) {
       </div>
       
       <!-- Most Similar File Pairs -->
-      <div class="card" style="margin-top: var(--space-lg);">
-        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+      <div class="card similar-pairs-section">
+        <div class="card-header">
           <div>
-            <h3 class="card-title" style="cursor: help;" title="File pairs ranked by co-occurrence in prompts and editing sessions. Shows which files are frequently worked on together.">
+            <h3 class="card-title help-cursor" title="File pairs ranked by co-occurrence in prompts and editing sessions. Shows which files are frequently worked on together.">
               Most Similar File Pairs
-              <span style="font-size: 11px; color: var(--color-text-muted); font-weight: normal; margin-left: 4px;">Most Similar File Pairs</span>
             </h3>
             <p class="card-subtitle">Files frequently modified together with highest co-occurrence scores</p>
           </div>
-          <div style="display: flex; gap: var(--space-sm); align-items: center;">
-            <label style="font-size: var(--text-sm); color: var(--color-text-muted);">Show:</label>
-            <input type="number" id="similarPairsCount" min="1" max="50" value="10" onchange="updateSimilarPairs()" oninput="if(this.value > 50) this.value = 50; if(this.value < 1) this.value = 1;" style="width: 60px; padding: 4px 8px; border-radius: 4px; border: 1px solid var(--color-border); background: var(--color-bg); color: var(--color-text); font-size: 13px; text-align: center;" />
-            <button onclick="highlightSimilarPairs()" class="btn-secondary" style="font-size: 13px; padding: 6px 12px;" title="Highlight these pairs in the graph visualization above">Highlight in Graph</button>
+          <div class="similar-pairs-controls">
+            <label>Show:</label>
+            <input type="number" id="similarPairsCount" class="similar-pairs-count-input" min="1" max="50" value="10" onchange="updateSimilarPairs()" oninput="if(this.value > 50) this.value = 50; if(this.value < 1) this.value = 1;" />
+            <button onclick="highlightSimilarPairs()" class="btn btn-secondary" title="Highlight these pairs in the graph visualization above">Highlight in Graph</button>
           </div>
         </div>
         <div class="card-body">
-          <div id="similarFilePairs" style="display: grid; gap: var(--space-md);">
+          <div id="similarFilePairs" class="similar-pairs-list">
             <!-- Will be populated by JavaScript -->
           </div>
         </div>
       </div>
 
       <!-- Semantic Analysis Panels -->
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-lg); margin-top: var(--space-xl);">
+      <div class="semantic-analysis-grid">
         
         <!-- Prompt Embeddings Analysis -->
         <div class="card">
           <div class="card-header">
-            <h3 class="card-title" style="cursor: help;" title="Visualizes semantic similarity between your AI prompts using TF-IDF embeddings and dimensionality reduction (PCA/t-SNE/MDS). Prompts with similar content appear closer together. Data is extracted from your Cursor database and analyzed locally.">
+            <h3 class="card-title help-cursor" title="Visualizes semantic similarity between your AI prompts using TF-IDF embeddings and dimensionality reduction (PCA/t-SNE/MDS). Prompts with similar content appear closer together. Data is extracted from your Cursor database and analyzed locally.">
               Prompts Embedding Analysis
-              <span style="font-size: 11px; color: var(--color-text-muted); font-weight: normal; margin-left: 4px;">Prompts Embedding Analysis</span>
             </h3>
           </div>
           <div class="card-body">
-            <p style="font-size: 13px; color: var(--color-text-muted); margin-bottom: var(--space-lg);">
+            <p class="embeddings-description">
               Semantic relationships between AI prompts across all time. Colors represent time (purple = older, yellow/green = newer).
             </p>
-            <div style="display: grid; gap: var(--space-md); margin-bottom: var(--space-lg);">
-              <div style="display: flex; justify-content: space-between;">
-                <span style="color: var(--color-text-muted);">Prompts Analyzed:</span>
-                <span id="embeddingsFilesCount" style="font-weight: 600;">0</span>
+            <div class="embeddings-stats">
+              <div class="embeddings-stat-row">
+                <span class="embeddings-stat-label">Prompts Analyzed:</span>
+                <span id="embeddingsFilesCount" class="embeddings-stat-value">0</span>
               </div>
-              <div style="display: flex; justify-content: space-between;">
-                <span style="color: var(--color-text-muted);">Total Tokens:</span>
-                <span id="embeddingsTotalChanges" style="font-weight: 600;">0</span>
+              <div class="embeddings-stat-row">
+                <span class="embeddings-stat-label">Total Tokens:</span>
+                <span id="embeddingsTotalChanges" class="embeddings-stat-value">0</span>
               </div>
-              <div style="display: flex; justify-content: space-between;">
-                <span style="color: var(--color-text-muted);">Avg Similarity:</span>
-                <span id="embeddingsAvgSimilarity" style="font-weight: 600;">0.000</span>
+              <div class="embeddings-stat-row">
+                <span class="embeddings-stat-label">Avg Similarity:</span>
+                <span id="embeddingsAvgSimilarity" class="embeddings-stat-value">0.000</span>
               </div>
             </div>
             
             <!-- Dimensionality Reduction Controls -->
-            <div style="margin-bottom: var(--space-md); padding: var(--space-md); background: var(--color-bg-alt); border-radius: var(--radius-md);">
-              <div style="display: flex; align-items: center; gap: var(--space-md); flex-wrap: wrap;">
-                <div style="display: flex; align-items: center; gap: var(--space-sm);">
-                  <label style="font-size: 13px; color: var(--color-text-muted);" title="PCA: Fastest, linear. t-SNE: Best clusters. MDS: Preserves distances.">Reduction Method:</label>
-                  <select id="embeddingsReductionMethod" style="padding: 4px 8px; border-radius: 4px; border: 1px solid var(--color-border); background: var(--color-bg); color: var(--color-text); font-size: 12px;" onchange="renderEmbeddingsVisualization()">
+            <div class="embeddings-controls">
+              <div class="embeddings-controls-row">
+                <div class="embeddings-control-group">
+                  <label class="embeddings-control-label" title="PCA: Fastest, linear. t-SNE: Best clusters. MDS: Preserves distances.">Reduction Method:</label>
+                  <select id="embeddingsReductionMethod" class="embeddings-control-select" onchange="renderEmbeddingsVisualization()">
                     <option value="pca">PCA (Principal Component Analysis)</option>
                     <option value="tsne">t-SNE (t-Distributed Stochastic Neighbor Embedding)</option>
                     <option value="mds">MDS (Multidimensional Scaling)</option>
                   </select>
                 </div>
-                <div style="display: flex; align-items: center; gap: var(--space-sm);">
-                  <label style="font-size: 13px; color: var(--color-text-muted);" title="Number of dimensions to reduce to (2D for flat visualization, 3D for spatial view)">Dimensions:</label>
-                  <select id="embeddingsDimensions" style="padding: 4px 8px; border-radius: 4px; border: 1px solid var(--color-border); background: var(--color-bg); color: var(--color-text); font-size: 12px;" onchange="renderEmbeddingsVisualization()">
+                <div class="embeddings-control-group">
+                  <label class="embeddings-control-label" title="Number of dimensions to reduce to (2D for flat visualization, 3D for spatial view)">Dimensions:</label>
+                  <select id="embeddingsDimensions" class="embeddings-control-select" onchange="renderEmbeddingsVisualization()">
                     <option value="2" selected>2D</option>
                     <option value="3">3D</option>
                   </select>
                 </div>
-                <div style="display: flex; align-items: center; gap: var(--space-sm);">
-                  <label style="font-size: 13px; color: var(--color-text-muted);" title="Number of principal components to keep (higher = more detail, slower computation)">Components:</label>
-                  <input type="number" id="embeddingsPCAComponents" min="2" max="50" value="10" onchange="renderEmbeddingsVisualization()" oninput="if(this.value > 50) this.value = 50; if(this.value < 2) this.value = 2;" style="width: 55px; padding: 4px 8px; border-radius: 4px; border: 1px solid var(--color-border); background: var(--color-bg); color: var(--color-text); font-size: 12px; text-align: center;" />
+                <div class="embeddings-control-group">
+                  <label class="embeddings-control-label" title="Number of principal components to keep (higher = more detail, slower computation)">Components:</label>
+                  <input type="number" id="embeddingsPCAComponents" class="embeddings-control-input" min="2" max="50" value="10" onchange="renderEmbeddingsVisualization()" oninput="if(this.value > 50) this.value = 50; if(this.value < 2) this.value = 2;" />
                 </div>
               </div>
             </div>
             
             <!-- Embeddings Visualization Canvas -->
-            <div id="embeddingsVisualization" style="width: 100%; height: 300px; background: var(--color-bg); border: 1px solid var(--color-border); border-radius: var(--radius-md); position: relative; margin-bottom: var(--space-md);">
-              <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--color-text-muted); font-size: 13px;">
+            <div id="embeddingsVisualization" class="embeddings-visualization">
+              <div class="embeddings-visualization-placeholder">
                 Embeddings visualization will appear here
               </div>
             </div>
             
-            <div>
-              <h4 style="font-size: 14px; margin-bottom: var(--space-sm); color: var(--color-text-muted);">Most Similar Prompt Pairs:</h4>
-              <div id="similarityPairs" style="display: flex; flex-direction: column; gap: var(--space-xs);">
-                <div style="color: var(--color-text-muted); font-size: 13px;">Analyzing prompts...</div>
+            <div class="embeddings-subsection">
+              <h4 class="embeddings-subsection-title">Most Similar Prompt Pairs:</h4>
+              <div id="similarityPairs" class="embeddings-subsection-content">
+                <div class="embeddings-subsection-placeholder">Analyzing prompts...</div>
               </div>
             </div>
           </div>
@@ -2342,27 +2340,26 @@ function renderFileGraphView(container) {
             <h3 class="card-title">Term Frequency Analysis</h3>
           </div>
           <div class="card-body">
-            <div style="display: grid; gap: var(--space-md); margin-bottom: var(--space-lg);">
-              <div style="display: flex; justify-content: space-between;">
-                <span style="color: var(--color-text-muted);">Total Terms:</span>
-                <span id="tfidfTotalTerms" style="font-weight: 600;">0</span>
+            <div class="tfidf-stats">
+              <div class="tfidf-stat-row">
+                <span class="tfidf-stat-label">Total Terms:</span>
+                <span id="tfidfTotalTerms" class="tfidf-stat-value">0</span>
               </div>
-              <div style="display: flex; justify-content: space-between;">
-                <span style="color: var(--color-text-muted);">Unique Terms:</span>
-                <span id="tfidfUniqueTerms" style="font-weight: 600;">0</span>
+              <div class="tfidf-stat-row">
+                <span class="tfidf-stat-label">Unique Terms:</span>
+                <span id="tfidfUniqueTerms" class="tfidf-stat-value">0</span>
               </div>
-              <div style="display: flex; justify-content: space-between;">
-                <span style="color: var(--color-text-muted);">Avg Term Frequency:</span>
-                <span id="tfidfAvgFreq" style="font-weight: 600;">0.00</span>
+              <div class="tfidf-stat-row">
+                <span class="tfidf-stat-label">Avg Term Frequency:</span>
+                <span id="tfidfAvgFreq" class="tfidf-stat-value">0.00</span>
               </div>
             </div>
-            <div>
-              <h4 style="font-size: 14px; margin-bottom: var(--space-sm); color: var(--color-text-muted); cursor: help;" title="Terms ranked by TF-IDF (Term Frequency-Inverse Document Frequency) score. Higher scores indicate terms that are important in specific files but rare across all files.">
-              Top Terms by Importance:
-              <span style="font-size: 11px; color: var(--color-text-muted); font-weight: normal; margin-left: 4px;">Top Terms by Importance</span>
-            </h4>
-              <div id="topTerms" style="display: flex; flex-direction: column; gap: var(--space-xs); max-height: 300px; overflow-y: auto; overflow-x: hidden;">
-                <div style="color: var(--color-text-muted); font-size: 13px;">Analyzing...</div>
+            <div class="embeddings-subsection">
+              <h4 class="embeddings-subsection-title help" title="Terms ranked by TF-IDF (Term Frequency-Inverse Document Frequency) score. Higher scores indicate terms that are important in specific files but rare across all files.">
+                Top Terms by Importance:
+              </h4>
+              <div id="topTerms" class="embeddings-subsection-content scrollable">
+                <div class="embeddings-subsection-placeholder">Analyzing...</div>
               </div>
             </div>
           </div>
@@ -3956,10 +3953,9 @@ function renderSimilarFilePairs(links, files) {
   
   if (sortedLinks.length === 0) {
     container.innerHTML = `
-      <div style="text-align: center; padding: var(--space-xl); color: var(--color-text-muted);">
-        <div style="font-size: 48px; margin-bottom: var(--space-md);">No Similar Pairs Found</div>
-        <div style="font-size: var(--text-md); margin-bottom: var(--space-sm);">No Similar Pairs Found</div>
-        <div style="font-size: var(--text-sm);">Modify some files together to see relationships</div>
+      <div class="empty-state">
+        <div class="empty-state-text" style="font-size: var(--text-md); margin-bottom: var(--space-sm);">No Similar Pairs Found</div>
+        <div class="empty-state-hint">Modify some files together to see relationships</div>
       </div>
     `;
     return;
@@ -3993,32 +3989,29 @@ function renderSimilarFilePairs(links, files) {
     
     return `
       <div class="similar-pair-item" data-source="${source.id}" data-target="${target.id}" 
-           style="display: flex; align-items: center; gap: var(--space-md); padding: var(--space-md); background: var(--color-bg-alt); border-radius: var(--radius-md); border: 2px solid transparent; transition: all 0.2s; cursor: pointer;"
            onmouseenter="highlightPairInGraph('${source.id}', '${target.id}')"
            onmouseleave="clearGraphHighlights()"
            onclick="focusOnPair('${source.id}', '${target.id}')"
            title="Click to focus on this pair in the graph">
         
         <!-- Rank Badge -->
-        <div style="flex-shrink: 0; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; background: var(--color-primary); color: white; border-radius: 50%; font-weight: bold; font-size: 14px;">
-          ${index + 1}
-        </div>
+        <div class="similar-pair-rank">${index + 1}</div>
         
         <!-- File Pair Info -->
-        <div style="flex: 1; min-width: 0;">
-          <div style="display: flex; align-items: center; gap: var(--space-sm); margin-bottom: var(--space-xs);">
-            <div style="display: flex; align-items: center; gap: var(--space-xs); flex: 1; min-width: 0;">
-              <span style="width: 8px; height: 8px; border-radius: 50%; background: ${sourceColor}; flex-shrink: 0;"></span>
-              <span style="font-family: var(--font-mono); font-size: var(--text-sm); color: var(--color-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${source.path}">${sourceName}</span>
+        <div class="similar-pair-info">
+          <div class="similar-pair-files-row">
+            <div class="similar-pair-file">
+              <span class="similar-pair-file-dot" style="background: ${sourceColor};"></span>
+              <span class="similar-pair-file-name" title="${escapeHtml(source.path)}">${escapeHtml(sourceName)}</span>
             </div>
-            <span style="color: var(--color-text-muted); font-size: var(--text-sm); flex-shrink: 0;">↔</span>
-            <div style="display: flex; align-items: center; gap: var(--space-xs); flex: 1; min-width: 0;">
-              <span style="width: 8px; height: 8px; border-radius: 50%; background: ${targetColor}; flex-shrink: 0;"></span>
-              <span style="font-family: var(--font-mono); font-size: var(--text-sm); color: var(--color-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${target.path}">${targetName}</span>
+            <span class="similar-pair-file-arrow">↔</span>
+            <div class="similar-pair-file">
+              <span class="similar-pair-file-dot" style="background: ${targetColor};"></span>
+              <span class="similar-pair-file-name" title="${escapeHtml(target.path)}">${escapeHtml(targetName)}</span>
             </div>
           </div>
           
-          <div style="display: flex; gap: var(--space-md); font-size: var(--text-xs); color: var(--color-text-muted);">
+          <div class="similar-pair-meta">
             ${sharedPrompts > 0 ? `<span title="Number of AI prompts that referenced both files">${sharedPrompts} shared prompts</span>` : ''}
             ${sharedPrompts > 0 && sharedSessions > 0 ? '<span>•</span>' : ''}
             ${sharedSessions > 0 ? `<span title="Number of coding sessions where both files were modified">${sharedSessions} shared sessions</span>` : ''}
@@ -4028,13 +4021,11 @@ function renderSimilarFilePairs(links, files) {
         </div>
         
         <!-- Similarity Score -->
-        <div style="flex-shrink: 0; text-align: right;">
-          <div style="font-size: var(--text-lg); font-weight: bold; color: var(--color-success);" title="Jaccard similarity coefficient based on prompt and session co-occurrence">
+        <div class="similar-pair-score">
+          <div class="similar-pair-score-value" title="Jaccard similarity coefficient based on prompt and session co-occurrence">
             ${similarityPercent}%
           </div>
-          <div style="font-size: var(--text-xs); color: var(--color-text-muted);">
-            similarity
-          </div>
+          <div class="similar-pair-score-label">similarity</div>
         </div>
       </div>
     `;
@@ -4262,14 +4253,14 @@ async function initializeNavigator() {
     console.log('[NAVIGATOR] Starting initialization...');
     
     // Show loading
-    container.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%;"><div class="loading-spinner"></div><span style="margin-left: 12px;">Computing latent embeddings...</span></div>';
+    container.innerHTML = '<div class="loading-wrapper"><div class="loading-spinner"></div><span>Computing latent embeddings...</span></div>';
     
     // Fetch file data
     const response = await fetch(`${CONFIG.API_BASE}/api/file-contents?limit=100000`);
     const data = await response.json();
     
     if (!data.files || data.files.length === 0) {
-      container.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--color-text-muted);">No file data available</div>';
+      container.innerHTML = '<div class="empty-wrapper">No file data available</div>';
       return;
     }
     
@@ -4381,7 +4372,7 @@ async function initializeNavigator() {
     
   } catch (error) {
     console.error('Error initializing navigator:', error);
-    container.innerHTML = `<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--color-error);">Error loading navigator: ${error.message}</div>`;
+    container.innerHTML = `<div class="error-wrapper">Error loading navigator: ${escapeHtml(error.message)}</div>`;
   }
 }
 
@@ -4975,9 +4966,9 @@ function updateNavigatorStats() {
   const legend = document.getElementById('clusterLegend');
   if (legend) {
     legend.innerHTML = navigatorState.clusters.map(cluster => `
-      <div style="display: flex; align-items: center; gap: var(--space-xs);">
-        <div style="width: 12px; height: 12px; border-radius: 2px; background: ${cluster.color};"></div>
-        <span style="color: var(--color-text);">${cluster.name} (${cluster.nodes.length})</span>
+      <div class="cluster-legend-item">
+        <div class="cluster-legend-color" style="background: ${cluster.color};"></div>
+        <span class="cluster-legend-label">${escapeHtml(cluster.name)} (${cluster.nodes.length})</span>
       </div>
     `).join('');
   }
@@ -5029,9 +5020,9 @@ function generateSemanticInsights() {
   
   // Render insights
   container.innerHTML = insights.map(insight => `
-    <div style="padding: var(--space-md); background: var(--color-bg-alt); border-left: 4px solid ${insight.cluster.color}; border-radius: var(--radius-md);">
-      <h4 style="margin: 0 0 var(--space-xs) 0; font-size: var(--text-sm); color: var(--color-text);">${insight.title}</h4>
-      <p style="margin: 0; font-size: var(--text-xs); color: var(--color-text-muted);">${insight.description}</p>
+    <div class="semantic-insight-item" style="border-left-color: ${insight.cluster.color};">
+      <h4 class="semantic-insight-title">${escapeHtml(insight.title)}</h4>
+      <p class="semantic-insight-description">${escapeHtml(insight.description)}</p>
     </div>
   `).join('');
 }
@@ -5092,41 +5083,41 @@ function showFileInfo(file) {
   title.textContent = `File: ${file.name}`;
   
   body.innerHTML = `
-    <div style="display: flex; flex-direction: column; gap: var(--space-lg);">
+    <div class="file-info-section">
       <div>
-        <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">File Information</h4>
-        <div style="display: grid; gap: var(--space-sm);">
-          <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-            <span style="color: var(--color-text-muted);">Path:</span>
-            <span style="color: var(--color-text); font-family: var(--font-mono); font-size: var(--text-xs);" title="${escapeHtml(file.path)}">${escapeHtml(truncate(file.path, 50))}</span>
+        <h4>File Information</h4>
+        <div class="file-info-grid">
+          <div class="file-info-row">
+            <span class="file-info-label">Path:</span>
+            <span class="file-info-value mono" title="${escapeHtml(file.path)}">${escapeHtml(truncate(file.path, 50))}</span>
           </div>
-          <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-            <span style="color: var(--color-text-muted);">Type:</span>
+          <div class="file-info-row">
+            <span class="file-info-label">Type:</span>
             <span class="badge" style="background: var(--color-bg-alt); color: var(--color-text); border: 2px solid ${getFileTypeColor(file.ext)}; font-weight: 600; font-family: var(--font-mono);">${file.ext.toUpperCase()}</span>
           </div>
-          <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-            <span style="color: var(--color-text-muted);">Total Changes:</span>
-            <span style="color: var(--color-text); font-weight: 600;">${file.changes}</span>
+          <div class="file-info-row">
+            <span class="file-info-label">Total Changes:</span>
+            <span class="file-info-value bold">${file.changes}</span>
           </div>
-          <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-            <span style="color: var(--color-text-muted);">Last Modified:</span>
-            <span style="color: var(--color-text);">${formatTimeAgo(file.lastModified)}</span>
+          <div class="file-info-row">
+            <span class="file-info-label">Last Modified:</span>
+            <span class="file-info-value">${formatTimeAgo(file.lastModified)}</span>
           </div>
         </div>
       </div>
       
       <div>
-        <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">Recent Events (${file.events.length})</h4>
-        <div style="display: flex; flex-direction: column; gap: var(--space-sm); max-height: 300px; overflow-y: auto;">
+        <h4>Recent Events (${file.events.length})</h4>
+        <div class="file-events-list">
           ${file.events.slice(-10).reverse().map(event => `
-            <div style="padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md); border-left: 3px solid var(--color-accent);">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-xs);">
-                <span style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">
+            <div class="file-event-item">
+              <div class="file-event-header">
+                <span class="file-event-time">
                   ${formatTimeAgo(event.timestamp)}
                 </span>
-                <span class="badge">${event.type || 'file_change'}</span>
+                <span class="badge">${escapeHtml(event.type || 'file_change')}</span>
               </div>
-              <div style="font-size: var(--text-sm); color: var(--color-text);">
+              <div class="file-event-description">
                 ${escapeHtml(event.description || event.title || 'File modified')}
               </div>
             </div>
@@ -5394,18 +5385,18 @@ function renderNavigatorView(container) {
       </div>
 
       <!-- View Mode Switcher -->
-      <div class="view-mode-controls" style="display: flex; gap: var(--space-lg); align-items: center; padding: var(--space-lg); background: var(--color-bg-alt); border-radius: var(--radius-lg); margin-bottom: var(--space-lg);">
-        <div style="flex: 1;">
-          <h3 style="margin: 0 0 var(--space-xs) 0; font-size: var(--text-md); color: var(--color-text);">View Mode</h3>
-          <div class="view-mode-switcher" style="display: flex; gap: var(--space-sm);">
+      <div class="view-mode-controls">
+        <div>
+          <h3>View Mode</h3>
+          <div class="view-mode-switcher">
             <button class="view-mode-btn active" data-mode="physical" onclick="setNavigatorViewMode('physical')">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="margin-right: 4px;">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                 <path d="M4 4h3v3H4V4zm5 0h3v3H9V4zM4 9h3v3H4V9zm5 0h3v3H9V9z"/>
               </svg>
               Physical
             </button>
             <button class="view-mode-btn" data-mode="hybrid" onclick="setNavigatorViewMode('hybrid')">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="margin-right: 4px;">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                 <circle cx="8" cy="4" r="2"/>
                 <circle cx="4" cy="12" r="2"/>
                 <circle cx="12" cy="12" r="2"/>
@@ -5414,7 +5405,7 @@ function renderNavigatorView(container) {
               Hybrid
             </button>
             <button class="view-mode-btn" data-mode="latent" onclick="setNavigatorViewMode('latent')">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="margin-right: 4px;">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                 <circle cx="8" cy="8" r="6"/>
                 <circle cx="8" cy="8" r="3"/>
                 <path d="M8 2v4M8 10v4M2 8h4M10 8h4"/>
@@ -5422,18 +5413,17 @@ function renderNavigatorView(container) {
               Latent
             </button>
           </div>
-          <p style="margin: var(--space-xs) 0 0 0; font-size: var(--text-xs); color: var(--color-text-muted);">
+          <p>
             <strong>Physical:</strong> Direct co-modification • 
             <strong>Latent:</strong> Semantic similarity • 
             <strong>Hybrid:</strong> Blend both
           </p>
         </div>
 
-        <div style="border-left: 1px solid var(--color-border); padding-left: var(--space-lg);">
-          <h3 style="margin: 0 0 var(--space-xs) 0; font-size: var(--text-md); color: var(--color-text);">Transition Speed</h3>
-          <input type="range" id="transitionSpeed" min="0.5" max="2" step="0.1" value="1" 
-                 style="width: 200px;" oninput="updateTransitionSpeed(this.value)">
-          <div style="display: flex; justify-content: space-between; font-size: var(--text-xs); color: var(--color-text-muted); margin-top: 4px;">
+        <div>
+          <h3>Transition Speed</h3>
+          <input type="range" id="transitionSpeed" min="0.5" max="2" step="0.1" value="1" oninput="updateTransitionSpeed(this.value)">
+          <div class="speed-label-wrapper">
             <span>Slow</span>
             <span id="speedLabel">1.0x</span>
             <span>Fast</span>
@@ -5442,67 +5432,67 @@ function renderNavigatorView(container) {
       </div>
 
       <!-- Main Content Area -->
-      <div style="display: grid; grid-template-columns: 1fr 200px; gap: var(--space-lg);">
+      <div class="navigator-main-layout">
         
         <!-- Main Visualization -->
-        <div>
-          <div class="navigator-container" id="navigatorContainer" style="width: 100%; height: 700px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg); position: relative;">
+        <div class="navigator-visualization-area">
+          <div class="navigator-container" id="navigatorContainer">
             <!-- Navigator will be rendered here -->
           </div>
 
           <!-- Navigation Controls -->
-          <div style="display: flex; gap: var(--space-md); margin-top: var(--space-md); align-items: center;">
-            <button class="btn btn-primary" onclick="zoomToFitNavigator()" style="font-size: 13px; padding: 8px 16px;">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="margin-right: 4px;">
+          <div class="navigator-controls">
+            <button class="btn btn-primary" onclick="zoomToFitNavigator()">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                 <path d="M2 2h5v5H2V2zm7 0h5v5H9V2zM2 9h5v5H2V9zm7 0h5v5H9V9z"/>
               </svg>
               Zoom to Fit
             </button>
-            <button class="btn btn-secondary" onclick="resetNavigatorView()" style="font-size: 13px; padding: 8px 16px;">Reset View</button>
-            <button class="btn btn-secondary" onclick="toggleNavigatorLabels()" id="navigatorLabelToggle" style="font-size: 13px; padding: 8px 16px;">Hide Labels</button>
+            <button class="btn btn-secondary" onclick="resetNavigatorView()">Reset View</button>
+            <button class="btn btn-secondary" onclick="toggleNavigatorLabels()" id="navigatorLabelToggle">Hide Labels</button>
             
-            <div style="flex: 1;"></div>
+            <div class="spacer"></div>
             
-            <div style="display: flex; gap: var(--space-sm); align-items: center; font-size: var(--text-sm); color: var(--color-text-muted);">
+            <div class="interpolation-display">
               <span>Interpolation:</span>
-              <span id="interpolationValue" style="font-weight: bold; color: var(--color-primary);">0%</span>
+              <span id="interpolationValue" class="interpolation-value">0%</span>
             </div>
           </div>
         </div>
 
         <!-- Mini-Map Widget -->
-        <div>
-          <div class="mini-map-widget" style="background: var(--color-bg-alt); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: var(--space-md);">
-            <h3 style="margin: 0 0 var(--space-sm) 0; font-size: var(--text-sm); color: var(--color-text); display: flex; align-items: center; gap: var(--space-xs);">
+        <div class="navigator-sidebar">
+          <div class="mini-map-widget">
+            <h3>
               <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                 <path d="M8 0a8 8 0 100 16A8 8 0 008 0zm0 2a6 6 0 110 12A6 6 0 018 2z"/>
               </svg>
               Overview
             </h3>
-            <div id="miniMapCanvas" style="width: 100%; height: 180px; background: var(--color-bg); border-radius: var(--radius-sm); border: 1px solid var(--color-border); position: relative; cursor: pointer;">
+            <div id="miniMapCanvas" class="mini-map-canvas">
               <!-- Mini-map will be rendered here -->
             </div>
             
-            <div style="margin-top: var(--space-md); font-size: var(--text-xs); color: var(--color-text-muted);">
-              <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+            <div class="mini-map-stats">
+              <div class="mini-map-stat-row">
                 <span>Files:</span>
-                <span id="navFileCount" style="color: var(--color-text); font-weight: 600;">0</span>
+                <span id="navFileCount" class="mini-map-stat-value">0</span>
               </div>
-              <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+              <div class="mini-map-stat-row">
                 <span>Clusters:</span>
-                <span id="navClusterCount" style="color: var(--color-text); font-weight: 600;">0</span>
+                <span id="navClusterCount" class="mini-map-stat-value">0</span>
               </div>
-              <div style="display: flex; justify-content: space-between;">
+              <div class="mini-map-stat-row">
                 <span>Coherence:</span>
-                <span id="navCoherence" style="color: var(--color-success); font-weight: 600;">0%</span>
+                <span id="navCoherence" class="mini-map-stat-value success">0%</span>
               </div>
             </div>
           </div>
 
           <!-- Cluster Legend -->
-          <div style="margin-top: var(--space-md); background: var(--color-bg-alt); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: var(--space-md);">
-            <h3 style="margin: 0 0 var(--space-sm) 0; font-size: var(--text-sm); color: var(--color-text);">Latent Clusters</h3>
-            <div id="clusterLegend" style="display: flex; flex-direction: column; gap: var(--space-xs); font-size: var(--text-xs);">
+          <div class="cluster-legend">
+            <h3>Latent Clusters</h3>
+            <div id="clusterLegend" class="cluster-legend-list">
               <!-- Cluster legend will be populated -->
             </div>
           </div>
@@ -5510,13 +5500,13 @@ function renderNavigatorView(container) {
       </div>
 
       <!-- Semantic Insights -->
-      <div class="card" style="margin-top: var(--space-lg);">
+      <div class="card semantic-insights">
         <div class="card-header">
           <h3 class="card-title">Semantic Insights</h3>
           <p class="card-subtitle">Discovered patterns in latent space</p>
         </div>
         <div class="card-body">
-          <div id="semanticInsights" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: var(--space-md);">
+          <div id="semanticInsights" class="semantic-insights-grid">
             <!-- Insights will be populated -->
           </div>
         </div>
@@ -5547,10 +5537,10 @@ function renderSystemView(container) {
     : 'Unknown';
 
   container.innerHTML = `
-    <div style="display: grid; gap: var(--space-xl);">
+    <div class="system-view">
       
       <!-- Current Stats Row -->
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: var(--space-lg);">
+      <div class="system-stats-grid">
         
         <div class="card">
           <div class="card-header">
@@ -5567,18 +5557,18 @@ function renderSystemView(container) {
           </div>
           <div class="card-body">
             ${latestGit ? `
-              <div style="display: flex; flex-direction: column; gap: var(--space-md);">
-                <div style="display: flex; justify-content: space-between; padding: var(--space-sm) 0; border-bottom: 1px solid var(--color-border);">
-                  <span style="color: var(--color-text-muted);">Branch</span>
-                  <span style="color: var(--color-text); font-family: var(--font-mono); font-size: var(--text-sm);">${latestGit.branch || 'Unknown'}</span>
+              <div class="system-status-list">
+                <div class="info-row">
+                  <span class="info-label">Branch</span>
+                  <span class="info-value mono">${escapeHtml(latestGit.branch || 'Unknown')}</span>
                 </div>
-                <div style="display: flex; justify-content: space-between; padding: var(--space-sm) 0; border-bottom: 1px solid var(--color-border);">
-                  <span style="color: var(--color-text-muted);">Modified Files</span>
-                  <span style="color: var(--color-text); font-weight: 600;">${latestGit.status?.length || 0}</span>
+                <div class="info-row">
+                  <span class="info-label">Modified Files</span>
+                  <span class="info-value">${latestGit.status?.length || 0}</span>
                 </div>
-                <div style="display: flex; justify-content: space-between; padding: var(--space-sm) 0;">
-                  <span style="color: var(--color-text-muted);">Recent Commits</span>
-                  <span style="color: var(--color-text); font-weight: 600;">${latestGit.recentCommits?.length || 0}</span>
+                <div class="info-row">
+                  <span class="info-label">Recent Commits</span>
+                  <span class="info-value">${latestGit.recentCommits?.length || 0}</span>
                 </div>
               </div>
             ` : '<div class="empty-state-text">No git data available</div>'}
@@ -5591,22 +5581,22 @@ function renderSystemView(container) {
           </div>
           <div class="card-body">
             ${latestIdeState ? `
-              <div style="display: flex; flex-direction: column; gap: var(--space-md);">
-                <div style="display: flex; justify-content: space-between; padding: var(--space-sm) 0; border-bottom: 1px solid var(--color-border);">
-                  <span style="color: var(--color-text-muted);">Open Tabs</span>
-                  <span style="color: var(--color-text); font-weight: 600;">${openTabs}</span>
+              <div class="system-status-list">
+                <div class="info-row">
+                  <span class="info-label">Open Tabs</span>
+                  <span class="info-value">${openTabs}</span>
                 </div>
-                <div style="display: flex; justify-content: space-between; padding: var(--space-sm) 0; border-bottom: 1px solid var(--color-border);">
-                  <span style="color: var(--color-text-muted);">Current File</span>
-                  <span style="color: var(--color-text); font-family: var(--font-mono); font-size: var(--text-xs);" title="${escapeHtml(currentFile)}">${escapeHtml(truncate(currentFileName, 25))}</span>
+                <div class="info-row">
+                  <span class="info-label">Current File</span>
+                  <span class="info-value mono small" title="${escapeHtml(currentFile)}">${escapeHtml(truncate(currentFileName, 25))}</span>
                 </div>
-                <div style="display: flex; justify-content: space-between; padding: var(--space-sm) 0; border-bottom: 1px solid var(--color-border);">
-                  <span style="color: var(--color-text-muted);">Language</span>
-                  <span style="color: var(--color-text); font-weight: 600;">${languageMode || 'Unknown'}</span>
+                <div class="info-row">
+                  <span class="info-label">Language</span>
+                  <span class="info-value">${escapeHtml(languageMode || 'Unknown')}</span>
                 </div>
-                <div style="display: flex; justify-content: space-between; padding: var(--space-sm) 0;">
-                  <span style="color: var(--color-text-muted);">Position</span>
-                  <span style="color: var(--color-text); font-weight: 600;">${cursorPos}</span>
+                <div class="info-row">
+                  <span class="info-label">Position</span>
+                  <span class="info-value">${escapeHtml(cursorPos)}</span>
                 </div>
               </div>
             ` : '<div class="empty-state-text">No IDE state available</div>'}
@@ -5616,7 +5606,7 @@ function renderSystemView(container) {
       </div>
 
       <!-- Time Series Graphs -->
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: var(--space-lg);">
+      <div class="time-series-grid">
         
         <div class="card">
           <div class="card-header">
@@ -5624,7 +5614,7 @@ function renderSystemView(container) {
             <p class="card-subtitle">Memory usage and CPU load tracking</p>
           </div>
           <div class="card-body">
-            <canvas id="systemResourcesChart" style="max-height: 300px;"></canvas>
+            <canvas id="systemResourcesChart" class="system-chart-container"></canvas>
           </div>
         </div>
 

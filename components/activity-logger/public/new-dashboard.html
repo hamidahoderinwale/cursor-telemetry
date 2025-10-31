@@ -5,6 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Cursor Activity Dashboard</title>
     <link rel="stylesheet" href="new-dashboard.css">
+    <link rel="stylesheet" href="styles/views/navigator.css">
+    <link rel="stylesheet" href="styles/views/activity.css">
+    <link rel="stylesheet" href="styles/views/analytics.css">
+    <link rel="stylesheet" href="styles/views/overview.css">
+    <link rel="stylesheet" href="styles/views/system.css">
+    <link rel="stylesheet" href="styles/views/file-graph.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -287,6 +293,14 @@
     
     <script src="https://d3js.org/d3.v7.min.js"></script>
     <script src="https://unpkg.com/lunr/lunr.js"></script>
+    <!-- Core Modules -->
+    <script src="core/config.js"></script>
+    <script src="core/state.js"></script>
+    <script src="core/api-client.js"></script>
+    <!-- Utilities -->
+    <script src="utils/helpers.js"></script>
+    <script src="utils/file-helpers.js"></script>
+    <!-- Existing Scripts -->
     <script src="config.js"></script>
     <script src="persistent-storage.js"></script>
     <script src="analytics-manager.js"></script>

@@ -1,0 +1,59 @@
+/**
+ * System View Styles
+ * Replaces all inline styles from System view
+ */
+
+/* System View Container */
+.system-view {
+  display: grid;
+  gap: var(--space-xl);
+}
+
+/* System Stats Grid */
+.system-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: var(--space-lg);
+}
+
+/* Info Row */
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  padding: var(--space-sm) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.info-row:last-child {
+  border-bottom: none;
+}
+
+.info-label {
+  color: var(--color-text-muted);
+}
+
+.info-value {
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+.info-value.mono {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.info-value.small {
+  font-size: var(--text-xs);
+}
+
+/* Time Series Charts Grid */
+.time-series-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+  gap: var(--space-lg);
+}
+
+/* Chart Container */
+.system-chart-container {
+  max-height: 300px;
+}
