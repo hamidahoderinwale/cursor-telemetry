@@ -11,10 +11,10 @@ const PRECACHE_ASSETS = [
   '/new-dashboard.html',
   '/new-dashboard.js',
   '/new-dashboard.css',
-  '/persistent-storage.js',
-  '/data-synchronizer.js',
-  '/analytics-aggregator.js',
-  '/search-engine.js'
+  '/services/data/persistent-storage.js',
+  '/services/data/data-synchronizer.js',
+  '/services/analytics/analytics-aggregator.js',
+  '/services/search/search-engine.js'
 ];
 
 // Install event - cache core assets
