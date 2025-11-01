@@ -8594,7 +8594,7 @@ function performSearch(query) {
 }
 
 /**
- * Show search suggestions
+ * Show enhanced search suggestions with grouping
  */
 function showSearchSuggestions() {
   const suggestionsContainer = document.getElementById('searchSuggestions');
@@ -8606,7 +8606,10 @@ function showSearchSuggestions() {
   
   resultsContainer.innerHTML = '';
   
-  if (suggestions.length === 0) {
+  // Check if we have any suggestions
+  const hasAnySuggestions = suggestions.history?.length > 0 || suggestions.popular?.length > 0 || suggestions.filters?.length > 0;
+  
+  if (!hasAnySuggestions) {
     suggestionsContainer.innerHTML = `
       <div class="search-empty">
         <svg class="search-empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
@@ -8615,24 +8618,63 @@ function showSearchSuggestions() {
         </svg>
         <div>Start typing to search...</div>
         <div style="font-size: var(--text-xs); margin-top: var(--space-sm);">
-          Try: <code>type:prompt</code> or <code>workspace:cursor-telemetry</code>
+          Try: <code>type:prompt</code>, <code>date:today</code>, or <code>workspace:cursor-telemetry</code>
         </div>
       </div>
     `;
     return;
   }
 
-  suggestionsContainer.innerHTML = `
-    <div style="padding: var(--space-sm); color: var(--color-text-muted); font-size: var(--text-xs); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">
-      Recent Searches
-    </div>
-    ${suggestions.map(suggestion => `
-      <div class="search-suggestion-item" onclick="applySearchSuggestion('${escapeHtml(suggestion)}')">
-        <span class="search-suggestion-icon">→</span>
-        <span>${escapeHtml(suggestion)}</span>
+  let html = '';
+
+  // Popular searches
+  if (suggestions.popular && suggestions.popular.length > 0) {
+    html += `
+      <div style="padding: var(--space-sm); color: var(--color-text-muted); font-size: var(--text-xs); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">
+        🔥 Popular Searches
       </div>
-    `).join('')}
-  `;
+      ${suggestions.popular.map(suggestion => `
+        <div class="search-suggestion-item" onclick="applySearchSuggestion('${escapeHtml(suggestion)}')">
+          <span class="search-suggestion-icon">🔍</span>
+          <span>${escapeHtml(suggestion)}</span>
+        </div>
+      `).join('')}
+    `;
+  }
+
+  // Recent searches
+  if (suggestions.history && suggestions.history.length > 0) {
+    html += `
+      <div style="padding: var(--space-sm); padding-top: var(--space-md); color: var(--color-text-muted); font-size: var(--text-xs); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">
+        🕐 Recent Searches
+      </div>
+      ${suggestions.history.map(suggestion => `
+        <div class="search-suggestion-item" onclick="applySearchSuggestion('${escapeHtml(suggestion)}')">
+          <span class="search-suggestion-icon">→</span>
+          <span>${escapeHtml(suggestion)}</span>
+        </div>
+      `).join('')}
+    `;
+  }
+
+  // Filter suggestions
+  if (suggestions.filters && suggestions.filters.length > 0) {
+    html += `
+      <div style="padding: var(--space-sm); padding-top: var(--space-md); color: var(--color-text-muted); font-size: var(--text-xs); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">
+        🔧 Filter Options
+      </div>
+      ${suggestions.filters.map(filter => `
+        <div class="search-suggestion-item" onclick="applySearchSuggestion('${escapeHtml(filter.text)}')">
+          <div style="flex: 1;">
+            <div style="font-weight: 500;">${escapeHtml(filter.text)}</div>
+            <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: 2px;">${escapeHtml(filter.description)}</div>
+          </div>
+        </div>
+      `).join('')}
+    `;
+  }
+
+  suggestionsContainer.innerHTML = html;
 }
 /**
  * Apply search suggestion
@@ -8647,7 +8689,7 @@ function applySearchSuggestion(suggestion) {
 }
 
 /**
- * Render search results
+ * Render enhanced search results with snippets and scoring
  */
 function renderSearchResults(results) {
   const container = document.getElementById('searchResults');
@@ -8666,17 +8708,33 @@ function renderSearchResults(results) {
         </svg>
         <div>No results found</div>
         <div style="font-size: var(--text-xs); margin-top: var(--space-sm); color: var(--color-text-muted);">
-          Try different keywords or filters
+          Try different keywords or use filters like <code>type:prompt</code> or <code>date:today</code>
         </div>
       </div>
     `;
     return;
   }
 
-  container.innerHTML = results.map((result, index) => {
+  // Show result count
+  const countHtml = `
+    <div style="padding: var(--space-sm) var(--space-md); color: var(--color-text-muted); font-size: var(--text-sm); border-bottom: 1px solid var(--color-border);">
+      Found ${results.length} result${results.length !== 1 ? 's' : ''}
+    </div>
+  `;
+
+  const resultsHtml = results.map((result, index) => {
     const icon = getSearchResultIcon(result.type);
     const typeColor = getSearchResultTypeColor(result.type);
     const time = new Date(result.timestamp).toLocaleString();
+    
+    // Use snippet if available, otherwise use content
+    const displayText = result.snippet || result.content.substring(0, 180);
+    
+    // Show relevance score in debug mode
+    const scoreInfo = result._debug ? 
+      `<span style="color: var(--color-text-muted); font-size: 10px;" title="BM25: ${result._debug.bm25Score.toFixed(2)}, Semantic: ${result._debug.semanticScore.toFixed(2)}">
+        Score: ${result.score.toFixed(2)}
+      </span>` : '';
     
     return `
       <div class="search-result-item ${index === searchSelectedIndex ? 'selected' : ''}" 
@@ -8690,18 +8748,21 @@ function renderSearchResults(results) {
             ${escapeHtml(result.title)}
           </div>
           <div class="search-result-description">
-            ${escapeHtml(result.content.substring(0, 150))}${result.content.length > 150 ? '...' : ''}
+            ${escapeHtml(displayText)}${result.content.length > 180 && !result.snippet ? '...' : ''}
           </div>
           <div class="search-result-meta">
             <span class="search-result-badge" style="border-color: ${typeColor};">${result.type}</span>
-            <span>${escapeHtml(result.workspace)}</span>
+            ${result.workspace && result.workspace !== 'unknown' ? `<span>${escapeHtml(result.workspace)}</span>` : ''}
             <span>${time}</span>
-            ${result.searchMethod ? `<span style="color: var(--color-text-muted); font-size: 10px;">${result.searchMethod}</span>` : ''}
+            ${result.searchMethod ? `<span style="color: var(--color-text-muted); font-size: 10px;" title="Search methods used">${result.searchMethod}</span>` : ''}
+            ${scoreInfo}
           </div>
         </div>
       </div>
     `;
   }).join('');
+
+  container.innerHTML = countHtml + resultsHtml;
 }
 
 /**
@@ -8736,12 +8797,17 @@ function getSearchResultTypeColor(type) {
 }
 
 /**
- * Select search result
+ * Select search result with analytics tracking
  */
 function selectSearchResult(index) {
   if (index < 0 || index >= searchCurrentResults.length) return;
   
   const result = searchCurrentResults[index];
+  
+  // Track the click for relevance feedback
+  if (searchEngine) {
+    searchEngine.trackClick(result.type, result.id);
+  }
   
   // Close search palette
   closeSearchPalette();
