@@ -8952,7 +8952,8 @@ async function renderContextFileAnalytics() {
 
   try {
     // Fetch from API instead of calculating from prompts
-    const response = await fetch(`${CONFIG.API_BASE}/api/analytics/context`);
+    const apiBase = window.CONFIG?.API_BASE || CONFIG?.API_BASE || 'http://localhost:43917';
+    const response = await fetch(`${apiBase}/api/analytics/context`);
     const result = await response.json();
     
     if (!result.success || !result.data) {
@@ -9243,7 +9244,7 @@ function renderModelUsageAnalytics() {
   const container = document.getElementById('modelUsageAnalytics');
   if (!container) return;
 
-  const prompts = state.data.prompts || [];
+  const prompts = window.state?.data?.prompts || state?.data?.prompts || [];
   
   if (prompts.length === 0) {
     container.innerHTML = `
@@ -9330,7 +9331,7 @@ async function renderEnhancedContextAnalytics() {
   const container = document.getElementById('enhancedContextAnalytics');
   if (!container) return;
 
-  const prompts = state.data.prompts || [];
+  const prompts = window.state?.data?.prompts || state?.data?.prompts || [];
   
   if (prompts.length === 0) {
     container.innerHTML = `
@@ -9496,8 +9497,8 @@ async function renderProductivityInsights() {
   const container = document.getElementById('productivityInsights');
   if (!container) return;
 
-  const prompts = state.data.prompts || [];
-  const events = state.data.events || [];
+  const prompts = window.state?.data?.prompts || state?.data?.prompts || [];
+  const events = window.state?.data?.events || state?.data?.events || [];
   
   if (prompts.length === 0 && events.length === 0) {
       container.innerHTML = `
@@ -10121,7 +10122,9 @@ function truncateText(text, maxLength) {
 }
 
 // Export new functions
+window.renderModelUsageAnalytics = renderModelUsageAnalytics;
 window.renderEnhancedContextAnalytics = renderEnhancedContextAnalytics;
+window.renderContextFileAnalytics = renderContextFileAnalytics;
 // window.renderErrorTracking - REMOVED: Section removed from dashboard
 window.renderProductivityInsights = renderProductivityInsights;
 // window.renderFileRelationshipVisualization - REMOVED: Handled in File Graph view

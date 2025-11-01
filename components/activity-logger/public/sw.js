@@ -8,7 +8,7 @@ const CACHE_DURATION = 30 * 60 * 1000; // 30 minutes
 
 // Assets to cache immediately
 const PRECACHE_ASSETS = [
-  '/new-dashboard.html',
+  '/dashboard.html',
   '/new-dashboard.js',
   '/new-dashboard.css',
   '/services/data/persistent-storage.js',
