@@ -2,10 +2,14 @@
  * Cursor Activity Dashboard - Main Application
  * Clean, modern implementation with full feature support
  * 
- * NOTE: CONFIG, state, and APIClient are imported from core modules:
- * - core/config.js provides CONFIG
- * - core/state.js provides state
- * - core/api-client.js provides APIClient
+ * MODULE DEPENDENCIES:
+ * - core/config.js → CONFIG
+ * - core/state.js → state
+ * - core/api-client.js → APIClient
+ * - core/websocket-manager.js → WebSocketManager
+ * - algorithms/similarity.js → cosineSimilarity, euclideanDistance, etc.
+ * - algorithms/dimensionality-reduction.js → applyPCA, applyMDS, applyTSNE, applyUMAP
+ * - algorithms/clustering.js → applyClustering, kMeansClustering, detectCommunities, etc.
  */
 
 // Ensure modules are loaded (they export to window)
