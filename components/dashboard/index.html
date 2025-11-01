@@ -6,7 +6,38 @@
     <title>PKL Dashboard</title>
     <link rel="icon" type="image/x-icon" href="/favicon.ico">
     
-    <link rel="stylesheet" href="assets/css/dashboard.css">
+    <!-- Load CSS in parallel instead of using @import cascade -->
+    <!-- Core variables first -->
+    <link rel="stylesheet" href="assets/css/variables.css">
+    <link rel="stylesheet" href="assets/css/design-system.css">
+    <link rel="stylesheet" href="assets/css/components.css">
+    
+    <!-- Component styles loaded in parallel -->
+    <link rel="stylesheet" href="assets/css/components/header.css">
+    <link rel="stylesheet" href="assets/css/components/navigation.css">
+    <link rel="stylesheet" href="assets/css/components/stats.css">
+    <link rel="stylesheet" href="assets/css/components/memory-management.css">
+    <link rel="stylesheet" href="assets/css/components/search.css">
+    <link rel="stylesheet" href="assets/css/components/view-controls.css">
+    <link rel="stylesheet" href="assets/css/components/session-cards.css">
+    <link rel="stylesheet" href="assets/css/components/notebook-grid.css">
+    <link rel="stylesheet" href="assets/css/components/visualizations.css">
+    <link rel="stylesheet" href="assets/css/components/embeddings.css">
+    <link rel="stylesheet" href="assets/css/components/modals.css">
+    <link rel="stylesheet" href="assets/css/components/loading.css">
+    <link rel="stylesheet" href="assets/css/components/privacy-analysis.css">
+    <link rel="stylesheet" href="assets/css/components/timeline-events.css">
+    <link rel="stylesheet" href="assets/css/components/enhanced-timeline.css">
+    <link rel="stylesheet" href="assets/css/components/enhanced-cluster-map.css">
+    <link rel="stylesheet" href="assets/css/components/notifications.css">
+    <link rel="stylesheet" href="assets/css/components/sidebar.css">
+    <link rel="stylesheet" href="assets/css/components/enhanced-prompt-extraction.css">
+    <link rel="stylesheet" href="assets/css/components/enhanced-event-types.css">
+    <link rel="stylesheet" href="assets/css/components/language-distribution.css">
+    <link rel="stylesheet" href="assets/css/components/lda-topic-visualization.css">
+    
+    <!-- Main styles (button, layout, etc.) -->
+    <link rel="stylesheet" href="assets/css/main.css">
     
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/plotly.js-dist@2.26.0/plotly.min.js"></script>

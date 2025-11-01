@@ -157,9 +157,17 @@ app.use(compression({
 app.use(cors({ origin: '*' })); // Explicitly allow all origins
 app.use(express.json({ limit: '10mb' })); // Increase JSON payload limit
 
-// Serve static files from public directory
+// Serve static files from public directory with explicit MIME types
 const publicPath = path.join(__dirname, '../../public');
-app.use(express.static(publicPath));
+app.use(express.static(publicPath, {
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.css')) {
+      res.setHeader('Content-Type', 'text/css');
+    } else if (filePath.endsWith('.js')) {
+      res.setHeader('Content-Type', 'application/javascript');
+    }
+  }
+}));
 console.log(`[FILE] Serving static files from: ${publicPath}`);
 
 let ideStateCapture = new IDEStateCapture(); // Changed from const to let

@@ -3,106 +3,18 @@
  */
 
 function renderSystemView(container) {
-  const gitData = window.state?.data?.gitData || [];
-  const ideState = window.state?.data?.ideState;
-  const latestGit = gitData.length > 0 ? gitData[gitData.length - 1] : null;
-  const latestIdeState = Array.isArray(ideState) && ideState.length > 0 
-    ? ideState[ideState.length - 1] 
-    : null;
-  
-  // Extract editor info from the nested structure
-  const openTabs = latestIdeState?.editorState?.activeTabs?.length || 0;
-  const currentFile = latestIdeState?.editorState?.editorLayout?.activeEditor || 'None';
-  const currentFileName = currentFile !== 'None' ? currentFile.split('/').pop() : 'None';
-  const languageMode = latestIdeState?.editorConfiguration?.languageMode || 'Unknown';
-  const cursorPos = latestIdeState?.editorState?.activeTabs?.[0]?.lineNumber && latestIdeState?.editorState?.activeTabs?.[0]?.columnNumber
-    ? `Ln ${latestIdeState.editorState.activeTabs[0].lineNumber}, Col ${latestIdeState.editorState.activeTabs[0].columnNumber}`
-    : 'Unknown';
-
   container.innerHTML = `
     <div class="system-view">
-      
-      <!-- Current Stats Row -->
-      <div class="system-stats-grid">
-        
-        <div class="card">
-          <div class="card-header">
-            <h3 class="card-title">System Resources</h3>
-          </div>
-          <div class="card-body">
-            ${renderSystemStatus()}
-          </div>
+      <!-- System Resources Over Time Chart -->
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">System Resources Over Time</h3>
+          <p class="card-subtitle">Memory usage and CPU load tracking</p>
         </div>
-
-        <div class="card">
-          <div class="card-header">
-            <h3 class="card-title">Git Repository</h3>
-          </div>
-          <div class="card-body">
-            ${latestGit ? `
-              <div class="system-status-list">
-                <div class="info-row">
-                  <span class="info-label">Branch</span>
-                  <span class="info-value mono">${window.escapeHtml(latestGit.branch || 'Unknown')}</span>
-                </div>
-                <div class="info-row">
-                  <span class="info-label">Modified Files</span>
-                  <span class="info-value">${latestGit.status?.length || 0}</span>
-                </div>
-                <div class="info-row">
-                  <span class="info-label">Recent Commits</span>
-                  <span class="info-value">${latestGit.recentCommits?.length || 0}</span>
-                </div>
-              </div>
-            ` : '<div class="empty-state-text">No git data available</div>'}
-          </div>
+        <div class="card-body">
+          <canvas id="systemResourcesChart" class="system-chart-container"></canvas>
         </div>
-
-        <div class="card">
-          <div class="card-header">
-            <h3 class="card-title">Editor State</h3>
-          </div>
-          <div class="card-body">
-            ${latestIdeState ? `
-              <div class="system-status-list">
-                <div class="info-row">
-                  <span class="info-label">Open Tabs</span>
-                  <span class="info-value">${openTabs}</span>
-                </div>
-                <div class="info-row">
-                  <span class="info-label">Current File</span>
-                  <span class="info-value mono small" title="${window.escapeHtml(currentFile)}">${window.escapeHtml(window.truncate(currentFileName, 25))}</span>
-                </div>
-                <div class="info-row">
-                  <span class="info-label">Language</span>
-                  <span class="info-value">${window.escapeHtml(languageMode || 'Unknown')}</span>
-                </div>
-                <div class="info-row">
-                  <span class="info-label">Position</span>
-                  <span class="info-value">${window.escapeHtml(cursorPos)}</span>
-                </div>
-              </div>
-            ` : '<div class="empty-state-text">No IDE state available</div>'}
-          </div>
-        </div>
-
       </div>
-
-      <!-- Time Series Graphs -->
-      <div class="time-series-grid">
-        
-        <div class="card">
-          <div class="card-header">
-            <h3 class="card-title">System Resources Over Time</h3>
-            <p class="card-subtitle">Memory usage and CPU load tracking</p>
-          </div>
-          <div class="card-body">
-            <canvas id="systemResourcesChart" class="system-chart-container"></canvas>
-          </div>
-        </div>
-
-      </div>
-
     </div>
   `;
 

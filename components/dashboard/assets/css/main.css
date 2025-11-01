@@ -1,37 +1,9 @@
 /* Main Refactored CSS - Component-based Architecture */
-
-/* Import design system first */
-@import url('./design-system.css');
-
-/* Import components second */
-@import url('./components.css');
-
-/* Import variables third */
-@import url('./variables.css');
-
-/* Import all component styles */
-@import url('./components/header.css');
-@import url('./components/navigation.css');
-@import url('./components/stats.css');
-@import url('./components/memory-management.css');
-@import url('./components/search.css');
-@import url('./components/view-controls.css');
-@import url('./components/session-cards.css');
-@import url('./components/notebook-grid.css');
-@import url('./components/visualizations.css');
-@import url('./components/embeddings.css');
-@import url('./components/modals.css');
-@import url('./components/loading.css');
-@import url('./components/privacy-analysis.css');
-@import url('./components/timeline-events.css');
-@import url('./components/enhanced-timeline.css');
-@import url('./components/enhanced-cluster-map.css');
-@import url('./components/notifications.css');
-@import url('./components/sidebar.css');
-@import url('./components/enhanced-prompt-extraction.css');
-@import url('./components/enhanced-event-types.css');
-@import url('./components/language-distribution.css');
-@import url('./components/lda-topic-visualization.css');
+/* 
+ * NOTE: CSS imports have been moved to HTML <link> tags for parallel loading performance.
+ * This file now only contains base layout and button styles.
+ * Component styles are loaded directly in index.html to avoid @import cascade delays.
+ */
 
 /* Base Layout Styles */
 .dashboard {
@@ -57,7 +29,7 @@
   gap: var(--space-2);
   padding: var(--space-2) var(--space-4);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
+  border-radius: 0;
   background: var(--background-primary);
   color: var(--text-primary);
   font-family: var(--font-family-base);
@@ -230,7 +202,7 @@
 .session-card {
   background: var(--background-primary);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
+  border-radius: 0;
   padding: var(--space-4);
   margin-bottom: var(--space-3);
   cursor: pointer;
@@ -333,7 +305,7 @@
 
 /* Timeline Styles */
 .session-detail-modal {
-  max-width: 1200px;
+  max-width: 1400px;
   width: 95%;
   max-height: 85vh;
   overflow-y: auto;
@@ -384,7 +356,7 @@
   justify-content: space-between;
   margin-top: var(--space-2);
   font-size: var(--font-size-xs);
-  color: var(--text-muted);
+  color: var(--text-tertiary);
 }
 
 /* Timeline events styling moved to timeline-events.css to avoid conflicts */
@@ -430,13 +402,13 @@
 
 .timeline-event-time {
   font-size: var(--font-size-xs);
-  color: var(--text-muted);
+  color: var(--text-tertiary);
 }
 
 .timeline-current-event {
   background: var(--background-secondary);
   border: 1px solid var(--border-color);
-  border-radius: var(--border-radius);
+  border-radius: 0;
   padding: var(--space-4);
 }
 
@@ -471,14 +443,14 @@
   margin-top: var(--space-3);
   padding: var(--space-3);
   background: var(--background-primary);
-  border-radius: var(--border-radius);
+  border-radius: 0;
   border: 1px solid var(--border-color);
 }
 
 .conversation-content {
   background: var(--background-secondary);
   padding: var(--space-2);
-  border-radius: var(--border-radius);
+  border-radius: 0;
   font-family: var(--font-family-mono);
   font-size: var(--font-size-sm);
   white-space: pre-wrap;
@@ -495,7 +467,7 @@
 .viz-container {
   background: var(--background-primary);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
+  border-radius: 0;
   padding: var(--space-4);
   margin-bottom: var(--space-4);
   box-shadow: var(--shadow-sm);
@@ -1226,7 +1198,7 @@
   background: var(--background-modal);
   color: white;
   padding: var(--space-2);
-  border-radius: var(--border-radius);
+  border-radius: 0;
   font-size: var(--font-size-sm);
   pointer-events: none;
   z-index: 1000;
@@ -1263,11 +1235,11 @@
 
 .axis {
   font-size: var(--font-size-xs);
-  color: var(--text-muted);
+  color: var(--text-tertiary);
 }
 
 .axis text {
-  fill: var(--text-muted);
+  fill: var(--text-tertiary);
 }
 
 .axis path,
@@ -1370,7 +1342,7 @@ body {
 .loading-spinner {
   border: 3px solid var(--border-color);
   border-top: 3px solid var(--primary-color);
-  border-radius: var(--radius-full);
+  border-radius: 50%;
   animation: spin 1s linear infinite;
 }
 
@@ -1551,7 +1523,7 @@ body {
   max-height: 300px;
   overflow-y: auto;
   background: var(--background-primary);
-  border-radius: var(--radius-lg);
+  border-radius: 0;
   border: 1px solid var(--border-color);
   box-shadow: var(--shadow-md);
   padding: var(--space-4);
@@ -1568,7 +1540,7 @@ body {
   padding: var(--space-8);
   min-height: 300px;
   background: var(--background-primary);
-  border-radius: var(--radius-lg);
+  border-radius: 0;
   border: 1px solid var(--border-color);
   box-shadow: var(--shadow-sm);
 }
@@ -1609,7 +1581,7 @@ body {
   padding: var(--space-8);
   min-height: 300px;
   background: var(--background-primary);
-  border-radius: var(--radius-lg);
+  border-radius: 0;
   border: 1px solid var(--danger-color);
   box-shadow: var(--shadow-sm);
 }
@@ -1642,7 +1614,7 @@ body {
   right: 0;
   height: 3px;
   background: var(--primary-color);
-  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  border-radius: 0;
 }
 
 .intent-distribution-chart {
@@ -1650,7 +1622,7 @@ body {
   max-height: 300px;
   overflow: auto;
   background: var(--background-primary);
-  border-radius: var(--radius-lg);
+  border-radius: 0;
   border: 1px solid var(--border-color);
   box-shadow: var(--shadow-sm);
   padding: var(--space-4);
@@ -1792,7 +1764,7 @@ body {
 
 /* Container width adjustments for better visualization display */
 .container {
-  max-width: 1400px; /* Increased from 1200px */
+  max-width: 1400px;
   margin: 0 auto;
   padding: 0 var(--space-4);
 }
@@ -1828,13 +1800,13 @@ body {
   padding: var(--space-2);
   background: var(--background-secondary);
   border: 1px solid var(--border-color);
-  border-radius: var(--border-radius);
+  border-radius: 0;
 }
 
 .conversation-item {
   background: var(--background-primary);
   border: 1px solid var(--border-color);
-  border-radius: var(--border-radius);
+  border-radius: 0;
   padding: var(--space-3);
   transition: var(--transition-fast);
 }
@@ -1871,7 +1843,7 @@ body {
   letter-spacing: 0.5px;
   margin-bottom: var(--space-1);
   padding: var(--space-1) var(--space-2);
-  border-radius: var(--border-radius);
+  border-radius: 0;
   display: inline-block;
 }
 
@@ -1892,7 +1864,7 @@ body {
   padding: var(--space-2);
   background: var(--background-secondary);
   border: 1px solid var(--border-color);
-  border-radius: var(--border-radius);
+  border-radius: 0;
   font-family: var(--font-family-mono);
   white-space: pre-wrap;
   word-break: break-word;
@@ -1910,7 +1882,7 @@ body {
 @media (prefers-contrast: high) {
   :root {
     --border-color: var(--text-primary);
-    --text-muted: var(--text-primary);
+    --text-tertiary: var(--text-primary);
   }
 }
 
@@ -1981,7 +1953,7 @@ body {
   margin: var(--space-8) 0;
   padding: var(--space-6);
   background: var(--background-secondary);
-  border-radius: var(--radius-lg);
+  border-radius: 0;
   border: 1px solid var(--border-color);
 }
 
@@ -2028,6 +2000,6 @@ input:focus, select:focus, textarea:focus {
   color: var(--text-tertiary);
   font-style: italic;
   background: var(--background-secondary);
-  border-radius: var(--radius-lg);
+  border-radius: 0;
   border: 1px solid var(--border-color);
 }

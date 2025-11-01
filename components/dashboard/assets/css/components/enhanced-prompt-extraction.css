@@ -9,7 +9,7 @@
   --prompt-border: var(--border-color);
   --prompt-accent: var(--primary-color);
   --prompt-text: var(--text-primary);
-  --prompt-muted: var(--text-muted);
+  --prompt-muted: var(--text-tertiary);
   
   /* Prompt type colors */
   --prompt-direct: #3b82f6;
