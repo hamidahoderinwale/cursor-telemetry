@@ -666,9 +666,6 @@ function renderCurrentView() {
     case 'navigator':
       renderNavigatorView(container);
       break;
-    case 'todos':
-      renderTodoView(container);
-      break;
     case 'system':
       renderSystemView(container);
       break;
@@ -9658,10 +9655,9 @@ async function renderFileRelationshipVisualization_DISABLED() {
 }
 
 // ===================================
-// TODO View
+// TODO View - REMOVED
 // ===================================
-
-async function renderTodoView(container) {
+// TODOs view has been removed from the dashboard
   container.innerHTML = `
     <div style="max-width: 1200px; margin: 0 auto;">
       <div class="card">
@@ -9798,202 +9794,10 @@ async function renderTodoView(container) {
     }
   }
 }
-function renderTodoItem(todo) {
-  const statusIcon = {
-    'pending': '<span style="color: var(--color-text-muted); font-size: 18px;"></span>',
-    'in_progress': '<span style="color: var(--color-primary); font-size: 18px;"></span>',
-    'completed': '<span style="color: var(--color-success); font-size: 18px;"></span>'
-  }[todo.status] || '○';
 
-  const duration = getTodoDuration(todo);
-  const eventCount = (todo.eventCount || 0);
-  
-  // Parse JSON strings if needed
-  const promptsWhileActive = Array.isArray(todo.promptsWhileActive) 
-    ? todo.promptsWhileActive 
-    : (typeof todo.promptsWhileActive === 'string' && todo.promptsWhileActive.length > 0)
-      ? JSON.parse(todo.promptsWhileActive)
-      : [];
-      
-  const filesModified = Array.isArray(todo.filesModified)
-    ? todo.filesModified
-    : (typeof todo.filesModified === 'string' && todo.filesModified.length > 0)
-      ? JSON.parse(todo.filesModified)
-      : [];
-      
-  const promptCount = promptsWhileActive.length;
-  const fileCount = filesModified.length;
-
-  const isCompleted = todo.status === 'completed';
-  const isPending = todo.status === 'pending';
-  const isInProgress = todo.status === 'in_progress';
-
-  return `
-    <div style="background: var(--color-bg); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: var(--space-lg); ${isCompleted ? 'opacity: 0.7;' : ''}">
-      <!-- Header -->
-      <div style="display: flex; align-items: flex-start; gap: var(--space-md); margin-bottom: var(--space-md);">
-        <div style="flex-shrink: 0; margin-top: 2px;">
-          ${statusIcon}
-        </div>
-        <div style="flex: 1; min-width: 0;">
-          <div style="font-size: var(--text-md); color: var(--color-text); font-weight: 500; ${isCompleted ? 'text-decoration: line-through;' : ''}">${escapeHtml(todo.content)}</div>
-          <div style="display: flex; flex-wrap: wrap; gap: var(--space-md); margin-top: var(--space-sm); font-size: var(--text-sm); color: var(--color-text-muted);">
-            ${duration ? `<span style="color: var(--color-primary); font-weight: 500;">${duration}</span>` : ''}
-            ${todo.createdAt ? `<span>Created ${formatTimestamp(todo.createdAt)}</span>` : ''}
-          </div>
-        </div>
-      </div>
-
-      <!-- Activity Summary (Always Visible) -->
-      ${(promptCount > 0 || fileCount > 0) ? `
-        <div style="margin-bottom: var(--space-md); padding: var(--space-md); background: var(--color-bg-secondary); border-radius: var(--radius-sm);">
-          <div style="font-size: var(--text-xs); font-weight: 600; color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: var(--space-sm);">Activity Summary</div>
-          <div style="display: grid; gap: var(--space-sm);">
-            ${promptCount > 0 ? `
-              <div style="font-size: var(--text-sm); color: var(--color-text);">
-                <span style="color: var(--color-primary); font-weight: 600;">${promptCount}</span> AI prompt${promptCount !== 1 ? 's' : ''}
-              </div>
-            ` : ''}
-            ${fileCount > 0 ? `
-              <div style="font-size: var(--text-sm); color: var(--color-text);">
-                <span style="color: var(--color-primary); font-weight: 600;">${fileCount}</span> file${fileCount !== 1 ? 's' : ''} modified
-                <div style="margin-top: var(--space-xs); font-size: var(--text-xs); color: var(--color-text-muted); font-family: 'Geist Mono', monospace;">
-                  ${filesModified.slice(0, 3).map(f => `<div style="margin-top: 2px;">• ${escapeHtml(f.split('/').pop())}</div>`).join('')}
-                  ${fileCount > 3 ? `<div style="margin-top: 2px;">• +${fileCount - 3} more...</div>` : ''}
-                </div>
-              </div>
-            ` : ''}
-          </div>
-        </div>
-      ` : '<div style="margin-bottom: var(--space-md); padding: var(--space-md); background: var(--color-bg-secondary); border-radius: var(--radius-sm); font-size: var(--text-sm); color: var(--color-text-muted); text-align: center;">No activity yet</div>'}
-
-      <!-- Actions -->
-      <div style="display: flex; gap: var(--space-sm); flex-wrap: wrap; align-items: center;">
-        <button 
-          onclick="expandTodoDetails(${todo.id})"
-          style="padding: var(--space-xs) var(--space-md); font-size: var(--text-sm); background: var(--color-bg-hover); border: 1px solid var(--color-border); border-radius: var(--radius-sm); color: var(--color-text); cursor: pointer; transition: all 0.2s;"
-          onmouseover="this.style.background='var(--color-border)'"
-          onmouseout="this.style.background='var(--color-bg-hover)'"
-        >
-          <span id="expand-btn-text-${todo.id}">${eventCount > 0 ? `Show Timeline (${eventCount} events)` : 'Show Timeline'}</span>
-        </button>
-        
-        <span style="font-size: var(--text-xs); color: var(--color-text-muted); font-style: italic;">
-          Status tracked automatically by AI
-        </span>
-      </div>
-
-      <!-- Event Timeline (Initially Hidden) -->
-      <div id="todo-events-${todo.id}" style="display: none; margin-top: var(--space-lg); padding-top: var(--space-lg); border-top: 1px solid var(--color-border);">
-        <!-- Events will be loaded here -->
-      </div>
-    </div>
-  `;
-}
-
-function getTodoDuration(todo) {
-  if (todo.status === 'completed' && todo.startedAt && todo.completedAt) {
-    const durationMs = todo.completedAt - todo.startedAt;
-    const minutes = Math.floor(durationMs / 60000);
-    const hours = Math.floor(minutes / 60);
-    
-    if (hours > 0) {
-      return `${hours}h ${minutes % 60}m`;
-    } else if (minutes > 0) {
-      return `${minutes}m`;
-    } else {
-      return '< 1m';
-    }
-  } else if (todo.status === 'in_progress' && todo.startedAt) {
-    const durationMs = Date.now() - todo.startedAt;
-    const minutes = Math.floor(durationMs / 60000);
-    const hours = Math.floor(minutes / 60);
-    
-    if (hours > 0) {
-      return `${hours}h ${minutes % 60}m (ongoing)`;
-    } else if (minutes > 0) {
-      return `${minutes}m (ongoing)`;
-    } else {
-      return '< 1m (ongoing)';
-    }
-  }
-  return null;
-}
 
 // Manual TODO actions removed - status is now automatic based on AI activity
 
-async function expandTodoDetails(todoId) {
-  const eventsContainer = document.getElementById(`todo-events-${todoId}`);
-  const btnText = document.getElementById(`expand-btn-text-${todoId}`);
-  if (!eventsContainer) return;
-
-  // Toggle visibility
-  if (eventsContainer.style.display === 'block') {
-    eventsContainer.style.display = 'none';
-    if (btnText) {
-      const eventCount = eventsContainer.dataset.eventCount || 0;
-      btnText.textContent = `Show Timeline (${eventCount} events)`;
-    }
-    return;
-  }
-
-  // Show loading state
-  eventsContainer.style.display = 'block';
-  if (btnText) btnText.textContent = 'Loading...';
-  eventsContainer.innerHTML = `
-    <div style="display: flex; justify-content: center; padding: var(--space-md);">
-      <div class="spinner"></div>
-    </div>
-  `;
-
-  try {
-    const response = await fetch(`${CONFIG.API_BASE}/api/todos/${todoId}/events`);
-    const events = await response.json();
-    
-    // Store event count for toggle button
-    eventsContainer.dataset.eventCount = events.length;
-
-    if (!events || events.length === 0) {
-      eventsContainer.innerHTML = `
-        <div style="text-align: center; padding: var(--space-md); color: var(--color-text-muted); font-size: var(--text-sm);">
-          No events recorded for this TODO yet
-        </div>
-      `;
-      return;
-    }
-
-    // Render timeline
-    eventsContainer.innerHTML = `
-      <h4 style="font-size: var(--text-sm); font-weight: 600; color: var(--color-text); margin-bottom: var(--space-md);">Event Timeline (${events.length})</h4>
-      <div style="display: flex; flex-direction: column; gap: var(--space-sm);">
-        ${events.map(event => `
-          <div style="display: flex; gap: var(--space-md); padding: var(--space-sm); background: var(--color-bg-secondary); border-radius: var(--radius-sm);">
-            <div style="flex-shrink: 0; color: var(--color-text-muted); font-size: var(--text-xs); font-family: 'Geist Mono', monospace;">
-              ${formatTimestamp(event.timestamp)}
-            </div>
-            <div style="flex: 1;">
-              <div style="font-size: var(--text-sm); color: var(--color-text);">
-                ${event.eventType === 'prompt' ? 'Prompt' : 'File Change'}: 
-                ${event.details ? escapeHtml(truncateText(event.details, 100)) : 'N/A'}
-              </div>
-            </div>
-          </div>
-        `).join('')}
-      </div>
-    `;
-    
-    // Update button text
-    if (btnText) btnText.textContent = `Hide Timeline (${events.length} events)`;
-    
-  } catch (error) {
-    console.error('Error loading TODO events:', error);
-    eventsContainer.innerHTML = `
-      <div style="text-align: center; padding: var(--space-md); color: var(--color-error); font-size: var(--text-sm);">
-        Failed to load events: ${error.message}
-      </div>
-    `;
-  }
-}
 
 // Helper function for formatting timestamps
 function formatTimestamp(timestamp) {
