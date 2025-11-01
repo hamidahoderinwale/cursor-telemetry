@@ -3,9 +3,11 @@
  */
 
 function renderSystemView(container) {
-  const latestGit = window.state.data.gitData[window.state.data.gitData.length - 1];
-  const latestIdeState = Array.isArray(window.state.data.ideState) && window.state.data.ideState.length > 0 
-    ? window.state.data.ideState[window.state.data.ideState.length - 1] 
+  const gitData = window.state?.data?.gitData || [];
+  const ideState = window.state?.data?.ideState;
+  const latestGit = gitData.length > 0 ? gitData[gitData.length - 1] : null;
+  const latestIdeState = Array.isArray(ideState) && ideState.length > 0 
+    ? ideState[ideState.length - 1] 
     : null;
   
   // Extract editor info from the nested structure
@@ -114,7 +116,7 @@ function renderSystemResourcesChart() {
   const canvas = document.getElementById('systemResourcesChart');
   if (!canvas) return;
   
-  const data = window.state.data.systemResources.slice(-30);
+  const data = (window.state?.data?.systemResources || []).slice(-30);
   
   if (data.length === 0) {
     canvas.style.display = 'none';

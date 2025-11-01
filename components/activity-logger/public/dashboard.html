@@ -5,12 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Cursor Activity Dashboard</title>
   
-  <!-- External Libraries -->
-  <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
-  
   <!-- Styles -->
-  <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="new-dashboard.css">
   
   <!-- View-specific Styles (co-located with JS) -->
@@ -21,446 +16,263 @@
   <link rel="stylesheet" href="views/system/styles.css">
   <link rel="stylesheet" href="views/file-graph/styles.css">
   
-  <style>
-    :root {
-      --color-primary: #8b5cf6;
-      --color-secondary: #6366f1;
-      --color-accent: #ec4899;
-      --color-success: #10b981;
-      --color-warning: #f59e0b;
-      --color-error: #ef4444;
-      --color-info: #3b82f6;
-      --color-text: #1e293b;
-      --color-text-muted: #64748b;
-      --color-bg: #ffffff;
-      --color-bg-alt: #f8fafc;
-      --color-border: #e2e8f0;
-      --space-xs: 4px;
-      --space-sm: 8px;
-      --space-md: 16px;
-      --space-lg: 24px;
-      --space-xl: 32px;
-      --space-2xl: 48px;
-      --radius-sm: 4px;
-      --radius-md: 8px;
-      --radius-lg: 12px;
-      --text-xs: 12px;
-      --text-sm: 14px;
-      --text-base: 16px;
-      --text-md: 18px;
-      --text-lg: 20px;
-      --text-xl: 24px;
-      --text-2xl: 30px;
-      --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-      --font-mono: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+  <!-- Service Worker Registration -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js')
+          .then(reg => console.log('[SW] Registered:', reg.scope))
+          .catch(err => console.warn('[SW] Registration failed:', err));
+      });
     }
-
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-
-    body {
-      font-family: var(--font-sans);
-      background: var(--color-bg-alt);
-      color: var(--color-text);
-      line-height: 1.6;
-    }
-
-    .container {
-      max-width: 1400px;
-      margin: 0 auto;
-      padding: var(--space-lg);
-    }
-
-    .header {
-      background: var(--color-bg);
-      border-bottom: 1px solid var(--color-border);
-      padding: var(--space-md) var(--space-lg);
-      margin-bottom: var(--space-xl);
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      position: sticky;
-      top: 0;
-      z-index: 100;
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-    }
-
-    .header h1 {
-      font-size: var(--text-xl);
-      font-weight: 600;
-      color: var(--color-primary);
-    }
-
-    .nav {
-      display: flex;
-      gap: var(--space-sm);
-      flex-wrap: wrap;
-    }
-
-    .nav-link {
-      padding: var(--space-xs) var(--space-md);
-      border-radius: var(--radius-md);
-      text-decoration: none;
-      color: var(--color-text-muted);
-      font-size: var(--text-sm);
-      font-weight: 500;
-      transition: all 0.2s;
-      cursor: pointer;
-      border: 1px solid transparent;
-    }
-
-    .nav-link:hover {
-      background: var(--color-bg-alt);
-      color: var(--color-text);
-    }
-
-    .nav-link.active {
-      background: var(--color-primary);
-      color: white;
-      border-color: var(--color-primary);
-    }
-
-    .connection-status {
-      display: flex;
-      align-items: center;
-      gap: var(--space-sm);
-      padding: var(--space-xs) var(--space-sm);
-      border-radius: var(--radius-sm);
-      font-size: var(--text-xs);
-      font-weight: 500;
-    }
-
-    .connection-status.connected {
-      background: rgba(16, 185, 129, 0.1);
-      color: var(--color-success);
-    }
-
-    .connection-status.disconnected {
-      background: rgba(239, 68, 68, 0.1);
-      color: var(--color-error);
-    }
-
-    .connection-status .status-indicator {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: currentColor;
-      animation: pulse 2s infinite;
-    }
-
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.5; }
-    }
-
-    .connection-progress {
-      width: 200px;
-      height: 4px;
-      background: var(--color-bg-alt);
-      border-radius: 2px;
-      overflow: hidden;
-      margin-top: var(--space-xs);
-    }
-
-    .connection-progress-bar {
-      height: 100%;
-      background: var(--color-primary);
-      transition: width 0.3s ease;
-      width: 0%;
-    }
-
-    .connection-status-row {
-      display: flex;
-      flex-direction: column;
-      gap: var(--space-xs);
-    }
-
-    .stats-bar {
-      background: var(--color-bg);
-      padding: var(--space-lg);
-      border-radius: var(--radius-lg);
-      margin-bottom: var(--space-xl);
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-      gap: var(--space-lg);
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-    }
-
-    .stat-item {
-      text-align: center;
-    }
-
-    .stat-value {
-      font-size: var(--text-2xl);
-      font-weight: 600;
-      color: var(--color-primary);
-      display: block;
-      margin-bottom: var(--space-xs);
-    }
-
-    .stat-label {
-      font-size: var(--text-sm);
-      color: var(--color-text-muted);
-    }
-
-    .workspace-selector {
-      margin-bottom: var(--space-lg);
-    }
-
-    .workspace-selector select {
-      padding: var(--space-sm) var(--space-md);
-      border: 1px solid var(--color-border);
-      border-radius: var(--radius-md);
-      background: var(--color-bg);
-      color: var(--color-text);
-      font-size: var(--text-sm);
-      cursor: pointer;
-      width: 100%;
-      max-width: 400px;
-    }
-
-    #viewContainer {
-      min-height: 400px;
-    }
-
-    .card {
-      background: var(--color-bg);
-      border-radius: var(--radius-lg);
-      padding: var(--space-lg);
-      margin-bottom: var(--space-lg);
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-      border: 1px solid var(--color-border);
-    }
-
-    .card-header {
-      margin-bottom: var(--space-md);
-    }
-
-    .card-title {
-      font-size: var(--text-lg);
-      font-weight: 600;
-      color: var(--color-text);
-      margin-bottom: var(--space-xs);
-    }
-
-    .card-subtitle {
-      font-size: var(--text-sm);
-      color: var(--color-text-muted);
-    }
-
-    .empty-state {
-      text-align: center;
-      padding: var(--space-2xl);
-      color: var(--color-text-muted);
-    }
-
-    .empty-state-text {
-      font-size: var(--text-lg);
-      margin-bottom: var(--space-xs);
-    }
-
-    .empty-state-hint {
-      font-size: var(--text-sm);
-    }
-
-    .btn {
-      padding: var(--space-sm) var(--space-md);
-      border: none;
-      border-radius: var(--radius-md);
-      background: var(--color-primary);
-      color: white;
-      font-size: var(--text-sm);
-      font-weight: 500;
-      cursor: pointer;
-      transition: all 0.2s;
-    }
-
-    .btn:hover {
-      background: var(--color-secondary);
-      transform: translateY(-1px);
-      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-    }
-
-    .btn-secondary {
-      background: var(--color-bg-alt);
-      color: var(--color-text);
-      border: 1px solid var(--color-border);
-    }
-
-    .btn-secondary:hover {
-      background: var(--color-border);
-    }
-
-    .spinner {
-      border: 3px solid var(--color-bg-alt);
-      border-top: 3px solid var(--color-primary);
-      border-radius: 50%;
-      width: 24px;
-      height: 24px;
-      animation: spin 1s linear infinite;
-      display: inline-block;
-    }
-
-    @keyframes spin {
-      0% { transform: rotate(0deg); }
-      100% { transform: rotate(360deg); }
-    }
-
-    .loading-spinner {
-      border: 4px solid var(--color-bg-alt);
-      border-top: 4px solid var(--color-primary);
-      border-radius: 50%;
-      width: 40px;
-      height: 40px;
-      animation: spin 1s linear infinite;
-      margin: 0 auto;
-    }
-
-    /* Modal Styles */
-    .modal {
-      display: none;
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0, 0, 0, 0.5);
-      z-index: 1000;
-      align-items: center;
-      justify-content: center;
-      padding: var(--space-lg);
-    }
-
-    .modal.active {
-      display: flex;
-    }
-
-    .modal-content {
-      background: var(--color-bg);
-      border-radius: var(--radius-lg);
-      max-width: 800px;
-      width: 100%;
-      max-height: 90vh;
-      overflow-y: auto;
-      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-    }
-
-    .modal-header {
-      padding: var(--space-lg);
-      border-bottom: 1px solid var(--color-border);
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-
-    .modal-title {
-      font-size: var(--text-xl);
-      font-weight: 600;
-      color: var(--color-text);
-    }
-
-    .modal-close {
-      background: none;
-      border: none;
-      font-size: var(--text-xl);
-      color: var(--color-text-muted);
-      cursor: pointer;
-      padding: var(--space-xs);
-      line-height: 1;
-    }
-
-    .modal-close:hover {
-      color: var(--color-text);
-    }
-
-    .modal-body {
-      padding: var(--space-lg);
-    }
-
-    /* Chat Widget Styles */
-    #chatWidget {
-      position: fixed;
-      bottom: 20px;
-      right: 20px;
-      z-index: 999;
-    }
-  </style>
+  </script>
 </head>
 <body>
-  <div class="container">
-    <header class="header">
-      <div>
-        <h1>Cursor Activity</h1>
-        <div class="connection-status disconnected" id="connectionStatus">
-          <span class="status-indicator"></span>
-          <span id="connectionText">Connecting...</span>
-          <div class="connection-status-row" id="connectionProgressContainer" style="display: none;">
-            <div class="connection-progress">
-              <div class="connection-progress-bar" id="connectionProgressBar"></div>
-            </div>
+  <!-- Main App Container -->
+  <div id="app" class="app-container">
+    
+    <!-- Status Popup -->
+    <div id="statusPopup" class="status-popup">
+      <div class="status-popup-header">
+        <span class="status-popup-title">[LAUNCH] Dashboard Status</span>
+        <button class="status-popup-close" onclick="closeStatusPopup()">×</button>
+      </div>
+      <div class="status-popup-content" id="statusPopupContent">
+        <div class="status-message">Initializing...</div>
+      </div>
+    </div>
+
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="logo">
+          <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+            <path d="M16 8L24 16L16 24L8 16L16 8Z" fill="url(#gradient)" opacity="0.9"/>
+            <defs>
+              <linearGradient id="gradient" x1="0" y1="0" x2="32" y2="32">
+                <stop offset="0%" stop-color="#8B5CF6"/>
+                <stop offset="100%" stop-color="#6366F1"/>
+              </linearGradient>
+            </defs>
+          </svg>
+          <span>Cursor Activity</span>
+        </div>
+        <button class="search-trigger" onclick="openSearchPalette()" title="Search (Cmd+K)">
+          <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor">
+            <circle cx="8" cy="8" r="6" stroke-width="2"/>
+            <path d="M13 13l4 4" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          <kbd class="search-trigger-kbd">⌘K</kbd>
+        </button>
+      </div>
+
+      <div style="padding: 0 var(--space-lg); margin-top: var(--space-sm); margin-bottom: var(--space-md);">
+        <div class="connection-status" id="connectionStatus">
+          <div class="connection-status-row">
+            <span class="status-dot"></span>
+            <span class="status-text">Connecting...</span>
+          </div>
+          <div class="connection-progress" id="connectionProgress">
+            <div class="connection-progress-bar" id="connectionProgressBar" style="width: 0%"></div>
           </div>
         </div>
       </div>
-      <nav class="nav">
-        <a href="#" class="nav-link active" data-view="overview" onclick="switchView('overview'); return false;">Overview</a>
-        <a href="#" class="nav-link" data-view="activity" onclick="switchView('activity'); return false;">Activity</a>
-        <a href="#" class="nav-link" data-view="threads" onclick="switchView('threads'); return false;">Threads</a>
-        <a href="#" class="nav-link" data-view="analytics" onclick="switchView('analytics'); return false;">Analytics</a>
-        <a href="#" class="nav-link" data-view="filegraph" onclick="switchView('filegraph'); return false;">File Graph</a>
-        <a href="#" class="nav-link" data-view="navigator" onclick="switchView('navigator'); return false;">Navigator</a>
-        <a href="#" class="nav-link" data-view="todos" onclick="switchView('todos'); return false;">TODOs</a>
-        <a href="#" class="nav-link" data-view="system" onclick="switchView('system'); return false;">System</a>
-        <a href="#" class="nav-link" data-view="api-docs" onclick="switchView('api-docs'); return false;">API Docs</a>
+
+      <nav class="sidebar-nav">
+        <a href="#overview" class="nav-link active" data-view="overview">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+            <path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zM3 10a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1v-6zM14 9a1 1 0 00-1 1v6a1 1 0 001 1h2a1 1 0 001-1v-6a1 1 0 00-1-1h-2z"/>
+          </svg>
+          <span>Overview</span>
+        </a>
+        
+        <a href="#activity" class="nav-link" data-view="activity">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z"/>
+          </svg>
+          <span>Activity</span>
+        </a>
+        
+        <a href="#analytics" class="nav-link" data-view="analytics">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+            <path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z"/>
+          </svg>
+          <span>Analytics</span>
+        </a>
+        
+        <a href="#filegraph" class="nav-link" data-view="filegraph">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+            <path d="M10 3.5a1.5 1.5 0 013 0V4a1 1 0 001 1h3a1 1 0 011 1v3a1 1 0 01-1 1h-.5a1.5 1.5 0 000 3h.5a1 1 0 011 1v3a1 1 0 01-1 1h-3a1 1 0 01-1-1v-.5a1.5 1.5 0 00-3 0v.5a1 1 0 01-1 1H6a1 1 0 01-1-1v-3a1 1 0 00-1-1h-.5a1.5 1.5 0 010-3H4a1 1 0 001-1V6a1 1 0 011-1h3a1 1 0 001-1v-.5z"/>
+          </svg>
+          <span>File Graph</span>
+        </a>
+
+        <a href="#navigator" class="nav-link" data-view="navigator">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd"/>
+          </svg>
+          <span>Navigator</span>
+        </a>
+        
+        <a href="#todos" class="nav-link" data-view="todos">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+            <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/>
+            <path fill-rule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clip-rule="evenodd"/>
+          </svg>
+          <span>TODOs</span>
+        </a>
+        
+        <a href="#system" class="nav-link" data-view="system">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z"/>
+          </svg>
+          <span>System</span>
+        </a>
+        
+        <a href="#api-docs" class="nav-link" data-view="api-docs">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+            <path d="M9 4.804A7.968 7.968 0 005.5 4c-1.255 0-2.443.29-3.5.804v10A7.969 7.969 0 015.5 14c1.669 0 3.218.51 4.5 1.385A7.962 7.962 0 0114.5 14c1.255 0 2.443.29 3.5.804v-10A7.968 7.968 0 0014.5 4c-1.255 0-2.443.29-3.5.804V12a1 1 0 11-2 0V4.804z"/>
+          </svg>
+          <span>API Docs</span>
+        </a>
       </nav>
-    </header>
 
-    <div class="stats-bar" id="statsBar">
-      <div class="stat-item">
-        <span class="stat-value" id="statSessions">0</span>
-        <span class="stat-label">Active Sessions</span>
+      <div class="sidebar-footer">
+        <div class="workspace-selector">
+          <label>Workspace</label>
+          <select id="workspaceSelect" class="select-input">
+            <option value="all">All Workspaces</option>
+          </select>
+        </div>
+        
+        <button class="export-btn" onclick="exportDatabase()" title="Export database as JSON">
+          <svg width="18" height="18" viewBox="0 0 20 20" fill="currentColor">
+            <path d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z"/>
+          </svg>
+          <span>Export JSON</span>
+        </button>
       </div>
-      <div class="stat-item">
-        <span class="stat-value" id="statFileChanges">0</span>
-        <span class="stat-label">File Changes</span>
-      </div>
-      <div class="stat-item">
-        <span class="stat-value" id="statAIInteractions">0</span>
-        <span class="stat-label">AI Interactions</span>
-      </div>
-      <div class="stat-item">
-        <span class="stat-value" id="statCodeChanged">0 KB</span>
-        <span class="stat-label">Code Changed</span>
-      </div>
-      <div class="stat-item">
-        <span class="stat-value" id="statAvgContext">0.0%</span>
-        <span class="stat-label">Avg Context Used</span>
-      </div>
-    </div>
+    </aside>
 
-    <div class="workspace-selector">
-      <select id="workspaceSelect" onchange="filterByWorkspace(this.value)">
-        <option value="all">All Workspaces</option>
-      </select>
-      <button class="btn btn-secondary" onclick="exportData()" style="margin-left: var(--space-md);">Export JSON</button>
-    </div>
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Header Stats -->
+      <header class="dashboard-header">
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-content">
+              <span class="stat-label" title="Unique coding sessions detected">Active Sessions</span>
+              <span class="stat-value" id="statSessions">0</span>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-content">
+              <span class="stat-label" title="Total file changes tracked (all-time)">File Changes</span>
+              <span class="stat-value" id="statFileChanges">0</span>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-content">
+              <span class="stat-label" title="Total AI prompts with responses">AI Interactions</span>
+              <span class="stat-value" id="statAIInteractions">0</span>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-content">
+              <span class="stat-label" title="Total code added + deleted (all-time)">Code Changed</span>
+              <span class="stat-value" id="statCodeChanged">0 KB</span>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-content">
+              <span class="stat-label" title="Average AI context window utilization">Avg Context Used</span>
+              <span class="stat-value" id="statAvgContext">0%</span>
+            </div>
+          </div>
+        </div>
+      </header>
 
-    <div id="viewContainer">
-      <!-- Views will be rendered here -->
+      <!-- View Container -->
+      <div id="viewContainer" class="view-container">
+        <!-- Views will be rendered here -->
+      </div>
+    </main>
+  </div>
+
+  <!-- Event Modal -->
+  <div id="eventModal" class="modal">
+    <div class="modal-overlay"></div>
+    <div class="modal-content modal-large">
+      <div class="modal-header">
+        <h2 id="modalTitle">Event Details</h2>
+        <button class="modal-close" onclick="closeEventModal()">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <path d="M18 6L6 18M6 6l12 12" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body" id="modalBody">
+        <!-- Modal content -->
+      </div>
     </div>
   </div>
 
-  <!-- Modal -->
-  <div class="modal" id="eventModal">
-    <div class="modal-content">
+  <!-- Thread Modal -->
+  <div id="threadModal" class="modal">
+    <div class="modal-overlay"></div>
+    <div class="modal-content modal-large">
       <div class="modal-header">
-        <h2 class="modal-title" id="modalTitle">Event Details</h2>
-        <button class="modal-close" onclick="closeModal()">&times;</button>
+        <h2 id="threadModalTitle">Thread Details</h2>
+        <button class="modal-close" onclick="closeThreadModal()">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <path d="M18 6L6 18M6 6l12 12" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </button>
       </div>
-      <div class="modal-body" id="modalBody">
-        <!-- Modal content will be populated here -->
+      <div class="modal-body" id="threadModalBody">
+        <!-- Thread content -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Search Command Palette -->
+  <div id="searchPalette" class="search-palette">
+    <div class="search-palette-overlay" onclick="closeSearchPalette()"></div>
+    <div class="search-palette-content">
+      <div class="search-palette-header">
+        <div class="search-input-wrapper">
+          <svg class="search-icon" width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor">
+            <circle cx="8" cy="8" r="6" stroke-width="2"/>
+            <path d="M13 13l4 4" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          <input 
+            type="text" 
+            id="searchInput" 
+            class="search-input" 
+            placeholder="Search events, prompts, files... (try 'type:prompt' or 'date:today')"
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <kbd class="search-kbd">esc</kbd>
+        </div>
+      </div>
+      <div class="search-palette-body">
+        <div id="searchResults" class="search-results">
+          <!-- Results will be rendered here -->
+        </div>
+        <div id="searchSuggestions" class="search-suggestions">
+          <!-- Suggestions will be rendered here -->
+        </div>
+      </div>
+      <div class="search-palette-footer">
+        <div class="search-hint">
+          <span><kbd>↑</kbd><kbd>↓</kbd> navigate</span>
+          <span><kbd>↵</kbd> select</span>
+          <span><kbd>esc</kbd> close</span>
+        </div>
+        <div class="search-filters">
+          <span class="search-filter-hint">Filters: <code>type:</code> <code>workspace:</code> <code>date:</code> <code>mode:</code></span>
+        </div>
       </div>
     </div>
   </div>
@@ -481,8 +293,12 @@
       .catch(err => console.warn('Chat widget not loaded:', err));
   </script>
   
+  <!-- External Libraries -->
+  <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
   <script src="https://d3js.org/d3.v7.min.js"></script>
   <script src="https://unpkg.com/lunr/lunr.js"></script>
+  
   <!-- Core Modules -->
   <script src="core/config.js"></script>
   <script src="core/state.js"></script>
@@ -538,15 +354,5 @@
   <!-- Widgets -->
   <script src="widgets/chat-widget.js"></script>
   <script src="widgets/prompt-display-system.js"></script>
-  
-  <!-- Service Worker Registration -->
-  <script>
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('sw.js')
-        .then(reg => console.log('[SW] Registered:', reg.scope))
-        .catch(err => console.warn('[SW] Registration failed:', err));
-    }
-  </script>
 </body>
 </html>
-

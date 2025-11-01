@@ -3,9 +3,9 @@
  */
 
 function renderActivityView(container) {
-  const events = window.filterEventsByWorkspace(window.state.data.events);
-  const prompts = window.state.data.prompts || [];
-  const terminalCommands = window.state.data.terminalCommands || [];
+  const events = window.filterEventsByWorkspace ? window.filterEventsByWorkspace(window.state?.data?.events || []) : (window.state?.data?.events || []);
+  const prompts = window.state?.data?.prompts || [];
+  const terminalCommands = window.state?.data?.terminalCommands || [];
   
   // Merge events, prompts, and terminal commands into unified timeline
   const timelineItems = [

@@ -11,146 +11,24 @@
 // Ensure modules are loaded (they export to window)
 if (!window.CONFIG || !window.state || !window.APIClient) {
   console.error('[ERROR] Core modules not loaded. Ensure core/config.js, core/state.js, and core/api-client.js are loaded before new-dashboard.js');
+  // Create fallbacks to prevent crashes
+  if (!window.CONFIG) window.CONFIG = { API_BASE: 'http://localhost:43917' };
+  if (!window.state) window.state = { data: {}, stats: {} };
+  if (!window.APIClient) {
+    console.error('[ERROR] APIClient not available! API calls will fail.');
+    window.APIClient = { get: () => Promise.reject(new Error('APIClient not loaded')), post: () => Promise.reject(new Error('APIClient not loaded')) };
+  }
 }
 
 // Use globals from modules (available via window exports)
-const CONFIG = window.CONFIG;
-const state = window.state;
-const APIClient = window.APIClient;
+// CONFIG, state, and APIClient are now loaded from core modules
+// They are available as window.CONFIG, window.state, and window.APIClient
+// No need to redeclare them here
 
 // ===================================
 // WebSocket Manager
 // ===================================
-
-class WebSocketManager {
-  constructor() {
-    this.socket = null;
-    this.reconnectAttempts = 0;
-    this.maxReconnectAttempts = 5;
-    this.subscriptions = new Set();
-    this.lastMessageId = 0;
-    
-    // Restore connection state from localStorage
-    this.restoreConnectionState();
-  }
-
-  restoreConnectionState() {
-    try {
-      const saved = localStorage.getItem('ws_connection_state');
-      if (saved) {
-        const state = JSON.parse(saved);
-        this.subscriptions = new Set(state.subscriptions || []);
-        this.lastMessageId = state.lastMessageId || 0;
-        console.log('[SYNC] Restored WebSocket state:', {
-          subscriptions: this.subscriptions.size,
-          lastMessageId: this.lastMessageId
-        });
-      }
-    } catch (error) {
-      console.warn('[WARNING] Failed to restore WebSocket state:', error);
-    }
-  }
-
-  saveConnectionState() {
-    try {
-      const state = {
-        subscriptions: Array.from(this.subscriptions),
-        lastMessageId: this.lastMessageId,
-        timestamp: Date.now()
-      };
-      localStorage.setItem('ws_connection_state', JSON.stringify(state));
-    } catch (error) {
-      console.warn('[WARNING] Failed to save WebSocket state:', error);
-    }
-  }
-
-  connect() {
-    try {
-      this.socket = io(CONFIG.API_BASE, {
-        transports: ['websocket', 'polling'],
-        reconnection: true,
-        reconnectionDelay: 1000,
-        reconnectionDelayMax: 5000,
-        reconnectionAttempts: this.maxReconnectAttempts,
-        // Resume from last known state
-        query: {
-          lastMessageId: this.lastMessageId
-        }
-      });
-
-      this.socket.on('connect', () => {
-        console.log('[SUCCESS] WebSocket connected');
-        state.connected = true;
-        updateConnectionStatus(true);
-        this.reconnectAttempts = 0;
-        
-        // Auto-restore subscriptions after reconnect
-        this.restoreSubscriptions();
-      });
-
-      this.socket.on('disconnect', () => {
-        console.log('[ERROR] WebSocket disconnected');
-        state.connected = false;
-        updateConnectionStatus(false);
-        
-        // Save state before disconnect
-        this.saveConnectionState();
-      });
-
-      this.socket.on('activityUpdate', (data) => {
-        console.log('Activity update:', data);
-        if (data.id) this.lastMessageId = Math.max(this.lastMessageId, data.id);
-        handleRealtimeUpdate(data);
-        this.saveConnectionState();
-      });
-
-      this.socket.on('terminal-command', (cmd) => {
-        console.log('Terminal command:', cmd);
-        handleTerminalCommand(cmd);
-      });
-
-      this.socket.on('connect_error', (error) => {
-        console.error('[ERROR] WebSocket connection error:', error);
-        this.reconnectAttempts++;
-      });
-
-      state.socket = this.socket;
-    } catch (error) {
-      console.error('[ERROR] Failed to initialize WebSocket:', error);
-    }
-  }
-
-  restoreSubscriptions() {
-    // Re-subscribe to all previously active subscriptions
-    this.subscriptions.forEach(channel => {
-      console.log(`[SYNC] Re-subscribing to: ${channel}`);
-      this.socket.emit('subscribe', channel);
-    });
-  }
-
-  subscribe(channel) {
-    this.subscriptions.add(channel);
-    if (this.socket && this.socket.connected) {
-      this.socket.emit('subscribe', channel);
-    }
-    this.saveConnectionState();
-  }
-
-  unsubscribe(channel) {
-    this.subscriptions.delete(channel);
-    if (this.socket && this.socket.connected) {
-      this.socket.emit('unsubscribe', channel);
-    }
-    this.saveConnectionState();
-  }
-
-  disconnect() {
-    if (this.socket) {
-      this.socket.disconnect();
-      this.socket = null;
-    }
-  }
-}
+// NOTE: WebSocketManager is now loaded from core/websocket-manager.js
 
 // ===================================
 // Data Fetching & Processing
@@ -241,6 +119,32 @@ async function loadFromCache() {
  * Fetch only recent data (last 24 hours by default)
  */
 async function fetchRecentData() {
+  // ✅ FIX: Check if APIClient is available before using it
+  if (!APIClient || typeof APIClient.get !== 'function') {
+    console.error('[ERROR] APIClient is not available. Ensure core/api-client.js is loaded before new-dashboard.js');
+    // Fallback to using cached data only
+    if (!state) {
+      console.error('[ERROR] state is not defined');
+      return;
+    }
+    if (!state.data) {
+      state.data = {};
+    }
+    if (!state.data.events) state.data.events = [];
+    if (!state.data.prompts) state.data.prompts = [];
+    calculateStats();
+    return;
+  }
+  
+  // ✅ FIX: Ensure state.data exists
+  if (!state) {
+    console.error('[ERROR] state is not defined');
+    return;
+  }
+  if (!state.data) {
+    state.data = {};
+  }
+
   const windowHours = 24 * 365; // 1 year of data
   const windowLabel = windowHours >= 24 ? `${windowHours / 24}d` : `${windowHours}h`;
   const startTime = Date.now() - (windowHours * 60 * 60 * 1000); // ✅ FIX: Define startTime
@@ -282,9 +186,9 @@ async function fetchRecentData() {
     });
     
     // Process activity
-    console.log('[DEBUG] Activity response:', { hasData: !!activity.data, isArray: Array.isArray(activity.data), length: activity.data?.length });
+    console.log('[DEBUG] Activity response:', { hasActivity: !!activity, hasData: !!activity?.data, isArray: Array.isArray(activity?.data), length: activity?.data?.length });
     
-    if (activity.data && Array.isArray(activity.data)) {
+    if (activity && activity.data && Array.isArray(activity.data)) {
       // Store total count for all-time stats
       if (activity.pagination?.total) {
         if (!state.stats) state.stats = {};

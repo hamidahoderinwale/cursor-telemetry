@@ -3,8 +3,9 @@
  */
 
 function renderThreadsView(container) {
-  const threads = window.groupIntoThreads(window.state.data.entries);
-  const prompts = window.state.data.prompts || [];
+  const entries = window.state?.data?.entries || [];
+  const threads = window.groupIntoThreads ? window.groupIntoThreads(entries) : [];
+  const prompts = window.state?.data?.prompts || [];
   
   container.innerHTML = `
     <div class="threads-view">

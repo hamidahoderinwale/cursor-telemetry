@@ -3,7 +3,7 @@
  */
 
 function renderOverviewView(container) {
-  const recentEvents = window.state.data.events.slice(-10).reverse();
+  const recentEvents = (window.state?.data?.events || []).slice(-10).reverse();
 
   container.innerHTML = `
     <div class="overview-view">
@@ -43,7 +43,8 @@ function renderOverviewView(container) {
 }
 
 function renderSystemStatus() {
-  const latest = window.state.data.systemResources[window.state.data.systemResources.length - 1];
+  const systemResources = window.state?.data?.systemResources || [];
+  const latest = systemResources.length > 0 ? systemResources[systemResources.length - 1] : null;
   if (!latest) {
     return '<div class="empty-state-text">No system data available</div>';
   }
@@ -71,13 +72,14 @@ function renderSystemStatus() {
 }
 
 function renderWorkspacesList() {
-  if (window.state.data.workspaces.length === 0) {
+  const workspaces = window.state?.data?.workspaces || [];
+  if (workspaces.length === 0) {
     return '<div class="empty-state-text">No workspaces detected</div>';
   }
 
   return `
     <div class="workspaces-list">
-      ${window.state.data.workspaces.map(ws => `
+      ${workspaces.map(ws => `
         <div class="workspace-item">
           <div class="workspace-item-title">
             <span class="workspace-item-title-text">${window.escapeHtml(ws.path.split('/').pop() || ws.path)}</span>

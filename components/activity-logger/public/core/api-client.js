@@ -15,6 +15,10 @@ function debounce(fn, delay = 300) {
 }
 
 class APIClient {
+  static getApiBase() {
+    return window.CONFIG?.API_BASE || window.DASHBOARD_CONFIG?.API_BASE || 'http://localhost:43917';
+  }
+
   static async get(endpoint, options = {}) {
     const timeout = options.timeout || 20000; // 20 second default timeout
     const retries = options.retries || 1;
@@ -32,7 +36,8 @@ class APIClient {
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), timeout);
           
-          const response = await fetch(`${window.CONFIG.API_BASE}${endpoint}`, {
+          const apiBase = this.getApiBase();
+          const response = await fetch(`${apiBase}${endpoint}`, {
             signal: controller.signal,
             ...options
           });
@@ -71,7 +76,8 @@ class APIClient {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), timeout);
       
-      const response = await fetch(`${window.CONFIG.API_BASE}${endpoint}`, {
+      const apiBase = this.getApiBase();
+      const response = await fetch(`${apiBase}${endpoint}`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify(data),
