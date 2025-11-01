@@ -94,6 +94,97 @@ class CursorDatabaseParser {
         `sqlite3 "${dbPath}" "${genQuery}"`
       ).catch(() => ({ stdout: '' }));
 
+      // Try to extract conversation metadata if it exists
+      // Query for all conversation-related keys and merge them
+      const conversationQuery = `SELECT key, value FROM ItemTable WHERE key LIKE 'aiService.conversations%' OR key LIKE 'conversations%'`;
+      const { stdout: conversationData } = await execAsync(
+        `sqlite3 "${dbPath}" "${conversationQuery}"`
+      ).catch(() => ({ stdout: '' }));
+      
+      let conversationMetadata = {};
+      if (conversationData.trim()) {
+        try {
+          // Handle multiple rows (key-value pairs)
+          // sqlite3 uses tabs as default separator, but values might contain tabs too
+          // Use a regex that splits on the first tab only
+          const lines = conversationData.trim().split('\n');
+          const conversationsMap = new Map();
+          
+          for (const line of lines) {
+            if (!line) continue;
+            // Split on first tab only (sqlite3 default separator)
+            const tabIndex = line.indexOf('\t');
+            if (tabIndex === -1) continue;
+            
+            const key = line.substring(0, tabIndex);
+            const value = line.substring(tabIndex + 1);
+            
+            try {
+              const parsed = JSON.parse(value);
+              // If it's an array of conversations, store them
+              if (Array.isArray(parsed)) {
+                parsed.forEach(conv => {
+                  if (conv.id && !conversationsMap.has(conv.id)) {
+                    conversationsMap.set(conv.id, conv);
+                  }
+                });
+              } else if (parsed.conversations && Array.isArray(parsed.conversations)) {
+                parsed.conversations.forEach(conv => {
+                  if (conv.id && !conversationsMap.has(conv.id)) {
+                    conversationsMap.set(conv.id, conv);
+                  }
+                });
+              } else if (parsed.id) {
+                // Single conversation object
+                conversationsMap.set(parsed.id, parsed);
+              }
+            } catch (parseError) {
+              // If this line doesn't parse as JSON, try parsing the whole value as JSON
+              try {
+                const fullParsed = JSON.parse(value);
+                if (Array.isArray(fullParsed)) {
+                  fullParsed.forEach(conv => {
+                    if (conv.id && !conversationsMap.has(conv.id)) {
+                      conversationsMap.set(conv.id, conv);
+                    }
+                  });
+                } else if (fullParsed.conversations) {
+                  if (Array.isArray(fullParsed.conversations)) {
+                    fullParsed.conversations.forEach(conv => {
+                      if (conv.id && !conversationsMap.has(conv.id)) {
+                        conversationsMap.set(conv.id, conv);
+                      }
+                    });
+                  }
+                } else {
+                  Object.assign(conversationMetadata, fullParsed);
+                }
+              } catch (e2) {
+                // Skip this entry if it doesn't parse
+              }
+            }
+          }
+          
+          // Convert map to array or object structure
+          if (conversationsMap.size > 0) {
+            conversationMetadata.conversations = Array.from(conversationsMap.values());
+          } else if (conversationData.trim()) {
+            // Fallback: try parsing the first line as JSON
+            const firstLine = lines[0];
+            if (firstLine) {
+              const tabIndex = firstLine.indexOf('\t');
+              if (tabIndex !== -1) {
+                const value = firstLine.substring(tabIndex + 1);
+                conversationMetadata = JSON.parse(value);
+              }
+            }
+          }
+        } catch (e) {
+          // Ignore parsing errors for conversation metadata
+          console.warn('Could not parse conversation metadata:', e.message);
+        }
+      }
+
       const prompts = [];
       const generations = [];
 
@@ -111,6 +202,9 @@ class CursorDatabaseParser {
                   timestamp: item.timestamp,
                   generationUUID: item.generationUUID,
                   commandType: item.commandType,
+                  // Capture conversation title if available
+                  conversationTitle: item.title || item.conversationTitle || item.conversation?.title || item.metadata?.title || null,
+                  conversationId: item.conversationId || item.conversation?.id || item.metadata?.conversationId || null,
                   index: idx,
                   messageRole: 'user',
                   source: 'aiService'
@@ -150,10 +244,10 @@ class CursorDatabaseParser {
         }
       }
 
-      return { prompts, generations };
+      return { prompts, generations, conversationMetadata };
     } catch (error) {
       console.warn('Error extracting AI service data:', error.message);
-      return { prompts: [], generations: [] };
+      return { prompts: [], generations: [], conversationMetadata: {} };
     }
   }
 
@@ -397,14 +491,14 @@ class CursorDatabaseParser {
       
       for (const workspaceId of workspaceDirs) {
         const dbPath = path.join(workspaceRoot, workspaceId, 'state.vscdb');
-        const { prompts, generations } = await this.extractAIServiceData(dbPath);
+        const { prompts, generations, conversationMetadata } = await this.extractAIServiceData(dbPath);
         
         // Get workspace metadata
         const workspacePath = this.getWorkspacePath(workspaceId);
         const workspaceName = this.getWorkspaceName(workspacePath);
 
         // Link prompts to generations by UUID and create threaded conversations
-        const linked = this.linkPromptsToGenerations(prompts, generations, workspaceId, workspacePath, workspaceName);
+        const linked = this.linkPromptsToGenerations(prompts, generations, workspaceId, workspacePath, workspaceName, conversationMetadata);
         allMessages.push(...linked);
       }
 
@@ -419,7 +513,7 @@ class CursorDatabaseParser {
   /**
    * Link user prompts to AI generations and create conversation threads
    */
-  linkPromptsToGenerations(prompts, generations, workspaceId, workspacePath, workspaceName) {
+  linkPromptsToGenerations(prompts, generations, workspaceId, workspacePath, workspaceName, conversationMetadata = {}) {
     const threaded = [];
     const genMap = new Map();
 
@@ -429,6 +523,25 @@ class CursorDatabaseParser {
         genMap.set(gen.generationUUID, gen);
       }
     });
+
+    // Create a map of conversation titles by conversationId if available
+    const conversationTitleMap = new Map();
+    if (conversationMetadata && typeof conversationMetadata === 'object') {
+      // If conversationMetadata is an array of conversations
+      if (Array.isArray(conversationMetadata)) {
+        conversationMetadata.forEach(conv => {
+          if (conv.id && conv.title) {
+            conversationTitleMap.set(conv.id, conv.title);
+          }
+        });
+      } else if (conversationMetadata.conversations && Array.isArray(conversationMetadata.conversations)) {
+        conversationMetadata.conversations.forEach(conv => {
+          if (conv.id && conv.title) {
+            conversationTitleMap.set(conv.id, conv.title);
+          }
+        });
+      }
+    }
 
     // Link prompts to their responses
     prompts.forEach((prompt, idx) => {
@@ -441,7 +554,18 @@ class CursorDatabaseParser {
       }
 
       // Create conversation ID from generation UUID or workspace + index
-      const conversationId = prompt.generationUUID || `${workspaceId}_${idx}`;
+      const conversationId = prompt.generationUUID || prompt.conversationId || `${workspaceId}_${idx}`;
+
+      // Determine conversation title: prefer explicit title, then metadata map, then prompt text
+      let conversationTitle = prompt.conversationTitle || 
+                              conversationTitleMap.get(conversationId) ||
+                              conversationTitleMap.get(prompt.conversationId) ||
+                              null;
+      
+      // Fallback to first 100 chars of prompt text if no title found
+      if (!conversationTitle) {
+        conversationTitle = prompt.text.substring(0, 100);
+      }
 
       // Add user message
       const isConversationThread = prompt.type === 'composer';
@@ -458,13 +582,14 @@ class CursorDatabaseParser {
         messageRole: 'user',
         // Don't set parentConversationId for thread initiators (so dashboard can identify them as threads)
         parentConversationId: isConversationThread ? undefined : conversationId,
-        conversationTitle: prompt.text.substring(0, 100), // Use first part as title
+        conversationTitle: conversationTitle,
         confidence: 'high',
         status: 'captured'
       });
 
       // Add AI response if it exists
       if (correspondingGen) {
+        // Use the same conversation title we determined above
         threaded.push({
           id: `${conversationId}_assistant`,
           text: correspondingGen.text,
@@ -477,7 +602,7 @@ class CursorDatabaseParser {
           type: 'ai-response',
           messageRole: 'assistant',
           parentConversationId: conversationId,
-          conversationTitle: prompt.text.substring(0, 100),
+          conversationTitle: conversationTitle,
           model: correspondingGen.model,
           finishReason: correspondingGen.finishReason,
           thinkingTimeSeconds: correspondingGen.timestamp && timestamp 

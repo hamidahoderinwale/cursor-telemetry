@@ -2,6 +2,23 @@
  * Chart rendering helper functions for Analytics view
  */
 
+// Helper function to get chart colors with fallback
+function getChartColors() {
+  return (window.CONFIG && window.CONFIG.CHART_COLORS) ? {
+    primary: window.CONFIG.CHART_COLORS.primary,
+    secondary: window.CONFIG.CHART_COLORS.secondary,
+    accent: window.CONFIG.CHART_COLORS.accent,
+    success: window.CONFIG.CHART_COLORS.success,
+    warning: window.CONFIG.CHART_COLORS.warning
+  } : {
+    primary: '#3b82f6',
+    secondary: '#8b5cf6',
+    accent: '#10b981',
+    success: '#22c55e',
+    warning: '#f59e0b'
+  };
+}
+
 function renderFileTypesChart() {
   const ctx = document.getElementById('fileTypesChart');
   if (!ctx) {
@@ -36,6 +53,9 @@ function renderFileTypesChart() {
   const labels = Object.keys(typeCount).slice(0, 5);
   const data = labels.map(label => typeCount[label]);
 
+  // Get chart colors with fallback
+  const colors = getChartColors();
+
   window.createChart('fileTypesChart', {
     type: 'doughnut',
     data: {
@@ -43,11 +63,11 @@ function renderFileTypesChart() {
       datasets: [{
         data: data,
         backgroundColor: [
-          window.CONFIG.CHART_COLORS.primary,
-          window.CONFIG.CHART_COLORS.secondary,
-          window.CONFIG.CHART_COLORS.accent,
-          window.CONFIG.CHART_COLORS.success,
-          window.CONFIG.CHART_COLORS.warning
+          colors.primary,
+          colors.secondary,
+          colors.accent,
+          colors.success,
+          colors.warning
         ]
       }]
     },
@@ -117,6 +137,8 @@ function renderHourlyChart() {
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   });
 
+  const colors = getChartColors();
+
   window.createChart('hourlyChart', {
     type: 'bar',
     data: {
@@ -125,15 +147,15 @@ function renderHourlyChart() {
         {
           label: 'File Changes',
           data: intervals.map(i => i.events),
-          backgroundColor: window.CONFIG.CHART_COLORS.primary + '80',
-          borderColor: window.CONFIG.CHART_COLORS.primary,
+          backgroundColor: colors.primary + '80',
+          borderColor: colors.primary,
           borderWidth: 1
         },
         {
           label: 'AI Prompts',
           data: intervals.map(i => i.prompts),
-          backgroundColor: window.CONFIG.CHART_COLORS.accent + '80',
-          borderColor: window.CONFIG.CHART_COLORS.accent,
+          backgroundColor: colors.accent + '80',
+          borderColor: colors.accent,
           borderWidth: 1
         }
       ]

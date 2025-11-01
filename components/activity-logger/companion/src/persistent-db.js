@@ -691,6 +691,40 @@ class PersistentDB {
   }
   
   /**
+   * Get entries with full code content (includes before_code and after_code)
+   * Used for exports where structural edits are needed
+   */
+  async getEntriesWithCode(limit = 1000) {
+    await this.init();
+    
+    return new Promise((resolve, reject) => {
+      this.db.all(`
+        SELECT 
+          id, session_id, workspace_path, file_path, source, 
+          before_code, after_code, notes, timestamp, tags, prompt_id, modelInfo, type
+        FROM entries 
+        ORDER BY timestamp DESC 
+        LIMIT ?
+      `, [limit], (err, rows) => {
+        if (err) {
+          console.error('Error loading entries with code:', err);
+          reject(err);
+        } else {
+          // Parse JSON fields
+          const entries = rows.map(row => ({
+            ...row,
+            tags: row.tags ? JSON.parse(row.tags) : [],
+            modelInfo: row.modelInfo ? JSON.parse(row.modelInfo) : null,
+            before_content: row.before_code,  // Alias for compatibility
+            after_content: row.after_code     // Alias for compatibility
+          }));
+          resolve(entries);
+        }
+      });
+    });
+  }
+
+  /**
    * Get file contents for semantic analysis (includes after_code)
    */
   async getFileContents(limit = 500) {

@@ -115,6 +115,7 @@ body {
   top: 0;
   bottom: 0;
   z-index: 100;
+  overflow: hidden; /* Prevents sidebar itself from scrolling */
 }
 
 .sidebar-header {
@@ -195,6 +196,9 @@ body {
   display: flex;
   flex-direction: column;
   gap: var(--space-xs);
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0; /* Allows flex child to shrink below content size */
 }
 
 .nav-link {
@@ -365,6 +369,13 @@ body {
   flex: 1;
   padding: var(--space-xl);
   overflow-y: auto;
+  max-width: 100%;
+}
+
+@media (max-width: 768px) {
+  .view-container {
+    padding: var(--space-md);
+  }
 }
 
 /* ===================================
@@ -375,8 +386,15 @@ body {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  padding: var(--space-lg);
+  padding: var(--space-xl);
   transition: all var(--transition-base);
+  width: 100%;
+}
+
+@media (max-width: 768px) {
+  .card {
+    padding: var(--space-md);
+  }
 }
 
 .card:hover {
@@ -386,8 +404,15 @@ body {
 .card-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   margin-bottom: var(--space-lg);
+  gap: var(--space-md);
+  flex-wrap: wrap;
+}
+
+.card-header > div:first-child {
+  flex: 1;
+  min-width: 0;
 }
 
 .card-title {
@@ -404,6 +429,12 @@ body {
 
 .card-body {
   color: var(--color-text-muted);
+  padding: 0;
+}
+
+/* Activity view cards need extra padding for timeline */
+.activity-view .card-body {
+  padding: var(--space-lg);
 }
 
 /* ===================================
@@ -561,28 +592,182 @@ body {
   background: var(--color-border);
 }
 
+/* Alternating Timeline Layout (Option 3) */
+.timeline-alternating {
+  position: relative;
+  padding: var(--space-sm) 0;
+  max-width: 100%;
+  min-height: 100px;
+}
+
+@media (min-width: 1200px) {
+  .timeline-alternating {
+    padding: var(--space-md) var(--space-lg);
+  }
+}
+
+/* Responsive: stack on small screens */
+@media (max-width: 768px) {
+  .timeline-item {
+    width: 100% !important;
+    left: 0 !important;
+    padding-left: var(--space-lg) !important;
+    padding-right: var(--space-lg) !important;
+  }
+  
+  .timeline-item-left::before,
+  .timeline-item-right::before {
+    left: -26px !important;
+    right: auto !important;
+  }
+  
+  .timeline-item-left .timeline-content,
+  .timeline-item-right .timeline-content {
+    border-left: 3px solid var(--color-border) !important;
+    border-right: none !important;
+  }
+  
+  .timeline-item-right .timeline-content {
+    border-left-color: #8b5cf6 !important;
+  }
+  
+  .timeline-axis {
+    left: 20px !important;
+  }
+}
+
+.timeline-axis {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: linear-gradient(to bottom, 
+    var(--color-primary) 0%, 
+    var(--color-border) 50%, 
+    var(--color-primary) 100%);
+  transform: translateX(-50%);
+  z-index: 1;
+}
+
 .timeline-item {
   position: relative;
-  padding-bottom: var(--space-xl);
+  padding-bottom: var(--space-md);
   cursor: pointer;
+  z-index: 2;
+  width: calc(50% - var(--space-md));
+  margin-bottom: var(--space-md);
 }
 
-.timeline-item::before {
+@media (min-width: 1200px) {
+  .timeline-item {
+    width: calc(50% - var(--space-lg));
+  }
+}
+
+/* Left side items (Events/Terminal) */
+.timeline-item-left {
+  left: 0;
+  padding-right: var(--space-lg);
+}
+
+.timeline-item-left::before {
   content: '';
   position: absolute;
-  left: -26px;
-  top: 6px;
-  width: 12px;
-  height: 12px;
+  right: -8px;
+  top: 12px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
-  background: var(--color-primary);
-  border: 2px solid var(--color-surface);
-  box-shadow: 0 0 0 4px var(--color-bg);
+  background: #3b82f6;
+  border: 3px solid var(--color-surface);
+  box-shadow: 0 0 0 2px var(--color-bg), 0 0 0 4px #3b82f6;
+  z-index: 3;
 }
 
-.timeline-item:hover {
+.timeline-item-left .timeline-content {
+  background: rgba(59, 130, 246, 0.05);
+  border-left: 3px solid #3b82f6;
+  border-right: none;
+}
+
+.timeline-item-left:hover {
+  transform: translateX(-4px);
+}
+
+.timeline-item-left:hover .timeline-content {
+  background: rgba(59, 130, 246, 0.1);
+  border-left-color: #2563eb;
+  box-shadow: -4px 0 8px rgba(59, 130, 246, 0.2);
+}
+
+/* Right side items (Prompts/Conversations) */
+.timeline-item-right {
+  left: calc(50% + var(--space-md));
+  padding-left: var(--space-lg);
+}
+
+@media (min-width: 1200px) {
+  .timeline-item-right {
+    left: calc(50% + var(--space-lg));
+  }
+}
+
+.timeline-item-right::before {
+  content: '';
+  position: absolute;
+  left: -8px;
+  top: 12px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #8b5cf6;
+  border: 3px solid var(--color-surface);
+  box-shadow: 0 0 0 2px var(--color-bg), 0 0 0 4px #8b5cf6;
+  z-index: 3;
+}
+
+.timeline-item-right .timeline-content {
+  background: rgba(139, 92, 246, 0.05);
+  border-right: 3px solid #8b5cf6;
+  border-left: none;
+}
+
+.timeline-item-right:hover {
   transform: translateX(4px);
-  transition: transform var(--transition-fast);
+}
+
+.timeline-item-right:hover .timeline-content {
+  background: rgba(139, 92, 246, 0.1);
+  border-right-color: #7c3aed;
+  box-shadow: 4px 0 8px rgba(139, 92, 246, 0.2);
+}
+
+/* Event content styling (blue theme) */
+.event-content .timeline-content {
+  background: rgba(59, 130, 246, 0.05);
+  border-left: 3px solid #3b82f6;
+}
+
+/* Prompt content styling (purple theme) */
+.prompt-content {
+  background: rgba(139, 92, 246, 0.05) !important;
+  border-right: 3px solid #8b5cf6 !important;
+}
+
+/* Temporal thread items span full width */
+.temporal-thread-item {
+  width: 100% !important;
+  left: 0 !important;
+  padding: 0 !important;
+}
+
+.temporal-thread-item::before {
+  display: none !important;
+}
+
+.temporal-thread-items .timeline-item {
+  width: 48% !important;
 }
 
 .timeline-content {
@@ -591,6 +776,12 @@ body {
   border-radius: var(--radius-lg);
   padding: var(--space-lg);
   transition: all var(--transition-base);
+}
+
+@media (max-width: 768px) {
+  .timeline-content {
+    padding: var(--space-md);
+  }
 }
 
 .timeline-item:hover .timeline-content {

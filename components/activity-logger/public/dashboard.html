@@ -305,29 +305,41 @@
   <!-- UI Modules -->
   <script type="module" src="modals/modal-manager.js"></script>
   
+  <!-- Utilities (load first - no dependencies) -->
+  <script src="utils/helpers.js"></script>
+  <script src="utils/file-helpers.js"></script>
+  <script src="utils/math-helpers.js"></script>
+  <script src="utils/data-helpers.js"></script>
+  <script src="utils/time-formatting.js"></script>
+  <script src="utils/event-helpers.js"></script>
+  <script src="utils/temporal-threading.js"></script>
+  <script src="utils/templates.js"></script>
+  
   <!-- Views (must load before view-router) -->
   <script src="views/activity/timeline-helpers.js"></script>
+  <script src="views/overview/helpers.js"></script>
   <script src="views/overview/index.js"></script>
   <script src="views/activity/index.js"></script>
+  <script src="views/threads/helpers.js"></script>
   <script src="views/threads/index.js"></script>
   <script src="views/analytics/chart-helpers.js"></script>
   <script src="views/analytics/index.js"></script>
+  <script src="views/system/templates.js"></script>
   <script src="views/system/index.js"></script>
+  <script src="views/file-graph/templates.js"></script>
   <script src="views/file-graph/index.js"></script>
+  <script src="views/navigator/templates.js"></script>
   <script src="views/navigator/index.js"></script>
+  <script src="views/api-docs/templates.js"></script>
   <script src="views/api-docs/index.js"></script>
   
   <!-- View Router (loads after all views) -->
   <script src="core/view-router.js"></script>
   
-  <!-- Utilities -->
-  <script src="utils/helpers.js"></script>
-  <script src="utils/file-helpers.js"></script>
-  <script src="utils/math-helpers.js"></script>
-  <script src="utils/data-helpers.js"></script>
-  
   <!-- Components -->
   <script src="components/charts/chart-utils.js"></script>
+  <script type="module" src="components/charts/chart-renderers.js"></script>
+  <script type="module" src="components/charts/analytics-renderers.js"></script>
   
   <!-- Config & Main Dashboard -->
   <script src="config.js"></script>

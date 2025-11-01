@@ -48,7 +48,7 @@ function renderActivityView(container) {
           </div>
         </div>
         <div class="card-body">
-          ${timelineItems.length > 0 ? renderUnifiedTimeline(timelineItems) : '<div class="empty-state"><div class="empty-state-text">No activity recorded</div><div class="empty-state-hint">Activity will appear as you work in Cursor</div></div>'}
+          ${timelineItems.length > 0 ? window.renderUnifiedTimeline(timelineItems) : '<div class="empty-state"><div class="empty-state-text">No activity recorded</div><div class="empty-state-hint">Activity will appear as you work in Cursor</div></div>'}
         </div>
       </div>
 

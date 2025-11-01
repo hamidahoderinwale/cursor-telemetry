@@ -2529,8 +2529,9 @@ app.get('/api/export/database', async (req, res) => {
     console.log(`[EXPORT] Limit: ${limit}, Full fields: ${includeAllFields}`);
     
     // Gather data from database with limits
+    // For export, use getEntriesWithCode to include structural edits (before_code/after_code)
     const [entries, prompts, events, terminalCommands, contextSnapshots, contextAnalytics] = await Promise.all([
-      persistentDB.getRecentEntries(Math.min(limit, 1000)),  // Cap at 1000
+      persistentDB.getEntriesWithCode(Math.min(limit, 1000)),  // ✅ Includes before_code and after_code for structural edits
       persistentDB.getRecentPrompts(Math.min(limit, 1000)),  // Cap at 1000
       persistentDB.getAllEvents(),  // Usually smaller
       persistentDB.getAllTerminalCommands(Math.min(limit, 1000)),  // Cap at 1000

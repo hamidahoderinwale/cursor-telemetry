@@ -1,22 +1,10 @@
 /**
  * System View - System monitoring and resources
+ * HTML templates moved to views/system/templates.js
  */
 
 function renderSystemView(container) {
-  container.innerHTML = `
-    <div class="system-view">
-      <!-- System Resources Over Time Chart -->
-      <div class="card">
-        <div class="card-header">
-          <h3 class="card-title">System Resources Over Time</h3>
-          <p class="card-subtitle">Memory usage and CPU load tracking</p>
-        </div>
-        <div class="card-body">
-          <canvas id="systemResourcesChart" class="system-chart-container"></canvas>
-        </div>
-      </div>
-    </div>
-  `;
+  container.innerHTML = window.renderSystemViewTemplate();
 
   // Render charts after DOM is updated
   setTimeout(() => {
@@ -66,8 +54,8 @@ function renderSystemResourcesChart() {
         {
           label: 'Memory Usage (MB)',
           data: memoryData,
-          borderColor: window.CONFIG.CHART_COLORS.primary,
-          backgroundColor: window.CONFIG.CHART_COLORS.primary + '15',
+          borderColor: window.CONFIG?.CHART_COLORS?.primary || '#3b82f6',
+          backgroundColor: (window.CONFIG?.CHART_COLORS?.primary || '#3b82f6') + '15',
           tension: 0.4,
           fill: true,
           yAxisID: 'y-memory',
@@ -78,8 +66,8 @@ function renderSystemResourcesChart() {
         {
           label: 'CPU Load Average',
           data: cpuData,
-          borderColor: window.CONFIG.CHART_COLORS.accent,
-          backgroundColor: window.CONFIG.CHART_COLORS.accent + '15',
+          borderColor: window.CONFIG?.CHART_COLORS?.accent || '#8b5cf6',
+          backgroundColor: (window.CONFIG?.CHART_COLORS?.accent || '#8b5cf6') + '15',
           tension: 0.4,
           fill: true,
           yAxisID: 'y-cpu',
@@ -100,76 +88,30 @@ function renderSystemResourcesChart() {
         legend: {
           display: true,
           position: 'top',
-          align: 'end',
-          labels: {
-            usePointStyle: true,
-            padding: 15,
-            font: {
-              size: 11,
-              family: 'Inter'
-            }
-          }
         },
         tooltip: {
-          backgroundColor: 'rgba(0, 0, 0, 0.8)',
-          padding: 12,
-          titleFont: { size: 13 },
-          bodyFont: { size: 12 },
-          callbacks: {
-            label: function(context) {
-              let label = context.dataset.label || '';
-              if (label) label += ': ';
-              if (context.dataset.yAxisID === 'y-memory') {
-                label += context.parsed.y.toFixed(1) + ' MB';
-              } else {
-                label += context.parsed.y.toFixed(2);
-              }
-              return label;
-            }
-          }
-        }
+          mode: 'index',
+          intersect: false,
+        },
       },
       scales: {
-        x: {
-          grid: { display: false },
-          ticks: {
-            maxRotation: 45,
-            minRotation: 0,
-            font: { size: 10 }
-          }
-        },
         'y-memory': {
           type: 'linear',
           position: 'left',
-          beginAtZero: true,
           title: {
             display: true,
-            text: 'Memory (MB)',
-            font: { size: 11, weight: 'bold' }
+            text: 'Memory (MB)'
           },
-          ticks: {
-            callback: function(value) { return value.toFixed(0) + ' MB'; },
-            font: { size: 10 }
-          },
-          grid: { color: 'rgba(99, 102, 241, 0.1)' }
+          max: maxMemory * 1.2
         },
         'y-cpu': {
           type: 'linear',
           position: 'right',
-          beginAtZero: true,
           title: {
             display: true,
-            text: 'CPU Load',
-            font: { size: 11, weight: 'bold' }
+            text: 'Load Average'
           },
-          ticks: {
-            callback: function(value) { return value.toFixed(1); },
-            font: { size: 10 }
-          },
-          grid: {
-            drawOnChartArea: false,
-            color: 'rgba(245, 158, 11, 0.1)'
-          }
+          max: maxCpu * 1.2
         }
       }
     }
@@ -179,4 +121,3 @@ function renderSystemResourcesChart() {
 // Export to window for global access
 window.renderSystemView = renderSystemView;
 window.renderSystemResourcesChart = renderSystemResourcesChart;
-

@@ -52,20 +52,55 @@ async function initializeDashboard() {
     
     // Step 2: Check server version to see if we need to sync
     initProgress.update('server', 0);
-    const serverHealth = await APIClient.get('/health');
-    const serverSequence = serverHealth.sequence || 0;
-    initProgress.update('server', 100);
+    let serverHealth = null;
+    let isConnected = false;
     
-    const cacheStale = await persistentStorage.isCacheStale(serverSequence);
+    try {
+      serverHealth = await APIClient.get('/health');
+      const serverSequence = serverHealth.sequence || 0;
+      isConnected = serverHealth.status === 'running' || serverHealth.sequence !== undefined;
+      initProgress.update('server', 100);
+      
+      // Update connection state
+      if (window.state) {
+        window.state.connected = isConnected;
+      }
+      
+      if (isConnected) {
+        updateConnectionStatus(true, 'Connected to companion service');
+      } else {
+        updateConnectionStatus(false, 'Companion service offline');
+      }
+    } catch (error) {
+      console.warn('[WARNING] Health check failed:', error.message);
+      isConnected = false;
+      if (window.state) {
+        window.state.connected = false;
+      }
+      updateConnectionStatus(false, 'Cannot reach companion service');
+      initProgress.update('server', 100);
+    }
     
-    if (cacheStale) {
+    const cacheStale = serverHealth ? await persistentStorage.isCacheStale(serverHealth.sequence || 0) : false;
+    
+    if (cacheStale && isConnected) {
       console.log('📥 Cache stale, fetching updates...');
       initProgress.update('data', 0);
-      await fetchRecentData();
-      await persistentStorage.updateServerSequence(serverSequence);
-      initProgress.update('data', 100);
+      try {
+        await fetchRecentData();
+        await persistentStorage.updateServerSequence(serverHealth.sequence || 0);
+        updateConnectionStatus(true, 'Connected - data synced');
+        initProgress.update('data', 100);
+      } catch (error) {
+        console.warn('[WARNING] Data fetch failed:', error.message);
+        updateConnectionStatus(false, 'Connected but sync failed');
+        initProgress.update('data', 100);
+      }
     } else {
       console.log('[SUCCESS] Cache up-to-date, using cached data');
+      if (isConnected) {
+        updateConnectionStatus(true, 'Connected - using cached data');
+      }
       initProgress.update('data', 100);
     }
     
@@ -75,13 +110,19 @@ async function initializeDashboard() {
     await renderCurrentView();
     initProgress.update('render', 100);
     
-    // Mark as complete
-    initProgress.complete();
+    // Mark as complete with final status
+    if (isConnected) {
+      initProgress.complete('Connected');
+    } else {
+      initProgress.complete('Offline - using cached data');
+    }
     
     // Step 4: Background: fetch older history if needed
-    setTimeout(() => {
-      fetchOlderHistory();
-    }, 3000);
+    if (isConnected) {
+      setTimeout(() => {
+        fetchOlderHistory();
+      }, 3000);
+    }
     
     // Step 5: Heavy analytics will be loaded on-demand via analyticsManager
     console.log('⏳ Heavy analytics deferred until idle/tab focus');
@@ -89,6 +130,9 @@ async function initializeDashboard() {
   } catch (error) {
     console.error('Initialization error:', error);
     updateConnectionStatus(false, 'Connection failed');
+    if (window.state) {
+      window.state.connected = false;
+    }
     // Fallback to old method
     await fetchAllData();
   }
@@ -151,7 +195,7 @@ async function fetchRecentData() {
 
   const windowHours = 24 * 365; // 1 year of data
   const windowLabel = windowHours >= 24 ? `${windowHours / 24}d` : `${windowHours}h`;
-  const startTime = Date.now() - (windowHours * 60 * 60 * 1000); // ✅ FIX: Define startTime
+  const startTime = Date.now() - (windowHours * 60 * 60 * 1000);
   console.log(`[SYNC] Fetching recent data (${windowLabel} window)...`);
   
   const pageSize = 500; // Optimized limit for performance
@@ -580,8 +624,9 @@ const initProgress = {
     console.log(`[PROGRESS] ${label} (${overallPercent}% overall)`);
   },
   
-  complete() {
-    updateConnectionStatus(true, 'Connected', 100);
+  complete(finalMessage = null) {
+    const message = finalMessage || 'Connected';
+    updateConnectionStatus(true, message, 100);
     // Hide progress bar after a short delay
     setTimeout(() => {
       const progressContainer = document.getElementById('connectionProgress');
@@ -646,42 +691,28 @@ function switchView(viewName) {
   renderCurrentView();
 }
 
-function renderCurrentView() {
-  const container = document.getElementById('viewContainer');
-  if (!container) return;
-
-  switch (state.currentView) {
-    case 'overview':
-      renderOverviewView(container);
-      break;
-    case 'activity':
-      renderActivityView(container);
-      break;
-    case 'analytics':
-      renderAnalyticsView(container);
-      break;
-    case 'filegraph':
-      renderFileGraphView(container);
-      break;
-    case 'navigator':
-      renderNavigatorView(container);
-      break;
-    case 'system':
-      renderSystemView(container);
-      break;
-    case 'api-docs':
-      renderAPIDocsView(container);
-      break;
-    default:
-      container.innerHTML = '<div class="empty-state">View not found</div>';
-  }
-}
-
 // ===================================
-// Overview View
+// View rendering is handled by core/view-router.js
+// Individual view implementations are in views/ directory
 // ===================================
 
-function renderOverviewView(container) {
+// Note: All view render functions are now in separate view files:
+// - views/overview/index.js
+// - views/activity/index.js  
+// - views/analytics/index.js
+// - views/file-graph/index.js
+// - views/navigator/index.js
+// - views/system/index.js
+// - views/api-docs/index.js
+// - views/threads/index.js
+
+// Removed duplicate view render functions - use the ones from views/ instead
+// ===================================
+// Overview View (moved to views/overview/index.js)
+// ===================================
+// Removed: function renderOverviewView - see views/overview/index.js
+
+function _legacy_renderOverviewView(container) {
   const recentEvents = state.data.events.slice(-10).reverse();
 
   container.innerHTML = `
@@ -729,9 +760,80 @@ function renderActivityTimeline(events) {
   `;
 }
 
+/**
+ * Group items into temporal threads/sessions based on time proximity
+ * Events within a time window (default 15 minutes) are grouped together
+ */
+function groupIntoTemporalThreads(items, timeWindowMs = 15 * 60 * 1000) {
+  if (items.length === 0) return [];
+  
+  // Filter out items with invalid timestamps first
+  const validItems = items.filter(item => {
+    return item.sortTime && !isNaN(item.sortTime) && isFinite(item.sortTime);
+  });
+  
+  if (validItems.length === 0) {
+    // If no valid items, return items as-is (don't group)
+    return items.map(item => ({
+      id: `single-${item.id || Date.now()}-${Math.random()}`,
+      items: [item],
+      startTime: item.sortTime || Date.now(),
+      lastItemTime: item.sortTime || Date.now(),
+      endTime: item.sortTime || Date.now(),
+      itemType: 'temporal-thread'
+    }));
+  }
+  
+  // Sort items by time (newest first for display, but we'll process chronologically)
+  const sorted = [...validItems].sort((a, b) => {
+    const aTime = a.sortTime || 0;
+    const bTime = b.sortTime || 0;
+    return bTime - aTime;
+  });
+  
+  const threads = [];
+  let currentThread = null;
+  
+  // Process from oldest to newest to build threads
+  const chronological = [...sorted].reverse();
+  
+  chronological.forEach(item => {
+    const itemTime = item.sortTime || Date.now();
+    
+    if (!currentThread || (itemTime - currentThread.lastItemTime) > timeWindowMs) {
+      // Start a new thread
+      if (currentThread) {
+        threads.push(currentThread);
+      }
+      currentThread = {
+        id: `thread-${itemTime}-${Math.random().toString(36).substr(2, 9)}`,
+        items: [item],
+        startTime: itemTime,
+        lastItemTime: itemTime,
+        endTime: itemTime,
+        itemType: 'temporal-thread'
+      };
+    } else {
+      // Add to current thread
+      currentThread.items.push(item);
+      currentThread.lastItemTime = itemTime;
+      currentThread.endTime = itemTime;
+    }
+  });
+  
+  // Add final thread
+  if (currentThread) {
+    threads.push(currentThread);
+  }
+  
+  // Convert back to reverse chronological for display
+  return threads.reverse();
+}
+
 function renderUnifiedTimeline(items) {
-  // Group prompts by conversation for threading
+  // First: Group prompts by conversation for threading
   const conversationMap = new Map();
+  const standalonePrompts = [];
   const nonPromptItems = [];
   
   items.forEach(item => {
@@ -740,21 +842,28 @@ function renderUnifiedTimeline(items) {
       const isThread = item.type === 'conversation-thread' && !item.parentConversationId;
       const conversationId = isThread ? item.composerId : (item.parentConversationId || item.composerId);
       
-      if (!conversationMap.has(conversationId)) {
-        conversationMap.set(conversationId, {
-          thread: isThread ? item : null,
-          messages: [],
-          timestamp: item.sortTime
-        });
-      }
-      
-      const conv = conversationMap.get(conversationId);
-      if (isThread) {
-        conv.thread = item;
+      // Only group prompts that are part of conversations
+      // Standalone prompts (no conversationId) should be rendered individually
+      if (conversationId) {
+        if (!conversationMap.has(conversationId)) {
+          conversationMap.set(conversationId, {
+            thread: isThread ? item : null,
+            messages: [],
+            timestamp: item.sortTime
+          });
+        }
+        
+        const conv = conversationMap.get(conversationId);
+        if (isThread) {
+          conv.thread = item;
+        } else {
+          conv.messages.push(item);
+        }
+        conv.timestamp = Math.max(conv.timestamp, item.sortTime);
       } else {
-        conv.messages.push(item);
+        // This is a standalone prompt, not part of a conversation
+        standalonePrompts.push(item);
       }
-      conv.timestamp = Math.max(conv.timestamp, item.sortTime);
     } else {
       nonPromptItems.push(item);
     }
@@ -767,28 +876,45 @@ function renderUnifiedTimeline(items) {
     sortTime: conv.timestamp
   }));
   
-  // Merge and sort all items
-  const allItems = [...conversationItems, ...nonPromptItems]
-    .sort((a, b) => b.sortTime - a.sortTime);
+  // Merge all items (conversations, standalone prompts, and other items)
+  const allItems = [...conversationItems, ...standalonePrompts, ...nonPromptItems]
+    .sort((a, b) => {
+      const aTime = a.sortTime || 0;
+      const bTime = b.sortTime || 0;
+      return bTime - aTime;
+    });
+  
+  // Apply temporal threading to group items by time windows
+  // Only group if items have meaningful time differences
+  const temporalThreads = groupIntoTemporalThreads(allItems, 15 * 60 * 1000); // 15 minute window
   
   return `
-    <div class="timeline">
-      ${allItems.map(item => {
-        if (item.itemType === 'event') {
-          return renderTimelineItem(item);
-        } else if (item.itemType === 'terminal') {
-          return renderTerminalTimelineItem(item);
-        } else if (item.itemType === 'conversation') {
-          return renderConversationThread(item.conversation);
-        } else {
-          return renderPromptTimelineItem(item);
+    <div class="timeline-alternating">
+      <div class="timeline-axis"></div>
+      ${temporalThreads.map(thread => {
+        // If thread has only one item, render it with appropriate side
+        if (thread.items.length === 1) {
+          const item = thread.items[0];
+          if (item.itemType === 'event') {
+            return renderTimelineItem(item, 'left');
+          } else if (item.itemType === 'terminal') {
+            return renderTerminalTimelineItem(item, 'left');
+          } else if (item.itemType === 'conversation') {
+            return renderConversationThread(item.conversation, 'right');
+          } else if (item.itemType === 'prompt') {
+            return renderPromptTimelineItem(item, 'right');
+          }
+          return '';
         }
+        
+        // Multiple items: render as a temporal thread/session with mixed content
+        return renderTemporalThread(thread);
       }).join('')}
     </div>
   `;
 }
 
-function renderConversationThread(conversation) {
+function renderConversationThread(conversation, side = 'right') {
   const { thread, messages } = conversation;
   const title = thread?.conversationTitle || thread?.text || 'Untitled Conversation';
   const time = formatTimeAgo(thread?.timestamp || conversation.timestamp);
@@ -799,8 +925,8 @@ function renderConversationThread(conversation) {
   const sortedMessages = messages.sort((a, b) => a.sortTime - b.sortTime);
   
   return `
-    <div class="timeline-item conversation-timeline-item">
-      <div class="timeline-content">
+    <div class="timeline-item timeline-item-${side} conversation-timeline-item">
+      <div class="timeline-content prompt-content">
         <div class="timeline-header clickable" onclick="toggleConversationMessages('${threadId}')">
           <div class="timeline-title">
             <span id="conv-icon-${threadId}" class="timeline-title-icon"></span>
@@ -862,8 +988,12 @@ function toggleConversationMessages(threadId) {
   }
 }
 
-function renderPromptTimelineItem(prompt) {
-  const time = formatTimeAgo(prompt.timestamp);
+function renderPromptTimelineItem(prompt, side = 'right') {
+  // Use sortTime if available (processed timestamp), otherwise fall back to timestamp
+  const timestamp = prompt.sortTime && !isNaN(prompt.sortTime) ? prompt.sortTime : 
+                    (prompt.timestamp ? new Date(prompt.timestamp).getTime() : Date.now());
+  const time = formatTimeAgo(timestamp);
+  
   const promptText = prompt.text || prompt.prompt || prompt.preview || prompt.content || 'No prompt text';
   const displayText = promptText.length > 100 ? promptText.substring(0, 100) + '...' : promptText;
   const isJsonLike = promptText.startsWith('{') || promptText.startsWith('[');
@@ -878,8 +1008,8 @@ function renderPromptTimelineItem(prompt) {
   const confidence = prompt.confidence || 'medium';
   
   return `
-    <div class="timeline-item prompt-timeline-item" onclick="showEventModal('${prompt.id}')">
-      <div class="timeline-content">
+    <div class="timeline-item timeline-item-${side} prompt-timeline-item" onclick="showEventModal('${prompt.id}')">
+      <div class="timeline-content prompt-content">
         <div class="timeline-header">
           <div class="timeline-title">
             <span>${icon}</span>
@@ -898,7 +1028,106 @@ function renderPromptTimelineItem(prompt) {
   `;
 }
 
-function renderTerminalTimelineItem(cmd) {
+/**
+ * Render a temporal thread/session containing multiple events within a time window
+ */
+function renderTemporalThread(thread) {
+  // Validate timestamps
+  const startTime = thread.startTime && !isNaN(thread.startTime) ? thread.startTime : Date.now();
+  const endTime = thread.endTime && !isNaN(thread.endTime) ? thread.endTime : startTime;
+  
+  const duration = endTime - startTime;
+  const durationMinutes = duration > 0 ? Math.round(duration / 60000) : 0;
+  
+  const startDate = new Date(startTime);
+  const endDate = new Date(endTime);
+  
+  // Only show time range if times are different, otherwise show single time
+  const timeRange = duration > 60000 // More than 1 minute difference
+    ? `${startDate.toLocaleTimeString()} - ${endDate.toLocaleTimeString()}`
+    : startDate.toLocaleTimeString();
+  
+  const threadId = thread.id;
+  
+  // Count items by type
+  const eventCounts = {
+    events: 0,
+    prompts: 0,
+    terminals: 0,
+    conversations: 0
+  };
+  
+  thread.items.forEach(item => {
+    if (item.itemType === 'event') eventCounts.events++;
+    else if (item.itemType === 'prompt') eventCounts.prompts++;
+    else if (item.itemType === 'terminal') eventCounts.terminals++;
+    else if (item.itemType === 'conversation') eventCounts.conversations++;
+  });
+  
+  const totalItems = thread.items.length;
+  const summary = [
+    eventCounts.events > 0 ? `${eventCounts.events} file change${eventCounts.events !== 1 ? 's' : ''}` : '',
+    eventCounts.prompts > 0 ? `${eventCounts.prompts} prompt${eventCounts.prompts !== 1 ? 's' : ''}` : '',
+    eventCounts.terminals > 0 ? `${eventCounts.terminals} terminal command${eventCounts.terminals !== 1 ? 's' : ''}` : '',
+    eventCounts.conversations > 0 ? `${eventCounts.conversations} conversation${eventCounts.conversations !== 1 ? 's' : ''}` : ''
+  ].filter(Boolean).join(', ');
+  
+  // Sort items within thread chronologically (oldest first within the thread)
+  const sortedItems = [...thread.items].sort((a, b) => a.sortTime - b.sortTime);
+  
+  return `
+    <div class="timeline-item temporal-thread-item">
+      <div class="timeline-content">
+        <div class="timeline-header clickable" onclick="toggleTemporalThread('${threadId}')">
+          <div class="timeline-title">
+            <span id="thread-icon-${threadId}" class="timeline-title-icon">▶</span>
+            <span class="timeline-title-text">Activity Session</span>
+            <span class="timeline-title-meta">(${totalItems} items • ${durationMinutes} min)</span>
+          </div>
+          <div class="timeline-meta">${formatTimeAgo(thread.startTime)}</div>
+        </div>
+        <div class="timeline-description">
+          <span class="badge badge-prompt">${timeRange}</span>
+          <span class="badge">${summary}</span>
+        </div>
+        
+        <!-- Thread items (initially hidden) -->
+        <div id="thread-items-${threadId}" class="temporal-thread-items">
+          ${sortedItems.map(item => {
+            if (item.itemType === 'event') {
+              return renderTimelineItem(item, 'left');
+            } else if (item.itemType === 'terminal') {
+              return renderTerminalTimelineItem(item, 'left');
+            } else if (item.itemType === 'conversation') {
+              return renderConversationThread(item.conversation, 'right');
+            } else if (item.itemType === 'prompt') {
+              return renderPromptTimelineItem(item, 'right');
+            }
+            return '';
+          }).join('')}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function toggleTemporalThread(threadId) {
+  const itemsDiv = document.getElementById(`thread-items-${threadId}`);
+  const icon = document.getElementById(`thread-icon-${threadId}`);
+  
+  if (itemsDiv && icon) {
+    const isHidden = !itemsDiv.classList.contains('visible');
+    if (isHidden) {
+      itemsDiv.classList.add('visible');
+      icon.textContent = '▼';
+    } else {
+      itemsDiv.classList.remove('visible');
+      icon.textContent = '▶';
+    }
+  }
+}
+
+function renderTerminalTimelineItem(cmd, side = 'left') {
   const time = formatTimeAgo(cmd.timestamp);
   const commandText = cmd.command || 'Unknown command';
   const displayText = commandText.length > 80 ? commandText.substring(0, 80) + '...' : commandText;
@@ -907,7 +1136,7 @@ function renderTerminalTimelineItem(cmd) {
   const source = cmd.source || 'terminal';
   
   return `
-    <div class="timeline-item terminal-timeline-item ${isError ? 'error' : ''}" style="border-left-color: ${isError ? '#ef4444' : '#8b5cf6'};" onclick="showTerminalModal('${cmd.id}')">
+    <div class="timeline-item timeline-item-${side} terminal-timeline-item event-content ${isError ? 'error' : ''}" style="border-left-color: ${isError ? '#ef4444' : '#8b5cf6'};" onclick="showTerminalModal('${cmd.id}')">
       <div class="timeline-content">
         <div class="timeline-header">
           <div class="timeline-title">
@@ -927,7 +1156,7 @@ function renderTerminalTimelineItem(cmd) {
     </div>
   `;
 }
-function renderTimelineItem(event) {
+function renderTimelineItem(event, side = 'left') {
   const time = new Date(event.timestamp).toLocaleTimeString();
   const title = getEventTitle(event);
   const desc = getEventDescription(event);
@@ -980,7 +1209,7 @@ function renderTimelineItem(event) {
   }
   
   return `
-    <div class="timeline-item" onclick="showEventModal('${event.id || event.timestamp}')">
+    <div class="timeline-item timeline-item-left event-content" onclick="showEventModal('${event.id || event.timestamp}')">
       <div class="timeline-content">
         <div class="timeline-header">
           <div class="timeline-title">
@@ -1119,7 +1348,12 @@ function renderWorkspacesList() {
 // Activity View
 // ===================================
 
-function renderActivityView(container) {
+// ===================================
+// Activity View (moved to views/activity/index.js)
+// ===================================
+// Removed: function renderActivityView - see views/activity/index.js
+
+function _legacy_renderActivityView(container) {
   const events = filterEventsByWorkspace(state.data.events);
   const prompts = state.data.prompts || [];
   const terminalCommands = state.data.terminalCommands || [];
@@ -1131,19 +1365,40 @@ function renderActivityView(container) {
       itemType: 'event',
       sortTime: new Date(event.timestamp).getTime()
     })),
-    ...prompts.map(prompt => ({
-      ...prompt,
-      itemType: 'prompt',
-      sortTime: new Date(prompt.timestamp).getTime(),
-      id: prompt.id || `prompt-${prompt.timestamp}`
-    })),
+    ...prompts.map(prompt => {
+      // Handle various timestamp formats
+      let timestamp = prompt.timestamp;
+      if (typeof timestamp === 'string') {
+        timestamp = new Date(timestamp).getTime();
+      } else if (typeof timestamp === 'number') {
+        // Already a timestamp
+      } else {
+        // Fallback to current time if invalid
+        timestamp = Date.now();
+      }
+      // Ensure we have a valid number
+      if (isNaN(timestamp)) {
+        timestamp = Date.now();
+      }
+      
+      return {
+        ...prompt,
+        itemType: 'prompt',
+        sortTime: timestamp,
+        timestamp: prompt.timestamp || new Date().toISOString(),
+        id: prompt.id || `prompt-${timestamp}`
+      };
+    }),
     ...terminalCommands.map(cmd => ({
       ...cmd,
       itemType: 'terminal',
-      sortTime: cmd.timestamp,
+      sortTime: cmd.timestamp || Date.now(),
       id: cmd.id
     }))
-  ].sort((a, b) => b.sortTime - a.sortTime).slice(0, 100);
+  ]
+  .filter(item => item.sortTime && !isNaN(item.sortTime)) // Remove items with invalid timestamps
+  .sort((a, b) => b.sortTime - a.sortTime)
+  .slice(0, 100);
   
   container.innerHTML = `
     <div class="activity-view">
@@ -1177,7 +1432,12 @@ function renderActivityView(container) {
 // Threads View  
 // ===================================
 
-function renderThreadsView(container) {
+// ===================================
+// Threads View (moved to views/threads/index.js)
+// ===================================
+// Removed: function renderThreadsView - see views/threads/index.js
+
+function _legacy_renderThreadsView(container) {
   // Group entries by session/thread
   const threads = groupIntoThreads(state.data.entries);
   const prompts = state.data.prompts || [];
@@ -1296,10 +1556,30 @@ function getPromptStatusIcon(status) {
 }
 
 function formatTimeAgo(timestamp) {
+  if (!timestamp || isNaN(timestamp)) {
+    return 'Unknown time';
+  }
+  
   const now = Date.now();
-  const time = new Date(timestamp).getTime();
+  let time;
+  
+  // Handle various timestamp formats
+  if (typeof timestamp === 'string') {
+    time = new Date(timestamp).getTime();
+  } else if (typeof timestamp === 'number') {
+    time = timestamp;
+  } else {
+    time = new Date(timestamp).getTime();
+  }
+  
+  // Check if time is valid
+  if (isNaN(time)) {
+    return 'Unknown time';
+  }
+  
   const diff = now - time;
   
+  if (diff < 0) return 'Just now'; // Future timestamps
   if (diff < 60000) return 'Just now';
   if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
   if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
@@ -1355,7 +1635,12 @@ function renderThreadsList(threads) {
 // Analytics View
 // ===================================
 
-function renderAnalyticsView(container) {
+// ===================================
+// Analytics View (moved to views/analytics/index.js)
+// ===================================
+// Removed: function renderAnalyticsView - see views/analytics/index.js
+
+function _legacy_renderAnalyticsView(container) {
   // Calculate data status
   const totalPrompts = state.data.prompts?.length || 0;
   const totalEvents = state.data.events?.length || 0;
@@ -1722,180 +2007,18 @@ function renderActivityChart_DISABLED() {
   });
 }
 
-function renderFileTypesChart() {
-  const ctx = document.getElementById('fileTypesChart');
-  if (!ctx) return;
 
-  // Count file types
-  const typeCount = {};
-  state.data.events.forEach(event => {
-    try {
-      const details = typeof event.details === 'string' ? JSON.parse(event.details) : event.details;
-      const path = details?.file_path || '';
-      let ext = path.split('.').pop() || 'unknown';
-      
-      // Group all Git-related extensions under "Git"
-      if (ext.startsWith('Git') || ext === 'COMMIT_EDITMSG' || ext === 'HEAD' || 
-          ext === 'index' || ext === 'FETCH_HEAD' || ext === 'ORIG_HEAD' || 
-          path.includes('.git/')) {
-        ext = 'Git';
-      }
-      
-      typeCount[ext] = (typeCount[ext] || 0) + 1;
-    } catch {}
-  });
-
-  const labels = Object.keys(typeCount).slice(0, 5);
-  const data = labels.map(label => typeCount[label]);
-
-  createChart('fileTypesChart', {
-    type: 'doughnut',
-    data: {
-      labels: labels,
-      datasets: [{
-        data: data,
-        backgroundColor: [
-          CONFIG.CHART_COLORS.primary,
-          CONFIG.CHART_COLORS.secondary,
-          CONFIG.CHART_COLORS.accent,
-          CONFIG.CHART_COLORS.success,
-          CONFIG.CHART_COLORS.warning
-        ]
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: true,
-      plugins: {
-        legend: {position: 'bottom'}
-      }
-    }
-  });
-}
-
-function renderHourlyChart() {
-  const ctx = document.getElementById('hourlyChart');
-  if (!ctx) return;
-
-  const allEvents = state.data.events || [];
-  const allPrompts = state.data.prompts || [];
-  
-  if (allEvents.length === 0 && allPrompts.length === 0) {
-    return;
-  }
-
-  // Create continuous timeline for the last 12 hours (by 15-minute intervals)
-  const now = Date.now();
-  const twelveHoursAgo = now - (12 * 60 * 60 * 1000);
-  const intervalSize = 15 * 60 * 1000; // 15 minutes
-  const numIntervals = 48; // 12 hours / 15 minutes = 48 intervals
-  
-  const intervals = [];
-  for (let i = 0; i < numIntervals; i++) {
-    const intervalStart = twelveHoursAgo + (i * intervalSize);
-    intervals.push({
-      timestamp: intervalStart,
-      events: 0,
-      prompts: 0
-    });
-  }
-  
-  // Fill intervals with events
-  allEvents.forEach(event => {
-    const eventTime = new Date(event.timestamp).getTime();
-    if (eventTime >= twelveHoursAgo) {
-      const intervalIndex = Math.floor((eventTime - twelveHoursAgo) / intervalSize);
-      if (intervalIndex >= 0 && intervalIndex < numIntervals) {
-        intervals[intervalIndex].events++;
-      }
-    }
-  });
-  
-  // Fill intervals with prompts
-  allPrompts.forEach(prompt => {
-    const promptTime = new Date(prompt.timestamp).getTime();
-    if (promptTime >= twelveHoursAgo) {
-      const intervalIndex = Math.floor((promptTime - twelveHoursAgo) / intervalSize);
-      if (intervalIndex >= 0 && intervalIndex < numIntervals) {
-        intervals[intervalIndex].prompts++;
-      }
-    }
-  });
-
-  createChart('hourlyChart', {
-    type: 'bar',
-    data: {
-      labels: intervals.map(interval => {
-        const date = new Date(interval.timestamp);
-        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      }),
-      datasets: [
-        {
-          label: 'File Changes',
-          data: intervals.map(i => i.events),
-          backgroundColor: CONFIG.CHART_COLORS.secondary,
-          borderColor: CONFIG.CHART_COLORS.secondary,
-          borderWidth: 1
-        },
-        {
-          label: 'AI Prompts',
-          data: intervals.map(i => i.prompts),
-          backgroundColor: 'rgba(139, 92, 246, 0.7)',
-          borderColor: '#8b5cf6',
-          borderWidth: 1
-        }
-      ]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: true,
-      interaction: {
-        mode: 'index',
-        intersect: false
-      },
-      plugins: {
-        legend: {
-          display: true,
-          position: 'top',
-          align: 'end',
-          labels: {
-            usePointStyle: true,
-            padding: 10,
-            font: { size: 10 }
-          }
-        },
-        tooltip: {
-          backgroundColor: 'rgba(0, 0, 0, 0.8)',
-          padding: 8,
-          titleFont: { size: 11 },
-          bodyFont: { size: 10 }
-        }
-      },
-      scales: {
-        x: {
-          ticks: {
-            maxRotation: 45,
-            minRotation: 45,
-            font: { size: 8 }
-          }
-        },
-        y: {
-          beginAtZero: true,
-          ticks: {
-            stepSize: 1,
-            font: { size: 10 }
-          }
-        }
-      }
-    }
-  });
-}
 
 // ===================================
 // File Graph View
 // ===================================
 
-function renderFileGraphView(container) {
+// ===================================
+// File Graph View (moved to views/file-graph/index.js)
+// ===================================
+// Removed: function renderFileGraphView - see views/file-graph/index.js
+
+function _legacy_renderFileGraphView(container) {
   container.innerHTML = `
     <div class="file-graph-view">
       <div class="view-header">
@@ -2480,26 +2603,37 @@ async function initializeD3FileGraph() {
     // Render with D3
     renderD3FileGraph(container, files, links);
     
-    // Update basic stats
-    document.getElementById('graphNodeCount').textContent = files.length;
-    document.getElementById('graphLinkCount').textContent = links.length;
-    document.getElementById('graphPromptCount').textContent = state.data.prompts.length;
+    // Update basic stats (with null checks)
+    const nodeCountEl = document.getElementById('graphNodeCount');
+    const linkCountEl = document.getElementById('graphLinkCount');
+    const promptCountEl = document.getElementById('graphPromptCount');
+    const avgSimEl = document.getElementById('graphAvgSimilarity');
     
-    if (links.length > 0) {
+    if (nodeCountEl) nodeCountEl.textContent = files.length;
+    if (linkCountEl) linkCountEl.textContent = links.length;
+    if (promptCountEl) promptCountEl.textContent = (state.data.prompts || []).length;
+    
+    if (links.length > 0 && avgSimEl) {
       const avgSim = links.reduce((sum, l) => sum + l.similarity, 0) / links.length;
-      document.getElementById('graphAvgSimilarity').textContent = avgSim.toFixed(3);
+      avgSimEl.textContent = avgSim.toFixed(3);
+    } else if (avgSimEl) {
+      avgSimEl.textContent = '0.000';
     }
     
     // Render most similar file pairs
     renderSimilarFilePairs(links, files);
     
-    // Render file similarity based on AI prompts
+    // Render prompt embeddings visualization for the "Prompts Embedding Analysis" section
+    // This analyzes prompts themselves, not files (file analysis is in Navigator view)
     renderEmbeddingsVisualization();
     
-    // Update TF-IDF analysis
-    document.getElementById('tfidfTotalTerms').textContent = tfidfStats.totalTerms.toLocaleString();
-    document.getElementById('tfidfUniqueTerms').textContent = tfidfStats.uniqueTerms;
-    document.getElementById('tfidfAvgFreq').textContent = tfidfStats.avgFrequency.toFixed(2);
+    // Update TF-IDF analysis (with null checks)
+    const tfidfTotalTermsEl = document.getElementById('tfidfTotalTerms');
+    const tfidfUniqueTermsEl = document.getElementById('tfidfUniqueTerms');
+    const tfidfAvgFreqEl = document.getElementById('tfidfAvgFreq');
+    if (tfidfTotalTermsEl) tfidfTotalTermsEl.textContent = tfidfStats.totalTerms.toLocaleString();
+    if (tfidfUniqueTermsEl) tfidfUniqueTermsEl.textContent = tfidfStats.uniqueTerms;
+    if (tfidfAvgFreqEl) tfidfAvgFreqEl.textContent = tfidfStats.avgFrequency.toFixed(2);
     
     // Show ALL top terms (not just 10) with scrolling
     const termsHtml = tfidfStats.topTerms.map((term, index) => `
@@ -2511,7 +2645,10 @@ async function initializeD3FileGraph() {
         <span style="font-weight: 600; color: var(--color-accent);">${term.tfidf.toFixed(4)}</span>
       </div>
     `).join('');
-    document.getElementById('topTerms').innerHTML = termsHtml || '<div style="color: var(--color-text-muted); font-size: 13px;">No terms found</div>';
+    const topTermsEl = document.getElementById('topTerms');
+    if (topTermsEl) {
+      topTermsEl.innerHTML = termsHtml || '<div style="color: var(--color-text-muted); font-size: 13px;">No terms found</div>';
+    }
     
   } catch (error) {
     console.error('Failed to initialize file graph:', error);
@@ -2566,8 +2703,14 @@ function renderEmbeddingsVisualization() {
     
     console.log(`[EMBEDDINGS] Filtered to ${validPrompts.length} valid prompts`);
     
+    // Update stats immediately
+    const filesCountEl = document.getElementById('embeddingsFilesCount');
+    const totalChangesEl = document.getElementById('embeddingsTotalChanges');
+    if (filesCountEl) filesCountEl.textContent = validPrompts.length;
+    
     if (validPrompts.length === 0) {
       container.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--color-text-muted); font-size: 13px;">No valid prompts for analysis (filtered out JSON metadata)</div>';
+      if (totalChangesEl) totalChangesEl.textContent = '0';
       return;
     }
     
@@ -2649,12 +2792,17 @@ function renderEmbeddingsVisualization() {
       renderEmbeddings3D(container, reducedVectors, promptLabels, promptMetadata);
     }
     
+    // Calculate total tokens for display
+    const totalTokens = allTokens.reduce((sum, tokens) => sum + tokens.length, 0);
+    if (totalChangesEl) totalChangesEl.textContent = totalTokens.toLocaleString();
+    
     // Update similarity pairs to show similar prompts
     const avgSim = updatePromptSimilarityPairs(validPrompts, vectors, promptTexts);
     
     // Update average similarity stat
-    if (avgSim !== null) {
-      document.getElementById('embeddingsAvgSimilarity').textContent = avgSim.toFixed(3);
+    const avgSimEl = document.getElementById('embeddingsAvgSimilarity');
+    if (avgSimEl && avgSim !== null) {
+      avgSimEl.textContent = avgSim.toFixed(3);
     }
     
   } catch (error) {
@@ -4688,8 +4836,16 @@ function navigateToMiniMapPosition(x, y) {
     .call(navigatorState.zoom.transform, d3.zoomIdentity.translate(translateX, translateY).scale(scale));
 }
 function updateNavigatorStats() {
-  document.getElementById('navFileCount').textContent = navigatorState.nodes.length;
-  document.getElementById('navClusterCount').textContent = navigatorState.clusters.length;
+  const fileCountEl = document.getElementById('navFileCount');
+  const clusterCountEl = document.getElementById('navClusterCount');
+  
+  if (!fileCountEl || !clusterCountEl) {
+    console.warn('[NAVIGATOR] Stats elements not found, skipping update');
+    return;
+  }
+  
+  fileCountEl.textContent = navigatorState.nodes.length;
+  clusterCountEl.textContent = navigatorState.clusters.length;
   
   // Calculate coherence (average intra-cluster distance vs inter-cluster distance)
   let coherence = 0;
@@ -4698,9 +4854,11 @@ function updateNavigatorStats() {
     const interDistances = [];
     
     navigatorState.clusters.forEach(cluster => {
+      if (!cluster.nodes || cluster.nodes.length === 0) return;
       cluster.nodes.forEach((n1, i) => {
+        if (!n1 || typeof n1.x !== 'number' || typeof n1.y !== 'number') return;
         cluster.nodes.forEach((n2, j) => {
-          if (i < j) {
+          if (i < j && n2 && typeof n2.x === 'number' && typeof n2.y === 'number') {
             const dist = Math.sqrt((n1.x - n2.x) ** 2 + (n1.y - n2.y) ** 2);
             intraDistances.push(dist);
           }
@@ -4710,9 +4868,11 @@ function updateNavigatorStats() {
     
     navigatorState.clusters.forEach((c1, i) => {
       navigatorState.clusters.forEach((c2, j) => {
-        if (i < j) {
+        if (i < j && c1.nodes && c1.nodes.length > 0 && c2.nodes && c2.nodes.length > 0) {
           c1.nodes.forEach(n1 => {
+            if (!n1 || typeof n1.x !== 'number' || typeof n1.y !== 'number') return;
             c2.nodes.forEach(n2 => {
+              if (!n2 || typeof n2.x !== 'number' || typeof n2.y !== 'number') return;
               const dist = Math.sqrt((n1.x - n2.x) ** 2 + (n1.y - n2.y) ** 2);
               interDistances.push(dist);
             });
@@ -4726,7 +4886,10 @@ function updateNavigatorStats() {
     coherence = Math.max(0, Math.min(100, (1 - avgIntra / avgInter) * 100));
   }
   
-  document.getElementById('navCoherence').textContent = `${coherence.toFixed(0)}%`;
+  const coherenceEl = document.getElementById('navCoherence');
+  if (coherenceEl) {
+    coherenceEl.textContent = `${coherence.toFixed(0)}%`;
+  }
   
   // Update cluster legend
   const legend = document.getElementById('clusterLegend');
@@ -4747,16 +4910,28 @@ function generateSemanticInsights() {
   const insights = [];
   
   // Find most isolated cluster
-  const clusterCenters = navigatorState.clusters.map(c => c.centroid);
+  const clusterCenters = navigatorState.clusters
+    .map(c => c.centroid)
+    .filter(centroid => centroid && typeof centroid.x === 'number' && typeof centroid.y === 'number');
+  
+  if (clusterCenters.length === 0) return; // No valid centroids
+  
   let maxDist = 0;
   let isolatedCluster = null;
   
   navigatorState.clusters.forEach((cluster, i) => {
+    if (!cluster.centroid || typeof cluster.centroid.x !== 'number' || typeof cluster.centroid.y !== 'number') {
+      return; // Skip clusters without valid centroids
+    }
+    
     const distances = clusterCenters.map((center, j) => {
-      if (i === j) return 0;
+      if (i === j || !center || typeof center.x !== 'number' || typeof center.y !== 'number') return 0;
       return Math.sqrt((cluster.centroid.x - center.x) ** 2 + (cluster.centroid.y - center.y) ** 2);
     });
-    const minDist = Math.min(...distances.filter(d => d > 0));
+    const validDistances = distances.filter(d => d > 0);
+    if (validDistances.length === 0) return;
+    
+    const minDist = Math.min(...validDistances);
     if (minDist > maxDist) {
       maxDist = minDist;
       isolatedCluster = cluster;
@@ -4928,8 +5103,10 @@ function resetFileGraphZoom() {
 // ===================================
 // File Similarity via Prompts Analysis
 // ===================================
+// NOTE: This analyzes FILES based on prompts, not prompts themselves
+// The "Prompts Embedding Analysis" section uses the renderEmbeddingsVisualization() function above (line 2608)
 
-function renderEmbeddingsVisualization() {
+function renderFileSimilarityFromPrompts() {
   console.log('[STYLE] Rendering file similarity embeddings based on prompt context...');
   
   // Get all prompts with valid text (filter out JSON/composer conversations)
@@ -5142,7 +5319,12 @@ function renderFileSimilarityVisualization(files, filePromptMap, similarities) {
 // Navigator View (Latent Space)
 // ===================================
 
-function renderNavigatorView(container) {
+// ===================================
+// Navigator View (moved to views/navigator/index.js)
+// ===================================
+// Removed: function renderNavigatorView - see views/navigator/index.js
+
+function _legacy_renderNavigatorView(container) {
   container.innerHTML = `
     <div class="navigator-view">
       <div class="view-header">
@@ -5287,21 +5469,12 @@ function renderNavigatorView(container) {
 // System View
 // ===================================
 
-function renderSystemView(container) {
-  const latestGit = state.data.gitData[state.data.gitData.length - 1];
-  const latestIdeState = Array.isArray(state.data.ideState) && state.data.ideState.length > 0 
-    ? state.data.ideState[state.data.ideState.length - 1] 
-    : null;
-  
-  // Extract editor info from the nested structure
-  const openTabs = latestIdeState?.editorState?.activeTabs?.length || 0;
-  const currentFile = latestIdeState?.editorState?.editorLayout?.activeEditor || 'None';
-  const currentFileName = currentFile !== 'None' ? currentFile.split('/').pop() : 'None';
-  const languageMode = latestIdeState?.editorConfiguration?.languageMode || 'Unknown';
-  const cursorPos = latestIdeState?.editorState?.activeTabs?.[0]?.lineNumber && latestIdeState?.editorState?.activeTabs?.[0]?.columnNumber
-    ? `Ln ${latestIdeState.editorState.activeTabs[0].lineNumber}, Col ${latestIdeState.editorState.activeTabs[0].columnNumber}`
-    : 'Unknown';
+// ===================================
+// System View (moved to views/system/index.js)
+// ===================================
+// Removed: function renderSystemView - see views/system/index.js
 
+function _legacy_renderSystemView(container) {
   container.innerHTML = `
     <div class="system-view">
       
@@ -5314,58 +5487,6 @@ function renderSystemView(container) {
           </div>
           <div class="card-body">
             ${renderSystemStatus()}
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="card-header">
-            <h3 class="card-title">Git Repository</h3>
-          </div>
-          <div class="card-body">
-            ${latestGit ? `
-              <div class="system-status-list">
-                <div class="info-row">
-                  <span class="info-label">Branch</span>
-                  <span class="info-value mono">${escapeHtml(latestGit.branch || 'Unknown')}</span>
-                </div>
-                <div class="info-row">
-                  <span class="info-label">Modified Files</span>
-                  <span class="info-value">${latestGit.status?.length || 0}</span>
-                </div>
-                <div class="info-row">
-                  <span class="info-label">Recent Commits</span>
-                  <span class="info-value">${latestGit.recentCommits?.length || 0}</span>
-                </div>
-              </div>
-            ` : '<div class="empty-state-text">No git data available</div>'}
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="card-header">
-            <h3 class="card-title">Editor State</h3>
-          </div>
-          <div class="card-body">
-            ${latestIdeState ? `
-              <div class="system-status-list">
-                <div class="info-row">
-                  <span class="info-label">Open Tabs</span>
-                  <span class="info-value">${openTabs}</span>
-                </div>
-                <div class="info-row">
-                  <span class="info-label">Current File</span>
-                  <span class="info-value mono small" title="${escapeHtml(currentFile)}">${escapeHtml(truncate(currentFileName, 25))}</span>
-                </div>
-                <div class="info-row">
-                  <span class="info-label">Language</span>
-                  <span class="info-value">${escapeHtml(languageMode || 'Unknown')}</span>
-                </div>
-                <div class="info-row">
-                  <span class="info-label">Position</span>
-                  <span class="info-value">${escapeHtml(cursorPos)}</span>
-                </div>
-              </div>
-            ` : '<div class="empty-state-text">No IDE state available</div>'}
           </div>
         </div>
 
@@ -5399,7 +5520,12 @@ function renderSystemView(container) {
 // API Documentation View
 // ===================================
 
-function renderAPIDocsView(container) {
+// ===================================
+// API Docs View (moved to views/api-docs/index.js)
+// ===================================
+// Removed: function renderAPIDocsView - see views/api-docs/index.js
+
+function _legacy_renderAPIDocsView(container) {
   container.innerHTML = `
     <div style="max-width: 1200px; margin: 0 auto;">
       <div class="page-header">
@@ -6210,188 +6336,6 @@ socket.on('activity', (event) => {
     </div>
   `;
 }
-function renderSystemResourcesChart() {
-  const canvas = document.getElementById('systemResourcesChart');
-  if (!canvas) return;
-  
-  const ctx = canvas.getContext('2d');
-  const data = state.data.systemResources.slice(-30); // Last 30 data points
-  
-  if (data.length === 0) {
-    // ✅ Use HTML instead of canvas text to avoid blurriness on Retina displays
-    canvas.style.display = 'none';
-    const container = canvas.parentElement;
-    container.innerHTML = `
-      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 200px; text-align: center;">
-        <div style="font-size: var(--text-md); font-weight: 500; color: var(--color-text); margin-bottom: var(--space-xs);">No Data Available</div>
-        <div style="font-size: var(--text-sm); color: var(--color-text-muted);">File type data will appear as you edit files</div>
-      </div>
-    `;
-    return;
-  }
-
-  // Calculate max values for dual-axis scaling
-  // Handle both old format (d.memory as number) and new format (d.memory.rss)
-  const memoryData = data.map(d => {
-    const memBytes = d.memory?.rss || d.memory?.heapUsed || d.memory || 0;
-    return parseFloat((memBytes / 1024 / 1024).toFixed(1));
-  });
-  
-  // Handle both d.loadAverage and d.system.loadAverage
-  const cpuData = data.map(d => {
-    const loadAvg = d.system?.loadAverage || d.loadAverage || [0];
-    return loadAvg[0] || 0;
-  });
-  
-  const maxMemory = Math.max(...memoryData);
-  const maxCpu = Math.max(...cpuData);
-
-  new Chart(ctx, {
-    type: 'line',
-    data: {
-      labels: data.map((d, i) => {
-        const date = new Date(d.timestamp);
-        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      }),
-      datasets: [
-        {
-          label: 'Memory Usage (MB)',
-          data: memoryData,
-          borderColor: CONFIG.CHART_COLORS.primary,
-          backgroundColor: CONFIG.CHART_COLORS.primary + '15',
-          tension: 0.4,
-          fill: true,
-          yAxisID: 'y-memory',
-          borderWidth: 2,
-          pointRadius: 2,
-          pointHoverRadius: 4
-        },
-        {
-          label: 'CPU Load Average',
-          data: cpuData,
-          borderColor: CONFIG.CHART_COLORS.accent,
-          backgroundColor: CONFIG.CHART_COLORS.accent + '15',
-          tension: 0.4,
-          fill: true,
-          yAxisID: 'y-cpu',
-          borderWidth: 2,
-          pointRadius: 2,
-          pointHoverRadius: 4
-        }
-      ]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: true,
-      interaction: {
-        mode: 'index',
-        intersect: false,
-      },
-      plugins: {
-        legend: {
-          display: true,
-          position: 'top',
-          align: 'end',
-          labels: {
-            usePointStyle: true,
-            padding: 15,
-            font: {
-              size: 11,
-              family: 'Inter'
-            }
-          }
-        },
-        tooltip: {
-          backgroundColor: 'rgba(0, 0, 0, 0.8)',
-          padding: 12,
-          titleFont: {
-            size: 13
-          },
-          bodyFont: {
-            size: 12
-          },
-          callbacks: {
-            label: function(context) {
-              let label = context.dataset.label || '';
-              if (label) {
-                label += ': ';
-              }
-              if (context.dataset.yAxisID === 'y-memory') {
-                label += context.parsed.y.toFixed(1) + ' MB';
-              } else {
-                label += context.parsed.y.toFixed(2);
-              }
-              return label;
-            }
-          }
-        }
-      },
-      scales: {
-        x: {
-          grid: {
-            display: false
-          },
-          ticks: {
-            maxRotation: 45,
-            minRotation: 0,
-            font: {
-              size: 10
-            }
-          }
-        },
-        'y-memory': {
-          type: 'linear',
-          position: 'left',
-          beginAtZero: true,
-          title: {
-            display: true,
-            text: 'Memory (MB)',
-            font: {
-              size: 11,
-              weight: 'bold'
-            }
-          },
-          ticks: {
-            callback: function(value) {
-              return value.toFixed(0) + ' MB';
-            },
-            font: {
-              size: 10
-            }
-          },
-          grid: {
-            color: 'rgba(99, 102, 241, 0.1)'
-          }
-        },
-        'y-cpu': {
-          type: 'linear',
-          position: 'right',
-          beginAtZero: true,
-          title: {
-            display: true,
-            text: 'CPU Load',
-            font: {
-              size: 11,
-              weight: 'bold'
-            }
-          },
-          ticks: {
-            callback: function(value) {
-              return value.toFixed(1);
-            },
-            font: {
-              size: 10
-            }
-          },
-          grid: {
-            drawOnChartArea: false,
-            color: 'rgba(245, 158, 11, 0.1)'
-          }
-        }
-      }
-    }
-  });
-}
 
 /**
  * Helper to safely create a chart, destroying any existing instance
@@ -6409,499 +6353,6 @@ function createChart(canvasId, config) {
   const ctx = canvas.getContext('2d');
   state.charts[canvasId] = new Chart(ctx, config);
   return state.charts[canvasId];
-}
-function renderAIActivityChart() {
-  const canvas = document.getElementById('aiActivityChart');
-  if (!canvas) return;
-  
-  // Combine events and prompts to create time-series data
-  const allEvents = state.data.events || [];
-  const allPrompts = state.data.prompts || [];
-  
-  // 🔍 DEBUG: Log data availability
-  console.log('[CHART-DEBUG] AI Activity Chart rendering with:', {
-    totalEvents: allEvents.length,
-    totalPrompts: allPrompts.length,
-    sampleEvent: allEvents[0],
-    samplePrompt: allPrompts[0]
-  });
-  
-  // Group by hour for the last 24 hours or by day for longer periods
-  const now = Date.now();
-  const oneDayAgo = now - (24 * 60 * 60 * 1000);
-  const oneWeekAgo = now - (7 * 24 * 60 * 60 * 1000);
-  
-  // Determine granularity based on data span
-  const oldestEvent = allEvents.length > 0 ? Math.min(...allEvents.map(e => new Date(e.timestamp).getTime())) : now;
-  const oldestPrompt = allPrompts.length > 0 ? Math.min(...allPrompts.map(p => new Date(p.timestamp).getTime())) : now;
-  const oldestData = Math.min(oldestEvent, oldestPrompt);
-  
-  const useHourly = (now - oldestData) < (2 * 24 * 60 * 60 * 1000); // Less than 2 days
-  const bucketSize = useHourly ? 60 * 60 * 1000 : 24 * 60 * 60 * 1000; // 1 hour or 1 day
-  const numBuckets = useHourly ? 24 : 14; // Last 24 hours or 14 days
-  
-  // Create time buckets
-  const buckets = [];
-  for (let i = numBuckets - 1; i >= 0; i--) {
-    const bucketTime = now - (i * bucketSize);
-    buckets.push({
-      timestamp: bucketTime,
-      promptCount: 0,
-      codeChanges: 0, // in KB
-      fileCount: 0
-    });
-  }
-  
-  // Fill buckets with prompt data
-  allPrompts.forEach(prompt => {
-    const promptTime = new Date(prompt.timestamp).getTime();
-    const bucketIndex = Math.floor((now - promptTime) / bucketSize);
-    const actualIndex = numBuckets - 1 - bucketIndex;
-    if (actualIndex >= 0 && actualIndex < numBuckets) {
-      buckets[actualIndex].promptCount++;
-    }
-  });
-  
-  // Fill buckets with code change data
-  allEvents.forEach(event => {
-    const eventTime = new Date(event.timestamp).getTime();
-    const bucketIndex = Math.floor((now - eventTime) / bucketSize);
-    const actualIndex = numBuckets - 1 - bucketIndex;
-    if (actualIndex >= 0 && actualIndex < numBuckets) {
-      buckets[actualIndex].fileCount++;
-      
-      // Try to extract code change size
-      let changeSize = 0;
-      try {
-        const details = typeof event.details === 'string' ? JSON.parse(event.details) : event.details;
-        if (details.chars_added) changeSize += details.chars_added;
-        if (details.chars_deleted) changeSize += details.chars_deleted;
-      } catch (e) {
-        // Use fallback
-        changeSize = 100; // Assume 100 chars per change
-      }
-      buckets[actualIndex].codeChanges += changeSize / 1024; // Convert to KB
-    }
-  });
-  
-  if (buckets.every(b => b.promptCount === 0 && b.codeChanges === 0)) {
-    // ✅ Use HTML with diagnostic information
-    canvas.style.display = 'none';
-    const container = canvas.parentElement;
-    
-    // Check if companion service is running
-    const companionRunning = allEvents.length > 0 || allPrompts.length > 0;
-    
-    container.innerHTML = `
-      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 300px; padding: var(--space-xl); text-align: center;">
-        <div style="font-size: var(--text-lg); font-weight: 500; color: var(--color-text); margin-bottom: var(--space-md);">
-          ${allPrompts.length === 0 && allEvents.length === 0 ? 'Waiting for Data' : 'No Recent Activity'}
-        </div>
-        <div style="font-size: var(--text-sm); color: var(--color-text-muted); max-width: 500px; line-height: 1.6;">
-          ${allPrompts.length === 0 && allEvents.length === 0 ? `
-            <div style="margin-bottom: var(--space-md);">
-              The companion service hasn't sent any data yet. This could mean:
-            </div>
-            <div style="text-align: left; margin: 0 auto; max-width: 400px;">
-              <div style="margin-bottom: var(--space-sm);">• Companion service is still starting up</div>
-              <div style="margin-bottom: var(--space-sm);">• You haven't used Cursor AI yet</div>
-              <div style="margin-bottom: var(--space-sm);">• Database sync is in progress</div>
-            </div>
-            <div style="margin-top: var(--space-md); padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md); border-left: 3px solid var(--color-primary);">
-              <strong>Debug Info:</strong><br>
-              Events: ${allEvents.length} | Prompts: ${allPrompts.length}<br>
-              Check browser console for more details (F12)
-            </div>
-          ` : `
-            Data is loaded (${allPrompts.length} prompts, ${allEvents.length} events) but no activity in the selected time window.
-            <div style="margin-top: var(--space-sm);">Try using Cursor AI to generate new activity.</div>
-          `}
-        </div>
-      </div>
-    `;
-    return;
-  }
-  
-  createChart('aiActivityChart', {
-    type: 'line',
-    data: {
-      labels: buckets.map(b => {
-        const date = new Date(b.timestamp);
-        if (useHourly) {
-          return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        } else {
-          return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
-        }
-      }),
-      datasets: [
-        {
-          label: 'AI Prompts',
-          data: buckets.map(b => b.promptCount),
-          borderColor: '#8b5cf6',
-          backgroundColor: 'rgba(139, 92, 246, 0.15)',
-          tension: 0.4,
-          fill: true,
-          yAxisID: 'y-prompts',
-          borderWidth: 2,
-          pointRadius: 3,
-          pointHoverRadius: 5,
-          pointBackgroundColor: '#8b5cf6'
-        },
-        {
-          label: 'Code Output (KB)',
-          data: buckets.map(b => b.codeChanges),
-          borderColor: '#10b981',
-          backgroundColor: 'rgba(16, 185, 129, 0.15)',
-          tension: 0.4,
-          fill: true,
-          yAxisID: 'y-code',
-          borderWidth: 2,
-          pointRadius: 3,
-          pointHoverRadius: 5,
-          pointBackgroundColor: '#10b981'
-        }
-      ]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: true,
-      interaction: {
-        mode: 'index',
-        intersect: false,
-      },
-      plugins: {
-        legend: {
-          display: true,
-          position: 'top',
-          align: 'end',
-          labels: {
-            usePointStyle: true,
-            padding: 15,
-            font: {
-              size: 11,
-              family: 'Inter'
-            }
-          }
-        },
-        tooltip: {
-          backgroundColor: 'rgba(0, 0, 0, 0.8)',
-          padding: 12,
-          titleFont: {
-            size: 13
-          },
-          bodyFont: {
-            size: 12
-          },
-          callbacks: {
-            label: function(context) {
-              let label = context.dataset.label || '';
-              if (label) {
-                label += ': ';
-              }
-              if (context.dataset.yAxisID === 'y-prompts') {
-                label += context.parsed.y + ' prompts';
-              } else {
-                label += context.parsed.y.toFixed(2) + ' KB';
-              }
-              return label;
-            },
-            afterBody: function(tooltipItems) {
-              const index = tooltipItems[0].dataIndex;
-              const bucket = buckets[index];
-              return [`Files changed: ${bucket.fileCount}`];
-            }
-          }
-        }
-      },
-      scales: {
-        x: {
-          grid: {
-            display: false
-          },
-          ticks: {
-            maxRotation: 45,
-            minRotation: 0,
-            font: {
-              size: 10
-            }
-          }
-        },
-        'y-prompts': {
-          type: 'linear',
-          position: 'left',
-          beginAtZero: true,
-          title: {
-            display: true,
-            text: 'AI Prompts',
-            font: {
-              size: 11,
-              weight: 'bold'
-            }
-          },
-          ticks: {
-            stepSize: 1,
-            callback: function(value) {
-              return Math.floor(value);
-            },
-            font: {
-              size: 10
-            }
-          },
-          grid: {
-            color: 'rgba(139, 92, 246, 0.1)'
-          }
-        },
-        'y-code': {
-          type: 'linear',
-          position: 'right',
-          beginAtZero: true,
-          title: {
-            display: true,
-            text: 'Code Output (KB)',
-            font: {
-              size: 11,
-              weight: 'bold'
-            }
-          },
-          ticks: {
-            callback: function(value) {
-              return value.toFixed(1) + ' KB';
-            },
-            font: {
-              size: 10
-            }
-          },
-          grid: {
-            drawOnChartArea: false,
-            color: 'rgba(16, 185, 129, 0.1)'
-          }
-        }
-      }
-    }
-  });
-}
-function renderPromptTokensChart(hoursParam = 24) {
-  const canvas = document.getElementById('promptTokensChart');
-  if (!canvas) return;
-  
-  const ctx = canvas.getContext('2d');
-  
-  // Extract prompt data with token estimates from Cursor database prompts
-  const prompts = state.data.prompts || [];
-  
-  // Group prompts by time buckets (hourly for last 24 hours)
-  const now = Date.now();
-  const hours = hoursParam;
-  const buckets = Array.from({ length: hours }, (_, i) => {
-    const time = now - (hours - i) * 60 * 60 * 1000;
-    return {
-      timestamp: time,
-      charCount: 0,
-      contextUsage: 0,
-      contextCount: 0,
-      count: 0
-    };
-  });
-  
-  // Aggregate prompts into buckets
-  prompts.forEach(prompt => {
-    const promptTime = new Date(prompt.timestamp).getTime();
-    const bucketIndex = Math.floor((promptTime - (now - hours * 60 * 60 * 1000)) / (60 * 60 * 1000));
-    
-    if (bucketIndex >= 0 && bucketIndex < hours) {
-      // Track character count (not actual tokens, which aren't available)
-      const text = prompt.text || prompt.prompt || prompt.preview || '';
-      const charCount = text.length;
-      
-      // Extract context usage percentage if available (from Cursor's tracking)
-      const contextUsage = prompt.contextUsage || 0;
-      
-      buckets[bucketIndex].charCount += charCount;
-      if (contextUsage > 0) {
-        buckets[bucketIndex].contextUsage += contextUsage;
-        buckets[bucketIndex].contextCount += 1;
-      }
-      buckets[bucketIndex].count += 1;
-    }
-  });
-  
-  if (buckets.every(b => b.count === 0)) {
-    // ✅ Use HTML instead of canvas text to avoid blurriness on Retina displays
-    canvas.style.display = 'none';
-    const container = canvas.parentElement;
-    container.innerHTML = `
-      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 250px; text-align: center;">
-        <div style="font-size: var(--text-md); font-weight: 500; color: var(--color-text); margin-bottom: var(--space-xs);">No Data Available</div>
-        <div style="font-size: var(--text-sm); color: var(--color-text-muted);">Prompt data will appear once you start using Cursor AI</div>
-      </div>
-    `;
-    return;
-  }
-
-  // Calculate average context usage per bucket
-  const avgContextUsage = buckets.map(b => 
-    b.contextCount > 0 ? b.contextUsage / b.contextCount : 0
-  );
-
-  // Intelligently determine y1 axis max based on actual data
-  const maxContextUsage = Math.max(...avgContextUsage.filter(v => v > 0));
-  const hasContextData = avgContextUsage.some(v => v > 0);
-  
-  // Smart scaling: if max usage is < 50%, cap at 60% for better detail
-  // Otherwise use 100% to show the full scale
-  let contextAxisMax = 100;
-  let contextStepSize = 20;
-  
-  if (hasContextData) {
-    if (maxContextUsage <= 30) {
-      contextAxisMax = 40;
-      contextStepSize = 10;
-    } else if (maxContextUsage <= 50) {
-      contextAxisMax = 60;
-      contextStepSize = 10;
-    } else if (maxContextUsage <= 70) {
-      contextAxisMax = 80;
-      contextStepSize = 10;
-    }
-  }
-
-  createChart('promptTokensChart', {
-    type: 'line',
-    data: {
-      labels: buckets.map(b => {
-        const date = new Date(b.timestamp);
-        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      }),
-      datasets: [
-        {
-          label: 'Prompt Length (chars)',
-          data: buckets.map(b => b.charCount),
-          borderColor: '#94a3b8',
-          backgroundColor: 'rgba(148, 163, 184, 0.1)',
-          tension: 0.4,
-          fill: true,
-          borderWidth: 2,
-          pointRadius: 2,
-          pointHoverRadius: 4,
-          yAxisID: 'y'
-        },
-        {
-          label: 'Context Usage %',
-          data: avgContextUsage,
-          borderColor: '#f59e0b',
-          backgroundColor: 'rgba(245, 158, 11, 0.1)',
-          tension: 0.4,
-          fill: true,
-          borderWidth: 2,
-          pointRadius: 2,
-          pointHoverRadius: 4,
-          yAxisID: 'y1',
-          segment: {
-            // Color segments based on usage level
-            borderColor: ctx => {
-              const value = ctx.p1.parsed.y;
-              if (value >= 80) return '#ef4444'; // Red for high usage
-              if (value >= 60) return '#f59e0b'; // Orange for medium-high
-              return '#10b981'; // Green for normal
-            }
-          }
-        }
-      ]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: true,
-      interaction: {
-        mode: 'index',
-        intersect: false
-      },
-      plugins: {
-        legend: { 
-          display: true,
-          position: 'top',
-          align: 'end',
-          labels: {
-            usePointStyle: true,
-            padding: 10,
-            font: { size: 11 }
-          }
-        },
-        tooltip: {
-          backgroundColor: 'rgba(0, 0, 0, 0.8)',
-          padding: 10,
-          callbacks: {
-            label: function(context) {
-              const label = context.dataset.label || '';
-              const value = context.parsed.y;
-              if (label === 'Prompt Length (chars)') {
-                return `${label}: ${value.toLocaleString()} characters`;
-              } else if (label === 'Context Usage %') {
-                let status = '';
-                if (value >= 80) status = ' (High!)';
-                else if (value >= 60) status = ' (Medium-High)';
-                else if (value >= 40) status = ' (Medium)';
-                else status = ' (Normal)';
-                return `${label}: ${value.toFixed(1)}%${status}`;
-              } else {
-                return `${label}: ${value.toLocaleString()}`;
-              }
-            },
-            afterBody: function(context) {
-              const index = context[0].dataIndex;
-              const count = buckets[index].count;
-              return count > 0 ? `\n${count} prompt${count !== 1 ? 's' : ''}` : '';
-            }
-          }
-        }
-      },
-      scales: {
-        y: {
-          type: 'linear',
-          display: true,
-          position: 'left',
-          beginAtZero: true,
-          title: {
-            display: true,
-            text: 'Characters',
-            font: { size: 11 }
-          },
-          ticks: {
-            callback: function(value) {
-              return value >= 1000 ? (value/1000).toFixed(1) + 'k' : value;
-            }
-          }
-        },
-        y1: {
-          type: 'linear',
-          display: true,
-          position: 'right',
-          beginAtZero: true,
-          max: contextAxisMax,
-          title: {
-            display: true,
-            text: `Context % (0-${contextAxisMax}%)`,
-            font: { size: 11 }
-          },
-          ticks: {
-            stepSize: contextStepSize,
-            callback: function(value) {
-              return value.toFixed(0) + '%';
-            }
-          },
-          grid: {
-            drawOnChartArea: false,
-            // Add visual zones
-            color: function(context) {
-              const value = context.tick.value;
-              if (value >= 80) return 'rgba(239, 68, 68, 0.1)'; // Red zone
-              if (value >= 60) return 'rgba(245, 158, 11, 0.1)'; // Orange zone
-              return 'rgba(148, 163, 184, 0.05)'; // Normal
-            }
-          }
-        }
-      }
-    }
-  });
 }
 
 // ===================================
@@ -6962,939 +6413,9 @@ function findRelatedPrompts(event, timeWindowMinutes = 5) {
   
   return related;
 }
-async function showEventModal(eventId) {
-  // Check if it's an event or a prompt
-  let event = state.data.events.find(e => e.id === eventId || e.timestamp === eventId);
-  let prompt = state.data.prompts.find(p => p.id === eventId || p.timestamp === eventId);
-  
-  // If not in cache, try fetching from API
-  if (!event && !prompt) {
-    console.log(`[MODAL] Event/prompt ${eventId} not found in cache`);
-    
-    const modal = document.getElementById('eventModal');
-    const title = document.getElementById('modalTitle');
-    const body = document.getElementById('modalBody');
-    
-    if (modal && title && body) {
-      title.textContent = 'Not Found';
-      body.innerHTML = `
-        <div style="text-align: center; padding: var(--space-xl); color: var(--color-text-muted);">
-          <p>Event/Prompt #${eventId} could not be found.</p>
-          <p style="font-size: var(--text-sm); margin-top: var(--space-md);">It may not be loaded yet. Try refreshing the data or checking the Activity view.</p>
-        </div>
-      `;
-      modal.classList.add('active');
-    }
-    return;
-  }
 
-  const modal = document.getElementById('eventModal');
-  const title = document.getElementById('modalTitle');
-  const body = document.getElementById('modalBody');
-  
-  // Handle prompt display
-  if (prompt && !event) {
-    await showPromptInModal(prompt, modal, title, body);
-    return;
-  }
-
-  title.textContent = getEventTitle(event);
-  
-  // Fetch related screenshots
-  let relatedScreenshots = [];
-  try {
-    const screenshotsResponse = await fetch(`http://localhost:43917/api/screenshots/near/${event.timestamp}`);
-    if (screenshotsResponse.ok) {
-      const screenshotsData = await screenshotsResponse.json();
-      if (screenshotsData.success) {
-        relatedScreenshots = screenshotsData.screenshots;
-      }
-    }
-  } catch (error) {
-    console.warn('Could not fetch screenshots:', error);
-  }
-  try {
-    const details = typeof event.details === 'string' ? JSON.parse(event.details) : event.details;
-    
-    // Find related prompts by temporal proximity and workspace
-    const relatedPrompts = findRelatedPrompts(event);
-    const eventTime = new Date(event.timestamp).getTime();
-    
-    // Find related conversations (filter out unhelpful background composer state)
-    const conversationsArray = Array.isArray(state.data.cursorConversations) ? state.data.cursorConversations : [];
-    const relatedConversations = conversationsArray.filter(c => {
-      if (!c || !c.timestamp) return false;
-      
-      // Filter out non-useful internal state mappings
-      if (c.id && (
-        c.id.includes('backgroundComposer.persistentData') ||
-        c.id.includes('backgroundComposer.windowBcMapping') ||
-        c.id.includes('workbench.backgroundComposer')
-      )) {
-        return false;
-      }
-      
-      const convTime = new Date(c.timestamp).getTime();
-      const diff = Math.abs(eventTime - convTime);
-      return diff < 10 * 60 * 1000; // 10 minutes
-    });
-    
-    body.innerHTML = `
-      <div style="display: flex; flex-direction: column; gap: var(--space-xl);">
-        
-        <!-- Event Details -->
-        <div>
-          <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">Event Details</h4>
-          <div style="display: grid; gap: var(--space-sm);">
-            <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-              <span style="color: var(--color-text-muted);">Type:</span>
-              <span style="color: var(--color-text);">${event.type || 'Unknown'}</span>
-            </div>
-            <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-              <span style="color: var(--color-text-muted);">Time:</span>
-              <span style="color: var(--color-text);">${new Date(event.timestamp).toLocaleString()}</span>
-            </div>
-            <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-              <span style="color: var(--color-text-muted);">Workspace:</span>
-              <span style="color: var(--color-text); font-family: var(--font-mono); font-size: var(--text-xs);">${truncate(event.workspace_path || 'Unknown', 40)}</span>
-            </div>
-            ${details?.file_path ? `
-              <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-                <span style="color: var(--color-text-muted);">File:</span>
-                <span style="color: var(--color-text); font-family: var(--font-mono); font-size: var(--text-sm);">${details.file_path}</span>
-              </div>
-            ` : ''}
-            ${details?.file_path && isImageFile(details.file_path) ? `
-              <div style="padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md);">
-                <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-bottom: var(--space-sm);">Screenshot Preview:</div>
-                <div style="border-radius: var(--radius-md); overflow: hidden; background: #000; display: flex; align-items: center; justify-content: center; max-height: 400px;">
-                  <img src="file://${details.file_path}" 
-                       alt="Screenshot" 
-                       style="max-width: 100%; max-height: 400px; object-fit: contain;"
-                       onerror="this.parentElement.innerHTML = '<div style=\\'padding: var(--space-lg); color: var(--color-text-muted); text-align: center;\\'>Image not accessible<br><span style=\\'font-size: 0.85em; font-family: var(--font-mono);\\'>Path: ${details.file_path}</span></div>'">
-                </div>
-                <div style="margin-top: var(--space-sm); text-align: center;">
-                  <a href="file://${details.file_path}" target="_blank" style="color: var(--color-accent); font-size: var(--text-sm); text-decoration: none;">
-                    Open in Finder
-                  </a>
-                </div>
-              </div>
-            ` : ''}
-            ${details?.lines_added !== undefined || details?.chars_added !== undefined ? `
-              <div style="padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md);">
-                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--space-lg); text-align: center;">
-                  <div>
-                    <div style="font-size: var(--text-xl); color: var(--color-success); font-weight: 600; margin-bottom: var(--space-xs);">
-                      +${details.lines_added || 0}
-                    </div>
-                    <div style="font-size: var(--text-xs); color: var(--color-text-muted);">Lines Added</div>
-                    <div style="font-size: var(--text-sm); color: var(--color-success); margin-top: var(--space-xs);">
-                      +${details.chars_added || 0} chars
-                    </div>
-                  </div>
-                  <div>
-                    <div style="font-size: var(--text-xl); color: var(--color-error); font-weight: 600; margin-bottom: var(--space-xs);">
-                      -${details.lines_removed || 0}
-                    </div>
-                    <div style="font-size: var(--text-xs); color: var(--color-text-muted);">Lines Removed</div>
-                    <div style="font-size: var(--text-sm); color: var(--color-error); margin-top: var(--space-xs);">
-                      -${details.chars_deleted || 0} chars
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ` : ''}
-          </div>
-        </div>
-
-        ${event.context ? `
-          <div>
-            <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">Context Information</h4>
-            <div style="display: grid; gap: var(--space-md);">
-              
-              ${event.context.atFiles && event.context.atFiles.length > 0 ? `
-                <div style="padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md); border-left: 3px solid #10b981;">
-                  <div style="font-weight: 600; margin-bottom: var(--space-sm); color: var(--color-text); display: flex; align-items: center; gap: var(--space-xs);">
-                    <span>[FILE] @ Referenced Files</span>
-                    <span style="background: #10b981; color: white; font-size: 10px; padding: 2px 6px; border-radius: 10px;">${event.context.atFiles.length}</span>
-                  </div>
-                  <div style="display: flex; flex-wrap: wrap; gap: var(--space-xs);">
-                    ${event.context.atFiles.map(file => `
-                      <span style="font-family: var(--font-mono); font-size: var(--text-xs); padding: 4px 8px; background: rgba(16, 185, 129, 0.1); color: #10b981; border-radius: 4px;">
-                        ${file.reference || file.fileName || file.filePath}
-                      </span>
-                    `).join('')}
-                  </div>
-                </div>
-              ` : ''}
-              
-              ${(event.context.contextFiles?.attachedFiles?.length || 0) + (event.context.contextFiles?.codebaseFiles?.length || 0) > 0 ? `
-                <div style="padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md); border-left: 3px solid #3b82f6;">
-                  <div style="font-weight: 600; margin-bottom: var(--space-sm); color: var(--color-text); display: flex; align-items: center; gap: var(--space-xs);">
-                    <span>Context Files</span>
-                    <span style="background: #3b82f6; color: white; font-size: 10px; padding: 2px 6px; border-radius: 10px;">
-                      ${(event.context.contextFiles?.attachedFiles?.length || 0) + (event.context.contextFiles?.codebaseFiles?.length || 0)}
-                    </span>
-                  </div>
-                  <div style="display: grid; gap: var(--space-xs);">
-                    ${event.context.contextFiles?.attachedFiles?.map(file => `
-                      <div style="font-family: var(--font-mono); font-size: var(--text-xs); padding: 4px 8px; background: rgba(59, 130, 246, 0.1); color: #3b82f6; border-radius: 4px; display: flex; justify-content: space-between; align-items: center;">
-                        <span>${file.name || file.path}</span>
-                        <span style="font-size: 10px; padding: 2px 4px; background: rgba(59, 130, 246, 0.2); border-radius: 3px;">attached</span>
-                      </div>
-                    `).join('') || ''}
-                    ${event.context.contextFiles?.codebaseFiles?.slice(0, 5).map(file => `
-                      <div style="font-family: var(--font-mono); font-size: var(--text-xs); padding: 4px 8px; background: rgba(59, 130, 246, 0.05); color: #60a5fa; border-radius: 4px; display: flex; justify-content: space-between; align-items: center;">
-                        <span>${file.name || file.path}</span>
-                        <span style="font-size: 10px; padding: 2px 4px; background: rgba(59, 130, 246, 0.1); border-radius: 3px;">codebase</span>
-                      </div>
-                    `).join('') || ''}
-                    ${(event.context.contextFiles?.codebaseFiles?.length || 0) > 5 ? `
-                      <div style="font-size: var(--text-xs); color: var(--color-text-muted); padding: 4px 8px; text-align: center;">
-                        +${event.context.contextFiles.codebaseFiles.length - 5} more files
-                      </div>
-                    ` : ''}
-                  </div>
-                </div>
-              ` : ''}
-              
-              ${event.context.browserState && event.context.browserState.tabs && event.context.browserState.tabs.length > 0 ? `
-                <div style="padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md); border-left: 3px solid #8b5cf6;">
-                  <div style="font-weight: 600; margin-bottom: var(--space-sm); color: var(--color-text); display: flex; align-items: center; gap: var(--space-xs);">
-                    <span>[SYSTEM] UI State</span>
-                    <span style="background: #8b5cf6; color: white; font-size: 10px; padding: 2px 6px; border-radius: 10px;">${event.context.browserState.tabs.length} tabs</span>
-                  </div>
-                  <div style="display: flex; flex-wrap: wrap; gap: var(--space-xs);">
-                    ${event.context.browserState.tabs.map(tab => `
-                      <span style="font-family: var(--font-mono); font-size: var(--text-xs); padding: 4px 8px; background: rgba(139, 92, 246, 0.1); color: #8b5cf6; border-radius: 4px; ${tab.isActive ? 'font-weight: 600; border: 1px solid #8b5cf6;' : ''}">
-                        ${tab.name || tab.path}
-                      </span>
-                    `).join('')}
-                  </div>
-                </div>
-              ` : ''}
-              
-            </div>
-          </div>
-        ` : ''}
-
-        ${relatedScreenshots.length > 0 ? `
-          <div>
-            <h4 style="margin-bottom: var(--space-md); color: var(--color-text); display: flex; align-items: center; gap: var(--space-sm);">
-              <span>Related Screenshots</span>
-              <span style="background: #f59e0b; color: white; font-size: 10px; padding: 2px 6px; border-radius: 10px;">${relatedScreenshots.length}</span>
-            </h4>
-            <div style="font-size: var(--text-sm); color: var(--color-text-muted); margin-bottom: var(--space-md);">
-              Screenshots captured within 5 minutes of this event
-            </div>
-            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: var(--space-md);">
-              ${relatedScreenshots.map(screenshot => {
-                const timeDiff = Math.abs(new Date(event.timestamp).getTime() - new Date(screenshot.timestamp).getTime());
-                const minutesAgo = Math.floor(timeDiff / 60000);
-                const secondsAgo = Math.floor((timeDiff % 60000) / 1000);
-                const timingText = minutesAgo > 0 ? `${minutesAgo}m ${secondsAgo}s` : `${secondsAgo}s`;
-                const isBefore = new Date(screenshot.timestamp) < new Date(event.timestamp);
-                
-                return `
-                  <div style="border: 2px solid var(--color-border); border-radius: var(--radius-md); overflow: hidden; background: var(--color-bg); transition: all 0.2s;" 
-                       onmouseover="this.style.transform='scale(1.02)'; this.style.boxShadow='0 8px 16px rgba(0,0,0,0.15)';" 
-                       onmouseout="this.style.transform=''; this.style.boxShadow='';">
-                    <div style="position: relative; background: #000; aspect-ratio: 16/9; overflow: hidden;">
-                      <img src="file://${screenshot.path}" 
-                           alt="${screenshot.fileName}" 
-                           style="width: 100%; height: 100%; object-fit: contain; cursor: pointer;"
-                           onclick="window.open('file://${screenshot.path}', '_blank')"
-                           onerror="this.parentElement.innerHTML = '<div style=\\'display: flex; align-items: center; justify-content: center; height: 100%; color: var(--color-text-muted); padding: var(--space-md); text-align: center; flex-direction: column;\\'>Image<div style=\\'font-size: 0.75em; margin-top: 8px;\\'>Screenshot not accessible</div></div>'">
-                      <div style="position: absolute; top: 8px; right: 8px; background: rgba(0,0,0,0.7); color: white; padding: 4px 8px; border-radius: 4px; font-size: 10px; font-weight: 600;">
-                        ${timingText} ${isBefore ? 'before' : 'after'}
-                      </div>
-                    </div>
-                    <div style="padding: var(--space-sm);">
-                      <div style="font-size: var(--text-xs); font-family: var(--font-mono); color: var(--color-text); margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${screenshot.fileName}">
-                        ${screenshot.fileName}
-                      </div>
-                      <div style="font-size: 10px; color: var(--color-text-muted);">
-                        ${new Date(screenshot.timestamp).toLocaleTimeString()}
-                      </div>
-                    </div>
-                  </div>
-                `;
-              }).join('')}
-            </div>
-          </div>
-        ` : ''}
-
-        ${details?.before_content !== undefined && details?.after_content !== undefined && (details.before_content || details.after_content) ? `
-          <div>
-            <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">Code Diff</h4>
-            <div style="display: grid; gap: var(--space-md);">
-              ${details.before_content ? `
-                <div>
-                  <div style="padding: var(--space-xs) var(--space-sm); background: rgba(239, 68, 68, 0.1); border-radius: var(--radius-sm) var(--radius-sm) 0 0; font-size: var(--text-xs); color: var(--color-error); font-weight: 500;">
-                    Before (${details.before_content.split('\\n').length} lines)
-                  </div>
-                  <div class="code-block" style="max-height: 250px; overflow-y: auto; border-radius: 0 0 var(--radius-sm) var(--radius-sm);">
-                    <pre style="margin: 0; font-size: var(--text-xs); line-height: 1.5;">${escapeHtml(details.before_content)}</pre>
-                  </div>
-                </div>
-              ` : ''}
-              ${details.after_content ? `
-                <div>
-                  <div style="padding: var(--space-xs) var(--space-sm); background: rgba(34, 197, 94, 0.1); border-radius: var(--radius-sm) var(--radius-sm) 0 0; font-size: var(--text-xs); color: var(--color-success); font-weight: 500;">
-                    After (${details.after_content.split('\\n').length} lines)
-                  </div>
-                  <div class="code-block" style="max-height: 250px; overflow-y: auto; border-radius: 0 0 var(--radius-sm) var(--radius-sm);">
-                    <pre style="margin: 0; font-size: var(--text-xs); line-height: 1.5;">${escapeHtml(details.after_content)}</pre>
-                  </div>
-                </div>
-              ` : ''}
-            </div>
-          </div>
-        ` : ''}
-
-        ${relatedPrompts.length > 0 ? `
-          <div>
-            <h4 style="margin-bottom: var(--space-md); color: var(--color-text); display: flex; align-items: center; gap: var(--space-sm);">
-              <span>Related AI Prompts</span>
-              <span style="background: var(--color-accent); color: white; font-size: var(--text-xs); padding: 2px 8px; border-radius: 12px;">${relatedPrompts.length}</span>
-            </h4>
-            <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-bottom: var(--space-md);">
-              Prompts from the same workspace within 5 minutes before this event, ordered by relevance.
-            </div>
-            <div style="display: grid; gap: var(--space-sm);">
-              ${relatedPrompts.slice(0, 5).map((prompt, idx) => {
-                const promptText = prompt.text || prompt.prompt || prompt.preview || prompt.content || 'No prompt text';
-                const displayText = promptText.length > 150 ? promptText.substring(0, 150) + '...' : promptText;
-                const timeDiffText = prompt.timeDiffSeconds < 60 ? 
-                  `${prompt.timeDiffSeconds}s before` : 
-                  `${Math.floor(prompt.timeDiffSeconds / 60)}m ${prompt.timeDiffSeconds % 60}s before`;
-                const relevancePercent = Math.round(prompt.relevanceScore * 100);
-                
-                return `
-                <div style="padding: var(--space-md); background: var(--color-bg); border-left: 3px solid var(--color-accent); border-radius: var(--radius-md); cursor: pointer; transition: all 0.2s;" 
-                     onmouseover="this.style.transform='translateX(4px)'; this.style.boxShadow='0 4px 12px rgba(0,0,0,0.1)';" 
-                     onmouseout="this.style.transform=''; this.style.boxShadow='';"
-                     onclick="closeEventModal(); setTimeout(() => showEventModal('${prompt.id}'), 100)">
-                  <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: var(--space-xs);">
-                    <div style="display: flex; align-items: center; gap: var(--space-xs);">
-                      <span style="color: var(--color-primary); font-weight: 600; font-size: var(--text-xs);">
-                        #${idx + 1}
-                      </span>
-                      <span style="font-size: var(--text-xs); color: var(--color-text-muted);">
-                        ${timeDiffText}
-                      </span>
-                      <span style="font-size: var(--text-xs); color: var(--color-accent); font-weight: 500;">
-                        ${relevancePercent}% match
-                      </span>
-                    </div>
-                    <span class="badge badge-prompt" style="font-size: 10px; padding: 2px 6px;">
-                      ${prompt.source || 'cursor'}
-                    </span>
-                  </div>
-                  <div style="font-size: var(--text-sm); color: var(--color-text); margin-bottom: var(--space-xs); line-height: 1.5;">
-                    ${escapeHtml(displayText)}
-                  </div>
-                  ${prompt.workspaceName || prompt.composerId ? `
-                    <div style="display: flex; gap: var(--space-xs); flex-wrap: wrap; margin-top: var(--space-sm);">
-                      ${prompt.workspaceName ? `
-                        <span style="font-size: 10px; padding: 2px 6px; background: var(--color-bg-alt); color: var(--color-text-muted); border-radius: 4px; font-family: var(--font-mono);">
-                          ${prompt.workspaceName}
-                        </span>
-                      ` : ''}
-                      ${prompt.composerId ? `
-                        <span style="font-size: 10px; padding: 2px 6px; background: var(--color-bg-alt); color: var(--color-text-muted); border-radius: 4px;">
-                          Composer
-                        </span>
-                      ` : ''}
-                      ${prompt.linesAdded > 0 || prompt.linesRemoved > 0 ? `
-                        <span style="font-size: 10px; padding: 2px 6px; background: var(--color-bg-alt); color: var(--color-text-muted); border-radius: 4px;">
-                          <span style="color: var(--color-success);">+${prompt.linesAdded || 0}</span>
-                          /
-                          <span style="color: var(--color-error);">-${prompt.linesRemoved || 0}</span>
-                        </span>
-                      ` : ''}
-                    </div>
-                  ` : ''}
-                </div>
-              `}).join('')}
-              ${relatedPrompts.length > 5 ? `
-                <div style="text-align: center; padding: var(--space-md); color: var(--color-text-muted); font-size: var(--text-sm); background: var(--color-bg); border-radius: var(--radius-md); border: 1px dashed var(--color-border);">
-                  + ${relatedPrompts.length - 5} more prompts (${Math.round(relatedPrompts.slice(5).reduce((sum, p) => sum + p.relevanceScore, 0) / (relatedPrompts.length - 5) * 100)}% avg match)
-                </div>
-              ` : ''}
-            </div>
-          </div>
-        ` : ''}
-
-        ${relatedConversations.length > 0 ? `
-          <div>
-            <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">
-              Related Conversations (${relatedConversations.length})
-            </h4>
-            <div style="display: grid; gap: var(--space-sm);">
-              ${relatedConversations.slice(0, 2).map(conv => `
-                <div style="padding: var(--space-md); background: var(--color-bg); border-left: 3px solid var(--color-primary); border-radius: var(--radius-md);">
-                  <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-bottom: var(--space-xs);">
-                    ${conv.type} • ${formatTimeAgo(conv.timestamp)}
-                  </div>
-                  <div style="font-size: var(--text-sm); color: var(--color-text);">
-                    ID: ${conv.id}
-                  </div>
-                </div>
-              `).join('')}
-            </div>
-          </div>
-        ` : ''}
-
-        ${state.data.cursorDbStats ? `
-          <div style="padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md); border: 1px solid var(--color-border);">
-            <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-bottom: var(--space-xs);">
-              Cursor Database Stats
-            </div>
-            <div style="display: flex; gap: var(--space-lg); font-size: var(--text-sm);">
-              <span>Conversations: <strong>${state.data.cursorDbStats.totalConversations || 0}</strong></span>
-              <span>Prompts: <strong>${state.data.cursorDbStats.totalPrompts || 0}</strong></span>
-              <span>Workspaces: <strong>${state.data.cursorDbStats.workspaces || 0}</strong></span>
-            </div>
-          </div>
-        ` : ''}
-
-      </div>
-    `;
-  } catch (error) {
-    body.innerHTML = `<div class="empty-state-text">Error loading event details: ${error.message}</div>`;
-  }
-
-  modal.classList.add('active');
-}
-function showPromptInModal(prompt, modal, title, body) {
-  const promptText = prompt.text || prompt.prompt || prompt.preview || prompt.content || 'No prompt text';
-  const isJsonLike = promptText.startsWith('{') || promptText.startsWith('[');
-  
-  // Parse prompt data to determine type and extract metadata
-  let titleText = 'AI Conversation';
-  let promptType = 'unknown';
-  let metadata = {};
-  let conversationDetails = null;
-  
-  if (isJsonLike) {
-    try {
-      const parsed = JSON.parse(promptText);
-      
-      // Detect composer data
-      if (parsed.allComposers && Array.isArray(parsed.allComposers)) {
-        promptType = 'composer';
-        titleText = 'Composer Session';
-        const composer = parsed.allComposers[0];
-        if (composer) {
-          metadata = {
-            composerId: composer.composerId,
-            name: composer.name || 'Unnamed conversation',
-            mode: composer.unifiedMode || composer.forceMode || 'unknown',
-            createdAt: composer.createdAt ? new Date(composer.createdAt).toLocaleString() : null,
-            lastUpdated: composer.lastUpdatedAt ? new Date(composer.lastUpdatedAt).toLocaleString() : null,
-            totalComposers: parsed.allComposers.length
-          };
-          conversationDetails = {
-            name: composer.name,
-            linesAdded: composer.totalLinesAdded,
-            linesRemoved: composer.totalLinesRemoved,
-            contextUsage: composer.contextUsagePercent
-          };
-        }
-      }
-      // Detect panel/view state
-      else if (Object.keys(parsed).some(k => k.includes('workbench.panel'))) {
-        promptType = 'panel-state';
-        titleText = 'AI Chat Panel State';
-        const panels = Object.keys(parsed).filter(k => k.includes('workbench.panel'));
-        metadata = {
-          panelCount: panels.length,
-          panels: panels.map(k => ({
-            id: k.split('.').pop() || k,
-            collapsed: parsed[k].collapsed,
-            hidden: parsed[k].isHidden,
-            size: parsed[k].size
-          }))
-        };
-      }
-      // Detect setup/terminal data
-      else if (parsed.setupPath2 || parsed.terminals) {
-        promptType = 'setup';
-        titleText = 'Development Setup';
-        metadata = {
-          setupPath: parsed.setupPath2,
-          terminals: parsed.terminals?.length || 0,
-          commands: parsed.ranTerminalCommands?.length || 0,
-          currentStep: parsed.currentSetupStep
-        };
-      }
-      // Background composer mapping
-      else if (parsed.composerIdToWindowId || prompt.type === 'background-composer') {
-        promptType = 'background-composer';
-        titleText = 'Background Composer Mapping';
-        metadata = {
-          mappings: Object.keys(parsed.composerIdToWindowId || {}).length
-        };
-      }
-    } catch (e) {
-      // Not valid JSON
-      promptType = 'text';
-    }
-  } else {
-    promptType = 'text';
-    titleText = 'Conversation';
-  }
-  
-  // Override with explicit prompt type if present
-  if (prompt.type === 'conversation') {
-    titleText = 'Composer Conversation';
-    promptType = 'conversation';
-  } else if (prompt.type === 'background-composer') {
-    titleText = 'Background Composer';
-    promptType = 'background-composer';
-  }
-  
-  title.textContent = titleText;
-  
-  // Find related events (within 5 minutes of prompt)
-  const promptTime = new Date(prompt.timestamp).getTime();
-  const relatedEvents = state.data.events.filter(e => {
-    const eventTime = new Date(e.timestamp).getTime();
-    const diff = Math.abs(promptTime - eventTime);
-    return diff < 5 * 60 * 1000; // 5 minutes
-  });
-  
-  body.innerHTML = `
-    <div style="display: flex; flex-direction: column; gap: var(--space-xl);">
-      
-      <!-- Basic Metadata -->
-      <div>
-        <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">Metadata</h4>
-        <div style="display: grid; gap: var(--space-sm);">
-          <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-            <span style="color: var(--color-text-muted);">Type:</span>
-            <span style="color: var(--color-text);"><span class="badge badge-prompt">${promptType}</span></span>
-          </div>
-          <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-            <span style="color: var(--color-text-muted);">Captured:</span>
-            <span style="color: var(--color-text);">${new Date(prompt.timestamp).toLocaleString()}</span>
-          </div>
-          <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-            <span style="color: var(--color-text-muted);">Source:</span>
-            <span style="color: var(--color-text);">${prompt.source || 'cursor-database'}</span>
-          </div>
-          ${prompt.modelName || prompt.modelType ? `
-            <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-              <span style="color: var(--color-text-muted);">Model:</span>
-              <span style="color: var(--color-text);">
-                <span class="badge" style="background: var(--color-accent); color: white;">
-                  ${prompt.modelName || prompt.modelType}
-                </span>
-                ${prompt.isAuto ? '<span class="badge" style="margin-left: 4px; background: var(--color-info); color: white;">Auto</span>' : ''}
-              </span>
-            </div>
-          ` : ''}
-          ${prompt.forceMode ? `
-            <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-              <span style="color: var(--color-text-muted);">Mode:</span>
-              <span style="color: var(--color-text);"><span class="badge">${prompt.forceMode}</span></span>
-            </div>
-          ` : ''}
-          ${prompt.workspaceId ? `
-            <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-              <span style="color: var(--color-text-muted);">Workspace:</span>
-              <span style="color: var(--color-text); font-family: var(--font-mono); font-size: var(--text-xs);">${prompt.workspaceName || prompt.workspaceId.substring(0, 16)}</span>
-            </div>
-          ` : ''}
-          ${prompt.mode || prompt.modelType ? `
-            <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-              <span style="color: var(--color-text-muted);">AI Mode:</span>
-              <span class="badge" style="background: ${(prompt.mode === 'agent' || prompt.isAuto) ? 'var(--color-accent)' : prompt.mode === 'chat' ? 'var(--color-info)' : 'var(--color-secondary)'}; color: white; font-weight: 600;">
-                ${(prompt.mode || prompt.modelType || 'unknown').toUpperCase()}${prompt.isAuto ? ' (AUTO)' : ''}
-              </span>
-            </div>
-          ` : ''}
-          ${prompt.contextUsage && prompt.contextUsage > 0 ? `
-            <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-              <span style="color: var(--color-text-muted);">Context Usage:</span>
-              <span style="color: var(--color-warning); font-weight: 600; font-size: var(--text-lg);">${prompt.contextUsage.toFixed(1)}%</span>
-            </div>
-          ` : ''}
-        </div>
-      </div>
-
-      <!-- Type-specific details -->
-      ${promptType === 'composer' && metadata.name ? `
-        <div>
-          <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">Composer Session</h4>
-          <div style="padding: var(--space-lg); background: var(--color-bg); border-radius: var(--radius-md); border-left: 3px solid var(--color-accent);">
-            <div style="font-size: var(--text-lg); font-weight: 600; color: var(--color-text); margin-bottom: var(--space-md);">
-              ${escapeHtml(metadata.name)}
-            </div>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-md); margin-bottom: var(--space-md);">
-              <div>
-                <div style="font-size: var(--text-xs); color: var(--color-text-muted);">Created</div>
-                <div style="font-size: var(--text-sm); color: var(--color-text);">${metadata.createdAt || 'Unknown'}</div>
-              </div>
-              <div>
-                <div style="font-size: var(--text-xs); color: var(--color-text-muted);">Last Updated</div>
-                <div style="font-size: var(--text-sm); color: var(--color-text);">${metadata.lastUpdated || 'Unknown'}</div>
-              </div>
-              <div>
-                <div style="font-size: var(--text-xs); color: var(--color-text-muted);">Model Mode</div>
-                <div style="font-size: var(--text-sm); color: var(--color-text);">
-                  <span class="badge" style="background: ${metadata.mode === 'agent' ? 'var(--color-accent)' : metadata.mode === 'chat' ? 'var(--color-info)' : 'var(--color-secondary)'}; color: white; font-weight: 600;">
-                    ${metadata.mode.toUpperCase()}${metadata.mode === 'agent' ? ' (AUTO)' : ''}
-                  </span>
-                </div>
-              </div>
-              <div>
-                <div style="font-size: var(--text-xs); color: var(--color-text-muted);">Composer ID</div>
-                <div style="font-size: var(--text-xs); color: var(--color-text); font-family: var(--font-mono);">${metadata.composerId?.substring(0, 12)}...</div>
-              </div>
-            </div>
-            ${conversationDetails && (conversationDetails.linesAdded !== undefined || conversationDetails.linesRemoved !== undefined || conversationDetails.contextUsage !== undefined) ? `
-              <div style="display: flex; gap: var(--space-md); padding-top: var(--space-md); border-top: 1px solid var(--color-border);">
-                ${conversationDetails.linesAdded !== undefined ? `
-                  <div style="flex: 1; text-align: center;">
-                    <div style="font-size: var(--text-xl); color: var(--color-success); font-weight: 600;">+${conversationDetails.linesAdded}</div>
-                    <div style="font-size: var(--text-xs); color: var(--color-text-muted);">Lines Added</div>
-                  </div>
-                ` : ''}
-                ${conversationDetails.linesRemoved !== undefined ? `
-                  <div style="flex: 1; text-align: center;">
-                    <div style="font-size: var(--text-xl); color: var(--color-error); font-weight: 600;">-${conversationDetails.linesRemoved}</div>
-                    <div style="font-size: var(--text-xs); color: var(--color-text-muted);">Lines Removed</div>
-                  </div>
-                ` : ''}
-                ${conversationDetails.contextUsage !== undefined ? `
-                  <div style="flex: 1; text-align: center;">
-                    <div style="font-size: var(--text-xl); color: var(--color-accent); font-weight: 600;">${conversationDetails.contextUsage}%</div>
-                    <div style="font-size: var(--text-xs); color: var(--color-text-muted);">Context Used</div>
-                  </div>
-                ` : ''}
-              </div>
-            ` : ''}
-            <div style="margin-top: var(--space-md); padding: var(--space-md); background: rgba(99, 102, 241, 0.1); border: 1px solid rgba(99, 102, 241, 0.3); border-radius: var(--radius-md);">
-              <div style="display: flex; align-items: center; justify-content: space-between;">
-                <div style="flex: 1;">
-                  <div style="font-size: var(--text-sm); font-weight: 600; color: var(--color-text); margin-bottom: var(--space-xs);">
-                    View Full Conversation
-                  </div>
-                  <div style="font-size: var(--text-xs); color: var(--color-text-muted);">
-                    Cursor stores conversation messages in memory. Open Composer to see the full chat history.
-                  </div>
-                </div>
-                <button 
-                  onclick="copyToClipboard('${metadata.composerId}', 'Composer ID copied!'); alert('Composer ID copied: ${metadata.composerId}\\n\\nTo find this conversation in Cursor:\\n1. Open Composer\\n2. Look for: ${escapeHtml(metadata.name).replace(/'/g, "\\'")}');" 
-                  style="padding: var(--space-sm) var(--space-md); background: var(--color-primary); color: white; border: none; border-radius: var(--radius-sm); cursor: pointer; font-size: var(--text-sm); white-space: nowrap; margin-left: var(--space-md);">
-                  [CLIPBOARD] Copy ID
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      ` : ''}
-      
-      ${promptType === 'panel-state' && metadata.panels ? `
-        <div>
-          <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">AI Chat Panels (${metadata.panelCount})</h4>
-          <div style="display: grid; gap: var(--space-sm);">
-            ${metadata.panels.map(panel => `
-              <div style="padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md); display: flex; justify-content: space-between; align-items: center;">
-                <div>
-                  <div style="font-family: var(--font-mono); font-size: var(--text-sm); color: var(--color-text);">
-                    ${panel.id.substring(0, 16)}...
-                  </div>
-                  <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: 4px;">
-                    ${panel.collapsed ? 'Collapsed' : 'Expanded'} • 
-                    ${panel.hidden ? 'Hidden' : 'Visible'}
-                    ${panel.size ? ` • ${Math.round(panel.size)}px` : ''}
-                  </div>
-                </div>
-                <div style="width: 8px; height: 8px; border-radius: 50%; background: ${panel.hidden ? '#94a3b8' : '#22c55e'};"></div>
-              </div>
-            `).join('')}
-          </div>
-        </div>
-      ` : ''}
-      
-      ${promptType === 'setup' && metadata.setupPath ? `
-        <div>
-          <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">Development Setup</h4>
-          <div style="padding: var(--space-lg); background: var(--color-bg); border-radius: var(--radius-md);">
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-md);">
-              <div>
-                <div style="font-size: var(--text-xs); color: var(--color-text-muted);">Setup Path</div>
-                <div style="font-size: var(--text-sm); color: var(--color-text);"><code>${metadata.setupPath}</code></div>
-              </div>
-              <div>
-                <div style="font-size: var(--text-xs); color: var(--color-text-muted);">Current Step</div>
-                <div style="font-size: var(--text-sm); color: var(--color-text);"><code>${metadata.currentStep}</code></div>
-              </div>
-              <div>
-                <div style="font-size: var(--text-xs); color: var(--color-text-muted);">Terminals</div>
-                <div style="font-size: var(--text-lg); color: var(--color-text); font-weight: 600;">${metadata.terminals}</div>
-              </div>
-              <div>
-                <div style="font-size: var(--text-xs); color: var(--color-text-muted);">Commands Run</div>
-                <div style="font-size: var(--text-lg); color: var(--color-text); font-weight: 600;">${metadata.commands}</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      ` : ''}
-      
-      ${promptType === 'background-composer' && metadata.mappings ? `
-        <div>
-          <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">Background Composer</h4>
-          <div style="padding: var(--space-lg); background: var(--color-bg); border-radius: var(--radius-md); text-align: center;">
-            <div style="font-size: var(--text-2xl); color: var(--color-text); font-weight: 600; margin-bottom: var(--space-xs);">
-              ${metadata.mappings}
-            </div>
-            <div style="font-size: var(--text-sm); color: var(--color-text-muted);">
-              Window Mappings
-            </div>
-          </div>
-        </div>
-      ` : ''}
-
-      <!-- Prompt Content -->
-      ${!isJsonLike || promptText.length < 200 ? `
-        <div>
-          <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">Conversation Title</h4>
-          <div style="padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md); border-left: 3px solid var(--color-accent);">
-            <div style="font-size: var(--text-lg); font-weight: 500; color: var(--color-text); margin-bottom: var(--space-sm);">
-              ${escapeHtml(promptText)}
-            </div>
-            ${prompt.subtitle ? `
-              <div style="font-size: var(--text-sm); color: var(--color-text-muted);">
-                Files: ${escapeHtml(prompt.subtitle)}
-              </div>
-            ` : ''}
-          </div>
-          ${prompt.type === 'conversation' || prompt.composerId ? `
-            <div style="margin-top: var(--space-sm); padding: var(--space-sm); background: rgba(99, 102, 241, 0.1); border-radius: var(--radius-sm);">
-              <div style="font-size: var(--text-xs); color: var(--color-text-muted);">
-                ℹ️ Note: Full conversation messages are stored in Cursor's internal cache and are not accessible via the database. 
-                Only metadata (title, file list, statistics) is available.
-              </div>
-            </div>
-          ` : ''}
-        </div>
-      ` : ''}
-
-      ${relatedEvents.length > 0 ? `
-        <div>
-          <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">
-            Related File Changes (${relatedEvents.length})
-          </h4>
-          <div style="display: grid; gap: var(--space-sm);">
-            ${relatedEvents.slice(0, 5).map(event => `
-              <div style="padding: var(--space-md); background: var(--color-bg); border-left: 3px solid var(--color-primary); border-radius: var(--radius-md); cursor: pointer;" onclick="closeEventModal(); setTimeout(() => showEventModal('${event.id || event.timestamp}'), 100)">
-                <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-bottom: var(--space-xs);">
-                  ${formatTimeAgo(event.timestamp)} • ${event.type || 'file_change'}
-                </div>
-                <div style="font-size: var(--text-sm); color: var(--color-text); font-family: var(--font-mono);">
-                  ${getEventTitle(event)}
-                </div>
-              </div>
-            `).join('')}
-            ${relatedEvents.length > 5 ? `
-              <div style="text-align: center; padding: var(--space-sm); color: var(--color-text-muted); font-size: var(--text-sm);">
-                + ${relatedEvents.length - 5} more events
-              </div>
-            ` : ''}
-          </div>
-        </div>
-      ` : ''}
-
-    </div>
-  `;
-  
-  modal.classList.add('active');
-}
-
-function showThreadModal(threadId) {
-  const thread = groupIntoThreads(state.data.entries).find(t => t.id === threadId);
-  if (!thread) return;
-
-  const modal = document.getElementById('threadModal');
-  const title = document.getElementById('threadModalTitle');
-  const body = document.getElementById('threadModalBody');
-
-  title.textContent = `Thread ${threadId.substring(0, 8)}`;
-  
-  body.innerHTML = `
-    <div style="display: flex; flex-direction: column; gap: var(--space-lg);">
-      ${thread.messages.map(msg => `
-        <div style="padding: var(--space-lg); background: var(--color-bg); border-radius: var(--radius-md); border-left: 3px solid var(--color-primary);">
-          <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-bottom: var(--space-sm);">
-            ${new Date(msg.timestamp).toLocaleString()}
-          </div>
-          ${msg.prompt ? `
-            <div style="margin-bottom: var(--space-md);">
-              <div style="font-weight: 600; color: var(--color-text); margin-bottom: var(--space-xs);">Prompt:</div>
-              <div style="color: var(--color-text-muted);">${escapeHtml(msg.prompt)}</div>
-            </div>
-          ` : ''}
-          ${msg.response ? `
-            <div>
-              <div style="font-weight: 600; color: var(--color-text); margin-bottom: var(--space-xs);">Response:</div>
-              <div style="color: var(--color-text-muted);">${escapeHtml(msg.response)}</div>
-            </div>
-          ` : ''}
-        </div>
-      `).join('')}
-    </div>
-  `;
-
-  modal.classList.add('active');
-}
-
-function closeThreadModal() {
-  document.getElementById('threadModal').classList.remove('active');
-}
-
-function showTerminalModal(id) {
-  // Find the terminal command by ID
-  const cmd = state.data.terminalCommands.find(c => c.id === id);
-  
-  const modal = document.getElementById('eventModal');
-  const title = document.getElementById('modalTitle');
-  const body = document.getElementById('modalBody');
-  
-  if (!modal || !title || !body) {
-    console.error('Modal elements not found');
-    return;
-  }
-  
-  if (!cmd) {
-    console.warn('Terminal command not found:', id);
-    return;
-  }
-  
-  try {
-    const isError = cmd.exit_code && cmd.exit_code !== 0;
-    const icon = isError ? 'Error' : '>';
-    
-    title.innerHTML = `${icon} Terminal Command`;
-    
-    let html = `
-      <div style="display: flex; flex-direction: column; gap: var(--space-xl);">
-        
-        <!-- Command Details -->
-        <div>
-          <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">Command Details</h4>
-          <div style="display: grid; gap: var(--space-sm);">
-            <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-              <span style="color: var(--color-text-muted);">Command:</span>
-              <code style="color: var(--color-text); font-family: var(--font-mono); font-size: var(--text-sm); max-width: 500px; overflow-x: auto;">${escapeHtml(cmd.command)}</code>
-            </div>
-            <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-              <span style="color: var(--color-text-muted);">Source:</span>
-              <span class="badge" style="background: #6366f1; color: white;">${cmd.source || 'unknown'}</span>
-            </div>
-            <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-              <span style="color: var(--color-text-muted);">Timestamp:</span>
-              <span style="color: var(--color-text);">${new Date(cmd.timestamp).toLocaleString()}</span>
-            </div>
-            ${cmd.shell ? `
-              <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-                <span style="color: var(--color-text-muted);">Shell:</span>
-                <span class="badge">${cmd.shell}</span>
-              </div>
-            ` : ''}
-            ${cmd.workspace ? `
-              <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-                <span style="color: var(--color-text-muted);">Workspace:</span>
-                <code style="color: var(--color-text); font-family: var(--font-mono); font-size: var(--text-xs);">${escapeHtml(cmd.workspace)}</code>
-              </div>
-            ` : ''}
-            ${cmd.exit_code !== null && cmd.exit_code !== undefined ? `
-              <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-                <span style="color: var(--color-text-muted);">Exit Code:</span>
-                <span class="badge" style="background: ${isError ? '#ef4444' : '#10b981'}; color: white;">${cmd.exit_code}</span>
-              </div>
-            ` : ''}
-            ${cmd.duration ? `
-              <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-                <span style="color: var(--color-text-muted);">Duration:</span>
-                <span style="color: var(--color-text);">${cmd.duration}ms</span>
-              </div>
-            ` : ''}
-          </div>
-        </div>
-    `;
-    
-    // Show command output if available
-    if (cmd.output) {
-      html += `
-        <div>
-          <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">Output</h4>
-          <pre style="padding: var(--space-md); background: #1e1e1e; color: #d4d4d4; border-radius: var(--radius-md); overflow-x: auto; max-height: 400px; font-size: 12px; line-height: 1.5;"><code>${escapeHtml(cmd.output)}</code></pre>
-        </div>
-      `;
-    }
-    
-    // Show error message if available
-    if (cmd.error) {
-      html += `
-        <div>
-          <h4 style="margin-bottom: var(--space-md); color: var(--color-error);">Error</h4>
-          <div style="padding: var(--space-md); background: #fee2e2; color: #dc2626; border-radius: var(--radius-md); font-family: var(--font-mono); font-size: var(--text-sm);">
-            ${escapeHtml(cmd.error)}
-          </div>
-        </div>
-      `;
-    }
-    
-    // Show related file changes if linked
-    if (cmd.linked_entry_id) {
-      const relatedEntry = state.data.events.find(e => e.id === cmd.linked_entry_id);
-      if (relatedEntry) {
-        html += `
-          <div>
-            <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">Related File Change</h4>
-            <div style="padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md); border-left: 3px solid var(--color-primary);">
-              <div style="font-family: var(--font-mono); font-size: var(--text-sm); color: var(--color-text); margin-bottom: var(--space-xs);">
-                ${escapeHtml(relatedEntry.file_path || 'Unknown file')}
-              </div>
-              <div style="font-size: var(--text-xs); color: var(--color-text-muted);">
-                ${new Date(relatedEntry.timestamp).toLocaleString()}
-              </div>
-            </div>
-          </div>
-        `;
-      }
-    }
-    
-    html += `</div>`;
-    
-    body.innerHTML = html;
-    modal.classList.add('active');
-    
-  } catch (error) {
-    console.error('Error showing terminal modal:', error);
-    title.textContent = 'Error';
-    body.innerHTML = `<div style="color: var(--color-error);">Error loading terminal command details: ${error.message}</div>`;
-    modal.classList.add('active');
-  }
-}
-
-function closeEventModal() {
-  const modal = document.getElementById('eventModal');
-  if (modal) {
-    modal.classList.remove('active');
-  }
-}
-
-// Make modal functions globally accessible
-window.showEventModal = showEventModal;
-window.showTerminalModal = showTerminalModal;
-window.closeEventModal = closeEventModal;
-window.closeThreadModal = closeThreadModal;
+// Export for modal-manager.js
+window.findRelatedPrompts = findRelatedPrompts;
 
 // ===================================
 // Utility Functions
@@ -8185,8 +6706,10 @@ document.addEventListener('DOMContentLoaded', () => {
       updateConnectionStatus(true);
       await initializeDashboard();
       
-      // Initialize search engine
-      initializeSearch();
+      // Initialize search engine (if available)
+      if (typeof initializeSearch === 'function') {
+        initializeSearch();
+      }
       
       console.log('[SUCCESS] Dashboard initialized with warm-start');
     }).catch(error => {
@@ -8216,11 +6739,19 @@ document.addEventListener('DOMContentLoaded', () => {
           await fetchRecentData();
           calculateStats();
           renderCurrentView();
+          // Update status on successful sync
+          if (window.state && window.state.connected) {
+            updateConnectionStatus(true, 'Connected - synced');
+          }
           // Don't reinitialize search on every refresh - it's expensive!
           // Only rebuild if we have significantly more documents
         }
       } catch (error) {
         console.error('Refresh error:', error);
+        // Update status if sync fails
+        if (window.state && window.state.connected) {
+          updateConnectionStatus(false, 'Sync failed - retrying...');
+        }
       } finally {
         refreshInProgress = false;
       }
@@ -8265,8 +6796,16 @@ document.addEventListener('DOMContentLoaded', () => {
         await fetchRecentData();
         calculateStats();
         renderCurrentView();
+        // Update status on successful sync
+        if (window.state && window.state.connected) {
+          updateConnectionStatus(true, 'Connected - synced');
+        }
       } catch (error) {
         console.error('Refresh error:', error);
+        // Update status if sync fails
+        if (window.state && window.state.connected) {
+          updateConnectionStatus(false, 'Sync failed - retrying...');
+        }
       } finally {
         refreshInProgress = false;
       }
@@ -8362,91 +6901,6 @@ async function refreshPrompts() {
   }
 }
 
-function showPromptModal(promptId) {
-  const prompt = state.data.prompts.find(p => p.id == promptId);
-  if (!prompt) {
-    console.error('Prompt not found:', promptId);
-    return;
-  }
-
-  const modal = document.getElementById('eventModal');
-  const title = document.getElementById('modalTitle');
-  const body = document.getElementById('modalBody');
-
-  title.textContent = 'Prompt Details';
-  
-  body.innerHTML = `
-    <div style="display: flex; flex-direction: column; gap: var(--space-xl);">
-      
-      <!-- Prompt Status -->
-      <div>
-        <div class="prompt-status ${prompt.status || 'pending'}" style="display: inline-flex; margin-bottom: var(--space-md);">
-          ${getPromptStatusIcon(prompt.status)}
-          ${prompt.status || 'pending'}
-        </div>
-        <div style="font-size: var(--text-xs); color: var(--color-text-muted);">
-          Captured ${new Date(prompt.timestamp).toLocaleString()}
-        </div>
-      </div>
-
-      <!-- Prompt Content -->
-      <div>
-        <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">Prompt Text</h4>
-        <div class="code-block">
-          <code>${escapeHtml(prompt.text || prompt.content || prompt.prompt || 'No content available')}</code>
-        </div>
-      </div>
-
-      <!-- Metadata -->
-      ${prompt.metadata ? `
-        <div>
-          <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">Metadata</h4>
-          <div style="display: grid; gap: var(--space-sm);">
-            ${prompt.metadata.method ? `
-              <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-                <span style="color: var(--color-text-muted);">Capture Method:</span>
-                <span style="color: var(--color-text);">${prompt.metadata.method}</span>
-              </div>
-            ` : ''}
-            ${prompt.metadata.complexity ? `
-              <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-                <span style="color: var(--color-text-muted);">Complexity:</span>
-                <span style="color: var(--color-text);">${prompt.metadata.complexity}</span>
-              </div>
-            ` : ''}
-            ${prompt.metadata.intent ? `
-              <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-                <span style="color: var(--color-text-muted);">Intent:</span>
-                <span style="color: var(--color-text);">${prompt.metadata.intent}</span>
-              </div>
-            ` : ''}
-          </div>
-        </div>
-      ` : ''}
-
-      <!-- Linked Entry -->
-      ${prompt.linked_entry_id ? `
-        <div>
-          <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">Linked Conversation</h4>
-          <div style="padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md); border-left: 3px solid var(--color-primary);">
-            <div style="color: var(--color-text-muted);">This prompt is linked to conversation entry #${prompt.linked_entry_id}</div>
-            <button class="btn btn-sm" style="margin-top: var(--space-md);" onclick="showThreadModal('${prompt.linked_entry_id}')">
-              View Conversation
-            </button>
-          </div>
-        </div>
-      ` : `
-        <div style="padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md); border-left: 3px solid var(--color-warning);">
-          <div style="color: var(--color-text-muted);">This prompt has not been linked to a conversation yet</div>
-        </div>
-      `}
-
-    </div>
-  `;
-
-  modal.classList.add('active');
-}
-
 async function checkClipboardStatus() {
   try {
     const health = await APIClient.get('/health');
@@ -8457,1453 +6911,10 @@ async function checkClipboardStatus() {
       `Clipboard Monitoring Status\n\n` +
       `Enabled: ${clipboardEnabled ? 'Yes' : 'No'}\n` +
       `Prompts Captured: ${capturedCount}\n\n` +
-      (clipboardEnabled ? 
-        'Clipboard monitoring is active! Copy text containing prompts and they will be captured automatically.' : 
-        'Clipboard monitoring is disabled. Enable it in the companion config.json file by setting "enable_clipboard": true')
+      `Check the companion service logs for more details.`
     );
   } catch (error) {
-    alert('Error checking clipboard status. Make sure the companion service is running.');
+    console.error('Error checking clipboard status:', error);
+    alert('Could not check clipboard status. Make sure the companion service is running.');
   }
 }
-
-// ===================================
-// Search Integration
-// ===================================
-
-let searchEngine = null;
-let searchSelectedIndex = -1;
-let searchCurrentResults = [];
-
-/**
- * Initialize search engine when data is loaded
- */
-async function initializeSearch() {
-  try {
-    if (!window.SearchEngine) {
-      console.warn('SearchEngine class not available');
-      return;
-    }
-    
-    if (!window.lunr) {
-      console.warn('Lunr.js not loaded');
-      return;
-    }
-    
-    console.log('Initializing search engine...');
-    searchEngine = new window.SearchEngine();
-    await searchEngine.initialize(state.data);
-    console.log('Search engine initialized with', searchEngine.documents.length, 'documents');
-  } catch (error) {
-    console.error('Search engine initialization failed:', error);
-  }
-}
-
-/**
- * Open search palette
- */
-function openSearchPalette() {
-  const palette = document.getElementById('searchPalette');
-  const input = document.getElementById('searchInput');
-  
-  if (palette) {
-    palette.classList.add('active');
-    if (input) {
-      setTimeout(() => {
-        input.focus();
-        input.value = '';
-      }, 50); // Small delay to ensure modal is visible
-      showSearchSuggestions();
-    }
-    
-    // Log search engine status for debugging
-    if (searchEngine) {
-      console.log('Search ready with', searchEngine.documents?.length || 0, 'documents');
-    } else {
-      console.warn('Search engine not ready - initializing...');
-      // Try to initialize if not already done
-      initializeSearch();
-    }
-  }
-}
-
-/**
- * Close search palette
- */
-function closeSearchPalette() {
-  const palette = document.getElementById('searchPalette');
-  if (palette) {
-    palette.classList.remove('active');
-    searchSelectedIndex = -1;
-    searchCurrentResults = [];
-  }
-}
-
-/**
- * Perform search
- */
-function performSearch(query) {
-  if (!query.trim()) {
-    showSearchSuggestions();
-    return;
-  }
-  
-  if (!searchEngine) {
-    console.warn('Search engine not initialized');
-    const container = document.getElementById('searchResults');
-    if (container) {
-      container.innerHTML = `
-        <div class="search-empty">
-          <svg class="search-empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-            <circle cx="11" cy="11" r="8" stroke-width="2"/>
-            <path d="M21 21l-4.35-4.35" stroke-width="2" stroke-linecap="round"/>
-          </svg>
-          <div>Search is initializing...</div>
-          <div style="font-size: var(--text-xs); margin-top: var(--space-sm); color: var(--color-text-muted);">
-            Please wait for data to load
-          </div>
-        </div>
-      `;
-    }
-    return;
-  }
-
-  try {
-    console.log('Searching for:', query);
-    const results = searchEngine.search(query, { limit: 20 });
-    console.log('[DATA] Found', results.length, 'results');
-    searchCurrentResults = results;
-    searchSelectedIndex = -1;
-    renderSearchResults(results);
-  } catch (error) {
-    console.error('Search error:', error);
-    const container = document.getElementById('searchResults');
-    if (container) {
-      container.innerHTML = `
-        <div class="search-empty">
-          <svg class="search-empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-            <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" stroke-width="2"/>
-          </svg>
-          <div>Search error</div>
-          <div style="font-size: var(--text-xs); margin-top: var(--space-sm); color: var(--color-text-muted);">
-            ${error.message}
-          </div>
-        </div>
-      `;
-    }
-  }
-}
-
-/**
- * Show enhanced search suggestions with grouping
- */
-function showSearchSuggestions() {
-  const suggestionsContainer = document.getElementById('searchSuggestions');
-  const resultsContainer = document.getElementById('searchResults');
-  
-  if (!searchEngine || !suggestionsContainer) return;
-
-  const suggestions = searchEngine.getSuggestions('');
-  
-  resultsContainer.innerHTML = '';
-  
-  // Check if we have any suggestions
-  const hasAnySuggestions = suggestions.history?.length > 0 || suggestions.popular?.length > 0 || suggestions.filters?.length > 0;
-  
-  if (!hasAnySuggestions) {
-    suggestionsContainer.innerHTML = `
-      <div class="search-empty">
-        <svg class="search-empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-          <circle cx="11" cy="11" r="8" stroke-width="2"/>
-          <path d="M21 21l-4.35-4.35" stroke-width="2" stroke-linecap="round"/>
-        </svg>
-        <div>Start typing to search...</div>
-        <div style="font-size: var(--text-xs); margin-top: var(--space-sm);">
-          Try: <code>type:prompt</code>, <code>date:today</code>, or <code>workspace:cursor-telemetry</code>
-        </div>
-      </div>
-    `;
-    return;
-  }
-
-  let html = '';
-
-  // Popular searches
-  if (suggestions.popular && suggestions.popular.length > 0) {
-    html += `
-      <div style="padding: var(--space-sm); color: var(--color-text-muted); font-size: var(--text-xs); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">
-        🔥 Popular Searches
-      </div>
-      ${suggestions.popular.map(suggestion => `
-        <div class="search-suggestion-item" onclick="applySearchSuggestion('${escapeHtml(suggestion)}')">
-          <span class="search-suggestion-icon">🔍</span>
-          <span>${escapeHtml(suggestion)}</span>
-        </div>
-      `).join('')}
-    `;
-  }
-
-  // Recent searches
-  if (suggestions.history && suggestions.history.length > 0) {
-    html += `
-      <div style="padding: var(--space-sm); padding-top: var(--space-md); color: var(--color-text-muted); font-size: var(--text-xs); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">
-        🕐 Recent Searches
-      </div>
-      ${suggestions.history.map(suggestion => `
-        <div class="search-suggestion-item" onclick="applySearchSuggestion('${escapeHtml(suggestion)}')">
-          <span class="search-suggestion-icon">→</span>
-          <span>${escapeHtml(suggestion)}</span>
-        </div>
-      `).join('')}
-    `;
-  }
-
-  // Filter suggestions
-  if (suggestions.filters && suggestions.filters.length > 0) {
-    html += `
-      <div style="padding: var(--space-sm); padding-top: var(--space-md); color: var(--color-text-muted); font-size: var(--text-xs); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">
-        🔧 Filter Options
-      </div>
-      ${suggestions.filters.map(filter => `
-        <div class="search-suggestion-item" onclick="applySearchSuggestion('${escapeHtml(filter.text)}')">
-          <div style="flex: 1;">
-            <div style="font-weight: 500;">${escapeHtml(filter.text)}</div>
-            <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: 2px;">${escapeHtml(filter.description)}</div>
-          </div>
-        </div>
-      `).join('')}
-    `;
-  }
-
-  suggestionsContainer.innerHTML = html;
-}
-/**
- * Apply search suggestion
- */
-function applySearchSuggestion(suggestion) {
-  const input = document.getElementById('searchInput');
-  if (input) {
-    input.value = suggestion;
-    input.focus();
-    performSearch(suggestion);
-  }
-}
-
-/**
- * Render enhanced search results with snippets and scoring
- */
-function renderSearchResults(results) {
-  const container = document.getElementById('searchResults');
-  const suggestionsContainer = document.getElementById('searchSuggestions');
-  
-  if (!container) return;
-
-  suggestionsContainer.innerHTML = '';
-
-  if (results.length === 0) {
-    container.innerHTML = `
-      <div class="search-empty">
-        <svg class="search-empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-          <circle cx="11" cy="11" r="8" stroke-width="2"/>
-          <path d="M21 21l-4.35-4.35" stroke-width="2" stroke-linecap="round"/>
-        </svg>
-        <div>No results found</div>
-        <div style="font-size: var(--text-xs); margin-top: var(--space-sm); color: var(--color-text-muted);">
-          Try different keywords or use filters like <code>type:prompt</code> or <code>date:today</code>
-        </div>
-      </div>
-    `;
-    return;
-  }
-
-  // Show result count
-  const countHtml = `
-    <div style="padding: var(--space-sm) var(--space-md); color: var(--color-text-muted); font-size: var(--text-sm); border-bottom: 1px solid var(--color-border);">
-      Found ${results.length} result${results.length !== 1 ? 's' : ''}
-    </div>
-  `;
-
-  const resultsHtml = results.map((result, index) => {
-    const icon = getSearchResultIcon(result.type);
-    const typeColor = getSearchResultTypeColor(result.type);
-    const time = new Date(result.timestamp).toLocaleString();
-    
-    // Use snippet if available, otherwise use content
-    const displayText = result.snippet || result.content.substring(0, 180);
-    
-    // Show relevance score in debug mode
-    const scoreInfo = result._debug ? 
-      `<span style="color: var(--color-text-muted); font-size: 10px;" title="BM25: ${result._debug.bm25Score.toFixed(2)}, Semantic: ${result._debug.semanticScore.toFixed(2)}">
-        Score: ${result.score.toFixed(2)}
-      </span>` : '';
-    
-    return `
-      <div class="search-result-item ${index === searchSelectedIndex ? 'selected' : ''}" 
-           onclick="selectSearchResult(${index})"
-           data-result-index="${index}">
-        <div class="search-result-icon" style="border-color: ${typeColor};">
-          ${icon}
-        </div>
-        <div class="search-result-content">
-          <div class="search-result-title">
-            ${escapeHtml(result.title)}
-          </div>
-          <div class="search-result-description">
-            ${escapeHtml(displayText)}${result.content.length > 180 && !result.snippet ? '...' : ''}
-          </div>
-          <div class="search-result-meta">
-            <span class="search-result-badge" style="border-color: ${typeColor};">${result.type}</span>
-            ${result.workspace && result.workspace !== 'unknown' ? `<span>${escapeHtml(result.workspace)}</span>` : ''}
-            <span>${time}</span>
-            ${result.searchMethod ? `<span style="color: var(--color-text-muted); font-size: 10px;" title="Search methods used">${result.searchMethod}</span>` : ''}
-            ${scoreInfo}
-          </div>
-        </div>
-      </div>
-    `;
-  }).join('');
-
-  container.innerHTML = countHtml + resultsHtml;
-}
-
-/**
- * Get icon for search result type
- */
-function getSearchResultIcon(type) {
-  const icons = {
-    event: `<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor">
-      <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z" fill="currentColor"/>
-      <path d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5z" stroke-width="2"/>
-    </svg>`,
-    prompt: `<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor">
-      <path d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2h-1l-3 3z" stroke-width="2" stroke-linecap="round"/>
-    </svg>`,
-    workspace: `<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor">
-      <path d="M3 7v10a2 2 0 002 2h10a2 2 0 002-2V9a2 2 0 00-2-2h-1V5a2 2 0 00-2-2H8a2 2 0 00-2 2v2H5a2 2 0 00-2 2z" stroke-width="2"/>
-    </svg>`
-  };
-  return icons[type] || icons.event;
-}
-
-/**
- * Get color for search result type
- */
-function getSearchResultTypeColor(type) {
-  const colors = {
-    event: 'var(--color-info)',
-    prompt: 'var(--color-accent)',
-    workspace: 'var(--color-success)'
-  };
-  return colors[type] || 'var(--color-border)';
-}
-
-/**
- * Select search result with analytics tracking
- */
-function selectSearchResult(index) {
-  if (index < 0 || index >= searchCurrentResults.length) return;
-  
-  const result = searchCurrentResults[index];
-  
-  // Track the click for relevance feedback
-  if (searchEngine) {
-    searchEngine.trackClick(result.type, result.id);
-  }
-  
-  // Close search palette
-  closeSearchPalette();
-  
-  // Navigate to the result
-  if (result.type === 'event' || result.type === 'prompt') {
-    showEventModal(result.raw.id || result.raw.timestamp);
-  } else if (result.type === 'workspace') {
-    // Switch to workspace and show workspace view
-    state.currentWorkspace = result.raw.name || result.raw.path;
-    switchView('workspace');
-    renderCurrentView();
-  }
-}
-
-/**
- * Navigate search results with keyboard
- */
-function navigateSearchResults(direction) {
-  if (searchCurrentResults.length === 0) return;
-
-  if (direction === 'down') {
-    searchSelectedIndex = (searchSelectedIndex + 1) % searchCurrentResults.length;
-  } else if (direction === 'up') {
-    searchSelectedIndex = searchSelectedIndex <= 0 ? searchCurrentResults.length - 1 : searchSelectedIndex - 1;
-  }
-
-  // Update UI
-  const items = document.querySelectorAll('.search-result-item');
-  items.forEach((item, index) => {
-    if (index === searchSelectedIndex) {
-      item.classList.add('selected');
-      item.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-    } else {
-      item.classList.remove('selected');
-    }
-  });
-}
-
-// Setup search input handler
-document.addEventListener('DOMContentLoaded', () => {
-  const searchInput = document.getElementById('searchInput');
-  
-  if (searchInput) {
-    // Debounce search
-    let searchTimeout;
-    searchInput.addEventListener('input', (e) => {
-      clearTimeout(searchTimeout);
-      searchTimeout = setTimeout(() => {
-        const query = e.target.value.trim();
-        if (query) {
-          performSearch(query);
-        } else {
-          showSearchSuggestions();
-        }
-      }, 300);
-    });
-
-    // Handle keyboard navigation
-    searchInput.addEventListener('keydown', (e) => {
-      if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        navigateSearchResults('down');
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        navigateSearchResults('up');
-      } else if (e.key === 'Enter') {
-        e.preventDefault();
-        if (searchSelectedIndex >= 0) {
-          selectSearchResult(searchSelectedIndex);
-        } else if (searchCurrentResults.length > 0) {
-          selectSearchResult(0);
-        }
-      } else if (e.key === 'Escape') {
-        e.preventDefault();
-        closeSearchPalette();
-      }
-    });
-  }
-
-  // Setup Cmd+K / Ctrl+K shortcut
-  document.addEventListener('keydown', (e) => {
-    if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-      e.preventDefault();
-      openSearchPalette();
-    }
-  });
-});
-
-// Global functions for HTML onclick handlers
-window.showEventModal = showEventModal;
-window.closeEventModal = closeEventModal;
-window.showThreadModal = showThreadModal;
-window.closeThreadModal = closeThreadModal;
-window.renderEmbeddingsVisualization = renderEmbeddingsVisualization;
-window.filterActivityByTimeRange = filterActivityByTimeRange;
-window.refreshPrompts = refreshPrompts;
-window.showPromptModal = showPromptModal;
-window.checkClipboardStatus = checkClipboardStatus;
-window.updateFileGraph = updateFileGraph;
-window.resetFileGraphZoom = resetFileGraphZoom;
-window.showFileInfo = showFileInfo;
-window.openSearchPalette = openSearchPalette;
-window.closeSearchPalette = closeSearchPalette;
-window.applySearchSuggestion = applySearchSuggestion;
-window.selectSearchResult = selectSearchResult;
-window.initializeSearch = initializeSearch;
-
-// Context File Analytics Functions
-async function renderContextFileAnalytics() {
-  const container = document.getElementById('contextFileAnalytics');
-  if (!container) return;
-
-  try {
-    // Fetch from API instead of calculating from prompts
-    const apiBase = window.CONFIG?.API_BASE || CONFIG?.API_BASE || 'http://localhost:43917';
-    const response = await fetch(`${apiBase}/api/analytics/context`);
-    const result = await response.json();
-    
-    if (!result.success || !result.data) {
-      throw new Error('No context data available');
-    }
-    
-    const stats = result.data;
-    
-    if (stats.totalAtFiles === 0 && stats.totalContextFiles === 0) {
-      container.innerHTML = `
-        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 200px; padding: var(--space-xl); text-align: center;">
-          <div style="font-size: var(--text-lg); color: var(--color-text); margin-bottom: var(--space-xs); font-weight: 500;">No Data Available</div>
-          <div style="font-size: var(--text-sm); color: var(--color-text-muted);">Context data will appear here once you use @ mentions in Cursor</div>
-        </div>
-      `;
-      return;
-    }
-    
-    const promptsWithContext = stats.withContext || 0;
-    
-    // Note: mostReferencedFiles data needs to be added to the API if needed
-    const topFiles = [];
-
-  container.innerHTML = `
-    <div style="display: grid; gap: var(--space-xl);">
-      <!-- Stats Summary -->
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--space-md);">
-        <div style="text-align: center; padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md);">
-          <div style="font-size: 2rem; font-weight: 600; color: #10b981;">${stats.totalAtFiles}</div>
-          <div style="font-size: var(--text-sm); color: var(--color-text-muted); margin-top: var(--space-xs);">@ Files Referenced</div>
-        </div>
-        <div style="text-align: center; padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md);">
-          <div style="font-size: 2rem; font-weight: 600; color: #3b82f6;">${stats.totalContextFiles}</div>
-          <div style="font-size: var(--text-sm); color: var(--color-text-muted); margin-top: var(--space-xs);">Context Files</div>
-        </div>
-        <div style="text-align: center; padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md);">
-          <div style="font-size: 2rem; font-weight: 600; color: #8b5cf6;">${stats.totalUIStates}</div>
-          <div style="font-size: var(--text-sm); color: var(--color-text-muted); margin-top: var(--space-xs);">UI States</div>
-        </div>
-        <div style="text-align: center; padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md);">
-          <div style="font-size: 2rem; font-weight: 600; color: var(--color-accent);">${promptsWithContext.length}</div>
-          <div style="font-size: var(--text-sm); color: var(--color-text-muted); margin-top: var(--space-xs);">With Context</div>
-        </div>
-      </div>
-
-      <!-- Most Referenced Files -->
-      ${topFiles.length > 0 ? `
-        <div>
-          <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">Most Referenced Files</h4>
-          <div style="display: grid; gap: var(--space-sm);">
-            ${topFiles.map(([fileName, count]) => {
-              const percentage = stats.totalAtFiles > 0 ? Math.round((count / stats.totalAtFiles) * 100) : 0;
-              return `
-                <div style="display: flex; align-items: center; gap: var(--space-md); padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-                  <div style="flex: 1;">
-                    <div style="font-family: var(--font-mono); font-size: var(--text-sm); color: var(--color-text); margin-bottom: 4px;">${fileName}</div>
-                    <div style="background: var(--color-bg-alt); height: 6px; border-radius: 3px; overflow: hidden;">
-                      <div style="background: var(--color-primary); height: 100%; width: ${percentage}%;"></div>
-                    </div>
-                  </div>
-                  <div style="text-align: right; min-width: 60px;">
-                    <div style="font-weight: 600; color: var(--color-text);">${count}</div>
-                    <div style="font-size: 10px; color: var(--color-text-muted);">${percentage}%</div>
-                  </div>
-                </div>
-              `;
-            }).join('')}
-          </div>
-        </div>
-      ` : ''}
-    </div>
-  `;
-  } catch (error) {
-    console.error('Error rendering context file analytics:', error);
-    container.innerHTML = `
-      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 200px; padding: var(--space-xl); text-align: center;">
-        <div style="font-size: var(--text-lg); color: var(--color-text); margin-bottom: var(--space-xs); font-weight: 500;">No Data Available</div>
-        <div style="font-size: var(--text-sm); color: var(--color-text-muted);">Context data will appear here once you use @ mentions in Cursor</div>
-      </div>
-    `;
-  }
-}
-
-async function renderContextFileHeatmap() {
-  const container = document.getElementById('contextFileHeatmap');
-  if (!container) return;
-
-  try {
-    // Fetch context snapshots from database
-    const response = await fetch(`${CONFIG.API_BASE}/api/analytics/context/snapshots?source=database&limit=200`);
-    const result = await response.json();
-    
-    if (!result.success || !result.data || result.data.length === 0) {
-      container.innerHTML = `
-        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 200px; padding: var(--space-xl); text-align: center;">
-          <div style="font-size: var(--text-lg); color: var(--color-text); margin-bottom: var(--space-xs); font-weight: 500;">No Data Available</div>
-          <div style="font-size: var(--text-sm); color: var(--color-text-muted);">Context data will appear here once you use @ mentions in Cursor</div>
-        </div>
-      `;
-      return;
-    }
-
-    const snapshots = result.data;
-    
-    // Build co-occurrence matrix
-    const fileCoOccurrence = new Map();
-    
-    snapshots.forEach(snapshot => {
-      const files = [];
-      
-      // Collect all files from this snapshot
-      try {
-        if (snapshot.at_mentions) {
-          const mentions = typeof snapshot.at_mentions === 'string' 
-            ? JSON.parse(snapshot.at_mentions) 
-            : snapshot.at_mentions;
-          if (Array.isArray(mentions)) {
-            files.push(...mentions);
-          }
-        }
-        
-        if (snapshot.context_files) {
-          const contextFiles = typeof snapshot.context_files === 'string'
-            ? JSON.parse(snapshot.context_files)
-            : snapshot.context_files;
-          if (Array.isArray(contextFiles)) {
-            files.push(...contextFiles);
-          } else if (contextFiles.attachedFiles || contextFiles.codebaseFiles) {
-            const attached = contextFiles.attachedFiles || [];
-            const codebase = contextFiles.codebaseFiles || [];
-            files.push(...attached, ...codebase);
-          }
-        }
-      } catch (e) {
-        // Skip malformed JSON
-      }
-      
-      // Record co-occurrences (files used together in same prompt)
-      for (let i = 0; i < files.length; i++) {
-        for (let j = i + 1; j < files.length; j++) {
-          const key = [files[i], files[j]].sort().join('::');
-          fileCoOccurrence.set(key, (fileCoOccurrence.get(key) || 0) + 1);
-        }
-      }
-    });
-
-  // Get top file pairs
-  const topPairs = Array.from(fileCoOccurrence.entries())
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 15);
-
-  if (topPairs.length === 0) {
-    container.innerHTML = '<div style="text-align: center; color: var(--color-text-muted); padding: var(--space-xl);">Not enough data for heatmap</div>';
-    return;
-  }
-
-  const maxCount = topPairs[0][1];
-
-  container.innerHTML = `
-    <div>
-      <div style="font-size: var(--text-sm); color: var(--color-text-muted); margin-bottom: var(--space-md);">
-        Files frequently referenced together in the same prompt
-      </div>
-      <div style="display: grid; gap: var(--space-xs);">
-        ${topPairs.map(([key, count]) => {
-          const [file1, file2] = key.split('::');
-          const intensity = count / maxCount;
-          const color = `rgba(99, 102, 241, ${0.2 + (intensity * 0.8)})`;
-          
-          return `
-            <div style="display: flex; align-items: center; gap: var(--space-sm); padding: var(--space-sm); background: ${color}; border-radius: var(--radius-md); transition: all 0.2s;" 
-                 onmouseover="this.style.transform='translateX(4px)'; this.style.boxShadow='0 2px 8px rgba(0,0,0,0.1)';" 
-                 onmouseout="this.style.transform=''; this.style.boxShadow='';">
-              <div style="flex: 1; display: flex; align-items: center; gap: var(--space-xs); font-family: var(--font-mono); font-size: var(--text-xs);">
-                <span style="color: var(--color-text); font-weight: 500;">${file1}</span>
-                <span style="color: var(--color-text-muted);">↔</span>
-                <span style="color: var(--color-text); font-weight: 500;">${file2}</span>
-              </div>
-              <div style="background: rgba(255, 255, 255, 0.9); padding: 4px 10px; border-radius: 12px; font-weight: 600; font-size: var(--text-xs); color: var(--color-primary);">
-                ${count}x
-              </div>
-            </div>
-          `;
-        }).join('')}
-      </div>
-    </div>
-  `;
-  } catch (error) {
-    console.error('Error rendering context file heatmap:', error);
-    container.innerHTML = '<div style="text-align: center; color: var(--color-text-muted); padding: var(--space-xl);">Unable to load heatmap data</div>';
-  }
-}
-
-// UI State Analytics - DISABLED
-// This feature tracks Cursor tabs/panels via AppleScript (expensive & unreliable)
-// Removed from analytics view to focus on procedural knowledge features instead
-function renderUIStateAnalytics() {
-  const container = document.getElementById('uiStateAnalytics');
-  if (!container) return;
-
-  // Collect UI state data
-  const promptsWithUI = state.data.prompts?.filter(p => p.context?.browserState?.tabs) || [];
-  
-  if (promptsWithUI.length === 0) {
-    container.innerHTML = '<div style="text-align: center; color: var(--color-text-muted); padding: var(--space-xl);">No UI state data available yet</div>';
-    return;
-  }
-
-  // Calculate statistics
-  const tabCounts = promptsWithUI.map(p => p.context.browserState.tabs.length);
-  const averageTabs = (tabCounts.reduce((a, b) => a + b, 0) / tabCounts.length).toFixed(1);
-  const maxTabs = Math.max(...tabCounts);
-  const minTabs = Math.min(...tabCounts);
-  
-  // Most active tabs
-  const tabFrequency = new Map();
-  promptsWithUI.forEach(prompt => {
-    prompt.context.browserState.tabs.forEach(tab => {
-      const tabName = tab.name || tab.path;
-      tabFrequency.set(tabName, (tabFrequency.get(tabName) || 0) + 1);
-    });
-  });
-  
-  const topTabs = Array.from(tabFrequency.entries())
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 10);
-
-  container.innerHTML = `
-    <div style="display: grid; gap: var(--space-xl);">
-      <!-- Tab Statistics -->
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: var(--space-md);">
-        <div style="text-align: center; padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md);">
-          <div style="font-size: 1.5rem; font-weight: 600; color: #8b5cf6;">${averageTabs}</div>
-          <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">Avg Tabs Open</div>
-        </div>
-        <div style="text-align: center; padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md);">
-          <div style="font-size: 1.5rem; font-weight: 600; color: #ec4899;">${maxTabs}</div>
-          <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">Max Tabs</div>
-        </div>
-        <div style="text-align: center; padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md);">
-          <div style="font-size: 1.5rem; font-weight: 600; color: #06b6d4;">${minTabs}</div>
-          <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">Min Tabs</div>
-        </div>
-        <div style="text-align: center; padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md);">
-          <div style="font-size: 1.5rem; font-weight: 600; color: #f59e0b;">${promptsWithUI.length}</div>
-          <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">UI Sessions</div>
-        </div>
-      </div>
-
-      <!-- Most Active Tabs -->
-      ${topTabs.length > 0 ? `
-        <div>
-          <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">Most Active Tabs</h4>
-          <div style="display: grid; gap: var(--space-xs);">
-            ${topTabs.map(([tabName, count]) => {
-              const percentage = Math.round((count / promptsWithUI.length) * 100);
-              return `
-                <div style="display: flex; align-items: center; gap: var(--space-md); padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-                  <div style="flex: 1;">
-                    <div style="font-family: var(--font-mono); font-size: var(--text-sm); color: var(--color-text); margin-bottom: 4px;">${tabName}</div>
-                    <div style="background: var(--color-bg-alt); height: 6px; border-radius: 3px; overflow: hidden;">
-                      <div style="background: var(--color-primary); height: 100%; width: ${percentage}%;"></div>
-                    </div>
-                  </div>
-                  <div style="text-align: right; min-width: 60px;">
-                    <div style="font-weight: 600; color: var(--color-text);">${count}</div>
-                    <div style="font-size: 10px; color: var(--color-text-muted);">${percentage}%</div>
-                  </div>
-                </div>
-              `;
-            }).join('')}
-          </div>
-        </div>
-      ` : ''}
-    </div>
-  `;
-}
-
-
-// ===================================
-// NEW ANALYTICS VISUALIZATION FUNCTIONS
-// ===================================
-
-/**
- * Render Model Usage Analytics
- */
-function renderModelUsageAnalytics() {
-  const container = document.getElementById('modelUsageAnalytics');
-  if (!container) return;
-
-  const prompts = window.state?.data?.prompts || state?.data?.prompts || [];
-  
-  if (prompts.length === 0) {
-    container.innerHTML = `
-      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 200px; padding: var(--space-xl); text-align: center;">
-        <div style="font-size: var(--text-lg); color: var(--color-text); margin-bottom: var(--space-xs); font-weight: 500;">No Data Available</div>
-        <div style="font-size: var(--text-sm); color: var(--color-text-muted);">Model usage statistics will appear here once you start using Cursor AI</div>
-      </div>
-    `;
-    return;
-  }
-
-  // Count models
-  const modelCounts = {};
-  const modelModes = {};
-  const modelContext = {};
-  
-  prompts.forEach(p => {
-    const model = p.modelName || p.model_name || 'Unknown';
-    const mode = p.mode || 'unknown';
-    const context = p.contextUsage || p.context_usage || 0;
-    
-    // Count by model
-    modelCounts[model] = (modelCounts[model] || 0) + 1;
-    
-    // Count modes per model
-    if (!modelModes[model]) modelModes[model] = {};
-    modelModes[model][mode] = (modelModes[model][mode] || 0) + 1;
-    
-    // Average context per model
-    if (!modelContext[model]) modelContext[model] = { total: 0, count: 0 };
-    modelContext[model].total += context;
-    modelContext[model].count++;
-  });
-
-  // Sort by usage
-  const sortedModels = Object.entries(modelCounts).sort((a, b) => b[1] - a[1]);
-  
-  const totalPrompts = prompts.length;
-
-  let html = '<div style="display: flex; flex-direction: column; gap: var(--space-md);">';
-
-  sortedModels.forEach(([model, count]) => {
-    const percentage = ((count / totalPrompts) * 100).toFixed(1);
-    const avgContext = modelContext[model] ? (modelContext[model].total / modelContext[model].count).toFixed(1) : 0;
-    const modes = modelModes[model] || {};
-    const modesList = Object.entries(modes)
-      .sort((a, b) => b[1] - a[1])
-      .map(([mode, modeCount]) => `${mode}: ${modeCount}`)
-      .join(', ');
-
-    html += `
-      <div style="padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md); border-left: 3px solid var(--color-primary);">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-sm);">
-          <div style="flex: 1;">
-            <div style="font-weight: 600; color: var(--color-text); margin-bottom: var(--space-xs);">
-              ${model === 'Unknown' ? 'Model Not Specified' : model}
-            </div>
-            <div style="font-size: var(--text-sm); color: var(--color-text-muted);">
-              ${modesList}
-            </div>
-          </div>
-          <div style="text-align: right;">
-            <div style="font-size: var(--text-xl); font-weight: 600; color: var(--color-primary);">${count}</div>
-            <div style="font-size: var(--text-xs); color: var(--color-text-muted);">${percentage}%</div>
-          </div>
-        </div>
-        <div style="display: flex; align-items: center; gap: var(--space-sm);">
-          <div style="flex: 1; background: var(--color-bg-alt); height: 6px; border-radius: 3px; overflow: hidden;">
-            <div style="background: var(--color-primary); height: 100%; width: ${percentage}%;"></div>
-          </div>
-          ${avgContext > 0 ? `<span style="font-size: var(--text-xs); color: var(--color-text-muted);">${avgContext}% avg context</span>` : ''}
-        </div>
-      </div>
-    `;
-  });
-
-  html += '</div>';
-  container.innerHTML = html;
-}
-/**
- * Render Enhanced Context Window Analytics
- */
-async function renderEnhancedContextAnalytics() {
-  const container = document.getElementById('enhancedContextAnalytics');
-  if (!container) return;
-
-  const prompts = window.state?.data?.prompts || state?.data?.prompts || [];
-  
-  if (prompts.length === 0) {
-    container.innerHTML = `
-      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 200px; padding: var(--space-xl); text-align: center;">
-        <div style="font-size: var(--text-lg); color: var(--color-text); margin-bottom: var(--space-xs); font-weight: 500;">No Data Available</div>
-        <div style="font-size: var(--text-sm); color: var(--color-text-muted);">Context data will appear here once you start using Cursor AI</div>
-      </div>
-    `;
-    return;
-  }
-
-  // Calculate context analytics from actual data
-  let totalContextFiles = 0;
-  let promptsWithContext = 0;
-  let totalContextUsage = 0;
-  let contexUsageCount = 0;
-  let totalCharsInPrompts = 0;
-  const fileReferences = new Map();
-  const promptsWithMentions = [];
-  
-  prompts.forEach(p => {
-    const text = p.text || p.prompt || '';
-    totalCharsInPrompts += text.length;
-    
-    // Count context files
-    if (p.contextFiles) {
-      let fileCount = 0;
-      if (typeof p.contextFiles === 'object') {
-        if (p.contextFiles.count) {
-          fileCount = p.contextFiles.count;
-        } else if (p.contextFiles.files && Array.isArray(p.contextFiles.files)) {
-          fileCount = p.contextFiles.files.length;
-          // Track individual file references
-          p.contextFiles.files.forEach(file => {
-            const fileName = typeof file === 'string' ? file : file.path || file.name;
-            if (fileName) {
-              fileReferences.set(fileName, (fileReferences.get(fileName) || 0) + 1);
-            }
-          });
-        }
-      }
-      if (fileCount > 0) {
-        totalContextFiles += fileCount;
-        promptsWithContext++;
-      }
-    }
-    
-    // Count @ mentions in text
-    const atMentions = (text.match(/@[\w\-\.\/]+/g) || []);
-    if (atMentions.length > 0) {
-      atMentions.forEach(mention => {
-        const cleanMention = mention.substring(1); // Remove @
-        fileReferences.set(cleanMention, (fileReferences.get(cleanMention) || 0) + 1);
-      });
-      promptsWithMentions.push(p);
-    }
-    
-    // Track context usage percentage
-    const usage = p.contextUsage || p.context_usage || 0;
-    if (usage > 0) {
-      totalContextUsage += usage;
-      contexUsageCount++;
-    }
-  });
-  
-  const avgFilesPerPrompt = promptsWithContext > 0 ? (totalContextFiles / promptsWithContext) : 0;
-  const avgContextUsage = contexUsageCount > 0 ? (totalContextUsage / contexUsageCount) : 0;
-  const avgCharsPerPrompt = prompts.length > 0 ? (totalCharsInPrompts / prompts.length) : 0;
-  const estimatedTokens = Math.round(avgCharsPerPrompt / 4); // Rough estimate: 4 chars per token
-  const contextUtilizationRate = (promptsWithContext / prompts.length) * 100;
-  
-  // Sort files by reference count
-  const topFiles = Array.from(fileReferences.entries())
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 8)
-    .map(([file, count]) => ({ file, count }));
-  
-  // Analyze context patterns
-  const last24h = Date.now() - 24 * 60 * 60 * 1000;
-  const recentPromptsWithContext = prompts.filter(p => {
-    const time = new Date(p.timestamp).getTime();
-    const hasContext = (p.contextFiles?.count || 0) > 0 || (p.text || '').includes('@');
-    return time >= last24h && hasContext;
-  }).length;
-    
-    container.innerHTML = `
-      <div class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--space-md); margin-bottom: var(--space-lg);">
-        <div class="stat-card">
-        <div class="stat-label" title="Average files referenced per prompt with context">Avg Files/Prompt</div>
-        <div class="stat-value">${avgFilesPerPrompt.toFixed(1)}</div>
-        <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">
-          ${promptsWithContext} of ${prompts.length} with context
-        </div>
-        </div>
-        <div class="stat-card">
-        <div class="stat-label" title="Estimated tokens based on average prompt length">Est. Tokens/Prompt</div>
-        <div class="stat-value">${estimatedTokens.toLocaleString()}</div>
-        <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">
-          ~${Math.round(avgCharsPerPrompt).toLocaleString()} chars avg
-        </div>
-        </div>
-        <div class="stat-card">
-        <div class="stat-label" title="Average context window utilization when context is used">Avg Context Usage</div>
-        <div class="stat-value" style="color: ${avgContextUsage >= 80 ? '#ef4444' : avgContextUsage >= 60 ? '#f59e0b' : '#10b981'};">
-          ${avgContextUsage.toFixed(1)}%
-        </div>
-        <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">
-          ${contexUsageCount} prompts tracked
-        </div>
-        </div>
-        <div class="stat-card">
-        <div class="stat-label" title="% of prompts that include file context or @ mentions">Context Adoption</div>
-        <div class="stat-value">${contextUtilizationRate.toFixed(0)}%</div>
-        <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">
-          ${recentPromptsWithContext} in last 24h
-        </div>
-        </div>
-      </div>
-      
-    ${topFiles.length > 0 ? `
-        <div style="margin-top: var(--space-lg);">
-        <h4 style="margin-bottom: var(--space-md); color: var(--color-text); font-size: var(--text-base); font-weight: 600;">
-          Most Referenced Files & Mentions
-        </h4>
-        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: var(--space-sm);">
-          ${topFiles.map(({ file, count }) => {
-            const fileName = file.split('/').pop() || file;
-            const percentage = ((count / prompts.length) * 100).toFixed(1);
-            return `
-              <div style="display: flex; justify-content: space-between; align-items: center; padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md); border-left: 3px solid var(--color-primary);">
-                <div style="flex: 1; min-width: 0;">
-                  <div style="font-family: 'Geist Mono', monospace; font-size: var(--text-sm); color: var(--color-text); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(file)}">
-                    ${escapeHtml(fileName)}
-              </div>
-                  ${file !== fileName ? `
-                    <div style="font-size: var(--text-xs); color: var(--color-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 2px;" title="${escapeHtml(file)}">
-                      ${escapeHtml(file)}
-          </div>
-                  ` : ''}
-        </div>
-                <div style="text-align: right; margin-left: var(--space-md); flex-shrink: 0;">
-                  <div style="color: var(--color-primary); font-weight: 600; font-size: var(--text-lg);">${count}</div>
-                  <div style="font-size: var(--text-xs); color: var(--color-text-muted);">${percentage}%</div>
-                </div>
-              </div>
-            `;
-          }).join('')}
-      </div>
-      </div>
-    ` : `
-      <div style="color: var(--color-text-muted); text-align: center; padding: var(--space-xl); background: var(--color-bg); border-radius: var(--radius-md);">
-        <div style="font-size: var(--text-base); margin-bottom: var(--space-xs);">No specific file references detected yet</div>
-        <div style="font-size: var(--text-sm);">Use @ mentions in Cursor to reference files explicitly</div>
-      </div>
-    `}
-  `;
-}
-
-/**
- * Render Productivity Insights
- */
-async function renderProductivityInsights() {
-  const container = document.getElementById('productivityInsights');
-  if (!container) return;
-
-  const prompts = window.state?.data?.prompts || state?.data?.prompts || [];
-  const events = window.state?.data?.events || state?.data?.events || [];
-  
-  if (prompts.length === 0 && events.length === 0) {
-      container.innerHTML = `
-        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 200px; padding: var(--space-xl); text-align: center;">
-          <div style="font-size: var(--text-lg); color: var(--color-text); margin-bottom: var(--space-xs); font-weight: 500;">No Data Available</div>
-          <div style="font-size: var(--text-sm); color: var(--color-text-muted);">Productivity data will accumulate as you work with Cursor</div>
-        </div>
-      `;
-      return;
-    }
-
-  // Calculate productivity metrics from actual data
-  const now = Date.now();
-  const last24h = now - 24 * 60 * 60 * 1000;
-  const last7days = now - 7 * 24 * 60 * 60 * 1000;
-  
-  // File edit activity
-  const fileEditEvents = events.filter(e => e.type === 'file-change' || e.type === 'file-edit');
-  const recentFileEdits = fileEditEvents.filter(e => new Date(e.timestamp).getTime() >= last24h);
-  
-  // Calculate active coding time (based on event density)
-  let activeCodingTime = 0;
-  const sortedEvents = [...events].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-  for (let i = 1; i < sortedEvents.length; i++) {
-    const timeDiff = new Date(sortedEvents[i].timestamp) - new Date(sortedEvents[i - 1].timestamp);
-    // Count as active if events are within 5 minutes of each other
-    if (timeDiff < 5 * 60 * 1000) {
-      activeCodingTime += timeDiff;
-    }
-  }
-  
-  // Prompt metrics
-  const userPrompts = prompts.filter(p => p.messageRole === 'user' || !p.messageRole);
-  const aiResponses = prompts.filter(p => p.messageRole === 'assistant');
-  const recentPrompts = userPrompts.filter(p => new Date(p.timestamp).getTime() >= last24h);
-  const weekPrompts = userPrompts.filter(p => new Date(p.timestamp).getTime() >= last7days);
-  
-  // Calculate thinking time for AI responses
-  const aiResponsesWithTime = aiResponses.filter(p => p.thinkingTimeSeconds && p.thinkingTimeSeconds > 0);
-  const avgThinkingTime = aiResponsesWithTime.length > 0 
-    ? aiResponsesWithTime.reduce((sum, p) => sum + parseFloat(p.thinkingTimeSeconds), 0) / aiResponsesWithTime.length 
-    : 0;
-  
-  // Lines changed analysis
-  const promptsWithLines = prompts.filter(p => (p.linesAdded || 0) > 0 || (p.linesRemoved || 0) > 0);
-  const totalLinesAdded = prompts.reduce((sum, p) => sum + (p.linesAdded || 0), 0);
-  const totalLinesRemoved = prompts.reduce((sum, p) => sum + (p.linesRemoved || 0), 0);
-  const netLinesChanged = totalLinesAdded - totalLinesRemoved;
-  
-  // Code churn (high churn = editing same files repeatedly)
-  const fileEditCounts = new Map();
-  events.filter(e => e.file).forEach(e => {
-    fileEditCounts.set(e.file, (fileEditCounts.get(e.file) || 0) + 1);
-  });
-  const highChurnFiles = Array.from(fileEditCounts.entries())
-    .filter(([_, count]) => count >= 5)
-    .sort((a, b) => b[1] - a[1]);
-  
-  // Conversation length (prompts per conversation)
-  const conversationMap = new Map();
-  prompts.forEach(p => {
-    const convId = p.parentConversationId || p.composerId || 'default';
-    conversationMap.set(convId, (conversationMap.get(convId) || 0) + 1);
-  });
-  const avgPromptsPerConversation = conversationMap.size > 0 
-    ? Array.from(conversationMap.values()).reduce((a, b) => a + b, 0) / conversationMap.size 
-    : 0;
-  
-  // Calculate prompts per day
-  const promptsPerDay = weekPrompts.length > 0 ? (weekPrompts.length / 7).toFixed(1) : '0.0';
-    
-    container.innerHTML = `
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--space-md); margin-bottom: var(--space-lg);">
-        <div class="stat-card">
-        <div class="stat-label" title="Estimated active coding time based on event density">Active Time (Est.)</div>
-        <div class="stat-value">${formatDuration(activeCodingTime)}</div>
-        <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">
-          Based on ${events.length.toLocaleString()} events
-        </div>
-      </div>
-      
-        <div class="stat-card">
-        <div class="stat-label" title="Total user prompts to AI">Total Prompts</div>
-        <div class="stat-value">${userPrompts.length.toLocaleString()}</div>
-        <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">
-          ${recentPrompts.length} in last 24h
-        </div>
-      </div>
-      
-        <div class="stat-card">
-        <div class="stat-label" title="Average prompts per conversation thread">Avg Iteration Depth</div>
-        <div class="stat-value">${avgPromptsPerConversation.toFixed(1)}</div>
-        <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">
-          ${conversationMap.size} conversations
-        </div>
-      </div>
-      
-        <div class="stat-card">
-        <div class="stat-label" title="Average AI response thinking time">Avg AI Think Time</div>
-        <div class="stat-value">${avgThinkingTime > 0 ? avgThinkingTime.toFixed(1) + 's' : 'N/A'}</div>
-        <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">
-          ${aiResponsesWithTime.length} responses tracked
-        </div>
-      </div>
-    </div>
-    
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--space-md); margin-bottom: var(--space-lg);">
-      <div class="stat-card">
-        <div class="stat-label" title="Total lines added across all prompts">Lines Added</div>
-        <div class="stat-value" style="color: #10b981;">${totalLinesAdded.toLocaleString()}</div>
-        <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">
-          ${promptsWithLines.length} prompts with changes
-        </div>
-      </div>
-      
-      <div class="stat-card">
-        <div class="stat-label" title="Total lines removed across all prompts">Lines Removed</div>
-        <div class="stat-value" style="color: #ef4444;">${totalLinesRemoved.toLocaleString()}</div>
-        <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">
-          Net: ${netLinesChanged >= 0 ? '+' : ''}${netLinesChanged.toLocaleString()}
-        </div>
-      </div>
-      
-      <div class="stat-card">
-        <div class="stat-label" title="Files edited repeatedly (potential churn)">High-Churn Files</div>
-        <div class="stat-value">${highChurnFiles.length}</div>
-        <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">
-          ${fileEditEvents.length} total edits
-        </div>
-      </div>
-      
-      <div class="stat-card">
-        <div class="stat-label" title="Average prompts per day over last week">Daily Velocity</div>
-        <div class="stat-value">${promptsPerDay}</div>
-        <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">
-          prompts/day (7-day avg)
-        </div>
-      </div>
-    </div>
-    
-    ${highChurnFiles.length > 0 ? `
-      <div style="margin-top: var(--space-md);">
-        <h4 style="margin-bottom: var(--space-md); color: var(--color-text); font-size: var(--text-base); font-weight: 600;">
-          Most Frequently Edited Files
-        </h4>
-        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: var(--space-sm);">
-          ${highChurnFiles.slice(0, 6).map(([file, count]) => {
-            const fileName = file.split('/').pop() || file;
-            const editIntensity = count >= 20 ? 'Very High' : count >= 10 ? 'High' : 'Moderate';
-            const color = count >= 20 ? '#ef4444' : count >= 10 ? '#f59e0b' : '#10b981';
-            return `
-              <div style="padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md); border-left: 3px solid ${color};">
-                <div style="font-family: 'Geist Mono', monospace; font-size: var(--text-sm); color: var(--color-text); font-weight: 500; margin-bottom: var(--space-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(file)}">
-                  ${escapeHtml(fileName)}
-                </div>
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                  <span style="font-size: var(--text-xs); color: var(--color-text-muted);">${editIntensity} churn</span>
-                  <span style="color: ${color}; font-weight: 600;">${count} edits</span>
-        </div>
-      </div>
-    `;
-          }).join('')}
-      </div>
-      </div>
-    ` : ''}
-    `;
-}
-
-// Update context chart timescale
-function updateContextChartTimescale(hours) {
-  // Update button states
-  document.querySelectorAll('.btn-timescale').forEach(btn => {
-    const btnHours = parseInt(btn.getAttribute('data-hours'));
-    if (btnHours === hours) {
-      btn.style.background = 'var(--color-primary)';
-      btn.style.color = 'white';
-    } else {
-      btn.style.background = 'var(--color-bg)';
-      btn.style.color = 'var(--color-text)';
-    }
-  });
-  
-  // Re-render chart with new timescale
-  renderPromptTokensChart(hours);
-}
-
-// Helper function to format duration
-function formatDuration(ms) {
-  if (ms < 60000) return `${Math.round(ms / 1000)}s`;
-  if (ms < 3600000) return `${Math.round(ms / 60000)}m`;
-  return `${(ms / 3600000).toFixed(1)}h`;
-}
-
-/**
- * ✅ REMOVED: File Relationship Visualization (handled in File Graph view)
- */
-// async function renderFileRelationshipVisualization() {
-//   Disabled - this is better handled in the dedicated File Graph tab
-// }
-async function renderFileRelationshipVisualization_DISABLED() {
-  const container = document.getElementById('fileRelationshipViz');
-  if (!container) return;
-
-  try {
-    // Fetch file relationship data from API
-    const response = await APIClient.get('/api/analytics/context/file-relationships');
-    
-    if (!response.success || !response.data) {
-      throw new Error('No file relationship data available');
-    }
-    
-    const data = response.data;
-    
-    if (!data.nodes || data.nodes.length === 0) {
-      container.innerHTML = `
-        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 200px; padding: var(--space-xl); text-align: center;">
-          <div style="font-size: var(--text-lg); color: var(--color-text); margin-bottom: var(--space-xs); font-weight: 500;">No Data Available</div>
-          <div style="font-size: var(--text-sm); color: var(--color-text-muted);">File relationships will appear once you use @ mentions in Cursor</div>
-        </div>
-      `;
-      return;
-    }
-    
-    // Render file relationship list (simple version for now)
-    container.innerHTML = `
-      <div style="margin-bottom: var(--space-md);">
-        <div style="font-size: var(--text-sm); color: var(--color-text-muted); margin-bottom: var(--space-xs);">
-          ${data.nodes.length} files with ${data.edges.length} relationships
-        </div>
-      </div>
-      <div style="display: flex; flex-direction: column; gap: var(--space-xs);">
-        ${data.nodes.slice(0, 10).map(node => `
-          <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-sm);">
-            <span style="font-family: 'Geist Mono', monospace; font-size: var(--text-sm); color: var(--color-text);">${node.id}</span>
-            <span style="color: var(--color-primary); font-weight: 500;">${node.weight} references</span>
-          </div>
-        `).join('')}
-      </div>
-    `;
-  } catch (error) {
-    console.warn('[INFO] File relationship error:', error.message);
-    container.innerHTML = `
-      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 200px; padding: var(--space-xl); text-align: center;">
-        <div style="font-size: var(--text-lg); color: var(--color-text); margin-bottom: var(--space-xs); font-weight: 500;">No Data Available</div>
-        <div style="font-size: var(--text-sm); color: var(--color-text-muted);">File relationships will appear once you use @ mentions in Cursor</div>
-      </div>
-    `;
-  }
-}
-
-// ===================================
-// TODO View - REMOVED
-// ===================================
-// TODOs view has been removed from the dashboard
-  container.innerHTML = `
-    <div style="max-width: 1200px; margin: 0 auto;">
-      <div class="card">
-        <div class="card-header">
-          <h2 class="card-title">Task Tracking</h2>
-          <p style="font-size: var(--text-sm); color: var(--color-text-muted); margin-top: var(--space-xs);">
-            TODOs created by AI assistant, linked to prompts and file changes
-          </p>
-        </div>
-        <div class="card-body" id="todoListContainer">
-          <div style="display: flex; justify-content: center; padding: var(--space-2xl);">
-            <div class="spinner"></div>
-          </div>
-        </div>
-      </div>
-    </div>
-  `;
-
-  try {
-    const response = await fetch(`${CONFIG.API_BASE}/api/todos`);
-    const data = await response.json();
-    
-    // ✅ Fix: API returns {success, todos}, not just array
-    const todos = data.todos || data || [];
-    
-    const todoListContainer = document.getElementById('todoListContainer');
-    
-    if (!todos || todos.length === 0) {
-      todoListContainer.innerHTML = `
-        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: var(--space-2xl); text-align: center;">
-          <div style="font-size: var(--text-lg); color: var(--color-text); margin-bottom: var(--space-xs); font-weight: 500;">No TODOs Yet</div>
-          <div style="font-size: var(--text-sm); color: var(--color-text-muted); max-width: 400px;">
-            TODOs will appear here automatically when the AI assistant creates them during your workflow
-          </div>
-        </div>
-      `;
-      return;
-    }
-
-    // Group todos by status
-    const grouped = {
-      in_progress: todos.filter(t => t.status === 'in_progress'),
-      pending: todos.filter(t => t.status === 'pending'),
-      completed: todos.filter(t => t.status === 'completed')
-    };
-
-    const totalCompleted = grouped.completed.length;
-    const totalTodos = todos.length;
-    const completionRate = totalTodos > 0 ? Math.round((totalCompleted / totalTodos) * 100) : 0;
-
-    todoListContainer.innerHTML = `
-      <!-- Progress Summary -->
-      <div style="display: flex; gap: var(--space-lg); margin-bottom: var(--space-xl); padding: var(--space-lg); background: var(--color-bg); border-radius: var(--radius-md);">
-        <div style="flex: 1;">
-          <div style="font-size: var(--text-sm); color: var(--color-text-muted); margin-bottom: var(--space-xs);">Total Tasks</div>
-          <div style="font-size: var(--text-2xl); font-weight: 600; color: var(--color-text);">${totalTodos}</div>
-        </div>
-        <div style="flex: 1;">
-          <div style="font-size: var(--text-sm); color: var(--color-text-muted); margin-bottom: var(--space-xs);">Completed</div>
-          <div style="font-size: var(--text-2xl); font-weight: 600; color: var(--color-success);">${totalCompleted}</div>
-        </div>
-        <div style="flex: 1;">
-          <div style="font-size: var(--text-sm); color: var(--color-text-muted); margin-bottom: var(--space-xs);">In Progress</div>
-          <div style="font-size: var(--text-2xl); font-weight: 600; color: var(--color-primary);">${grouped.in_progress.length}</div>
-        </div>
-        <div style="flex: 1;">
-          <div style="font-size: var(--text-sm); color: var(--color-text-muted); margin-bottom: var(--space-xs);">Completion Rate</div>
-          <div style="font-size: var(--text-2xl); font-weight: 600; color: var(--color-text);">${completionRate}%</div>
-        </div>
-      </div>
-
-      <!-- TODO Sections -->
-      ${grouped.in_progress.length > 0 ? `
-        <div style="margin-bottom: var(--space-xl);">
-          <h3 style="font-size: var(--text-md); font-weight: 600; color: var(--color-text); margin-bottom: var(--space-md); display: flex; align-items: center; gap: var(--space-sm);">
-            <span style="color: var(--color-primary);"></span> In Progress
-          </h3>
-          <div style="display: flex; flex-direction: column; gap: var(--space-md);">
-            ${grouped.in_progress.map(todo => renderTodoItem(todo)).join('')}
-          </div>
-        </div>
-      ` : ''}
-
-      ${grouped.pending.length > 0 ? `
-        <div style="margin-bottom: var(--space-xl);">
-          <h3 style="font-size: var(--text-md); font-weight: 600; color: var(--color-text); margin-bottom: var(--space-md); display: flex; align-items: center; gap: var(--space-sm);">
-            <span style="color: var(--color-text-muted);"></span> Pending
-          </h3>
-          <div style="display: flex; flex-direction: column; gap: var(--space-md);">
-            ${grouped.pending.map(todo => renderTodoItem(todo)).join('')}
-          </div>
-        </div>
-      ` : ''}
-
-      ${grouped.completed.length > 0 ? `
-        <div>
-          <h3 style="font-size: var(--text-md); font-weight: 600; color: var(--color-text); margin-bottom: var(--space-md); display: flex; align-items: center; gap: var(--space-sm);">
-            <span style="color: var(--color-success);"></span> Completed
-          </h3>
-          <div style="display: flex; flex-direction: column; gap: var(--space-md);">
-            ${grouped.completed.map(todo => renderTodoItem(todo)).join('')}
-          </div>
-        </div>
-      ` : ''}
-    `;
-
-    // Attach event listeners
-    todos.forEach(todo => {
-      const expandBtn = document.getElementById(`expand-todo-${todo.id}`);
-      const startBtn = document.getElementById(`start-todo-${todo.id}`);
-      const completeBtn = document.getElementById(`complete-todo-${todo.id}`);
-
-      if (expandBtn) {
-        expandBtn.addEventListener('click', () => expandTodoDetails(todo.id));
-      }
-      if (startBtn) {
-        startBtn.addEventListener('click', () => markTodoInProgress(todo.id));
-      }
-      if (completeBtn) {
-        completeBtn.addEventListener('click', () => markTodoCompleted(todo.id));
-      }
-    });
-
-  } catch (error) {
-    console.error('Error loading todos:', error);
-    const errorContainer = document.getElementById('todoListContainer');
-    if (errorContainer) {
-      errorContainer.innerHTML = `
-        <div style="display: flex; flex-direction: column; align-items: center; padding: var(--space-xl); text-align: center;">
-          <div style="font-size: var(--text-lg); color: var(--color-error); margin-bottom: var(--space-xs); font-weight: 500;">Failed to Load TODOs</div>
-          <div style="font-size: var(--text-sm); color: var(--color-text-muted);">${error.message}</div>
-        </div>
-      `;
-    }
-  }
-}
-
-
-// Manual TODO actions removed - status is now automatic based on AI activity
-
-
-// Helper function for formatting timestamps
-function formatTimestamp(timestamp) {
-  if (!timestamp) return 'Unknown';
-  const date = new Date(timestamp);
-  const now = new Date();
-  const diffMs = now - date;
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
-  
-  // Relative time for recent timestamps
-  if (diffMins < 1) return 'Just now';
-  if (diffMins < 60) return `${diffMins}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  if (diffDays < 7) return `${diffDays}d ago`;
-  
-  // Absolute time for older timestamps
-  return date.toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-}
-
-// Helper function for escaping HTML
-function escapeHtml(text) {
-  if (!text) return '';
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
-}
-
-// Helper function for truncating text
-function truncateText(text, maxLength) {
-  if (!text || text.length <= maxLength) return text;
-  return text.substring(0, maxLength) + '...';
-}
-
-// Export new functions
-window.renderModelUsageAnalytics = renderModelUsageAnalytics;
-window.renderEnhancedContextAnalytics = renderEnhancedContextAnalytics;
-window.renderContextFileAnalytics = renderContextFileAnalytics;
-// window.renderErrorTracking - REMOVED: Section removed from dashboard
-window.renderProductivityInsights = renderProductivityInsights;
-// window.renderFileRelationshipVisualization - REMOVED: Handled in File Graph view
-window.renderTodoView = renderTodoView;
