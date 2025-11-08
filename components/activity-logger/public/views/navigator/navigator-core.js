@@ -56,8 +56,24 @@ async function initializeNavigator() {
     container.innerHTML = '<div class="loading-wrapper"><div class="loading-spinner"></div><span>Computing latent embeddings...</span></div>';
     
     // Fetch file data
-    const response = await fetch(`${window.CONFIG.API_BASE}/api/file-contents?limit=100000`);
-    const data = await response.json();
+    let response, data;
+    try {
+      response = await fetch(`${window.CONFIG.API_BASE}/api/file-contents?limit=100000`);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      data = await response.json();
+    } catch (error) {
+      console.warn('[NAVIGATOR] Failed to fetch file contents:', error.message);
+      container.innerHTML = `
+        <div class="empty-wrapper" style="padding: 2rem; text-align: center;">
+          <div style="font-size: 1.1rem; font-weight: 500; margin-bottom: 0.5rem; color: var(--color-text);">Companion service not available</div>
+          <div style="font-size: 0.9rem; margin-bottom: 1rem; color: var(--color-text-muted);">File contents cannot be loaded. Make sure the companion service is running on port 43917.</div>
+          <div style="font-size: 0.85rem; opacity: 0.8; color: var(--color-text-muted);">Error: ${error.message}</div>
+        </div>
+      `;
+      return;
+    }
     
     if (!data.files || data.files.length === 0) {
       container.innerHTML = '<div class="empty-wrapper">No file data available</div>';
