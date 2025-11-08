@@ -10,6 +10,7 @@ A local-first companion service for the Cursor Activity Logger that provides fil
 - **MCP Server**: JSON-RPC integration with Cursor
 - **HTTP API**: RESTful API for the SPA to consume data
 - **Queue System**: Reliable data queuing and acknowledgment
+- **Model Detection**: Robust AI model provider detection with regex pattern matching (OpenAI, Anthropic, Google, Meta, Mistral, Cohere)
 
 ## Quick Start
 
@@ -76,24 +77,39 @@ The service exposes these MCP commands to Cursor:
 - `npm run dev` - Start with file watching
 - `npm test` - Run tests
 
+## Utilities
+
+### Model Detection
+
+The service includes a robust model detection utility (`utils/model-detector.js`) that automatically identifies AI model providers from model names and content. It uses regex pattern matching to support:
+
+- **OpenAI**: GPT-4, GPT-3.5-turbo, o1-preview, o1-mini, text-embedding models
+- **Anthropic**: Claude-3-opus, Claude-3-sonnet, Claude-3-haiku
+- **Google**: Gemini-pro, Gemini-ultra, PaLM models
+- **Meta**: Llama-2, Llama-3, Meta-Llama models
+- **Mistral**: Mistral-small, Mistral-large, Mixtral models
+- **Cohere**: Command, Command-light models
+
+The detector handles edge cases, null/undefined inputs, and provides fallback detection from content when model names are unavailable.
+
 ## Architecture
 
 ```
-ê    JSON-RPC     ê
-Ç     Cursor      Çóñ∫Ç   MCP Handler    Ç
-ò                 ò
-                                              Ç HTTP
-                                              ñº
-ê    HTTP API     ê
-Ç      SPA        Çóñ∫Ç  Companion API   Ç
-ò                 ò
-                                              Ç
-                                              ñº
-                                    ê
-                                    Ç  File Watcher    Ç
-                                    Ç  + Diff Engine   Ç
-                                    Ç  + Queue         Ç
-                                    ò
+ÔøΩ    JSON-RPC     ÔøΩ
+ÔøΩ     Cursor      ÔøΩÔøΩÔøΩÔøΩÔøΩ   MCP Handler    ÔøΩ
+ÔøΩ                 ÔøΩ
+                                              ÔøΩ HTTP
+                                              ÔøΩÔøΩ
+ÔøΩ    HTTP API     ÔøΩ
+ÔøΩ      SPA        ÔøΩÔøΩÔøΩÔøΩÔøΩ  Companion API   ÔøΩ
+ÔøΩ                 ÔøΩ
+                                              ÔøΩ
+                                              ÔøΩÔøΩ
+                                    ÔøΩ
+                                    ÔøΩ  File Watcher    ÔøΩ
+                                    ÔøΩ  + Diff Engine   ÔøΩ
+                                    ÔøΩ  + Queue         ÔøΩ
+                                    ÔøΩ
 ```
 
 ## Privacy & Security
