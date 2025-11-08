@@ -17,16 +17,16 @@ sleep 2
 
 # Check if server is running
 if curl -s http://localhost:8080/public/dashboard.html > /dev/null; then
-    echo "✅ Server started successfully!"
+    echo "OK: Server started successfully!"
     echo ""
-    echo "🌐 Dashboard URLs:"
+    echo "Dashboard URLs:"
     echo "   Main Dashboard: http://localhost:8080/public/dashboard.html"
     echo "   Test Page:      http://localhost:8080/public/test-complete.html"
     echo "   Simple Test:    http://localhost:8080/public/test-dashboard.html"
     echo ""
     echo "Companion Service:"
     if curl -s http://127.0.0.1:43917/health > /dev/null; then
-        echo "   ✅ Running - Data available"
+        echo "   OK: Running - Data available"
     else
         echo "   Not running - Dashboard will work in browser-only mode"
     fi
@@ -42,6 +42,6 @@ if curl -s http://localhost:8080/public/dashboard.html > /dev/null; then
     # Wait for user to stop
     wait $SERVER_PID
 else
-    echo "❌ Failed to start server"
+    echo "ERROR: Failed to start server"
     exit 1
 fi

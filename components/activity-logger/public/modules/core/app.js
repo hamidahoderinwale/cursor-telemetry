@@ -26,7 +26,7 @@ class DashboardApp {
       return;
     }
 
-    console.log('[APP] Initializing Cursor Activity Dashboard...');
+    console.log('[APP] Initializing Cursor Telemetry Dashboard...');
 
     try {
       // Initialize persistent storage

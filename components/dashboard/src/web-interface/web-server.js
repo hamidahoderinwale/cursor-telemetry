@@ -1031,10 +1031,23 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(express.static(path.join(__dirname)));
+// Add caching headers for static assets
+app.use(express.static(path.join(__dirname), {
+  maxAge: '1d', // Cache for 1 day
+  etag: true,
+  lastModified: true
+}));
 
-// Serve CSS and JS files from root directory
-app.use(express.static(path.join(__dirname, '..')));
+// Serve CSS and JS files from root directory with caching
+app.use(express.static(path.join(__dirname, '..'), {
+  maxAge: '1d', // Cache for 1 day
+  etag: true,
+  lastModified: true,
+  index: 'index.html'
+}));
+
+// Frontend routes will be defined later in the file
+// This prevents duplicate route definitions
 
 // Serve kura-dashboard.js specifically
 app.get('/src/web-interface/kura-dashboard.js', (req, res) => {
@@ -3750,8 +3763,13 @@ app.get('/api/health', (req, res) => {
   }
 });
 
-// Serve the live dashboard
+// Serve the main dashboard frontend
 app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'index.html'));
+});
+
+// Serve the live dashboard
+app.get('/live', (req, res) => {
   res.sendFile(path.join(__dirname, 'live-dashboard-clean.html'));
 });
 

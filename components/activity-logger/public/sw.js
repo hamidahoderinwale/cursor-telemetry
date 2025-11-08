@@ -3,18 +3,18 @@
  * Provides offline support and caching for better performance
  */
 
-const CACHE_NAME = 'cursor-telemetry-v1';
+const CACHE_NAME = 'cursor-telemetry-v3';
 const CACHE_DURATION = 30 * 60 * 1000; // 30 minutes
 
 // Assets to cache immediately
 const PRECACHE_ASSETS = [
-  '/new-dashboard.html',
-  '/new-dashboard.js',
-  '/new-dashboard.css',
-  '/persistent-storage.js',
-  '/data-synchronizer.js',
-  '/analytics-aggregator.js',
-  '/search-engine.js'
+  '/dashboard.html',
+  '/dashboard.js',
+  '/dashboard.css',
+  '/services/data/persistent-storage.js',
+  '/services/data/data-synchronizer.js',
+  '/services/analytics/analytics-aggregator.js',
+  '/services/search/search-engine.js'
 ];
 
 // Install event - cache core assets
@@ -58,41 +58,38 @@ self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
   
-  // Only cache GET requests
-  if (request.method !== 'GET') {
+  // Always fetch templates.js fresh (don't cache)
+  if (url.pathname.includes('templates.js')) {
+    event.respondWith(
+      fetch(request).then(response => {
+        // Return fresh response, don't cache
+        return response;
+      }).catch(() => {
+        // Fallback to cache only if network fails
+        return caches.match(request);
+      })
+    );
     return;
   }
   
-  // Don't cache API calls - they need to be fresh
-  if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/health')) {
-    event.respondWith(
-      fetch(request).then((response) => {
-        // Cache API responses for 30 seconds
-        if (response.ok && shouldCacheAPIResponse(url.pathname)) {
-          const responseClone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(request, responseClone);
-            // Set expiry metadata
-            setTimeout(() => {
-              cache.delete(request);
-            }, CACHE_DURATION);
-          });
-        }
-        return response;
-      }).catch(() => {
-        // Try to serve stale cache on network failure
-        return caches.match(request).then((cached) => {
-          if (cached) {
-            console.log('[SW] Serving stale API cache:', url.pathname);
-            return cached;
-          }
-          return new Response(JSON.stringify({ error: 'Network unavailable' }), {
-            status: 503,
-            headers: { 'Content-Type': 'application/json' }
-          });
-        });
-      })
-    );
+  // CRITICAL: Don't intercept cross-origin requests (different hostname or port)
+  // This prevents CORS/OpaqueResponseBlocking errors
+  const isCrossOrigin = url.hostname !== self.location.hostname || 
+                        url.port !== self.location.port;
+  
+  // Also don't intercept API requests (even same-origin) - they need fresh data
+  const isAPIRequest = url.pathname.startsWith('/api/') || 
+                       url.pathname.startsWith('/health') ||
+                       url.pathname.startsWith('/entries');
+  
+  if (isCrossOrigin || isAPIRequest) {
+    // For cross-origin and API requests, don't intercept - let browser handle CORS directly
+    // This prevents opaque response blocking errors
+    return; // Let the request pass through without ServiceWorker interception
+  }
+  
+  // Only cache GET requests for same-origin static assets
+  if (request.method !== 'GET') {
     return;
   }
   

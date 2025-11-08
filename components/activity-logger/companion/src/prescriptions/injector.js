@@ -98,11 +98,11 @@ class PrescriptionInjector {
       [CATEGORIES.BEHAVIOR]: '[TARGET]',
       [CATEGORIES.FORMATTING]: '[SPARKLE]',
       [CATEGORIES.WORKFLOW]: '[CONFIG]',
-      [CATEGORIES.SECURITY]: '🔒',
+      [CATEGORIES.SECURITY]: '[SECURITY]',
       [CATEGORIES.COMMUNICATION]: '[CHAT]',
       [CATEGORIES.ALLOWLIST]: '[SUCCESS]',
-      [CATEGORIES.BLOCKLIST]: '🚫',
-      [CATEGORIES.CONSTRAINTS]: '⚠️'
+      [CATEGORIES.BLOCKLIST]: '[BLOCK]',
+      [CATEGORIES.CONSTRAINTS]: '[WARN]'
     };
 
     const icon = icons[category] || '•';

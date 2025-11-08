@@ -32,8 +32,8 @@
   --spacing-2xl: 3rem;
   
   /* Typography */
-  --font-family: 'Geist', system-ui, -apple-system, sans-serif;
-  --font-family-mono: 'Geist Mono', 'Fira Code', monospace;
+  --font-family: "Stack Sans Text", "Inter", sans-serif;
+  --font-family-mono: 'SF Mono', Monaco, monospace;
   
   --font-size-xs: 0.75rem;
   --font-size-sm: 0.875rem;

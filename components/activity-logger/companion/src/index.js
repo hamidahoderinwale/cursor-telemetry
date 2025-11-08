@@ -15,8 +15,8 @@ const fs = require('fs');
 const crypto = require('crypto');
 const lunr = require('lunr'); // Import lunr
 // Import the new queue system and clipboard monitor
-const { queue: queueSystem } = require('./queue.js');
-const { clipboardMonitor } = require('./clipboardMonitor.js');
+const { queue: queueSystem } = require('./utils/queue.js');
+const { clipboardMonitor } = require('./monitors/clipboardMonitor.js');
 
 // Initialize query cache (30 second TTL, check every 60s for expired)
 const queryCache = new NodeCache({ 
@@ -32,40 +32,53 @@ const { promisify } = require('util');
 const execAsync = promisify(exec);
 
 // Import IDE state capture service
-const IDEStateCapture = require('./ide-state-capture.js');
+const IDEStateCapture = require('./monitors/ide-state-capture.js');
 
 // Import prompt capture system
-const PromptCaptureSystem = require('./prompt-capture-system.js');
+const PromptCaptureSystem = require('./capture/prompt-capture-system.js');
 
 // Import Cursor database parser
-const CursorDatabaseParser = require('./cursor-db-parser.js');
+const CursorDatabaseParser = require('./database/cursor-db-parser.js');
 
 // Import screenshot monitor
-const ScreenshotMonitor = require('./screenshot-monitor.js');
+const ScreenshotMonitor = require('./monitors/screenshot-monitor.js');
 
 // Import persistent database
-const PersistentDB = require('./persistent-db.js');
+const PersistentDB = require('./database/persistent-db.js');
 
-// Import reasoning engine
-const { ReasoningEngine } = require('./reasoning-engine.js');
+// Import schema migrations
+const SchemaMigrations = require('./database/schema-migrations.js');
 
-// Import new analytics modules
-const ContextAnalyzer = require('./context-analyzer.js');
-const ErrorTracker = require('./error-tracker.js');
-const ProductivityTracker = require('./productivity-tracker.js');
-const TerminalMonitor = require('./terminal-monitor.js');
+// Reasoning engine removed - chat widget no longer used
+
+// Import analytics modules
+const ContextAnalyzer = require('./analytics/context-analyzer.js');
+const ContextChangeTracker = require('./analytics/context-change-tracker.js');
+const ErrorTracker = require('./analytics/error-tracker.js');
+const ProductivityTracker = require('./analytics/productivity-tracker.js');
+const AbstractionEngine = require('./analytics/abstraction-engine.js');
+
+// Import monitor modules
+const StatusMessageTracker = require('./monitors/status-message-tracker.js');
+const TerminalMonitor = require('./monitors/terminal-monitor.js');
 
 // Initialize persistent database
 const persistentDB = new PersistentDB();
 
+// Initialize schema migrations
+const schemaMigrations = new SchemaMigrations(persistentDB);
+
 // Initialize analytics trackers
 const contextAnalyzer = new ContextAnalyzer(persistentDB);
+const contextChangeTracker = new ContextChangeTracker(persistentDB);
+const statusMessageTracker = new StatusMessageTracker(persistentDB);
 const errorTracker = new ErrorTracker();
 const productivityTracker = new ProductivityTracker();
 const terminalMonitor = new TerminalMonitor({
   captureOutput: false, // Don't execute commands, just monitor
   debug: false
 });
+const abstractionEngine = new AbstractionEngine();
 
 // Simple in-memory database for companion service (with persistent backup)
 const db = {
@@ -132,6 +145,9 @@ const io = new Server(server, {
   }
 });
 
+// Track active conversation streams (defined early for use in broadcast functions)
+const conversationStreams = new Map();
+
 // Real-time broadcast function with cache invalidation
 function broadcastUpdate(type, data) {
   io.emit('activityUpdate', { type, data });
@@ -149,17 +165,55 @@ function broadcastUpdate(type, data) {
   }
 }
 
+// Helper function to broadcast conversation updates to subscribed clients
+function broadcastConversationUpdate(conversationId, data) {
+  const stream = conversationStreams.get(conversationId);
+  if (stream && stream.subscribers) {
+    stream.subscribers.forEach(socketId => {
+      const socket = io.sockets.sockets.get(socketId);
+      if (socket) {
+        socket.emit('conversation-stream', {
+          conversation_id: conversationId,
+          data: data,
+          timestamp: Date.now()
+        });
+      }
+    });
+    
+    // Update stream stats
+    stream.messageCount++;
+  }
+}
+
 // Middleware
 app.use(compression({ 
   threshold: 1024, // Only compress responses > 1KB
   level: 6 // Balance between compression ratio and speed
 }));
-app.use(cors({ origin: '*' })); // Explicitly allow all origins
+// CORS configuration - explicitly allow all origins and methods
+app.use(cors({ 
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  credentials: false // No credentials needed for local API
+}));
+
+// Handle preflight requests
+app.options('*', cors());
+
 app.use(express.json({ limit: '10mb' })); // Increase JSON payload limit
 
-// Serve static files from public directory
+// Serve static files from public directory with explicit MIME types
 const publicPath = path.join(__dirname, '../../public');
-app.use(express.static(publicPath));
+app.use(express.static(publicPath, {
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.css')) {
+      res.setHeader('Content-Type', 'text/css');
+    } else if (filePath.endsWith('.js')) {
+      res.setHeader('Content-Type', 'application/javascript');
+    }
+  }
+}));
 console.log(`[FILE] Serving static files from: ${publicPath}`);
 
 let ideStateCapture = new IDEStateCapture(); // Changed from const to let
@@ -691,7 +745,7 @@ async function captureCursorDatabase() {
 }
 
 /**
- * ✨ NEW: Sync prompts from Cursor's database to persistent storage
+ * NEW: Sync prompts from Cursor's database to persistent storage
  * Extracts prompts from aiService.prompts and aiService.generations
  * and saves them to the companion.db for persistence and linking
  */
@@ -807,16 +861,16 @@ async function syncPromptsFromCursorDB() {
       }
     }
     
-    console.log(`[SYNC] ✅ Sync complete: ${newPrompts} new, ${skippedPrompts} skipped, ${syncedPromptIds.size} total tracked (${prompts.length} available in Cursor DB)`);
+    console.log(`[SYNC] Sync complete: ${newPrompts} new, ${skippedPrompts} skipped, ${syncedPromptIds.size} total tracked (${prompts.length} available in Cursor DB)`);
     
     // Mark initial sync as complete
     if (!initialSyncComplete && syncedPromptIds.size > 0) {
       initialSyncComplete = true;
-      console.log('[SYNC] 📌 Initial sync complete - future syncs disabled (prompts available via API)');
+      console.log('[SYNC] Initial sync complete - future syncs disabled (prompts available via API)');
     }
     
   } catch (error) {
-    console.error('[SYNC] ❌ Error syncing prompts from Cursor database:', error.message);
+    console.error('[SYNC] Error syncing prompts from Cursor database:', error.message);
     if (error.stack) console.error(error.stack);
   } finally {
     syncInProgress = false; // Release lock
@@ -857,7 +911,7 @@ async function captureLogData() {
           rawData.logs.cursor = rawData.logs.cursor.slice(-100);
         }
         
-        console.log(`📄 Captured log data: ${logFiles.length} files`);
+        console.log(`Captured log data: ${logFiles.length} files`);
         break;
       }
     }
@@ -898,6 +952,31 @@ function startRawDataCapture() {
   // Initialize prompt capture system
   promptCaptureSystem = new PromptCaptureSystem();
   
+  // Start status message tracking
+  statusMessageTracker.start(2000); // Check every 2 seconds
+  
+  // Link status messages to context changes
+  statusMessageTracker.on('fileRead', async (data) => {
+    // Try to find recent context changes that might be related
+    try {
+      const recentChanges = await persistentDB.getContextChanges({
+        startTime: data.timestamp - 5000, // 5 seconds before
+        endTime: data.timestamp + 5000,   // 5 seconds after
+        limit: 10
+      });
+      
+      // Link to context changes that added this file
+      for (const change of recentChanges) {
+        if (change.addedFiles && change.addedFiles.includes(data.filePath)) {
+          await persistentDB.linkStatusToContextChange(data.statusId, change.id);
+          console.log(`[STATUS] Linked "Read ${data.filePath}" to context change ${change.id}`);
+        }
+      }
+    } catch (error) {
+      console.warn('Error linking status to context change:', error);
+    }
+  });
+  
   // System resources every 5 seconds
   captureIntervals.systemResources = setInterval(captureSystemResources, 5000);
   
@@ -913,7 +992,7 @@ function startRawDataCapture() {
   // Logs every 60 seconds
   captureIntervals.logs = setInterval(captureLogData, 60000);
   
-  // ✨ NEW: Sync prompts from Cursor database every 30 seconds
+  // NEW: Sync prompts from Cursor database every 30 seconds
   captureIntervals.promptSync = setInterval(syncPromptsFromCursorDB, 30000);
   
   // Initial capture
@@ -1086,6 +1165,54 @@ app.get('/queue', (req, res) => {
 });
 
 // Multi-workspace API endpoints
+// Get conversations for a workspace
+app.get('/api/workspaces/:workspaceId/conversations', async (req, res) => {
+  try {
+    const { workspaceId } = req.params;
+    const limit = parseInt(req.query.limit) || 100;
+    
+    const conversations = await persistentDB.getConversationsByWorkspace(workspaceId, limit);
+    
+    res.json({
+      success: true,
+      data: conversations,
+      count: conversations.length
+    });
+  } catch (error) {
+    console.error('Error getting conversations:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Get audit log
+app.get('/api/audit-log', async (req, res) => {
+  try {
+    const options = {
+      workspaceId: req.query.workspaceId || null,
+      operationType: req.query.operationType || null,
+      limit: parseInt(req.query.limit) || 100,
+      offset: parseInt(req.query.offset) || 0
+    };
+    
+    const auditLog = await persistentDB.getAuditLog(options);
+    
+    res.json({
+      success: true,
+      data: auditLog,
+      count: auditLog.length
+    });
+  } catch (error) {
+    console.error('Error getting audit log:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 app.get('/api/workspaces', async (req, res) => {
   try {
     // Get ALL workspaces from Cursor (including old/stale ones)
@@ -1504,7 +1631,7 @@ app.get('/api/activity', async (req, res) => {
         }),
         title: entry.title || `File Change: ${entry.file_path ? entry.file_path.split('/').pop() : 'Unknown'}`,
         description: entry.description || entry.notes || 'File change detected',
-        // ✅ Include metadata fields for modal display
+        // Include metadata fields for modal display
         modelInfo: entry.modelInfo,  // Model information (parsed from JSON)
         tags: entry.tags || [],  // Tags array
         prompt_id: entry.prompt_id,  // Linked prompt ID
@@ -1653,13 +1780,49 @@ app.get('/entries', async (req, res) => {
 });
 
 // New endpoint specifically for Cursor database data
+// Supports incremental sync via ?since=timestamp query param
 app.get('/api/cursor-database', async (req, res) => {
   try {
+    const since = req.query.since ? parseInt(req.query.since) : null;
+    
+    // If since is provided, try to return only new data (if parser supports it)
+    // For now, we'll use the cache which is updated every 5 minutes
+    // This means incremental sync will work if last sync was > 5 min ago
     const data = await cursorDbParser.getAllData();
+    
+    // Filter prompts by timestamp if since is provided (basic incremental support)
+    let filteredData = data;
+    if (since && data.prompts) {
+      filteredData = {
+        ...data,
+        prompts: data.prompts.filter(p => {
+          const promptTime = p.timestamp ? new Date(p.timestamp).getTime() : 0;
+          return promptTime > since;
+        })
+      };
+      
+      // If no new prompts, return early with empty result
+      if (filteredData.prompts.length === 0) {
+        return res.json({
+          success: true,
+          data: {
+            conversations: [],
+            prompts: [],
+            stats: { totalPrompts: 0, totalConversations: 0 }
+          },
+          timestamp: Date.now(),
+          incremental: true,
+          newItems: 0
+        });
+      }
+    }
+    
     res.json({
       success: true,
-      data: data,
-      timestamp: Date.now()
+      data: filteredData,
+      timestamp: Date.now(),
+      incremental: !!since,
+      newItems: since ? filteredData.prompts.length : data.prompts.length
     });
   } catch (error) {
     console.error('Error fetching Cursor database:', error);
@@ -1770,6 +1933,95 @@ app.get('/api/screenshots', (req, res) => {
   } catch (error) {
     console.error('Error getting screenshots:', error);
     res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// API endpoint to serve images (proxy for file:// URLs)
+app.get('/api/image', async (req, res) => {
+  try {
+    let filePath = req.query.path;
+    if (!filePath) {
+      return res.status(400).json({ error: 'Missing path parameter' });
+    }
+    
+    // Decode URL-encoded path (handles spaces, special characters)
+    // The path might be double-encoded or have plus signs instead of spaces
+    try {
+      filePath = decodeURIComponent(filePath);
+      // Replace + with spaces if needed (some browsers encode spaces as +)
+      filePath = filePath.replace(/\+/g, ' ');
+    } catch (decodeError) {
+      console.warn('[IMAGE] Path decode warning:', decodeError.message);
+      // If decoding fails, try using the path as-is
+    }
+    
+    // Resolve the file path
+    let resolvedPath = filePath;
+    
+    // Handle relative paths (e.g., "Desktop/file.png")
+    if (!path.isAbsolute(filePath)) {
+      // Try resolving from user's home directory
+      const homeDir = os.homedir();
+      resolvedPath = path.join(homeDir, filePath);
+    }
+    
+    // Normalize the path (resolves . and .., handles duplicate slashes)
+    resolvedPath = path.normalize(resolvedPath);
+    
+    // Security: Only allow files within user's home directory
+    const homeDir = os.homedir();
+    const homeDirNormalized = path.normalize(homeDir);
+    if (!resolvedPath.startsWith(homeDirNormalized)) {
+      console.warn('[IMAGE] Security check failed:', { resolvedPath, homeDir: homeDirNormalized });
+      return res.status(403).json({ error: 'Access denied: File outside home directory' });
+    }
+    
+    // Check if file exists
+    if (!fs.existsSync(resolvedPath)) {
+      console.warn('[IMAGE] File not found:', resolvedPath);
+      return res.status(404).json({ error: 'File not found', path: resolvedPath });
+    }
+    
+    // Check if it's actually a file (not a directory)
+    const stats = fs.statSync(resolvedPath);
+    if (!stats.isFile()) {
+      return res.status(400).json({ error: 'Path is not a file' });
+    }
+    
+    // Check if it's an image file
+    const ext = path.extname(resolvedPath).toLowerCase();
+    const imageExts = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.bmp'];
+    if (!imageExts.includes(ext)) {
+      return res.status(400).json({ error: 'Not an image file', ext });
+    }
+    
+    // Read and serve the file (use async to avoid blocking)
+    const fileBuffer = await fs.promises.readFile(resolvedPath);
+    
+    const mimeTypes = {
+      '.png': 'image/png',
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.gif': 'image/gif',
+      '.webp': 'image/webp',
+      '.svg': 'image/svg+xml',
+      '.bmp': 'image/bmp'
+    };
+    
+    res.setHeader('Content-Type', mimeTypes[ext] || 'application/octet-stream');
+    res.setHeader('Cache-Control', 'public, max-age=3600'); // Cache for 1 hour
+    res.setHeader('Content-Length', fileBuffer.length);
+    
+    // Send the file buffer
+    res.send(fileBuffer);
+    
+    console.log(`[IMAGE] Served: ${resolvedPath} (${(fileBuffer.length / 1024).toFixed(2)}KB)`);
+    
+  } catch (error) {
+    console.error('[IMAGE] Error serving image:', error);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Failed to serve image', details: error.message });
+    }
   }
 });
 
@@ -1913,6 +2165,240 @@ app.get('/api/analytics/context/file-relationships', (req, res) => {
     });
   } catch (error) {
     console.error('Error getting file relationships:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Context Changes Endpoints - Track files added/removed from context
+app.get('/api/analytics/context/changes', async (req, res) => {
+  try {
+    const {
+      promptId = null,
+      eventId = null,
+      taskId = null,
+      sessionId = null,
+      startTime = null,
+      endTime = null,
+      limit = parseInt(req.query.limit) || 100
+    } = req.query;
+
+    const options = {
+      promptId: promptId || null,
+      eventId: eventId || null,
+      taskId: taskId || null,
+      sessionId: sessionId || null,
+      startTime: startTime ? parseInt(startTime) : null,
+      endTime: endTime ? parseInt(endTime) : null,
+      limit: parseInt(limit)
+    };
+
+    const changes = await persistentDB.getContextChanges(options);
+    
+    res.json({
+      success: true,
+      data: changes,
+      count: changes.length,
+      filters: options
+    });
+  } catch (error) {
+    console.error('Error getting context changes:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get context changes for a specific prompt
+app.get('/api/prompts/:id/context-changes', async (req, res) => {
+  try {
+    const promptId = req.params.id;
+    const changes = await contextChangeTracker.getContextChangesForPrompt(promptId);
+    
+    res.json({
+      success: true,
+      data: changes,
+      count: changes.length,
+      promptId
+    });
+  } catch (error) {
+    console.error('Error getting context changes for prompt:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get context changes for a specific event
+app.get('/api/events/:id/context-changes', async (req, res) => {
+  try {
+    const eventId = req.params.id;
+    const changes = await contextChangeTracker.getContextChangesForEvent(eventId);
+    
+    res.json({
+      success: true,
+      data: changes,
+      count: changes.length,
+      eventId
+    });
+  } catch (error) {
+    console.error('Error getting context changes for event:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get context changes summary statistics
+app.get('/api/analytics/context/changes/summary', (req, res) => {
+  try {
+    const stats = contextChangeTracker.getSummaryStats();
+    res.json({
+      success: true,
+      data: stats
+    });
+  } catch (error) {
+    console.error('Error getting context changes summary:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ===================================
+// SCHEMA CONFIGURATION ENDPOINTS
+// ===================================
+
+// Get full database schema
+app.get('/api/schema', async (req, res) => {
+  try {
+    const schema = await persistentDB.getSchema();
+    res.json({
+      success: true,
+      data: schema
+    });
+  } catch (error) {
+    console.error('Error getting schema:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get schema for a specific table
+app.get('/api/schema/:tableName', async (req, res) => {
+  try {
+    const { tableName } = req.params;
+    const tableSchema = await persistentDB.getTableSchema(tableName);
+    res.json({
+      success: true,
+      data: tableSchema
+    });
+  } catch (error) {
+    console.error(`Error getting schema for table ${req.params.tableName}:`, error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Add a column to a table
+app.post('/api/schema/:tableName/columns', async (req, res) => {
+  try {
+    const { tableName } = req.params;
+    const columnDef = req.body;
+    
+    if (!columnDef.name || !columnDef.type) {
+      return res.status(400).json({
+        success: false,
+        error: 'Column name and type are required'
+      });
+    }
+    
+    const result = await persistentDB.addColumn(tableName, columnDef);
+    res.json({
+      success: true,
+      data: result
+    });
+  } catch (error) {
+    console.error(`Error adding column to ${req.params.tableName}:`, error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get custom field configurations
+app.get('/api/schema/config/fields', async (req, res) => {
+  try {
+    const { tableName } = req.query;
+    const configs = await persistentDB.getCustomFieldConfigs(tableName || null);
+    res.json({
+      success: true,
+      data: configs
+    });
+  } catch (error) {
+    console.error('Error getting custom field configs:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Save custom field configuration
+app.post('/api/schema/config/fields', async (req, res) => {
+  try {
+    const config = req.body;
+    
+    if (!config.tableName || !config.fieldName || !config.fieldType) {
+      return res.status(400).json({
+        success: false,
+        error: 'tableName, fieldName, and fieldType are required'
+      });
+    }
+    
+    const result = await persistentDB.saveCustomFieldConfig(config);
+    res.json({
+      success: true,
+      data: result
+    });
+  } catch (error) {
+    console.error('Error saving custom field config:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Delete custom field configuration
+app.delete('/api/schema/config/fields/:tableName/:fieldName', async (req, res) => {
+  try {
+    const { tableName, fieldName } = req.params;
+    const result = await persistentDB.deleteCustomFieldConfig(tableName, fieldName);
+    res.json({
+      success: true,
+      data: result
+    });
+  } catch (error) {
+    console.error('Error deleting custom field config:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ===================================
+// STATUS MESSAGE ENDPOINTS
+// ===================================
+
+// Get status messages
+app.get('/api/status-messages', async (req, res) => {
+  try {
+    const {
+      startTime = null,
+      endTime = null,
+      type = null,
+      action = null,
+      limit = parseInt(req.query.limit) || 100
+    } = req.query;
+
+    const options = {
+      startTime: startTime ? parseInt(startTime) : null,
+      endTime: endTime ? parseInt(endTime) : null,
+      type: type || null,
+      action: action || null,
+      limit: parseInt(limit)
+    };
+
+    const messages = await persistentDB.getStatusMessages(options);
+    
+    res.json({
+      success: true,
+      data: messages,
+      count: messages.length,
+      filters: options
+    });
+  } catch (error) {
+    console.error('Error getting status messages:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -2509,63 +2995,582 @@ app.post('/api/prompts/manual', async (req, res) => {
   }
 });
 
-// Database export with pagination
+// API endpoint to repair database links
+app.post('/api/repair/links', async (req, res) => {
+  try {
+    console.log('[API] Repair links request received');
+    const result = await repairDatabaseLinks();
+    res.json({
+      success: true,
+      ...result
+    });
+  } catch (error) {
+    console.error('[API] Error in repair links:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Database export with streaming support
 app.get('/api/export/database', async (req, res) => {
   try {
     console.log('📤 Export request received');
     
-    // Support limiting export size for large datasets
-    const limit = parseInt(req.query.limit) || 1000;  // Default: last 1000 items
-    const includeAllFields = req.query.full === 'true';  // Include all fields or just key ones
+    // Check if streaming is requested
+    const useStreaming = req.query.stream === 'true' || req.query.streaming === 'true';
+    const streamThreshold = parseInt(req.query.stream_threshold) || 5000; // Stream if > 5000 items
     
-    console.log(`[EXPORT] Limit: ${limit}, Full fields: ${includeAllFields}`);
+    // Parse query parameters
+    const limit = parseInt(req.query.limit) || 1000;
+    const includeAllFields = req.query.full === 'true';
     
-    // Gather data from database with limits
-    const [entries, prompts, events, terminalCommands, contextSnapshots, contextAnalytics] = await Promise.all([
-      persistentDB.getRecentEntries(Math.min(limit, 1000)),  // Cap at 1000
-      persistentDB.getRecentPrompts(Math.min(limit, 1000)),  // Cap at 1000
-      persistentDB.getAllEvents(),  // Usually smaller
-      persistentDB.getAllTerminalCommands(Math.min(limit, 1000)),  // Cap at 1000
-      persistentDB.getContextSnapshots({ since: 0, limit: Math.min(limit, 1000) }),
-      persistentDB.getContextAnalytics()
-    ]);
+    // Parse date strings - handle both ISO date strings (YYYY-MM-DD) and timestamps
+    let since = null;
+    let until = null;
+    if (req.query.since) {
+      // If it's a number, treat as timestamp; otherwise parse as date string
+      if (!isNaN(req.query.since) && req.query.since.length > 10) {
+        since = parseInt(req.query.since);
+      } else {
+        // ISO date string (YYYY-MM-DD) - convert to timestamp
+        const date = new Date(req.query.since);
+        since = date.getTime();
+      }
+    }
+    if (req.query.until) {
+      // If it's a number, treat as timestamp; otherwise parse as date string
+      if (!isNaN(req.query.until) && req.query.until.length > 10) {
+        until = parseInt(req.query.until);
+      } else {
+        // ISO date string (YYYY-MM-DD) - add end of day
+        const date = new Date(req.query.until + 'T23:59:59.999Z');
+        until = date.getTime();
+      }
+    }
     
-    // Get in-memory data
+    // Type filters
+    const excludeEvents = req.query.exclude_events === 'true';
+    const excludePrompts = req.query.exclude_prompts === 'true';
+    const excludeTerminal = req.query.exclude_terminal === 'true';
+    const excludeContext = req.query.exclude_context === 'true';
+    
+    // Options
+    const noCodeDiffs = req.query.no_code_diffs === 'true';
+    const noLinkedData = req.query.no_linked_data === 'true';
+    const noTemporalChunks = req.query.no_temporal_chunks === 'true';
+    
+    // Abstraction level (new)
+    const abstractionLevel = parseInt(req.query.abstraction_level || req.query.abstractionLevel || '0');
+    const abstractPrompts = req.query.abstract_prompts === 'true' || req.query.abstractPrompts === 'true';
+    const extractPatterns = req.query.extract_patterns === 'true' || req.query.extractPatterns === 'true';
+    
+    console.log(`[EXPORT] Limit: ${limit}, Since: ${since ? new Date(since).toISOString() : 'all'}, Until: ${until ? new Date(until).toISOString() : 'all'}`);
+    console.log(`[EXPORT] Exclude: events=${excludeEvents}, prompts=${excludePrompts}, terminal=${excludeTerminal}, context=${excludeContext}`);
+    console.log(`[EXPORT] Abstraction Level: ${abstractionLevel}, Abstract Prompts: ${abstractPrompts}, Extract Patterns: ${extractPatterns}`);
+    console.log(`[EXPORT] Streaming: ${useStreaming || limit > streamThreshold} (threshold: ${streamThreshold})`);
+    
+    // Use streaming for large exports or if explicitly requested
+    if (useStreaming || limit > streamThreshold) {
+      return handleStreamingExport(req, res, {
+        limit, includeAllFields, since, until,
+        excludeEvents, excludePrompts, excludeTerminal, excludeContext,
+        noCodeDiffs, noLinkedData, noTemporalChunks,
+        abstractionLevel, abstractPrompts, extractPatterns
+      });
+    }
+    
+    // Helper function to filter by date range
+    const filterByDateRange = (items) => {
+      if (!since && !until) return items;
+      return items.filter(item => {
+        const itemTime = new Date(item.timestamp).getTime();
+        if (since && itemTime < since) return false;
+        if (until && itemTime > until) return false;
+        return true;
+      });
+    };
+    
+    // Gather data from database with limits and filters
+    const promises = [];
+    
+    if (!excludeEvents) {
+      // Use time range filtering if dates are provided, otherwise get entries with code
+      if (since || until) {
+        promises.push(persistentDB.getEntriesInTimeRange(since || 0, until || Date.now(), null, Math.min(limit, 10000)));
+      } else {
+        promises.push(persistentDB.getEntriesWithCode(Math.min(limit, 10000)));
+      }
+    } else {
+      promises.push(Promise.resolve([]));
+    }
+    
+    if (!excludePrompts) {
+      // Use time range filtering if dates are provided, otherwise get recent prompts
+      if (since || until) {
+        promises.push(persistentDB.getPromptsInTimeRange(since || 0, until || Date.now(), Math.min(limit, 10000)));
+      } else {
+        promises.push(persistentDB.getRecentPrompts(Math.min(limit, 10000)));
+      }
+    } else {
+      promises.push(Promise.resolve([]));
+    }
+    
+    if (!excludeEvents) {
+      promises.push(persistentDB.getAllEvents());
+    } else {
+      promises.push(Promise.resolve([]));
+    }
+    
+    if (!excludeTerminal) {
+      promises.push(persistentDB.getAllTerminalCommands(Math.min(limit, 10000)));
+    } else {
+      promises.push(Promise.resolve([]));
+    }
+    
+    if (!excludeContext) {
+      promises.push(persistentDB.getContextSnapshots({ since: since || 0, limit: Math.min(limit, 10000) }));
+    } else {
+      promises.push(Promise.resolve([]));
+    }
+    
+    promises.push(persistentDB.getContextAnalytics());
+    
+    const [entries, prompts, events, terminalCommands, contextSnapshots, contextAnalytics] = await Promise.all(promises);
+    
+    // Apply date range filtering
+    const filteredEntries = filterByDateRange(entries);
+    const filteredPrompts = filterByDateRange(prompts);
+    const filteredEvents = filterByDateRange(events);
+    const filteredTerminalCommands = filterByDateRange(terminalCommands);
+    const filteredContextSnapshots = filterByDateRange(contextSnapshots);
+    
+    // Calculate diff stats for entries with code
+    const calculateDiff = (before, after) => {
+      if (!before && !after) return { linesAdded: 0, linesRemoved: 0, charsAdded: 0, charsDeleted: 0 };
+      const beforeLines = (before || '').split('\n');
+      const afterLines = (after || '').split('\n');
+      const charsAdded = (after || '').length;
+      const charsDeleted = (before || '').length;
+      // Simple diff: compare line counts
+      const linesAdded = Math.max(0, afterLines.length - beforeLines.length);
+      const linesRemoved = Math.max(0, beforeLines.length - afterLines.length);
+      return { linesAdded, linesRemoved, charsAdded, charsDeleted };
+    };
+    
+    // Enrich entries with diff stats and ensure code diffs are included
+    const enrichedEntries = filteredEntries.map(entry => {
+      const diff = calculateDiff(entry.before_code || entry.before_content, entry.after_code || entry.after_content);
+      const enriched = {
+        ...entry,
+        // Add computed diff stats
+        diff_stats: {
+          lines_added: diff.linesAdded,
+          lines_removed: diff.linesRemoved,
+          chars_added: diff.charsAdded,
+          chars_deleted: diff.charsDeleted,
+          has_diff: !!(entry.before_code || entry.after_code)
+        }
+      };
+      
+      // Only include code diffs if requested
+      if (!noCodeDiffs) {
+        enriched.before_code = entry.before_code || entry.before_content || '';
+        enriched.after_code = entry.after_code || entry.after_content || '';
+        enriched.before_content = entry.before_code || entry.before_content || '';
+        enriched.after_content = entry.after_code || entry.after_content || '';
+      } else {
+        // Remove code content but keep metadata
+        enriched.before_code = '';
+        enriched.after_code = '';
+        enriched.before_content = '';
+        enriched.after_content = '';
+      }
+      
+      return enriched;
+    });
+    
+    // Create linked data structure: group prompts with their code changes
+    const linkedData = [];
+    const unlinkedEntries = [];
+    const unlinkedPrompts = [];
+    
+    // Build lookup maps for fast access
+    const promptMap = new Map(filteredPrompts.map(p => [p.id, p]));
+    const entryMap = new Map(enrichedEntries.map(e => [e.id, e]));
+    
+    // Only build linked data if requested
+    if (!noLinkedData) {
+      // Group linked prompts and entries
+      enrichedEntries.forEach(entry => {
+        if (entry.prompt_id) {
+          const prompt = promptMap.get(entry.prompt_id);
+          if (prompt) {
+            linkedData.push({
+              type: 'prompt_with_code_change',
+              prompt: prompt,
+              code_change: entry,
+              linked_at: entry.timestamp,
+              relationship: {
+                prompt_id: prompt.id,
+                entry_id: entry.id,
+                link_type: 'entry_to_prompt'
+              }
+            });
+          } else {
+            unlinkedEntries.push(entry);
+          }
+        } else {
+          unlinkedEntries.push(entry);
+        }
+      });
+      
+      // Add prompts that link to entries (reverse direction)
+      filteredPrompts.forEach(prompt => {
+        if (prompt.linked_entry_id || prompt.linkedEntryId) {
+          const entryId = prompt.linked_entry_id || prompt.linkedEntryId;
+          const entry = entryMap.get(entryId);
+          // Only add if not already in linkedData
+          const alreadyLinked = linkedData.some(link => 
+            link.prompt.id === prompt.id && link.code_change.id === entryId
+          );
+          if (entry && !alreadyLinked) {
+            linkedData.push({
+              type: 'prompt_with_code_change',
+              prompt: prompt,
+              code_change: entry,
+              linked_at: prompt.timestamp,
+              relationship: {
+                prompt_id: prompt.id,
+                entry_id: entry.id,
+                link_type: 'prompt_to_entry'
+              }
+            });
+          }
+        } else if (!linkedData.some(link => link.prompt.id === prompt.id)) {
+          unlinkedPrompts.push(prompt);
+        }
+      });
+    } else {
+      // If no linked data requested, mark all as unlinked
+      enrichedEntries.forEach(entry => {
+        if (!entry.prompt_id) {
+          unlinkedEntries.push(entry);
+        }
+      });
+      filteredPrompts.forEach(prompt => {
+        if (!prompt.linked_entry_id && !prompt.linkedEntryId) {
+          unlinkedPrompts.push(prompt);
+        }
+      });
+    }
+    
+    // Sort linked data by timestamp
+    linkedData.sort((a, b) => new Date(b.linked_at) - new Date(a.linked_at));
+    
+    // ============================================
+    // NEW: Create temporal chunks/sessions
+    // Groups prompts, code changes, and metadata by time proximity
+    // ============================================
+    const temporalChunks = [];
+    const timeWindowMs = 5 * 60 * 1000; // 5 minutes
+    
+    // Combine all items with timestamps for temporal grouping
+    const allTemporalItems = [
+      ...enrichedEntries.map(e => ({
+        type: 'code_change',
+        item: e,
+        timestamp: new Date(e.timestamp).getTime(),
+        file_path: e.file_path,
+        workspace_path: e.workspace_path,
+        model_info: e.modelInfo || null,
+        diff_stats: e.diff_stats,
+        before_code: e.before_code,
+        after_code: e.after_code,
+        prompt_id: e.prompt_id,
+        metadata: {
+          source: e.source,
+          session_id: e.session_id,
+          tags: e.tags || [],
+          notes: e.notes,
+          type: e.type
+        }
+      })),
+      ...filteredPrompts.map(p => ({
+        type: 'prompt',
+        item: p,
+        timestamp: new Date(p.timestamp).getTime(),
+        file_path: null, // Prompts don't have file_path directly
+        workspace_path: p.workspace_path,
+        model_info: {
+          model_type: p.model_type || p.modelType,
+          model_name: p.model_name || p.modelName
+        },
+        diff_stats: null,
+        before_code: null,
+        after_code: null,
+        prompt_id: p.id,
+        metadata: {
+          source: p.source,
+          mode: p.mode,
+          workspace_id: p.workspace_id,
+          workspace_name: p.workspace_name,
+          composer_id: p.composer_id,
+          context_usage: p.context_usage || p.contextUsage,
+          context_file_count: p.context_file_count || p.contextFileCount,
+          lines_added: p.lines_added || p.linesAdded,
+          lines_removed: p.lines_removed || p.linesRemoved,
+          conversation_title: p.conversation_title || p.conversationTitle,
+          message_role: p.message_role || p.messageRole,
+          thinking_time: p.thinking_time || p.thinkingTime
+        }
+      })),
+      ...filteredTerminalCommands.map(cmd => ({
+        type: 'terminal_command',
+        item: cmd,
+        timestamp: new Date(cmd.timestamp).getTime(),
+        file_path: null,
+        workspace_path: cmd.workspace,
+        model_info: null,
+        diff_stats: null,
+        before_code: null,
+        after_code: null,
+        prompt_id: null,
+        metadata: {
+          command: cmd.command,
+          exit_code: cmd.exit_code,
+          shell: cmd.shell,
+          source: cmd.source,
+          duration: cmd.duration,
+          linked_entry_id: cmd.linked_entry_id,
+          linked_prompt_id: cmd.linked_prompt_id
+        }
+      }))
+    ].filter(item => item.timestamp > 0); // Filter invalid timestamps
+    
+    // Sort by timestamp
+    allTemporalItems.sort((a, b) => a.timestamp - b.timestamp);
+    
+    // Group into temporal chunks
+    let currentChunk = null;
+    allTemporalItems.forEach(item => {
+      if (!currentChunk || (item.timestamp - currentChunk.end_time) > timeWindowMs) {
+        // Start new chunk
+        if (currentChunk) {
+          temporalChunks.push(currentChunk);
+        }
+        currentChunk = {
+          id: `chunk-${item.timestamp}-${Math.random().toString(36).substr(2, 9)}`,
+          start_time: item.timestamp,
+          end_time: item.timestamp,
+          duration_seconds: 0,
+          workspace_paths: new Set(),
+          files_changed: new Set(),
+          models_used: new Set(),
+          items: [],
+          summary: {
+            prompts: 0,
+            code_changes: 0,
+            terminal_commands: 0,
+            total_lines_added: 0,
+            total_lines_removed: 0,
+            total_chars_added: 0,
+            total_chars_deleted: 0
+          }
+        };
+      }
+      
+      // Add item to current chunk
+      currentChunk.items.push(item);
+      currentChunk.end_time = Math.max(currentChunk.end_time, item.timestamp);
+      currentChunk.duration_seconds = Math.round((currentChunk.end_time - currentChunk.start_time) / 1000);
+      
+      // Track workspace
+      if (item.workspace_path) {
+        currentChunk.workspace_paths.add(item.workspace_path);
+      }
+      
+      // Track files
+      if (item.file_path) {
+        currentChunk.files_changed.add(item.file_path);
+      }
+      
+      // Track models
+      if (item.model_info) {
+        const modelName = item.model_info.model_name || item.model_info.modelName;
+        const modelType = item.model_info.model_type || item.model_info.modelType;
+        if (modelName || modelType) {
+          currentChunk.models_used.add(modelType && modelName ? `${modelType}/${modelName}` : (modelName || modelType || 'Unknown'));
+        }
+      }
+      
+      // Update summary
+      if (item.type === 'prompt') currentChunk.summary.prompts++;
+      if (item.type === 'code_change') {
+        currentChunk.summary.code_changes++;
+        if (item.diff_stats) {
+          currentChunk.summary.total_lines_added += item.diff_stats.lines_added || 0;
+          currentChunk.summary.total_lines_removed += item.diff_stats.lines_removed || 0;
+          currentChunk.summary.total_chars_added += item.diff_stats.chars_added || 0;
+          currentChunk.summary.total_chars_deleted += item.diff_stats.chars_deleted || 0;
+        }
+      }
+      if (item.type === 'terminal_command') currentChunk.summary.terminal_commands++;
+    });
+    
+    // Add final chunk
+    if (currentChunk) {
+      temporalChunks.push(currentChunk);
+    }
+    
+    // Convert Sets to Arrays for JSON serialization and add linked relationships
+    const enrichedChunks = temporalChunks.map(chunk => {
+      // Find linked relationships within this chunk
+      const relationships = [];
+      chunk.items.forEach(item => {
+        if (item.type === 'code_change' && item.prompt_id) {
+          const linkedPrompt = chunk.items.find(i => i.type === 'prompt' && i.prompt_id === item.prompt_id);
+          if (linkedPrompt) {
+            relationships.push({
+              type: 'prompt_to_code',
+              prompt_id: item.prompt_id,
+              code_change_id: item.item.id,
+              time_gap_seconds: Math.abs((item.timestamp - linkedPrompt.timestamp) / 1000)
+            });
+          }
+        }
+      });
+      
+      return {
+        ...chunk,
+        start_time: new Date(chunk.start_time).toISOString(),
+        end_time: new Date(chunk.end_time).toISOString(),
+        workspace_paths: Array.from(chunk.workspace_paths),
+        files_changed: Array.from(chunk.files_changed),
+        models_used: Array.from(chunk.models_used),
+        relationships: relationships,
+        // Include full items with all metadata
+        items: chunk.items.map(i => ({
+          type: i.type,
+          id: i.item.id,
+          timestamp: new Date(i.timestamp).toISOString(),
+          // Code change metadata
+          ...(i.type === 'code_change' ? {
+            file_path: i.file_path,
+            before_code: i.before_code,
+            after_code: i.after_code,
+            diff_stats: i.diff_stats,
+            model_info: i.model_info,
+            prompt_id: i.prompt_id,
+            metadata: i.metadata
+          } : {}),
+          // Prompt metadata
+          ...(i.type === 'prompt' ? {
+            text: i.item.text || i.item.prompt || i.item.content,
+            workspace_path: i.workspace_path,
+            model_info: i.model_info,
+            metadata: i.metadata
+          } : {}),
+          // Terminal command metadata
+          ...(i.type === 'terminal_command' ? {
+            command: i.metadata.command,
+            workspace_path: i.workspace_path,
+            exit_code: i.metadata.exit_code,
+            metadata: i.metadata
+          } : {})
+        }))
+      };
+    });
+    
+    // Get current schema version
+    let schemaVersion = '1.0.0';
+    try {
+      const schema = await persistentDB.getSchema();
+      schemaVersion = schema.version || '1.0.0';
+    } catch (err) {
+      console.warn('[EXPORT] Could not get schema version:', err.message);
+    }
+
+    // Get in-memory data with improved structure
     const exportData = {
       metadata: {
         exportedAt: new Date().toISOString(),
-        version: '2.1',  // Bumped for threading + export pagination
+        version: '2.4',  // Bumped for export filters
+        schema_version: schemaVersion,
         exportLimit: limit,
         fullExport: includeAllFields,
-        totalEntries: entries.length,
-        totalPrompts: prompts.length,
-        totalEvents: events.length,
-        totalTerminalCommands: terminalCommands.length,
-        totalContextSnapshots: contextSnapshots.length,
+        dateRange: {
+          since: since ? new Date(since).toISOString() : null,
+          until: until ? new Date(until).toISOString() : null
+        },
+        filters: {
+          excludeEvents,
+          excludePrompts,
+          excludeTerminal,
+          excludeContext,
+          noCodeDiffs,
+          noLinkedData,
+          noTemporalChunks
+        },
+        totalEntries: enrichedEntries.length,
+        totalPrompts: filteredPrompts.length,
+        totalEvents: filteredEvents.length,
+        totalTerminalCommands: filteredTerminalCommands.length,
+        totalContextSnapshots: filteredContextSnapshots.length,
+        totalLinked: linkedData.length,
+        totalTemporalChunks: noTemporalChunks ? 0 : enrichedChunks.length,
         note: limit < 10000 ? 'Limited export - use ?limit=10000 for more data' : 'Full export'
       },
-      entries: entries,
-      prompts: prompts,
-      events: events,
-      terminal_commands: terminalCommands,  // NEW: Full command history
-      context_snapshots: contextSnapshots,  // NEW: Context usage over time
-      context_analytics: contextAnalytics,  // NEW: Aggregated context stats
+      // NEW: Temporal chunks (groups by time proximity with all metadata) - only if requested
+      ...(noTemporalChunks ? {} : { temporal_chunks: enrichedChunks }),
+      // NEW: Linked data structure (prompts with their code changes - explicit links) - only if requested
+      ...(noLinkedData ? {} : { linked_data: linkedData }),
+      // Original flat arrays (for backward compatibility and direct access)
+      entries: enrichedEntries,
+      prompts: filteredPrompts,
+      events: filteredEvents,
+      terminal_commands: filteredTerminalCommands,
+      context_snapshots: filteredContextSnapshots,
+      context_analytics: contextAnalytics,
       workspaces: db.workspaces || [],
+      // Unlinked items (for analysis)
+      unlinked: {
+        entries: unlinkedEntries.filter(e => !e.prompt_id),
+        prompts: unlinkedPrompts,
+        note: 'Items without explicit links (may be linked by timestamp proximity in temporal_chunks)'
+      },
       stats: {
-        sessions: db.entries.length,
-        fileChanges: entries.length,
-        aiInteractions: prompts.length,
-        totalActivities: events.length,
-        terminalCommands: terminalCommands.length,
-        avgContextUsage: contextAnalytics.avgContextUtilization || 0
+        sessions: enrichedEntries.length,
+        fileChanges: enrichedEntries.length,
+        aiInteractions: filteredPrompts.length,
+        totalActivities: filteredEvents.length,
+        terminalCommands: filteredTerminalCommands.length,
+        avgContextUsage: contextAnalytics.avgContextUtilization || 0,
+        linkedPairs: linkedData.length,
+        linkingRate: enrichedEntries.length > 0 
+          ? ((linkedData.length / enrichedEntries.length) * 100).toFixed(1) + '%'
+          : '0%'
       }
     };
     
-    console.log(`[SUCCESS] Exported ${entries.length} entries, ${prompts.length} prompts, ${events.length} events, ${terminalCommands.length} terminal commands, ${contextSnapshots.length} context snapshots`);
+    // Apply abstraction if level > 0
+    let finalExportData = exportData;
+    if (abstractionLevel > 0) {
+      console.log(`[ABSTRACTION] Applying level ${abstractionLevel} abstraction...`);
+      finalExportData = abstractionEngine.abstractExportData(exportData, abstractionLevel, {
+        abstractPrompts: abstractPrompts || abstractionLevel >= 2,
+        extractPatterns: extractPatterns || abstractionLevel >= 3
+      });
+      console.log(`[ABSTRACTION] Abstraction applied successfully`);
+    }
+    
+    console.log(`[SUCCESS] Exported ${enrichedEntries.length} entries (${linkedData.length} linked to prompts), ${filteredPrompts.length} prompts, ${filteredEvents.length} events, ${filteredTerminalCommands.length} terminal commands, ${filteredContextSnapshots.length} context snapshots`);
     
     res.json({
       success: true,
-      data: exportData
+      schema_version: schemaVersion,
+      data: finalExportData
     });
     
   } catch (error) {
@@ -2573,6 +3578,721 @@ app.get('/api/export/database', async (req, res) => {
     res.status(500).json({ 
       success: false, 
       error: error.message 
+    });
+  }
+});
+
+// Streaming export handler for large datasets
+async function handleStreamingExport(req, res, options) {
+  const {
+    limit, includeAllFields, since, until,
+    excludeEvents, excludePrompts, excludeTerminal, excludeContext,
+    noCodeDiffs, noLinkedData, noTemporalChunks,
+    abstractionLevel, abstractPrompts, extractPatterns
+  } = options;
+  
+  try {
+    // Set headers for streaming
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Transfer-Encoding', 'chunked');
+    
+    // Helper function to filter by date range
+    const filterByDateRange = (items) => {
+      if (!since && !until) return items;
+      return items.filter(item => {
+        const itemTime = new Date(item.timestamp).getTime();
+        if (since && itemTime < since) return false;
+        if (until && itemTime > until) return false;
+        return true;
+      });
+    };
+    
+    // Helper to write JSON chunk
+    const writeChunk = (chunk) => {
+      res.write(chunk);
+    };
+    
+    // Helper to abstract entry if needed
+    const processEntry = (entry) => {
+      if (abstractionLevel > 0 && abstractionEngine) {
+        return abstractionEngine.abstractEntry(entry, abstractionLevel);
+      }
+      return entry;
+    };
+    
+    // Helper to abstract prompt if needed
+    const processPrompt = (prompt) => {
+      if (abstractionLevel > 0 && abstractionEngine) {
+        return abstractionEngine.abstractPrompt(prompt, abstractionLevel);
+      }
+      return prompt;
+    };
+    
+    // Calculate diff stats
+    const calculateDiff = (before, after) => {
+      if (!before && !after) return { linesAdded: 0, linesRemoved: 0, charsAdded: 0, charsDeleted: 0 };
+      const beforeLines = (before || '').split('\n');
+      const afterLines = (after || '').split('\n');
+      const charsAdded = (after || '').length;
+      const charsDeleted = (before || '').length;
+      const linesAdded = Math.max(0, afterLines.length - beforeLines.length);
+      const linesRemoved = Math.max(0, beforeLines.length - afterLines.length);
+      return { linesAdded, linesRemoved, charsAdded, charsDeleted };
+    };
+    
+    // Start writing JSON structure
+    writeChunk('{\n  "success": true,\n  "data": {\n');
+    
+    // Get current schema version
+    let schemaVersion = '1.0.0';
+    try {
+      const schema = await persistentDB.getSchema();
+      schemaVersion = schema.version || '1.0.0';
+    } catch (err) {
+      console.warn('[EXPORT] Could not get schema version:', err.message);
+    }
+
+    // Write metadata first (small, can load all at once)
+    const metadata = {
+      exportedAt: new Date().toISOString(),
+      version: '2.4',
+      schema_version: schemaVersion,
+      exportLimit: limit,
+      fullExport: includeAllFields,
+      dateRange: {
+        since: since ? new Date(since).toISOString() : null,
+        until: until ? new Date(until).toISOString() : null
+      },
+      filters: {
+        excludeEvents, excludePrompts, excludeTerminal, excludeContext,
+        noCodeDiffs, noLinkedData, noTemporalChunks
+      },
+      streaming: true
+    };
+    writeChunk(`    "metadata": ${JSON.stringify(metadata, null, 2).split('\n').join('\n    ')},\n`);
+    
+    // Stream entries in batches
+    if (!excludeEvents) {
+      writeChunk('    "entries": [\n');
+      const batchSize = 100; // Process 100 entries at a time
+      let processedCount = 0;
+      let firstEntry = true;
+      
+      // Get entries - use time range filtering if dates are provided
+      let allEntries = [];
+      if (since || until) {
+        // Get all entries in time range at once (more efficient for date filtering)
+        allEntries = await persistentDB.getEntriesInTimeRange(since || 0, until || Date.now(), null, limit);
+      } else {
+        // Get entries in batches
+        for (let offset = 0; offset < limit; offset += batchSize) {
+          const batchLimit = Math.min(batchSize, limit - offset);
+          const batch = await persistentDB.getEntriesWithCode(batchLimit);
+          allEntries.push(...batch);
+          if (allEntries.length >= limit) break;
+        }
+        allEntries = allEntries.slice(0, limit);
+      }
+      
+      // Process entries
+      for (const entry of allEntries) {
+        if (processedCount >= limit) break;
+        
+        // Apply date range filter (in case database query didn't filter perfectly)
+        const itemTime = new Date(entry.timestamp).getTime();
+        if (since && itemTime < since) continue;
+        if (until && itemTime > until) continue;
+        
+        if (!firstEntry) writeChunk(',\n');
+        firstEntry = false;
+        
+        // Enrich entry
+        const diff = calculateDiff(entry.before_code || entry.before_content, entry.after_code || entry.after_content);
+        const enriched = {
+          ...entry,
+          diff_stats: {
+            lines_added: diff.linesAdded,
+            lines_removed: diff.linesRemoved,
+            chars_added: diff.charsAdded,
+            chars_deleted: diff.charsDeleted,
+            has_diff: !!(entry.before_code || entry.after_code)
+          }
+        };
+        
+        // Only include code diffs if requested
+        if (noCodeDiffs) {
+          enriched.before_code = '';
+          enriched.after_code = '';
+          enriched.before_content = '';
+          enriched.after_content = '';
+        }
+        
+        // Apply abstraction
+        const processed = processEntry(enriched);
+        writeChunk('      ' + JSON.stringify(processed).split('\n').join('\n      '));
+        processedCount++;
+        
+        // Flush periodically
+        if (processedCount % (batchSize * 10) === 0) {
+          await new Promise(resolve => setImmediate(resolve));
+        }
+      }
+      
+      writeChunk('\n    ],\n');
+    } else {
+      writeChunk('    "entries": [],\n');
+    }
+    
+    // Stream prompts in batches
+    if (!excludePrompts) {
+      writeChunk('    "prompts": [\n');
+      const batchSize = 100;
+      let processedCount = 0;
+      let firstPrompt = true;
+      
+      // Use time range filtering if dates are provided
+      let allPrompts = [];
+      if (since || until) {
+        // Get all prompts in time range at once (more efficient for date filtering)
+        allPrompts = await persistentDB.getPromptsInTimeRange(since || 0, until || Date.now(), limit);
+      } else {
+        // Get recent prompts in batches
+        for (let offset = 0; offset < limit; offset += batchSize) {
+          const batchLimit = Math.min(batchSize, limit - offset);
+          const batch = await persistentDB.getRecentPrompts(batchLimit);
+          allPrompts.push(...batch);
+          if (allPrompts.length >= limit) break;
+        }
+        allPrompts = allPrompts.slice(0, limit);
+      }
+      
+      // Process prompts
+      for (const prompt of allPrompts) {
+        if (processedCount >= limit) break;
+        
+        // Apply date range filter (in case database query didn't filter perfectly)
+        const itemTime = new Date(prompt.timestamp).getTime();
+        if (since && itemTime < since) continue;
+        if (until && itemTime > until) continue;
+        
+        if (!firstPrompt) writeChunk(',\n');
+        firstPrompt = false;
+        
+        const processed = processPrompt(prompt);
+        writeChunk('      ' + JSON.stringify(processed).split('\n').join('\n      '));
+        processedCount++;
+        
+        // Flush periodically
+        if (processedCount % (batchSize * 10) === 0) {
+          await new Promise(resolve => setImmediate(resolve));
+        }
+      }
+      
+      writeChunk('\n    ],\n');
+    } else {
+      writeChunk('    "prompts": [],\n');
+    }
+    
+    // Stream terminal commands (smaller, can batch)
+    if (!excludeTerminal) {
+      writeChunk('    "terminal_commands": [\n');
+      const commands = await persistentDB.getAllTerminalCommands(Math.min(limit, 10000));
+      const filteredCommands = filterByDateRange(commands);
+      let firstCmd = true;
+      
+      for (const cmd of filteredCommands.slice(0, limit)) {
+        if (!firstCmd) writeChunk(',\n');
+        firstCmd = false;
+        writeChunk('      ' + JSON.stringify(cmd).split('\n').join('\n      '));
+      }
+      
+      writeChunk('\n    ],\n');
+    } else {
+      writeChunk('    "terminal_commands": [],\n');
+    }
+    
+    // Context snapshots (smaller dataset)
+    if (!excludeContext) {
+      writeChunk('    "context_snapshots": [\n');
+      const snapshots = await persistentDB.getContextSnapshots({ since: since || 0, limit: Math.min(limit, 10000) });
+      const filteredSnapshots = filterByDateRange(snapshots);
+      let firstSnapshot = true;
+      
+      for (const snapshot of filteredSnapshots.slice(0, limit)) {
+        if (!firstSnapshot) writeChunk(',\n');
+        firstSnapshot = false;
+        writeChunk('      ' + JSON.stringify(snapshot).split('\n').join('\n      '));
+      }
+      
+      writeChunk('\n    ],\n');
+    } else {
+      writeChunk('    "context_snapshots": [],\n');
+    }
+    
+    // Context analytics (small, can load all)
+    const contextAnalytics = await persistentDB.getContextAnalytics();
+    writeChunk(`    "context_analytics": ${JSON.stringify(contextAnalytics).split('\n').join('\n    ')},\n`);
+    
+    // Workspaces (small)
+    writeChunk(`    "workspaces": ${JSON.stringify(db.workspaces || []).split('\n').join('\n    ')},\n`);
+    
+    // Stats (computed)
+    const stats = {
+      sessions: 0, // Would need to compute
+      fileChanges: 0,
+      aiInteractions: 0,
+      totalActivities: 0,
+      terminalCommands: 0,
+      avgContextUsage: contextAnalytics.avgContextUtilization || 0
+    };
+    writeChunk(`    "stats": ${JSON.stringify(stats).split('\n').join('\n    ')}\n`);
+    
+    // Close JSON
+    writeChunk('\n  }\n}');
+    
+    res.end();
+    console.log(`[STREAM] Streaming export completed`);
+    
+  } catch (error) {
+    console.error('Error in streaming export:', error);
+    // Try to close JSON properly on error
+    if (!res.headersSent) {
+      res.status(500).json({ success: false, error: error.message });
+    } else {
+      res.write(`\n  "error": "${error.message.replace(/"/g, '\\"')}"\n}`);
+      res.end();
+    }
+  }
+}
+
+// Database import/redeploy endpoint - restore exported data
+app.post('/api/import/database', async (req, res) => {
+  try {
+    console.log('[IMPORT] Import request received');
+    
+    const importData = req.body;
+    
+    // Validate import data structure
+    if (!importData || !importData.data) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid import data: missing "data" field'
+      });
+    }
+    
+    const data = importData.data;
+    const options = req.body.options || {};
+    const {
+      overwrite = false,  // If true, overwrite existing records; if false, skip duplicates
+      skipLinkedData = false,  // Skip linked_data and temporal_chunks if present
+      dryRun = false,  // If true, validate but don't import
+      workspaceFilter = null,  // If set, only import data for this workspace
+      mergeStrategy = 'skip'  // 'skip', 'overwrite', 'merge', 'append'
+    } = options;
+
+    // Get current schema for schema version comparison
+    let currentSchema = null;
+    let currentSchemaVersion = '1.0.0';
+    try {
+      currentSchema = await persistentDB.getSchema();
+      currentSchemaVersion = currentSchema.version || '1.0.0';
+    } catch (err) {
+      console.warn('[IMPORT] Could not load current schema:', err.message);
+    }
+
+    // Detect import schema version
+    const importSchemaVersion = 
+      importData.schema_version || 
+      importData.metadata?.schema_version || 
+      data.metadata?.schema_version || 
+      '1.0.0';
+    
+    console.log(`[IMPORT] Schema versions - Import: ${importSchemaVersion}, Current: ${currentSchemaVersion}`);
+    
+    // Schema compatibility check and migration
+    const schemaCompatible = importSchemaVersion === currentSchemaVersion;
+    if (!schemaCompatible) {
+      console.log(`[IMPORT] Schema version mismatch detected - will normalize data during import`);
+      
+      // Run migrations if needed (migrate to current version)
+      if (!dryRun) {
+        try {
+          const migrationResult = await schemaMigrations.migrate();
+          if (migrationResult.migrations.length > 0) {
+            console.log(`[IMPORT] Schema migrations completed: ${migrationResult.migrations.length} migration(s) applied`);
+          }
+        } catch (migrationErr) {
+          console.warn(`[IMPORT] Schema migration warning:`, migrationErr.message);
+        }
+      }
+      
+      // Normalize data structure
+      try {
+        const normalizedData = await schemaMigrations.normalizeData(data, importSchemaVersion, currentSchemaVersion);
+        Object.assign(data, normalizedData);
+      } catch (normalizeErr) {
+        console.warn(`[IMPORT] Data normalization warning:`, normalizeErr.message);
+      }
+    }
+    
+    // Log audit event for import start
+    if (!dryRun) {
+      await persistentDB.logAuditEvent('Import started', 'import', {
+        workspaceId: workspaceFilter,
+        importVersion: importSchemaVersion,
+        currentVersion: currentSchemaVersion,
+        mergeStrategy,
+        overwrite,
+        status: 'in_progress'
+      }).catch(err => console.warn('[IMPORT] Could not log audit event:', err.message));
+    }
+    
+    const stats = {
+      entries: { imported: 0, skipped: 0, errors: 0 },
+      prompts: { imported: 0, skipped: 0, errors: 0 },
+      events: { imported: 0, skipped: 0, errors: 0 },
+      terminalCommands: { imported: 0, skipped: 0, errors: 0 },
+      contextSnapshots: { imported: 0, skipped: 0, errors: 0 },
+      workspaces: { imported: 0, skipped: 0, errors: 0 }
+    };
+    
+    // Helper to check if record exists and apply merge strategy
+    const shouldImport = async (table, item) => {
+      if (mergeStrategy === 'append') return true; // Always import with append
+      
+      // Filter by workspace if specified
+      if (workspaceFilter) {
+        const itemWorkspace = item.workspaceId || item.workspace_id || item.workspace_path || item.workspacePath;
+        if (itemWorkspace && !itemWorkspace.includes(workspaceFilter) && !workspaceFilter.includes(itemWorkspace)) {
+          return false; // Skip items not matching workspace filter
+        }
+      }
+      
+      try {
+        let existing = null;
+        if (table === 'entries') {
+          existing = await persistentDB.getEntryById(item.id);
+        } else if (table === 'prompts') {
+          existing = await persistentDB.getPromptById(item.id);
+        }
+        
+        if (!existing) return true; // New item, import it
+        
+        // Item exists, apply merge strategy
+        if (mergeStrategy === 'skip' || (!overwrite && mergeStrategy !== 'overwrite' && mergeStrategy !== 'merge')) {
+          return false; // Skip existing
+        } else if (mergeStrategy === 'overwrite' || overwrite) {
+          return true; // Overwrite existing
+        } else if (mergeStrategy === 'merge') {
+          // Merge: combine data, prefer existing for conflicts
+          Object.assign(item, existing, item);
+          return true;
+        }
+        
+        return false;
+      } catch (err) {
+        return true; // On error, try to import
+      }
+    };
+    
+    // Import entries
+    if (data.entries && Array.isArray(data.entries)) {
+      console.log(`[IMPORT] Processing ${data.entries.length} entries...`);
+      
+      for (const entry of data.entries) {
+        try {
+          if (!dryRun) {
+            const shouldImportEntry = await shouldImport('entries', entry);
+            if (!shouldImportEntry) {
+              stats.entries.skipped++;
+              continue;
+            }
+            
+            // Normalize entry data
+            const normalizedEntry = {
+              id: entry.id,
+              session_id: entry.session_id || entry.sessionId,
+              workspace_path: entry.workspace_path || entry.workspacePath,
+              file_path: entry.file_path || entry.filePath,
+              source: entry.source || 'imported',
+              before_code: entry.before_code || entry.beforeCode || entry.before_content,
+              after_code: entry.after_code || entry.afterCode || entry.after_content,
+              notes: entry.notes || entry.description,
+              timestamp: entry.timestamp,
+              tags: entry.tags,
+              prompt_id: entry.prompt_id || entry.promptId,
+              modelInfo: entry.modelInfo || entry.model_info,
+              type: entry.type || 'file_change'
+            };
+            
+            await persistentDB.saveEntry(normalizedEntry);
+            stats.entries.imported++;
+          } else {
+            stats.entries.imported++; // Count in dry run
+          }
+        } catch (error) {
+          console.error(`[IMPORT] Error importing entry ${entry.id}:`, error.message);
+          stats.entries.errors++;
+        }
+      }
+    }
+    
+    // Import prompts
+    if (data.prompts && Array.isArray(data.prompts)) {
+      console.log(`[IMPORT] Processing ${data.prompts.length} prompts...`);
+      
+      for (const prompt of data.prompts) {
+        try {
+          if (!dryRun) {
+            const shouldImportPrompt = await shouldImport('prompts', prompt);
+            if (!shouldImportPrompt) {
+              stats.prompts.skipped++;
+              continue;
+            }
+            
+            // Normalize prompt data
+            const normalizedPrompt = {
+              id: prompt.id,
+              timestamp: prompt.timestamp,
+              text: prompt.text || prompt.prompt || prompt.preview || prompt.content,
+              status: prompt.status || 'captured',
+              linked_entry_id: prompt.linked_entry_id || prompt.linkedEntryId,
+              source: prompt.source || 'imported',
+              workspaceId: prompt.workspaceId || prompt.workspace_id,
+              workspacePath: prompt.workspacePath || prompt.workspace_path,
+              workspaceName: prompt.workspaceName || prompt.workspace_name,
+              composerId: prompt.composerId || prompt.composer_id,
+              subtitle: prompt.subtitle,
+              linesAdded: prompt.linesAdded || prompt.lines_added || 0,
+              linesRemoved: prompt.linesRemoved || prompt.lines_removed || 0,
+              contextUsage: prompt.contextUsage || prompt.context_usage || 0,
+              mode: prompt.mode,
+              modelType: prompt.modelType || prompt.model_type,
+              modelName: prompt.modelName || prompt.model_name,
+              forceMode: prompt.forceMode || prompt.force_mode,
+              isAuto: prompt.isAuto || prompt.is_auto || false,
+              type: prompt.type,
+              confidence: prompt.confidence,
+              added_from_database: false, // Mark as imported, not from Cursor DB
+              contextFiles: prompt.contextFiles || prompt.context_files,
+              terminalBlocks: prompt.terminalBlocks || prompt.terminal_blocks,
+              thinkingTime: prompt.thinkingTime || prompt.thinking_time,
+              thinkingTimeSeconds: prompt.thinkingTimeSeconds || prompt.thinking_time_seconds,
+              hasAttachments: prompt.hasAttachments || prompt.has_attachments || false,
+              attachmentCount: prompt.attachmentCount || prompt.attachment_count || 0,
+              conversationTitle: prompt.conversationTitle || prompt.conversation_title,
+              messageRole: prompt.messageRole || prompt.message_role,
+              parentConversationId: prompt.parentConversationId || prompt.parent_conversation_id,
+              conversationId: prompt.conversationId || prompt.composerId || prompt.parentConversationId,
+              conversationIndex: prompt.conversationIndex || prompt.conversation_index
+            };
+            
+            // Update conversation metadata if conversation_id is set
+            if (normalizedPrompt.conversationId && normalizedPrompt.workspaceId) {
+              await persistentDB.updateConversationMetadata(
+                normalizedPrompt.conversationId,
+                normalizedPrompt.workspaceId,
+                normalizedPrompt.workspacePath,
+                normalizedPrompt.conversationTitle
+              ).catch(err => console.warn('[IMPORT] Could not update conversation:', err.message));
+            }
+            
+            await persistentDB.savePrompt(normalizedPrompt);
+            stats.prompts.imported++;
+          } else {
+            stats.prompts.imported++;
+          }
+        } catch (error) {
+          console.error(`[IMPORT] Error importing prompt ${prompt.id}:`, error.message);
+          stats.prompts.errors++;
+        }
+      }
+    }
+    
+    // Import events
+    if (data.events && Array.isArray(data.events)) {
+      console.log(`[IMPORT] Processing ${data.events.length} events...`);
+      
+      for (const event of data.events) {
+        try {
+          if (!dryRun) {
+            const normalizedEvent = {
+              id: event.id || `imported-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              session_id: event.session_id || event.sessionId,
+              workspace_path: event.workspace_path || event.workspacePath,
+              timestamp: event.timestamp,
+              type: event.type || 'activity',
+              details: event.details || event.metadata || {}
+            };
+            
+            await persistentDB.saveEvent(normalizedEvent);
+            stats.events.imported++;
+          } else {
+            stats.events.imported++;
+          }
+        } catch (error) {
+          console.error(`[IMPORT] Error importing event:`, error.message);
+          stats.events.errors++;
+        }
+      }
+    }
+    
+    // Import terminal commands
+    if (data.terminal_commands && Array.isArray(data.terminal_commands)) {
+      console.log(`[IMPORT] Processing ${data.terminal_commands.length} terminal commands...`);
+      
+      for (const cmd of data.terminal_commands) {
+        try {
+          if (!dryRun) {
+            const normalizedCmd = {
+              id: cmd.id || `cmd-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              command: cmd.command,
+              shell: cmd.shell || cmd.metadata?.shell,
+              source: cmd.source || cmd.metadata?.source || 'imported',
+              timestamp: cmd.timestamp || cmd.metadata?.timestamp,
+              workspace: cmd.workspace || cmd.workspace_path || cmd.metadata?.workspace,
+              output: cmd.output || cmd.metadata?.output,
+              exitCode: cmd.exit_code || cmd.exitCode || cmd.metadata?.exit_code,
+              duration: cmd.duration || cmd.metadata?.duration,
+              error: cmd.error || cmd.metadata?.error,
+              linkedEntryId: cmd.linked_entry_id || cmd.linkedEntryId,
+              linkedPromptId: cmd.linked_prompt_id || cmd.linkedPromptId,
+              sessionId: cmd.session_id || cmd.sessionId
+            };
+            
+            await persistentDB.saveTerminalCommand(normalizedCmd);
+            stats.terminalCommands.imported++;
+          } else {
+            stats.terminalCommands.imported++;
+          }
+        } catch (error) {
+          console.error(`[IMPORT] Error importing terminal command:`, error.message);
+          stats.terminalCommands.errors++;
+        }
+      }
+    }
+    
+    // Import context snapshots (if present)
+    if (data.context_snapshots && Array.isArray(data.context_snapshots)) {
+      console.log(`[IMPORT] Processing ${data.context_snapshots.length} context snapshots...`);
+      // Context snapshots are typically derived from prompts, so we'll skip explicit import
+      // unless there's a dedicated table for them
+      stats.contextSnapshots.skipped = data.context_snapshots.length;
+    }
+    
+    // Import workspaces (add to in-memory db.workspaces)
+    if (data.workspaces && Array.isArray(data.workspaces)) {
+      console.log(`[IMPORT] Processing ${data.workspaces.length} workspaces...`);
+      
+      if (!dryRun) {
+        for (const workspace of data.workspaces) {
+          try {
+            const workspacePath = workspace.path || workspace.workspace_path || workspace;
+            if (workspacePath && !db.workspaces.includes(workspacePath)) {
+              db.workspaces.push(workspacePath);
+              stats.workspaces.imported++;
+            } else {
+              stats.workspaces.skipped++;
+            }
+          } catch (error) {
+            console.error(`[IMPORT] Error importing workspace:`, error.message);
+            stats.workspaces.errors++;
+          }
+        }
+      } else {
+        stats.workspaces.imported = data.workspaces.length;
+      }
+    }
+    
+    // Reload in-memory data from database after import
+    if (!dryRun) {
+      console.log('[IMPORT] Reloading in-memory data from database...');
+      const recentEntries = await persistentDB.getRecentEntries(1000);
+      const recentPrompts = await persistentDB.getRecentPrompts(1000);
+      db.entries = recentEntries;
+      db.prompts = recentPrompts;
+    }
+    
+    const totalImported = 
+      stats.entries.imported +
+      stats.prompts.imported +
+      stats.events.imported +
+      stats.terminalCommands.imported +
+      stats.contextSnapshots.imported +
+      stats.workspaces.imported;
+    
+    const totalSkipped = 
+      stats.entries.skipped +
+      stats.prompts.skipped +
+      stats.events.skipped +
+      stats.terminalCommands.skipped +
+      stats.contextSnapshots.skipped +
+      stats.workspaces.skipped;
+    
+    const totalErrors = 
+      stats.entries.errors +
+      stats.prompts.errors +
+      stats.events.errors +
+      stats.terminalCommands.errors +
+      stats.contextSnapshots.errors +
+      stats.workspaces.errors;
+    
+    console.log(`[SUCCESS] Import completed: ${totalImported} imported, ${totalSkipped} skipped, ${totalErrors} errors`);
+    
+    // Log audit event for import completion
+    if (!dryRun) {
+      await persistentDB.logAuditEvent('Import completed', 'import', {
+        workspaceId: workspaceFilter,
+        importVersion: importSchemaVersion,
+        currentVersion: currentSchemaVersion,
+        mergeStrategy,
+        overwrite,
+        totalImported,
+        totalSkipped,
+        totalErrors,
+        status: totalErrors > 0 ? 'partial' : 'success'
+      }).catch(err => console.warn('[IMPORT] Could not log audit event:', err.message));
+    }
+    
+    res.json({
+      success: true,
+      dryRun,
+      stats,
+      summary: {
+        totalImported,
+        totalSkipped,
+        totalErrors,
+        overwrite,
+        mergeStrategy,
+        workspaceFilter,
+        timestamp: new Date().toISOString()
+      },
+      schema: {
+        importVersion: importSchemaVersion,
+        currentVersion: currentSchemaVersion,
+        compatible: schemaCompatible
+      },
+      message: dryRun 
+        ? `Dry run: Would import ${totalImported} items (${totalSkipped} would be skipped)`
+        : `Successfully imported ${totalImported} items (${totalSkipped} skipped, ${totalErrors} errors)`
+    });
+    
+  } catch (error) {
+    console.error('Error importing database:', error);
+    
+    // Log audit event for import failure
+    if (!req.body.options?.dryRun) {
+      await persistentDB.logAuditEvent('Import failed', 'import', {
+        workspaceId: req.body.options?.workspaceFilter,
+        error: error.message,
+        status: 'error'
+      }).catch(err => console.warn('[IMPORT] Could not log audit event:', err.message));
+    }
+    
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 });
@@ -2683,44 +4403,7 @@ app.get('/api/file-contents', async (req, res) => {
   }
 });
 
-// Chat query endpoint with reasoning engine
-const reasoningEngine = new ReasoningEngine();
-
-app.post('/api/chat/query', async (req, res) => {
-  try {
-    const { query } = req.body;
-    
-    if (!query || typeof query !== 'string') {
-      return res.status(400).json({ error: 'Query is required' });
-    }
-    
-    console.log('[CHAT] Chat query:', query);
-    
-    // ✅ Gather telemetry data - LIMITED for performance
-    const recentEntries = await persistentDB.getRecentEntries(500);  // Last 500 only
-    const recentPrompts = await persistentDB.getRecentPrompts(200);  // Last 200 only
-    const telemetryData = {
-      events: recentEntries,
-      prompts: recentPrompts,
-      sessions: [], // Session data structure to be implemented
-      files: db.entries || []
-    };
-    
-    // Process query with reasoning engine
-    const response = await reasoningEngine.query(query, telemetryData);
-    
-    console.log('[SUCCESS] Generated response with', response.confidence, 'confidence');
-    
-    res.json(response);
-    
-  } catch (error) {
-    console.error('❌ Chat endpoint error:', error);
-    res.status(500).json({ 
-      error: 'Failed to process query',
-      details: error.message 
-    });
-  }
-});
+// Chat query endpoint removed - Qwen widget no longer used
 
 // Acknowledge queue
 app.post('/ack', (req, res) => {
@@ -2913,77 +4596,212 @@ app.post('/privacy/delete-sensitive', (req, res) => {
   }
 });
 
-// MCP endpoints
-app.post('/mcp/log-prompt-response', (req, res) => {
-  console.log('[NOTE] MCP request received:', req.body);
-  // Check if we need to create a new session due to timeout
+// ============================================================================
+// MCP (Model Context Protocol) Endpoints - OPTIONAL/FUTURE FEATURE
+// These endpoints are disabled by default. Set enable_mcp: true in config.json
+// to enable external data collection via MCP instead of direct database reads.
+// ============================================================================
+
+// Check if MCP is enabled (default: false)
+const isMCPEnabled = () => {
+  try {
+    const cfg = require('./utils/config.js');
+    return cfg.get().enable_mcp === true;
+  } catch (e) {
+    return false; // Default to disabled
+  }
+};
+
+// Enhanced MCP endpoints with comprehensive data capture (OPTIONAL)
+app.post('/mcp/log-prompt-response', async (req, res) => {
+  if (!isMCPEnabled()) {
+    return res.status(503).json({ 
+      success: false, 
+      error: 'MCP endpoints are disabled. Set enable_mcp: true in config.json to enable.',
+      note: 'MCP is an optional feature for external data collection. Database mode is the default.'
+    });
+  }
+  console.log('[MCP] Enhanced prompt-response received:', Object.keys(req.body));
   checkSessionTimeout();
   updateActivityTime();
   
-  const { session_id, file_path, prompt, response } = req.body;
+  const {
+    session_id,
+    conversation_id,
+    conversation_title,
+    message_id,
+    timestamp,
+    file_path,
+    workspace_path,
+    workspace_name,
+    prompt,
+    response,
+    message_role = 'user',
+    metadata = {}
+  } = req.body;
   
   // Detect workspace for this file
-  const workspacePath = file_path ? detectWorkspace(file_path) : currentWorkspace;
+  const workspacePath = workspace_path || (file_path ? detectWorkspace(file_path) : currentWorkspace);
   const workspaceSession = getWorkspaceSession(workspacePath);
   
+  const entryId = message_id || crypto.randomUUID();
+  const entryTimestamp = timestamp || new Date().toISOString();
+  
+  // Create entry with enhanced metadata
   const entry = {
-    id: crypto.randomUUID(),
+    id: entryId,
     session_id: session_id || workspaceSession,
     workspace_path: workspacePath,
-    timestamp: new Date().toISOString(),
+    workspace_name: workspace_name || path.basename(workspacePath),
+    timestamp: entryTimestamp,
     source: 'mcp',
     file_path: file_path || '',
     prompt: prompt || '',
     response: response || '',
-    notes: 'Logged via MCP'
+    notes: 'Logged via MCP (Enhanced)',
+    conversation_id: conversation_id,
+    conversation_title: conversation_title,
+    message_role: message_role
   };
   
-  console.log('[SUCCESS] Creating entry:', entry);
+  // Create prompt record with comprehensive metadata (matching database mode structure)
+  const promptData = {
+    id: crypto.randomUUID(),
+    session_id: entry.session_id,
+    workspace_path: workspacePath,
+    workspace_name: entry.workspace_name,
+    timestamp: entryTimestamp,
+    source: 'mcp',
+    conversation_id: conversation_id || entryId,
+    conversation_title: conversation_title,
+    message_role: message_role,
+    text: message_role === 'user' ? prompt : response,
+    linked_entry_id: entryId,
+    // Enhanced metadata
+    context_usage: metadata.contextUsage || metadata.context_usage || null,
+    lines_added: metadata.linesAdded || metadata.lines_added || null,
+    lines_removed: metadata.linesRemoved || metadata.lines_removed || null,
+    ai_mode: metadata.aiMode || metadata.ai_mode || 'chat',
+    model: metadata.model || null,
+    finish_reason: metadata.finishReason || metadata.finish_reason || null,
+    thinking_time_seconds: metadata.thinkingTimeSeconds || metadata.thinking_time_seconds || null,
+    context_files: JSON.stringify(metadata.contextFiles || metadata.context_files || []),
+    at_files: JSON.stringify(metadata.atFiles || metadata.at_files || []),
+    command_type: metadata.commandType || metadata.command_type || null,
+    generation_uuid: metadata.generationUUID || metadata.generation_uuid || null,
+    status: 'captured',
+    confidence: 'high'
+  };
   
   // Create matching event
   const event = {
     id: crypto.randomUUID(),
     session_id: entry.session_id,
     workspace_path: workspacePath,
-    timestamp: entry.timestamp,
+    timestamp: entryTimestamp,
     type: 'prompt_response',
-    details: JSON.stringify({ file_path: entry.file_path })
+    details: JSON.stringify({
+      file_path: entry.file_path,
+      conversation_id: conversation_id,
+      message_role: message_role,
+      metadata: metadata
+    })
   };
+  
+  // Store in database if persistent DB is available
+  if (persistentDB) {
+    try {
+      await persistentDB.savePrompt(promptData);
+      if (message_role === 'assistant' && response) {
+        // Also save as entry for AI responses
+        await persistentDB.saveEntry(entry);
+      }
+    } catch (dbError) {
+      console.warn('[MCP] Failed to save to persistent DB:', dbError.message);
+    }
+  }
   
   // Use enqueue function for reliable queuing
   enqueue('entry', entry);
   enqueue('event', event);
   
+  // Add prompt to in-memory store
+  if (!db.prompts) db.prompts = [];
+  db.prompts.push(promptData);
+  
   // Update workspace data
   updateWorkspaceData(workspacePath, entry, event);
   
-  console.log(`[SUCCESS] MCP entry added: ${entry.id} - ${entry.file_path} in workspace: ${workspacePath}`);
+  // Broadcast real-time update via WebSocket
+  broadcastUpdate('prompt-captured', {
+    prompt: promptData,
+    entry: entry,
+    conversation_id: conversation_id
+  });
   
-  res.json({ success: true, entry_id: entry.id });
+  console.log(`[SUCCESS] MCP enhanced entry added: ${entry.id} - ${entry.file_path} in workspace: ${workspacePath}`);
+  
+  res.json({ success: true, entry_id: entry.id, prompt_id: promptData.id });
 });
 
-app.post('/mcp/log-code-change', (req, res) => {
-  // Check if we need to create a new session due to timeout
+app.post('/mcp/log-code-change', async (req, res) => {
+  if (!isMCPEnabled()) {
+    return res.status(503).json({ 
+      success: false, 
+      error: 'MCP endpoints are disabled. Set enable_mcp: true in config.json to enable.',
+      note: 'MCP is an optional feature for external data collection. Database mode is the default.'
+    });
+  }
+  
   checkSessionTimeout();
   updateActivityTime();
   
-  const { session_id, file_path, before_code, after_code } = req.body;
+  const {
+    session_id,
+    conversation_id,
+    timestamp,
+    file_path,
+    workspace_path,
+    before_code,
+    after_code,
+    metadata = {}
+  } = req.body;
   
   // Detect workspace for this file
-  const workspacePath = file_path ? detectWorkspace(file_path) : currentWorkspace;
+  const workspacePath = workspace_path || (file_path ? detectWorkspace(file_path) : currentWorkspace);
   const workspaceSession = getWorkspaceSession(workspacePath);
+  
+  // Calculate diff metrics if not provided
+  const linesAdded = metadata.linesAdded || metadata.lines_added || 
+    Math.max(0, (after_code || '').split('\n').length - (before_code || '').split('\n').length);
+  const linesRemoved = metadata.linesRemoved || metadata.lines_removed || 
+    Math.max(0, (before_code || '').split('\n').length - (after_code || '').split('\n').length);
   
   const entry = {
     id: crypto.randomUUID(),
     session_id: session_id || workspaceSession,
     workspace_path: workspacePath,
-    timestamp: new Date().toISOString(),
+    timestamp: timestamp || new Date().toISOString(),
     source: 'mcp',
     file_path: file_path || '',
     before_code: before_code || '',
     after_code: after_code || '',
-    notes: 'Code change logged via MCP'
+    notes: 'Code change logged via MCP (Enhanced)',
+    conversation_id: conversation_id,
+    lines_added: linesAdded,
+    lines_removed: linesRemoved,
+    diff_size: metadata.diffSize || metadata.diff_size || 
+      Math.abs((after_code || '').length - (before_code || '').length)
   };
+  
+  // Store in database if persistent DB is available
+  if (persistentDB) {
+    try {
+      await persistentDB.saveEntry(entry);
+    } catch (dbError) {
+      console.warn('[MCP] Failed to save entry to persistent DB:', dbError.message);
+    }
+  }
   
   // Use enqueue function for reliable queuing
   enqueue('entry', entry);
@@ -2995,25 +4813,209 @@ app.post('/mcp/log-code-change', (req, res) => {
     workspace_path: workspacePath,
     timestamp: entry.timestamp,
     type: 'code_change',
-    details: JSON.stringify({ file_path: entry.file_path })
+    details: JSON.stringify({
+      file_path: entry.file_path,
+      conversation_id: conversation_id,
+      lines_added: linesAdded,
+      lines_removed: linesRemoved,
+      metadata: metadata
+    })
   };
   enqueue('event', event);
   
   // Update workspace data
   updateWorkspaceData(workspacePath, entry, event);
   
-  console.log(`[SUCCESS] MCP code change added: ${entry.id} - ${entry.file_path} in workspace: ${workspacePath}`);
+  // Broadcast real-time update
+  broadcastUpdate('file-changed', {
+    entry: entry,
+    event: event
+  });
+  
+  console.log(`[SUCCESS] MCP enhanced code change added: ${entry.id} - ${entry.file_path} in workspace: ${workspacePath}`);
   console.log(`[DATA] Total entries: ${entries.length}, events: ${events.length}`);
   
   res.json({ success: true, entry_id: entry.id });
 });
 
-app.post('/mcp/log-event', (req, res) => {
-  // Check if we need to create a new session due to timeout
+// conversationStreams is defined at the top of the file
+
+// Enhanced conversation logging endpoint (OPTIONAL)
+app.post('/mcp/log-conversation', async (req, res) => {
+  if (!isMCPEnabled()) {
+    return res.status(503).json({ 
+      success: false, 
+      error: 'MCP endpoints are disabled. Set enable_mcp: true in config.json to enable.',
+      note: 'MCP is an optional feature for external data collection. Database mode is the default.'
+    });
+  }
+  
+  console.log('[MCP] Conversation received:', req.body.conversation_id);
   checkSessionTimeout();
   updateActivityTime();
   
-  const { session_id, type, details, file_path } = req.body;
+  const {
+    conversation_id,
+    conversation_title,
+    session_id,
+    workspace_path,
+    workspace_name,
+    messages = [],
+    metadata = {}
+  } = req.body;
+  
+  const workspacePath = workspace_path || currentWorkspace;
+  const workspaceSession = getWorkspaceSession(workspacePath);
+  
+  // Process all messages in the conversation
+  const savedPrompts = [];
+  const savedEntries = [];
+  
+  for (const message of messages) {
+    const messageId = message.id || crypto.randomUUID();
+    const messageTimestamp = message.timestamp || new Date().toISOString();
+    
+    // Create prompt record for each message
+    const promptData = {
+      id: messageId,
+      session_id: session_id || workspaceSession,
+      workspace_path: workspacePath,
+      workspace_name: workspace_name || path.basename(workspacePath),
+      timestamp: messageTimestamp,
+      source: 'mcp',
+      conversation_id: conversation_id,
+      conversation_title: conversation_title,
+      message_role: message.role || 'user',
+      text: message.text || message.content || '',
+      linked_entry_id: null,
+      context_usage: message.metadata?.contextUsage || metadata.contextUsage || null,
+      lines_added: message.metadata?.linesAdded || metadata.linesAdded || null,
+      lines_removed: message.metadata?.linesRemoved || metadata.linesRemoved || null,
+      ai_mode: message.metadata?.aiMode || metadata.aiMode || 'chat',
+      model: message.metadata?.model || metadata.model || null,
+      finish_reason: message.metadata?.finishReason || metadata.finishReason || null,
+      thinking_time_seconds: message.metadata?.thinkingTimeSeconds || metadata.thinkingTimeSeconds || null,
+      context_files: JSON.stringify(message.metadata?.contextFiles || metadata.contextFiles || []),
+      at_files: JSON.stringify(message.metadata?.atFiles || metadata.atFiles || []),
+      status: 'captured',
+      confidence: 'high'
+    };
+    
+    savedPrompts.push(promptData);
+    
+    // Store in database
+    if (persistentDB) {
+      try {
+        await persistentDB.savePrompt(promptData);
+      } catch (dbError) {
+        console.warn('[MCP] Failed to save prompt:', dbError.message);
+      }
+    }
+    
+    // Add to in-memory store
+    if (!db.prompts) db.prompts = [];
+    db.prompts.push(promptData);
+  }
+  
+  // Create conversation event
+  const event = {
+    id: crypto.randomUUID(),
+    session_id: session_id || workspaceSession,
+    workspace_path: workspacePath,
+    timestamp: new Date().toISOString(),
+    type: 'conversation',
+    details: JSON.stringify({
+      conversation_id: conversation_id,
+      conversation_title: conversation_title,
+      message_count: messages.length,
+      metadata: metadata
+    })
+  };
+  
+  enqueue('event', event);
+  updateWorkspaceData(workspacePath, null, event);
+  
+  // Broadcast conversation update
+  broadcastUpdate('conversation-update', {
+    conversation_id: conversation_id,
+    conversation_title: conversation_title,
+    messages: savedPrompts,
+    metadata: metadata
+  });
+  
+  // Broadcast to subscribed WebSocket clients
+  broadcastConversationUpdate(conversation_id, {
+    conversation_id: conversation_id,
+    conversation_title: conversation_title,
+    messages: savedPrompts,
+    metadata: metadata
+  });
+  
+  console.log(`[SUCCESS] MCP conversation logged: ${conversation_id} with ${messages.length} messages`);
+  
+  res.json({
+    success: true,
+    conversation_id: conversation_id,
+    message_count: messages.length,
+    prompt_ids: savedPrompts.map(p => p.id)
+  });
+});
+
+// Conversation streaming endpoint (OPTIONAL)
+app.post('/mcp/stream-conversation', (req, res) => {
+  if (!isMCPEnabled()) {
+    return res.status(503).json({ 
+      success: false, 
+      error: 'MCP endpoints are disabled. Set enable_mcp: true in config.json to enable.',
+      note: 'MCP is an optional feature for external data collection. Database mode is the default.'
+    });
+  }
+  
+  const { conversation_id, enable = true } = req.body;
+  
+  if (enable) {
+    conversationStreams.set(conversation_id, {
+      id: conversation_id,
+      enabled: true,
+      startTime: Date.now(),
+      messageCount: 0
+    });
+    console.log(`[MCP] Conversation streaming enabled: ${conversation_id}`);
+  } else {
+    conversationStreams.delete(conversation_id);
+    console.log(`[MCP] Conversation streaming disabled: ${conversation_id}`);
+  }
+  
+  res.json({ success: true, streaming: enable, conversation_id });
+});
+
+// Get active conversation streams (OPTIONAL)
+app.get('/mcp/streams', (req, res) => {
+  if (!isMCPEnabled()) {
+    return res.status(503).json({ 
+      success: false, 
+      error: 'MCP endpoints are disabled. Set enable_mcp: true in config.json to enable.',
+      note: 'MCP is an optional feature for external data collection. Database mode is the default.'
+    });
+  }
+  
+  const streams = Array.from(conversationStreams.values());
+  res.json({ success: true, streams: streams });
+});
+
+app.post('/mcp/log-event', (req, res) => {
+  if (!isMCPEnabled()) {
+    return res.status(503).json({ 
+      success: false, 
+      error: 'MCP endpoints are disabled. Set enable_mcp: true in config.json to enable.',
+      note: 'MCP is an optional feature for external data collection. Database mode is the default.'
+    });
+  }
+  
+  checkSessionTimeout();
+  updateActivityTime();
+  
+  const { session_id, type, details, file_path, timestamp } = req.body;
   
   // Detect workspace from file_path if provided, or use details
   let workspacePath = currentWorkspace;
@@ -3029,7 +5031,7 @@ app.post('/mcp/log-event', (req, res) => {
     id: crypto.randomUUID(),
     session_id: session_id || workspaceSession,
     workspace_path: workspacePath,
-    timestamp: new Date().toISOString(),
+    timestamp: timestamp || new Date().toISOString(),
     type: type || 'unknown',
     details: typeof details === 'string' ? details : JSON.stringify(details || {})
   };
@@ -3039,6 +5041,9 @@ app.post('/mcp/log-event', (req, res) => {
   
   // Update workspace data
   updateWorkspaceData(workspacePath, null, event);
+  
+  // Broadcast real-time update
+  broadcastUpdate('event', event);
   
   console.log(`[SUCCESS] MCP event added: ${event.id} - ${event.type} in workspace: ${workspacePath}`);
   console.log(`[DATA] Total events: ${events.length}`);
@@ -3208,26 +5213,26 @@ async function processFileChange(filePath) {
           const entryTime = new Date(entry.timestamp).getTime();
           const fiveMinutesAgo = entryTime - (5 * 60 * 1000);
           
-          // Find recent prompts (pending or captured status, within time window)
-          const recentPrompts = db.prompts
-            .filter(p => {
-              const promptTime = new Date(p.timestamp).getTime();
-              return (p.status === 'pending' || p.status === 'captured') && 
-                     promptTime >= fiveMinutesAgo &&
-                     promptTime <= entryTime &&
-                     !p.linked_entry_id; // Not already linked
-            })
-            .sort((a, b) => b.timestamp - a.timestamp);
+          // Query database for recent prompts (more reliable than in-memory array)
+          const recentPrompts = await persistentDB.getPromptsInTimeRange(
+            new Date(fiveMinutesAgo).toISOString(),
+            new Date(entryTime).toISOString(),
+            50 // Limit to 50 most recent
+          );
           
-          const lastPrompt = recentPrompts[0];
+          // Filter for unlinked prompts with pending/captured status
+          const candidatePrompts = recentPrompts
+            .filter(p => {
+              const status = p.status || 'captured';
+              const linkedEntryId = p.linked_entry_id || p.linkedEntryId;
+              return (status === 'pending' || status === 'captured') && !linkedEntryId;
+            })
+            .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+          
+          const lastPrompt = candidatePrompts[0];
           
           if (lastPrompt) {
-            // Update in-memory
-            lastPrompt.status = 'linked';
-            lastPrompt.linked_entry_id = entry.id;
-            entry.prompt_id = lastPrompt.id;
-            
-            // Persist to database
+            // Persist to database (bidirectional linking)
             await persistentDB.updatePrompt(lastPrompt.id, {
               status: 'linked',
               linked_entry_id: entry.id
@@ -3237,7 +5242,16 @@ async function processFileChange(filePath) {
               prompt_id: lastPrompt.id 
             });
             
-            console.log(`✓ Linked prompt ${lastPrompt.id} ("${lastPrompt.text?.substring(0, 50)}...") to entry ${entry.id}`);
+            // Update in-memory if present
+            const inMemoryPrompt = db.prompts.find(p => p.id === lastPrompt.id);
+            if (inMemoryPrompt) {
+              inMemoryPrompt.status = 'linked';
+              inMemoryPrompt.linked_entry_id = entry.id;
+            }
+            entry.prompt_id = lastPrompt.id;
+            
+            const promptText = lastPrompt.text || lastPrompt.prompt || lastPrompt.content || '';
+            console.log(`Linked prompt ${lastPrompt.id} ("${promptText.substring(0, 50)}...") to entry ${entry.id}`);
           }
         } catch (error) {
           console.error('Error linking prompt to entry:', error);
@@ -3329,9 +5343,12 @@ function startFileWatcher() {
     });
 }
 
-// Socket.IO connection handling
+// Socket.IO connection handling with conversation streaming
 io.on('connection', (socket) => {
   console.log(`Client connected: ${socket.id}`);
+  
+  // Track client's subscribed conversation streams
+  const clientStreams = new Set();
   
   // Send initial data when client connects
   socket.emit('initial-data', {
@@ -3339,11 +5356,55 @@ io.on('connection', (socket) => {
     prompts: db.prompts,
     queue: queueSystem.getQueue(),
     ideState: ideStateCapture ? ideStateCapture.getLatestState() : null,
+    activeStreams: Array.from(conversationStreams.keys()),
     timestamp: Date.now()
   });
   
   socket.on('disconnect', () => {
     console.log(`Client disconnected: ${socket.id}`);
+    // Clean up client streams
+    clientStreams.clear();
+  });
+  
+  // Subscribe to conversation stream
+  socket.on('subscribe-conversation', (conversationId) => {
+    if (conversationId) {
+      clientStreams.add(conversationId);
+      console.log(`[WS] Client ${socket.id} subscribed to conversation: ${conversationId}`);
+      
+      // Enable streaming for this conversation if not already enabled
+      if (!conversationStreams.has(conversationId)) {
+        conversationStreams.set(conversationId, {
+          id: conversationId,
+          enabled: true,
+          startTime: Date.now(),
+          messageCount: 0,
+          subscribers: new Set([socket.id])
+        });
+      } else {
+        conversationStreams.get(conversationId).subscribers.add(socket.id);
+      }
+      
+      socket.emit('conversation-subscribed', { conversation_id: conversationId });
+    }
+  });
+  
+  // Unsubscribe from conversation stream
+  socket.on('unsubscribe-conversation', (conversationId) => {
+    if (conversationId && clientStreams.has(conversationId)) {
+      clientStreams.delete(conversationId);
+      console.log(`[WS] Client ${socket.id} unsubscribed from conversation: ${conversationId}`);
+      
+      const stream = conversationStreams.get(conversationId);
+      if (stream && stream.subscribers) {
+        stream.subscribers.delete(socket.id);
+        if (stream.subscribers.size === 0) {
+          conversationStreams.delete(conversationId);
+        }
+      }
+      
+      socket.emit('conversation-unsubscribed', { conversation_id: conversationId });
+    }
   });
   
   // Handle client requests for specific data
@@ -3362,12 +5423,30 @@ io.on('connection', (socket) => {
         case 'ide-state':
           socket.emit('ide-state-update', ideStateCapture.getLatestState());
           break;
+        case 'conversations':
+          // Get all conversations from prompts
+          const conversations = {};
+          (db.prompts || []).forEach(prompt => {
+            if (prompt.conversation_id) {
+              if (!conversations[prompt.conversation_id]) {
+                conversations[prompt.conversation_id] = {
+                  id: prompt.conversation_id,
+                  title: prompt.conversation_title,
+                  messages: []
+                };
+              }
+              conversations[prompt.conversation_id].messages.push(prompt);
+            }
+          });
+          socket.emit('conversations-update', Object.values(conversations));
+          break;
         case 'all':
           socket.emit('full-update', {
             entries: db.entries,
             prompts: db.prompts,
             queue: queueSystem.getQueue(),
             ideState: ideStateCapture.getLatestState(),
+            activeStreams: Array.from(conversationStreams.keys()),
             timestamp: Date.now()
           });
           break;
@@ -3381,7 +5460,8 @@ io.on('connection', (socket) => {
   socket.emit('initial-data', {
     entries: db.entries,
     events: events,
-    queue: queue
+    queue: queue,
+    activeStreams: Array.from(conversationStreams.keys())
   });
 });
 
@@ -3501,21 +5581,31 @@ async function loadPersistedData() {
     console.log('[SAVE] Initializing database (lazy loading mode)...');
     await persistentDB.init();
     
-    // ✅ DON'T load all data - just get stats and setup
+    // Run schema migrations to ensure database is up to date
+    try {
+      const migrationResult = await schemaMigrations.migrate();
+      if (migrationResult.migrations.length > 0) {
+        console.log(`[MIGRATIONS] Applied ${migrationResult.migrations.length} migration(s): ${migrationResult.migrations.map(m => m.migration).join(', ')}`);
+      }
+    } catch (migrationErr) {
+      console.warn('[MIGRATIONS] Migration warning:', migrationErr.message);
+    }
+    
+    // DON'T load all data - just get stats and setup
     const stats = await persistentDB.getStats();
     
     // Set nextId from database max ID (without loading all records)
     const maxIds = await persistentDB.getMaxIds();
     db.nextId = Math.max(maxIds.entryId || 0, maxIds.promptId || 0) + 1;
     
-    // ✅ Keep in-memory arrays empty - query database on demand
+    // Keep in-memory arrays empty - query database on demand
     db._entries = [];  // Don't load - use database queries
     db._prompts = [];  // Don't load - use database queries
     
     console.log(`[SUCCESS] Database ready with ${stats.entries} entries and ${stats.prompts} prompts (lazy loading)`);
     console.log(`[MEMORY] In-memory cache disabled - using on-demand queries`);
   } catch (error) {
-    console.error('⚠️  Error loading persisted data:', error.message);
+    console.error('Error loading persisted data:', error.message);
     console.log('   Starting with empty database');
   }
 }
@@ -3523,8 +5613,112 @@ async function loadPersistedData() {
 // Start the server
 const HOST = process.env.HOST || '127.0.0.1';
 
+// Repair function to fix existing unlinked data
+async function repairDatabaseLinks() {
+  try {
+    console.log('[REPAIR] Starting database link repair...');
+    
+    // Get all prompts that have linked_entry_id
+    const promptsWithLinks = await persistentDB.getPromptsWithLinkedEntries();
+    let repairedCount = 0;
+    let skippedCount = 0;
+    let notFoundCount = 0;
+    
+    for (const prompt of promptsWithLinks) {
+      const linkedEntryId = prompt.linked_entry_id || prompt.linkedEntryId;
+      if (!linkedEntryId) {
+        skippedCount++;
+        continue;
+      }
+      
+      // Try to find entry by the linked_entry_id (could be UUID or numeric)
+      let entry = await persistentDB.getEntryById(linkedEntryId);
+      
+      // If not found by ID, try to find by timestamp proximity (within 5 minutes)
+      if (!entry) {
+        // Handle both ISO string and numeric timestamps
+        let promptTime;
+        if (typeof prompt.timestamp === 'number') {
+          promptTime = prompt.timestamp;
+        } else if (typeof prompt.timestamp === 'string') {
+          promptTime = new Date(prompt.timestamp).getTime();
+        } else {
+          notFoundCount++;
+          continue;
+        }
+        
+        if (isNaN(promptTime) || !isFinite(promptTime)) {
+          notFoundCount++;
+          continue;
+        }
+        
+        const fiveMinutesAgo = promptTime - (5 * 60 * 1000);
+        const fiveMinutesAfter = promptTime + (5 * 60 * 1000);
+        
+        // Find entries in the same workspace within time window
+        const nearbyEntries = await persistentDB.getEntriesInTimeRange(
+          new Date(fiveMinutesAgo).toISOString(),
+          new Date(fiveMinutesAfter).toISOString(),
+          prompt.workspace_path || prompt.workspacePath
+        );
+        
+        // Find the closest entry without a prompt_id
+        entry = nearbyEntries
+          .filter(e => !e.prompt_id)
+          .sort((a, b) => {
+            const aTime = new Date(a.timestamp).getTime();
+            const bTime = new Date(b.timestamp).getTime();
+            return Math.abs(aTime - promptTime) - Math.abs(bTime - promptTime);
+          })[0];
+      }
+      
+      if (!entry) {
+        notFoundCount++;
+        continue;
+      }
+      
+      if (entry.prompt_id) {
+        skippedCount++;
+        continue;
+      }
+      
+      // Fix: Set prompt_id on entry
+      try {
+        await persistentDB.updateEntry(entry.id, {
+          prompt_id: prompt.id
+        });
+        repairedCount++;
+        console.log(`[REPAIR] Fixed entry ${entry.id} -> prompt ${prompt.id}`);
+      } catch (updateError) {
+        console.error(`[REPAIR] Error updating entry ${entry.id}:`, updateError.message);
+      }
+    }
+    
+    console.log(`[REPAIR] Completed: Fixed ${repairedCount} entries, skipped ${skippedCount}, not found ${notFoundCount}`);
+    return { 
+      repaired: repairedCount, 
+      total: promptsWithLinks.length,
+      skipped: skippedCount,
+      notFound: notFoundCount
+    };
+  } catch (error) {
+    console.error('[REPAIR] Error repairing links:', error);
+    return { repaired: 0, error: error.message };
+  }
+}
+
 loadPersistedData().then(() => {
-  app.listen(PORT, HOST, () => {
+  // Repair existing links on startup
+  repairDatabaseLinks().then(result => {
+    if (result.repaired > 0) {
+      console.log(`[REPAIR] Repaired ${result.repaired} database links on startup`);
+    }
+  }).catch(err => {
+    console.warn('[REPAIR] Link repair failed (non-critical):', err.message);
+  });
+  
+  // Use server.listen() instead of app.listen() to ensure Socket.IO works properly
+  server.listen(PORT, HOST, () => {
     console.log(`[LAUNCH] Companion service running on http://${HOST}:${PORT}`);
     console.log(`[DATA] Health endpoint: http://${HOST}:${PORT}/health`);
     console.log(`[UP] Activity endpoint: http://${HOST}:${PORT}/api/activity`);
@@ -3553,7 +5747,7 @@ loadPersistedData().then(() => {
     console.log(' Clipboard monitor disabled in config');
   }
   
-  // ✨ Automatic prompt sync DISABLED (causes OOM - use /api/cursor-database instead)
+  // Automatic prompt sync DISABLED (causes OOM - use /api/cursor-database instead)
   // The dashboard should query /api/cursor-database for real-time data
   // Historical data already in database from previous syncs
   console.log('[SYNC] Automatic prompt sync DISABLED (use /api/cursor-database for fresh data)');
@@ -3644,6 +5838,19 @@ loadPersistedData().then(() => {
             const contextAnalysis = await contextAnalyzer.analyzePromptContext(prompt);
             if (contextAnalysis) {
               enhancedPrompt.contextAnalysis = contextAnalysis;
+              
+              // Track context changes (files added/removed)
+              const contextChange = await contextChangeTracker.trackContextChange(
+                contextAnalysis,
+                {
+                  promptId: enhancedPrompt.id,
+                  timestamp: Date.now(),
+                  sessionId: activeSession
+                }
+              );
+              if (contextChange) {
+                enhancedPrompt.contextChange = contextChange;
+              }
             }
             
             // Track prompt creation for productivity metrics
@@ -3669,9 +5876,10 @@ loadPersistedData().then(() => {
   });
   }); // Close app.listen callback
 }).catch(error => {
-  console.error('❌ Failed to load persisted data:', error);
+  console.error('Failed to load persisted data:', error);
   // Start anyway with empty database
-  app.listen(PORT, HOST, () => {
+  // Use server.listen() instead of app.listen() to ensure Socket.IO works properly
+  server.listen(PORT, HOST, () => {
     console.log(`[LAUNCH] Companion service running on http://${HOST}:${PORT} (without persisted data)`);
   });
 });

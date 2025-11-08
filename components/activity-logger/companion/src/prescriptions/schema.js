@@ -64,10 +64,10 @@ const SOURCES = {
 function initializePrescriptionSchema(db) {
   try {
     db.exec(PRESCRIPTION_SCHEMA);
-    console.log('✓ Prescription schema initialized');
+    console.log('Prescription schema initialized');
     return true;
   } catch (error) {
-    console.error('✗ Failed to initialize prescription schema:', error.message);
+    console.error('Failed to initialize prescription schema:', error.message);
     return false;
   }
 }

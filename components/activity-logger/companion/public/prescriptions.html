@@ -11,18 +11,18 @@
     <!-- Header -->
     <header class="header">
       <div class="header-content">
-        <h1>📋 Prescriptions</h1>
+        <h1>Prescriptions</h1>
         <p class="subtitle">Behavioral rules and instructions that guide AI behavior</p>
       </div>
       <div class="header-actions">
         <button onclick="showSuggestions()" class="btn btn-secondary">
-          ✨ Suggest from Patterns
+          Suggest from Patterns
         </button>
         <button onclick="showTemplates()" class="btn btn-secondary">
-          📚 Templates
+          Templates
         </button>
         <button onclick="showImportExport()" class="btn btn-secondary">
-          💾 Import/Export
+          Import/Export
         </button>
         <button onclick="showCreateModal()" class="btn btn-primary">
           + New Prescription
@@ -91,7 +91,7 @@
       </div>
       
       <div id="empty-state" class="empty-state" style="display: none;">
-        <div class="empty-icon">📋</div>
+        <div class="empty-icon">[Prescription]</div>
         <h2>No Prescriptions Yet</h2>
         <p>Create your first prescription to start guiding AI behavior</p>
         <button onclick="showCreateModal()" class="btn btn-primary">Create Prescription</button>
@@ -180,7 +180,7 @@
   <div id="suggestions-modal" class="modal" style="display: none;">
     <div class="modal-content modal-large">
       <div class="modal-header">
-        <h2>💡 Suggested Prescriptions</h2>
+        <h2>Suggested Prescriptions</h2>
         <button onclick="closeSuggestionsModal()" class="btn-close">&times;</button>
       </div>
       
@@ -194,7 +194,7 @@
   <div id="templates-modal" class="modal" style="display: none;">
     <div class="modal-content modal-large">
       <div class="modal-header">
-        <h2>📚 Prescription Templates</h2>
+        <h2>Prescription Templates</h2>
         <button onclick="closeTemplatesModal()" class="btn-close">&times;</button>
       </div>
       
@@ -208,7 +208,7 @@
   <div id="import-export-modal" class="modal" style="display: none;">
     <div class="modal-content">
       <div class="modal-header">
-        <h2>💾 Import/Export</h2>
+        <h2>Import/Export</h2>
         <button onclick="closeImportExportModal()" class="btn-close">&times;</button>
       </div>
       

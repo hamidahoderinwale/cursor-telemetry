@@ -14,14 +14,14 @@ NC='\033[0m' # No Color
 
 # Function to cleanup background processes
 cleanup() {
-    echo -e "\n${YELLOW}🛑 Shutting down services...${NC}"
+    echo -e "\n${YELLOW}Shutting down services...${NC}"
     if [ ! -z "$COMPANION_PID" ]; then
         kill $COMPANION_PID 2>/dev/null
-        echo -e "${GREEN}✅ Companion service stopped${NC}"
+        echo -e "${GREEN}OK: Companion service stopped${NC}"
     fi
     if [ ! -z "$SPA_PID" ]; then
         kill $SPA_PID 2>/dev/null
-        echo -e "${GREEN}✅ SPA server stopped${NC}"
+        echo -e "${GREEN}OK: SPA server stopped${NC}"
     fi
     exit 0
 }
@@ -31,28 +31,28 @@ trap cleanup SIGINT SIGTERM
 
 # Check if Node.js is installed
 if ! command -v node &> /dev/null; then
-    echo -e "${RED}❌ Node.js is not installed. Please install Node.js first.${NC}"
+    echo -e "${RED}ERROR: Node.js is not installed. Please install Node.js first.${NC}"
     exit 1
 fi
 
 # Check if npm is installed
 if ! command -v npm &> /dev/null; then
-    echo -e "${RED}❌ npm is not installed. Please install npm first.${NC}"
+    echo -e "${RED}ERROR: npm is not installed. Please install npm first.${NC}"
     exit 1
 fi
 
 # Check if Python is installed
 if ! command -v python3 &> /dev/null; then
-    echo -e "${RED}❌ Python 3 is not installed. Please install Python 3 first.${NC}"
+    echo -e "${RED}ERROR: Python 3 is not installed. Please install Python 3 first.${NC}"
     exit 1
 fi
 
-echo -e "${BLUE}📦 Starting companion service...${NC}"
+echo -e "${BLUE}Starting companion service...${NC}"
 cd companion
 
 # Install dependencies if needed
 if [ ! -d "node_modules" ]; then
-    echo -e "${YELLOW}📥 Installing companion dependencies...${NC}"
+    echo -e "${YELLOW}Installing companion dependencies...${NC}"
     npm install
 fi
 
@@ -61,14 +61,14 @@ npm start > ../companion.log 2>&1 &
 COMPANION_PID=$!
 
 # Wait for companion to start
-echo -e "${YELLOW}⏳ Waiting for companion service to start...${NC}"
+echo -e "${YELLOW}Waiting for companion service to start...${NC}"
 for i in {1..10}; do
     if curl -s http://127.0.0.1:43917/health > /dev/null 2>&1; then
-        echo -e "${GREEN}✅ Companion service started (PID: $COMPANION_PID)${NC}"
+        echo -e "${GREEN}OK: Companion service started (PID: $COMPANION_PID)${NC}"
         break
     fi
     if [ $i -eq 10 ]; then
-        echo -e "${RED}❌ Failed to start companion service${NC}"
+        echo -e "${RED}ERROR: Failed to start companion service${NC}"
         kill $COMPANION_PID 2>/dev/null
         exit 1
     fi
@@ -76,7 +76,7 @@ for i in {1..10}; do
 done
 
 # Start SPA server
-echo -e "${BLUE}🌐 Starting SPA server...${NC}"
+echo -e "${BLUE}Starting SPA server...${NC}"
 cd ../public
 
 # Start SPA in background
@@ -84,14 +84,14 @@ python3 -m http.server 8000 > ../spa.log 2>&1 &
 SPA_PID=$!
 
 # Wait for SPA to start
-echo -e "${YELLOW}⏳ Waiting for SPA server to start...${NC}"
+echo -e "${YELLOW}Waiting for SPA server to start...${NC}"
 for i in {1..5}; do
     if curl -s -I http://localhost:8000 > /dev/null 2>&1; then
-        echo -e "${GREEN}✅ SPA server started (PID: $SPA_PID)${NC}"
+        echo -e "${GREEN}OK: SPA server started (PID: $SPA_PID)${NC}"
         break
     fi
     if [ $i -eq 5 ]; then
-        echo -e "${RED}❌ Failed to start SPA server${NC}"
+        echo -e "${RED}ERROR: Failed to start SPA server${NC}"
         kill $COMPANION_PID 2>/dev/null
         kill $SPA_PID 2>/dev/null
         exit 1

@@ -23,9 +23,9 @@ REQUIRED_FILES=(
 
 for file in "${REQUIRED_FILES[@]}"; do
     if [ -f "$file" ]; then
-        echo "  ✅ $file"
+        echo "  OK: $file"
     else
-        echo "  ❌ $file - MISSING"
+        echo "  ERROR: $file - MISSING"
         exit 1
     fi
 done
@@ -48,21 +48,21 @@ else
 fi
 
 # Check if any servers are running
-echo "🌐 Checking for running servers..."
+    echo "Checking for running servers..."
 if pgrep -f "python3 -m http.server" > /dev/null; then
-    echo "  ✅ HTTP server already running"
+    echo "  OK: HTTP server already running"
     SERVER_PID=$(pgrep -f "python3 -m http.server" | head -1)
-    echo "  📍 Server PID: $SERVER_PID"
+    echo "  Server PID: $SERVER_PID"
 else
     echo "  No HTTP server running"
 fi
 
 # Test the dashboard
-echo "🧪 Testing dashboard accessibility..."
+echo "Testing dashboard accessibility..."
 if curl -s http://localhost:8080/public/dashboard.html > /dev/null; then
-    echo "  ✅ Dashboard accessible at http://localhost:8080/public/dashboard.html"
+    echo "  OK: Dashboard accessible at http://localhost:8080/public/dashboard.html"
 else
-    echo "  ❌ Dashboard not accessible"
+    echo "  ERROR: Dashboard not accessible"
 fi
 
 # Create a system status report
@@ -77,24 +77,24 @@ Project Directory: $PROJECT_DIR
 File Status:
 $(for file in "${REQUIRED_FILES[@]}"; do
     if [ -f "$file" ]; then
-        echo "✅ $file ($(wc -c < "$file") bytes)"
+        echo "OK: $file ($(wc -c < "$file") bytes)"
     else
-        echo "❌ $file - MISSING"
+        echo "ERROR: $file - MISSING"
     fi
 done)
 
 Companion Service:
 $(if curl -s http://127.0.0.1:43917/health > /dev/null; then
-    echo "✅ Running - $(curl -s http://127.0.0.1:43917/health)"
+    echo "OK: Running - $(curl -s http://127.0.0.1:43917/health)"
 else
-    echo "❌ Not running"
+    echo "ERROR: Not running"
 fi)
 
 HTTP Server:
 $(if pgrep -f "python3 -m http.server" > /dev/null; then
-    echo "✅ Running on PID $(pgrep -f "python3 -m http.server" | head -1)"
+    echo "OK: Running on PID $(pgrep -f "python3 -m http.server" | head -1)"
 else
-    echo "❌ Not running"
+    echo "ERROR: Not running"
 fi)
 
 Dashboard URLs:
@@ -103,15 +103,15 @@ Dashboard URLs:
 - Simple: http://localhost:8080/public/test-dashboard.html
 
 Features Implemented:
-✅ Enhanced UX Design
-✅ Code/Diff Preview with Line Counts
-✅ Always Visible Prompts
-✅ Line-Based Diff Counting
-✅ Export System (CSV, JSON, Markdown)
-✅ Debug Tools
-✅ Filter System
-✅ Error Handling
-✅ Companion Integration
+- Enhanced UX Design
+- Code/Diff Preview with Line Counts
+- Always Visible Prompts
+- Line-Based Diff Counting
+- Export System (CSV, JSON, Markdown)
+- Debug Tools
+- Filter System
+- Error Handling
+- Companion Integration
 
 System Ready: $(if curl -s http://localhost:8080/public/dashboard.html > /dev/null; then echo "YES"; else echo "NO"; fi)
 EOF
@@ -121,7 +121,7 @@ echo "System status report created: system-status.txt"
 echo ""
 echo "Build Complete!"
 echo ""
-echo "🌐 Dashboard URLs:"
+echo "Dashboard URLs:"
 echo "   Main Dashboard: http://localhost:8080/public/dashboard.html"
 echo "   Complete Test:  http://localhost:8080/public/test-complete.html"
 echo "   Simple Test:    http://localhost:8080/public/test-dashboard.html"

@@ -1,295 +1,38 @@
 /**
- * Cursor Activity Dashboard - Main Application
+ * Cursor Telemetry Dashboard - Main Application
  * Clean, modern implementation with full feature support
+ * 
+ * MODULE DEPENDENCIES:
+ * - core/config.js → CONFIG
+ * - core/state.js → state
+ * - core/api-client.js → APIClient
+ * - core/websocket-manager.js → WebSocketManager
+ * - algorithms/similarity.js → cosineSimilarity, euclideanDistance, etc.
+ * - algorithms/dimensionality-reduction.js → applyPCA, applyMDS, applyTSNE, applyUMAP
+ * - algorithms/clustering.js → applyClustering, kMeansClustering, detectCommunities, etc.
  */
 
-// ===================================
-// Configuration & Constants
-// ===================================
-
-// Use external config (from config.js) if available, otherwise use defaults
-const EXTERNAL_CONFIG = window.CONFIG || {};
-const DASHBOARD_CONFIG = {
-  API_BASE: EXTERNAL_CONFIG.API_BASE_URL || 'http://localhost:43917',
-  WS_URL: EXTERNAL_CONFIG.WS_URL || 'ws://localhost:43917',
-  REFRESH_INTERVAL: 120000,  // 2 minutes to prevent request overload (down from 30s)
-  ENABLE_TF_IDF: false, // Disable TF-IDF by default to save memory
-  ENABLE_SEMANTIC_SEARCH: false, // Disable semantic analysis by default
-  MAX_SEARCH_RESULTS: 50, // Limit search results to prevent memory issues
-  CHART_COLORS: {
-    primary: '#8B5CF6',
-    secondary: '#6366F1',
-    accent: '#EC4899',
-    success: '#10B981',
-    warning: '#F59E0B',
-    error: '#EF4444',
-  }
-};
-
-// Use DASHBOARD_CONFIG as CONFIG for compatibility
-const CONFIG = DASHBOARD_CONFIG;
-
-// ===================================
-// State Management
-// ===================================
-
-const state = {
-  connected: false,
-  currentView: 'overview',
-  currentWorkspace: 'all',
-  data: {
-    events: [],
-    entries: [],
-    threads: [],
-    prompts: [],
-    terminalCommands: [],
-    workspaces: [],
-    systemResources: [],
-    gitData: [],
-    ideState: null
-  },
-  stats: {
-    sessions: 0,
-    fileChanges: 0,
-    aiInteractions: 0,
-    codeChanged: 0,
-    avgContext: 0,
-    terminalCommands: 0
-  },
-  sequence: 0,
-  socket: null,
-  charts: {} // Track active Chart.js instances
-};
-
-// ===================================
-// API Client
-// ===================================
-
-// ===================================
-// Performance: Request Debouncing
-// ===================================
-
-const debouncedRequests = new Map();
-
-function debounce(fn, delay = 300) {
-  let timeout;
-  return function(...args) {
-    clearTimeout(timeout);
-    return new Promise((resolve) => {
-      timeout = setTimeout(() => resolve(fn.apply(this, args)), delay);
-    });
-  };
-}
-
-class APIClient {
-  static async get(endpoint, options = {}) {
-    const timeout = options.timeout || 20000; // 20 second default timeout (increased from 10s)
-    const retries = options.retries || 1; // Retry up to 1 time (reduced to avoid long waits)
-    
-    // Debounce repeated requests to the same endpoint
-    const cacheKey = endpoint + JSON.stringify(options);
-    if (debouncedRequests.has(cacheKey)) {
-      console.log(`[DEBOUNCE] Skipping duplicate request to ${endpoint}`);
-      return debouncedRequests.get(cacheKey);
-    }
-    
-    const requestPromise = (async () => {
-      for (let attempt = 0; attempt <= retries; attempt++) {
-        try {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), timeout);
-          
-          const response = await fetch(`${CONFIG.API_BASE}${endpoint}`, {
-            signal: controller.signal,
-            ...options
-          });
-          
-          clearTimeout(timeoutId);
-          
-          if (!response.ok) throw new Error(`HTTP ${response.status}`);
-          return await response.json();
-        } catch (error) {
-          const isLastAttempt = attempt === retries;
-          
-          if (isLastAttempt) {
-            console.error(`[ERROR] API (${endpoint}) failed after ${retries + 1} attempts:`, error.message);
-            throw error;
-          }
-          
-          // Wait before retry (exponential backoff)
-          const waitTime = Math.min(1000 * Math.pow(2, attempt), 5000);
-          console.warn(`[WARNING] API (${endpoint}) attempt ${attempt + 1} failed, retrying in ${waitTime}ms...`);
-          await new Promise(resolve => setTimeout(resolve, waitTime));
-        }
-      }
-    })();
-    
-    // Cache the promise for deduplication
-    debouncedRequests.set(cacheKey, requestPromise);
-    setTimeout(() => debouncedRequests.delete(cacheKey), 1000);
-    
-    return requestPromise;
-  }
-
-  static async post(endpoint, data, options = {}) {
-    const timeout = options.timeout || 10000;
-    
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), timeout);
-      
-      const response = await fetch(`${CONFIG.API_BASE}${endpoint}`, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(data),
-        signal: controller.signal,
-        ...options
-      });
-      
-      clearTimeout(timeoutId);
-      
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      return await response.json();
-    } catch (error) {
-      console.error(`[ERROR] API POST (${endpoint}):`, error.message);
-      throw error;
-    }
+// Ensure modules are loaded (they export to window)
+if (!window.CONFIG || !window.state || !window.APIClient) {
+  console.error('[ERROR] Core modules not loaded. Ensure core/config.js, core/state.js, and core/api-client.js are loaded before new-dashboard.js');
+  // Create fallbacks to prevent crashes
+  if (!window.CONFIG) window.CONFIG = { API_BASE: 'http://localhost:43917' };
+  if (!window.state) window.state = { data: {}, stats: {} };
+  if (!window.APIClient) {
+    console.error('[ERROR] APIClient not available! API calls will fail.');
+    window.APIClient = { get: () => Promise.reject(new Error('APIClient not loaded')), post: () => Promise.reject(new Error('APIClient not loaded')) };
   }
 }
+
+// Use globals from modules (available via window exports)
+// CONFIG, state, and APIClient are now loaded from core modules
+// They are available as window.CONFIG, window.state, and window.APIClient
+// No need to redeclare them here
 
 // ===================================
 // WebSocket Manager
 // ===================================
-
-class WebSocketManager {
-  constructor() {
-    this.socket = null;
-    this.reconnectAttempts = 0;
-    this.maxReconnectAttempts = 5;
-    this.subscriptions = new Set();
-    this.lastMessageId = 0;
-    
-    // Restore connection state from localStorage
-    this.restoreConnectionState();
-  }
-
-  restoreConnectionState() {
-    try {
-      const saved = localStorage.getItem('ws_connection_state');
-      if (saved) {
-        const state = JSON.parse(saved);
-        this.subscriptions = new Set(state.subscriptions || []);
-        this.lastMessageId = state.lastMessageId || 0;
-        console.log('[SYNC] Restored WebSocket state:', {
-          subscriptions: this.subscriptions.size,
-          lastMessageId: this.lastMessageId
-        });
-      }
-    } catch (error) {
-      console.warn('[WARNING] Failed to restore WebSocket state:', error);
-    }
-  }
-
-  saveConnectionState() {
-    try {
-      const state = {
-        subscriptions: Array.from(this.subscriptions),
-        lastMessageId: this.lastMessageId,
-        timestamp: Date.now()
-      };
-      localStorage.setItem('ws_connection_state', JSON.stringify(state));
-    } catch (error) {
-      console.warn('[WARNING] Failed to save WebSocket state:', error);
-    }
-  }
-
-  connect() {
-    try {
-      this.socket = io(CONFIG.API_BASE, {
-        transports: ['websocket', 'polling'],
-        reconnection: true,
-        reconnectionDelay: 1000,
-        reconnectionDelayMax: 5000,
-        reconnectionAttempts: this.maxReconnectAttempts,
-        // Resume from last known state
-        query: {
-          lastMessageId: this.lastMessageId
-        }
-      });
-
-      this.socket.on('connect', () => {
-        console.log('[SUCCESS] WebSocket connected');
-        state.connected = true;
-        updateConnectionStatus(true);
-        this.reconnectAttempts = 0;
-        
-        // Auto-restore subscriptions after reconnect
-        this.restoreSubscriptions();
-      });
-
-      this.socket.on('disconnect', () => {
-        console.log('[ERROR] WebSocket disconnected');
-        state.connected = false;
-        updateConnectionStatus(false);
-        
-        // Save state before disconnect
-        this.saveConnectionState();
-      });
-
-      this.socket.on('activityUpdate', (data) => {
-        console.log('Activity update:', data);
-        if (data.id) this.lastMessageId = Math.max(this.lastMessageId, data.id);
-        handleRealtimeUpdate(data);
-        this.saveConnectionState();
-      });
-
-      this.socket.on('terminal-command', (cmd) => {
-        console.log('Terminal command:', cmd);
-        handleTerminalCommand(cmd);
-      });
-
-      this.socket.on('connect_error', (error) => {
-        console.error('[ERROR] WebSocket connection error:', error);
-        this.reconnectAttempts++;
-      });
-
-      state.socket = this.socket;
-    } catch (error) {
-      console.error('[ERROR] Failed to initialize WebSocket:', error);
-    }
-  }
-
-  restoreSubscriptions() {
-    // Re-subscribe to all previously active subscriptions
-    this.subscriptions.forEach(channel => {
-      console.log(`[SYNC] Re-subscribing to: ${channel}`);
-      this.socket.emit('subscribe', channel);
-    });
-  }
-
-  subscribe(channel) {
-    this.subscriptions.add(channel);
-    if (this.socket && this.socket.connected) {
-      this.socket.emit('subscribe', channel);
-    }
-    this.saveConnectionState();
-  }
-
-  unsubscribe(channel) {
-    this.subscriptions.delete(channel);
-    if (this.socket && this.socket.connected) {
-      this.socket.emit('unsubscribe', channel);
-    }
-    this.saveConnectionState();
-  }
-
-  disconnect() {
-    if (this.socket) {
-      this.socket.disconnect();
-      this.socket = null;
-    }
-  }
-}
+// NOTE: WebSocketManager is now loaded from core/websocket-manager.js
 
 // ===================================
 // Data Fetching & Processing
@@ -309,20 +52,55 @@ async function initializeDashboard() {
     
     // Step 2: Check server version to see if we need to sync
     initProgress.update('server', 0);
-    const serverHealth = await APIClient.get('/health');
-    const serverSequence = serverHealth.sequence || 0;
-    initProgress.update('server', 100);
+    let serverHealth = null;
+    let isConnected = false;
     
-    const cacheStale = await persistentStorage.isCacheStale(serverSequence);
+    try {
+      serverHealth = await APIClient.get('/health');
+      const serverSequence = serverHealth.sequence || 0;
+      isConnected = serverHealth.status === 'running' || serverHealth.sequence !== undefined;
+      initProgress.update('server', 100);
+      
+      // Update connection state
+      if (window.state) {
+        window.state.connected = isConnected;
+      }
+      
+      if (isConnected) {
+        updateConnectionStatus(true, 'Connected to companion service');
+      } else {
+        updateConnectionStatus(false, 'Companion service offline');
+      }
+    } catch (error) {
+      console.warn('[WARNING] Health check failed:', error.message);
+      isConnected = false;
+      if (window.state) {
+        window.state.connected = false;
+      }
+      updateConnectionStatus(false, 'Cannot reach companion service');
+      initProgress.update('server', 100);
+    }
     
-    if (cacheStale) {
-      console.log('📥 Cache stale, fetching updates...');
+    const cacheStale = serverHealth ? await persistentStorage.isCacheStale(serverHealth.sequence || 0) : false;
+    
+    if (cacheStale && isConnected) {
+      console.log('Cache stale, fetching updates...');
       initProgress.update('data', 0);
-      await fetchRecentData();
-      await persistentStorage.updateServerSequence(serverSequence);
-      initProgress.update('data', 100);
+      try {
+        await fetchRecentData();
+        await persistentStorage.updateServerSequence(serverHealth.sequence || 0);
+        updateConnectionStatus(true, 'Connected - data synced');
+        initProgress.update('data', 100);
+      } catch (error) {
+        console.warn('[WARNING] Data fetch failed:', error.message);
+        updateConnectionStatus(false, 'Connected but sync failed');
+        initProgress.update('data', 100);
+      }
     } else {
       console.log('[SUCCESS] Cache up-to-date, using cached data');
+      if (isConnected) {
+        updateConnectionStatus(true, 'Connected - using cached data');
+      }
       initProgress.update('data', 100);
     }
     
@@ -332,20 +110,29 @@ async function initializeDashboard() {
     await renderCurrentView();
     initProgress.update('render', 100);
     
-    // Mark as complete
-    initProgress.complete();
+    // Mark as complete with final status
+    if (isConnected) {
+      initProgress.complete('Connected');
+    } else {
+      initProgress.complete('Offline - using cached data');
+    }
     
     // Step 4: Background: fetch older history if needed
-    setTimeout(() => {
-      fetchOlderHistory();
-    }, 3000);
+    if (isConnected) {
+      setTimeout(() => {
+        fetchOlderHistory();
+      }, 3000);
+    }
     
     // Step 5: Heavy analytics will be loaded on-demand via analyticsManager
-    console.log('⏳ Heavy analytics deferred until idle/tab focus');
+    console.log('Heavy analytics deferred until idle/tab focus');
     
   } catch (error) {
     console.error('Initialization error:', error);
     updateConnectionStatus(false, 'Connection failed');
+    if (window.state) {
+      window.state.connected = false;
+    }
     // Fallback to old method
     await fetchAllData();
   }
@@ -380,9 +167,35 @@ async function loadFromCache() {
  * Fetch only recent data (last 24 hours by default)
  */
 async function fetchRecentData() {
+  // FIX: Check if APIClient is available before using it
+  if (!APIClient || typeof APIClient.get !== 'function') {
+    console.error('[ERROR] APIClient is not available. Ensure core/api-client.js is loaded before new-dashboard.js');
+    // Fallback to using cached data only
+    if (!state) {
+      console.error('[ERROR] state is not defined');
+      return;
+    }
+    if (!state.data) {
+      state.data = {};
+    }
+    if (!state.data.events) state.data.events = [];
+    if (!state.data.prompts) state.data.prompts = [];
+    calculateStats();
+    return;
+  }
+  
+  // FIX: Ensure state.data exists
+  if (!state) {
+    console.error('[ERROR] state is not defined');
+    return;
+  }
+  if (!state.data) {
+    state.data = {};
+  }
+
   const windowHours = 24 * 365; // 1 year of data
   const windowLabel = windowHours >= 24 ? `${windowHours / 24}d` : `${windowHours}h`;
-  const startTime = Date.now() - (windowHours * 60 * 60 * 1000); // ✅ FIX: Define startTime
+  const startTime = Date.now() - (windowHours * 60 * 60 * 1000);
   console.log(`[SYNC] Fetching recent data (${windowLabel} window)...`);
   
   const pageSize = 500; // Optimized limit for performance
@@ -421,9 +234,9 @@ async function fetchRecentData() {
     });
     
     // Process activity
-    console.log('[DEBUG] Activity response:', { hasData: !!activity.data, isArray: Array.isArray(activity.data), length: activity.data?.length });
+    console.log('[DEBUG] Activity response:', { hasActivity: !!activity, hasData: !!activity?.data, isArray: Array.isArray(activity?.data), length: activity?.data?.length });
     
-    if (activity.data && Array.isArray(activity.data)) {
+    if (activity && activity.data && Array.isArray(activity.data)) {
       // Store total count for all-time stats
       if (activity.pagination?.total) {
         if (!state.stats) state.stats = {};
@@ -485,11 +298,11 @@ async function fetchRecentData() {
       state.data.workspaces = workspaces;
     }
     
-    // ✅ Calculate stats after fetching data
+    // Calculate stats after fetching data
     console.log(`[SYNC] Fetch complete. Events: ${state.data.events.length}, Prompts: ${state.data.prompts.length}`);
     calculateStats();
     
-    // 🔧 FIX: Re-render current view to update charts with fresh data
+    // FIX: Re-render current view to update charts with fresh data
     if (state.currentView === 'analytics') {
       console.log('[CHART] Re-rendering charts with fresh data...');
       setTimeout(() => renderCurrentView(), 200);
@@ -811,8 +624,9 @@ const initProgress = {
     console.log(`[PROGRESS] ${label} (${overallPercent}% overall)`);
   },
   
-  complete() {
-    updateConnectionStatus(true, 'Connected', 100);
+  complete(finalMessage = null) {
+    const message = finalMessage || 'Connected';
+    updateConnectionStatus(true, message, 100);
     // Hide progress bar after a short delay
     setTimeout(() => {
       const progressContainer = document.getElementById('connectionProgress');
@@ -820,17 +634,23 @@ const initProgress = {
         progressContainer.classList.remove('active');
       }
     }, 500);
-    console.log('[PROGRESS] ✅ Initialization complete');
+    console.log('[PROGRESS] Initialization complete');
   }
 };
 
 function updateStatsDisplay() {
   // Defensive checks for DOM elements
+  const statWorkspaces = document.getElementById('statWorkspaces');
   const statSessions = document.getElementById('statSessions');
   const statFileChanges = document.getElementById('statFileChanges');
   const statAIInteractions = document.getElementById('statAIInteractions');
   const statCodeChanged = document.getElementById('statCodeChanged');
   const statAvgContext = document.getElementById('statAvgContext');
+  
+  // Update workspace count
+  const workspaceCount = state.stats.workspaces || 
+                        (state.data?.workspaces?.length || 0);
+  if (statWorkspaces) statWorkspaces.textContent = workspaceCount.toLocaleString();
   
   if (statSessions) statSessions.textContent = state.stats.sessions || 0;
   if (statFileChanges) statFileChanges.textContent = state.stats.fileChanges || 0;
@@ -877,49 +697,32 @@ function switchView(viewName) {
   renderCurrentView();
 }
 
-function renderCurrentView() {
-  const container = document.getElementById('viewContainer');
-  if (!container) return;
-
-  switch (state.currentView) {
-    case 'overview':
-      renderOverviewView(container);
-      break;
-    case 'activity':
-      renderActivityView(container);
-      break;
-    case 'analytics':
-      renderAnalyticsView(container);
-      break;
-    case 'filegraph':
-      renderFileGraphView(container);
-      break;
-    case 'navigator':
-      renderNavigatorView(container);
-      break;
-    case 'todos':
-      renderTodoView(container);
-      break;
-    case 'system':
-      renderSystemView(container);
-      break;
-    case 'api-docs':
-      renderAPIDocsView(container);
-      break;
-    default:
-      container.innerHTML = '<div class="empty-state">View not found</div>';
-  }
-}
-
 // ===================================
-// Overview View
+// View rendering is handled by core/view-router.js
+// Individual view implementations are in views/ directory
 // ===================================
 
-function renderOverviewView(container) {
+// Note: All view render functions are now in separate view files:
+// - views/overview/index.js
+// - views/activity/index.js  
+// - views/analytics/index.js
+// - views/file-graph/index.js
+// - views/navigator/index.js
+// - views/system/index.js
+// - views/api-docs/index.js
+// - views/threads/index.js
+
+// Removed duplicate view render functions - use the ones from views/ instead
+// ===================================
+// Overview View (moved to views/overview/index.js)
+// ===================================
+// Removed: function renderOverviewView - see views/overview/index.js
+
+function _legacy_renderOverviewView(container) {
   const recentEvents = state.data.events.slice(-10).reverse();
 
   container.innerHTML = `
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: var(--space-xl);">
+    <div class="overview-view">
       
       <!-- Recent Activity -->
       <div class="card">
@@ -963,9 +766,80 @@ function renderActivityTimeline(events) {
   `;
 }
 
+/**
+ * Group items into temporal threads/sessions based on time proximity
+ * Events within a time window (default 15 minutes) are grouped together
+ */
+function groupIntoTemporalThreads(items, timeWindowMs = 15 * 60 * 1000) {
+  if (items.length === 0) return [];
+  
+  // Filter out items with invalid timestamps first
+  const validItems = items.filter(item => {
+    return item.sortTime && !isNaN(item.sortTime) && isFinite(item.sortTime);
+  });
+  
+  if (validItems.length === 0) {
+    // If no valid items, return items as-is (don't group)
+    return items.map(item => ({
+      id: `single-${item.id || Date.now()}-${Math.random()}`,
+      items: [item],
+      startTime: item.sortTime || Date.now(),
+      lastItemTime: item.sortTime || Date.now(),
+      endTime: item.sortTime || Date.now(),
+      itemType: 'temporal-thread'
+    }));
+  }
+  
+  // Sort items by time (newest first for display, but we'll process chronologically)
+  const sorted = [...validItems].sort((a, b) => {
+    const aTime = a.sortTime || 0;
+    const bTime = b.sortTime || 0;
+    return bTime - aTime;
+  });
+  
+  const threads = [];
+  let currentThread = null;
+  
+  // Process from oldest to newest to build threads
+  const chronological = [...sorted].reverse();
+  
+  chronological.forEach(item => {
+    const itemTime = item.sortTime || Date.now();
+    
+    if (!currentThread || (itemTime - currentThread.lastItemTime) > timeWindowMs) {
+      // Start a new thread
+      if (currentThread) {
+        threads.push(currentThread);
+      }
+      currentThread = {
+        id: `thread-${itemTime}-${Math.random().toString(36).substr(2, 9)}`,
+        items: [item],
+        startTime: itemTime,
+        lastItemTime: itemTime,
+        endTime: itemTime,
+        itemType: 'temporal-thread'
+      };
+    } else {
+      // Add to current thread
+      currentThread.items.push(item);
+      currentThread.lastItemTime = itemTime;
+      currentThread.endTime = itemTime;
+    }
+  });
+  
+  // Add final thread
+  if (currentThread) {
+    threads.push(currentThread);
+  }
+  
+  // Convert back to reverse chronological for display
+  return threads.reverse();
+}
+
 function renderUnifiedTimeline(items) {
-  // Group prompts by conversation for threading
+  // First: Group prompts by conversation for threading
   const conversationMap = new Map();
+  const standalonePrompts = [];
   const nonPromptItems = [];
   
   items.forEach(item => {
@@ -974,21 +848,28 @@ function renderUnifiedTimeline(items) {
       const isThread = item.type === 'conversation-thread' && !item.parentConversationId;
       const conversationId = isThread ? item.composerId : (item.parentConversationId || item.composerId);
       
-      if (!conversationMap.has(conversationId)) {
-        conversationMap.set(conversationId, {
-          thread: isThread ? item : null,
-          messages: [],
-          timestamp: item.sortTime
-        });
-      }
-      
-      const conv = conversationMap.get(conversationId);
-      if (isThread) {
-        conv.thread = item;
+      // Only group prompts that are part of conversations
+      // Standalone prompts (no conversationId) should be rendered individually
+      if (conversationId) {
+        if (!conversationMap.has(conversationId)) {
+          conversationMap.set(conversationId, {
+            thread: isThread ? item : null,
+            messages: [],
+            timestamp: item.sortTime
+          });
+        }
+        
+        const conv = conversationMap.get(conversationId);
+        if (isThread) {
+          conv.thread = item;
+        } else {
+          conv.messages.push(item);
+        }
+        conv.timestamp = Math.max(conv.timestamp, item.sortTime);
       } else {
-        conv.messages.push(item);
+        // This is a standalone prompt, not part of a conversation
+        standalonePrompts.push(item);
       }
-      conv.timestamp = Math.max(conv.timestamp, item.sortTime);
     } else {
       nonPromptItems.push(item);
     }
@@ -1001,28 +882,45 @@ function renderUnifiedTimeline(items) {
     sortTime: conv.timestamp
   }));
   
-  // Merge and sort all items
-  const allItems = [...conversationItems, ...nonPromptItems]
-    .sort((a, b) => b.sortTime - a.sortTime);
+  // Merge all items (conversations, standalone prompts, and other items)
+  const allItems = [...conversationItems, ...standalonePrompts, ...nonPromptItems]
+    .sort((a, b) => {
+      const aTime = a.sortTime || 0;
+      const bTime = b.sortTime || 0;
+      return bTime - aTime;
+    });
+  
+  // Apply temporal threading to group items by time windows
+  // Only group if items have meaningful time differences
+  const temporalThreads = groupIntoTemporalThreads(allItems, 15 * 60 * 1000); // 15 minute window
   
   return `
-    <div class="timeline">
-      ${allItems.map(item => {
-        if (item.itemType === 'event') {
-          return renderTimelineItem(item);
-        } else if (item.itemType === 'terminal') {
-          return renderTerminalTimelineItem(item);
-        } else if (item.itemType === 'conversation') {
-          return renderConversationThread(item.conversation);
-        } else {
-          return renderPromptTimelineItem(item);
+    <div class="timeline-alternating">
+      <div class="timeline-axis"></div>
+      ${temporalThreads.map(thread => {
+        // If thread has only one item, render it with appropriate side
+        if (thread.items.length === 1) {
+          const item = thread.items[0];
+          if (item.itemType === 'event') {
+            return renderTimelineItem(item, 'left');
+          } else if (item.itemType === 'terminal') {
+            return renderTerminalTimelineItem(item, 'left');
+          } else if (item.itemType === 'conversation') {
+            return renderConversationThread(item.conversation, 'right');
+          } else if (item.itemType === 'prompt') {
+            return renderPromptTimelineItem(item, 'right');
+          }
+          return '';
         }
+        
+        // Multiple items: render as a temporal thread/session with mixed content
+        return renderTemporalThread(thread);
       }).join('')}
     </div>
   `;
 }
 
-function renderConversationThread(conversation) {
+function renderConversationThread(conversation, side = 'right') {
   const { thread, messages } = conversation;
   const title = thread?.conversationTitle || thread?.text || 'Untitled Conversation';
   const time = formatTimeAgo(thread?.timestamp || conversation.timestamp);
@@ -1033,25 +931,25 @@ function renderConversationThread(conversation) {
   const sortedMessages = messages.sort((a, b) => a.sortTime - b.sortTime);
   
   return `
-    <div class="timeline-item conversation-timeline-item" style="border-left: 3px solid var(--color-primary);">
-      <div class="timeline-content">
-        <div class="timeline-header" style="cursor: pointer;" onclick="toggleConversationMessages('${threadId}')">
-          <div class="timeline-title" style="display: flex; align-items: center; gap: var(--space-sm);">
-            <span id="conv-icon-${threadId}" style="transition: transform 0.2s;"></span>
-            <span style="font-weight: 600;">${escapeHtml(title)}</span>
-            ${messageCount > 0 ? `<span style="color: var(--color-text-muted); font-size: var(--text-sm);">(${messageCount} messages)</span>` : ''}
+    <div class="timeline-item timeline-item-${side} conversation-timeline-item">
+      <div class="timeline-content prompt-content">
+        <div class="timeline-header clickable" onclick="toggleConversationMessages('${threadId}')">
+          <div class="timeline-title">
+            <span id="conv-icon-${threadId}" class="timeline-title-icon"></span>
+            <span class="timeline-title-text">${escapeHtml(title)}</span>
+            ${messageCount > 0 ? `<span class="timeline-title-meta">(${messageCount} messages)</span>` : ''}
           </div>
           <div class="timeline-meta">${time}</div>
         </div>
-        <div class="timeline-description" style="display: flex; gap: var(--space-xs); flex-wrap: wrap;">
+        <div class="timeline-description">
           <span class="badge badge-prompt">Conversation</span>
-          ${thread?.workspaceName ? `<span class="badge">${thread.workspaceName}</span>` : ''}
-          ${thread?.mode ? `<span class="badge" style="background: var(--color-primary); color: white;">${thread.mode}</span>` : ''}
+          ${thread?.workspaceName ? `<span class="badge">${escapeHtml(thread.workspaceName)}</span>` : ''}
+          ${thread?.mode ? `<span class="badge" style="background: var(--color-primary); color: white;">${escapeHtml(thread.mode)}</span>` : ''}
         </div>
         
         <!-- Messages (initially hidden) -->
-        <div id="conv-messages-${threadId}" style="display: none; margin-top: var(--space-md); padding-top: var(--space-md); border-top: 1px solid var(--color-border);">
-          ${sortedMessages.length > 0 ? sortedMessages.map(msg => renderConversationMessage(msg)).join('') : '<div style="color: var(--color-text-muted); font-size: var(--text-sm); padding: var(--space-sm);">No messages in this conversation yet</div>'}
+        <div id="conv-messages-${threadId}" class="conversation-messages">
+          ${sortedMessages.length > 0 ? sortedMessages.map(msg => renderConversationMessage(msg)).join('') : '<div class="conversation-empty">No messages in this conversation yet</div>'}
         </div>
       </div>
     </div>
@@ -1067,15 +965,15 @@ function renderConversationMessage(message) {
   const displayText = text.length > 300 ? text.substring(0, 300) + '...' : text;
   
   return `
-    <div style="padding: var(--space-sm); margin-bottom: var(--space-xs); background: ${bgColor}; border-radius: var(--radius-sm); border-left: 3px solid ${isUser ? 'var(--color-primary)' : 'var(--color-accent)'};">
-      <div style="display: flex; align-items: center; gap: var(--space-sm); margin-bottom: var(--space-xs);">
-        <span>${icon}</span>
-        <span style="font-weight: 600; font-size: var(--text-sm);">${isUser ? 'You' : 'AI Assistant'}</span>
-        <span style="color: var(--color-text-muted); font-size: var(--text-xs);">${time}</span>
+    <div class="conversation-message ${isUser ? 'user' : 'ai'}">
+      <div class="conversation-message-header">
+        <span class="conversation-message-icon">${icon}</span>
+        <span class="conversation-message-author">${isUser ? 'You' : 'AI Assistant'}</span>
+        <span class="conversation-message-time">${time}</span>
         ${message.thinkingTimeSeconds ? `<span class="badge" style="background: var(--color-success); color: white;">Thinking ${message.thinkingTimeSeconds}s</span>` : ''}
       </div>
-      <div style="font-size: var(--text-sm); color: var(--color-text); white-space: pre-wrap; word-break: break-word;">${escapeHtml(displayText)}</div>
-      ${text.length > 300 ? `<button onclick="showEventModal('${message.id}')" style="margin-top: var(--space-xs); font-size: var(--text-xs); color: var(--color-primary); background: none; border: none; padding: 0; cursor: pointer; text-decoration: underline;">Read more</button>` : ''}
+      <div class="conversation-message-content">${escapeHtml(displayText)}</div>
+      ${text.length > 300 ? `<button class="conversation-message-read-more" onclick="showEventModal('${message.id}')">Read more</button>` : ''}
     </div>
   `;
 }
@@ -1085,14 +983,23 @@ function toggleConversationMessages(threadId) {
   const icon = document.getElementById(`conv-icon-${threadId}`);
   
   if (messagesDiv && icon) {
-    const isHidden = messagesDiv.style.display === 'none';
-    messagesDiv.style.display = isHidden ? 'block' : 'none';
-    icon.style.transform = isHidden ? 'rotate(90deg)' : 'rotate(0deg)';
+    const isHidden = !messagesDiv.classList.contains('visible');
+    if (isHidden) {
+      messagesDiv.classList.add('visible');
+      icon.style.transform = 'rotate(90deg)';
+    } else {
+      messagesDiv.classList.remove('visible');
+      icon.style.transform = 'rotate(0deg)';
+    }
   }
 }
 
-function renderPromptTimelineItem(prompt) {
-  const time = formatTimeAgo(prompt.timestamp);
+function renderPromptTimelineItem(prompt, side = 'right') {
+  // Use sortTime if available (processed timestamp), otherwise fall back to timestamp
+  const timestamp = prompt.sortTime && !isNaN(prompt.sortTime) ? prompt.sortTime : 
+                    (prompt.timestamp ? new Date(prompt.timestamp).getTime() : Date.now());
+  const time = formatTimeAgo(timestamp);
+  
   const promptText = prompt.text || prompt.prompt || prompt.preview || prompt.content || 'No prompt text';
   const displayText = promptText.length > 100 ? promptText.substring(0, 100) + '...' : promptText;
   const isJsonLike = promptText.startsWith('{') || promptText.startsWith('[');
@@ -1107,18 +1014,18 @@ function renderPromptTimelineItem(prompt) {
   const confidence = prompt.confidence || 'medium';
   
   return `
-    <div class="timeline-item prompt-timeline-item" onclick="showEventModal('${prompt.id}')">
-      <div class="timeline-content">
+    <div class="timeline-item timeline-item-${side} prompt-timeline-item" onclick="showEventModal('${prompt.id}')">
+      <div class="timeline-content prompt-content">
         <div class="timeline-header">
-          <div class="timeline-title" style="display: flex; align-items: center; gap: var(--space-sm);">
+          <div class="timeline-title">
             <span>${icon}</span>
-            <span>${displayText}</span>
+            <span>${escapeHtml(displayText)}</span>
           </div>
           <div class="timeline-meta">${time}</div>
         </div>
-        <div class="timeline-description" style="display: flex; gap: var(--space-xs); flex-wrap: wrap;">
-          <span class="badge badge-prompt">${source}</span>
-          ${prompt.workspaceName ? `<span class="badge">${prompt.workspaceName}</span>` : prompt.workspaceId ? `<span class="badge">${prompt.workspaceId.substring(0, 8)}</span>` : ''}
+        <div class="timeline-description">
+          <span class="badge badge-prompt">${escapeHtml(source)}</span>
+          ${prompt.workspaceName ? `<span class="badge">${escapeHtml(prompt.workspaceName)}</span>` : prompt.workspaceId ? `<span class="badge">${escapeHtml(prompt.workspaceId.substring(0, 8))}</span>` : ''}
           ${prompt.composerId ? `<span class="badge">Composer</span>` : ''}
           ${prompt.contextUsage > 0 ? `<span class="badge" style="background: var(--color-warning); color: white;">${prompt.contextUsage.toFixed(1)}% context</span>` : ''}
         </div>
@@ -1127,7 +1034,106 @@ function renderPromptTimelineItem(prompt) {
   `;
 }
 
-function renderTerminalTimelineItem(cmd) {
+/**
+ * Render a temporal thread/session containing multiple events within a time window
+ */
+function renderTemporalThread(thread) {
+  // Validate timestamps
+  const startTime = thread.startTime && !isNaN(thread.startTime) ? thread.startTime : Date.now();
+  const endTime = thread.endTime && !isNaN(thread.endTime) ? thread.endTime : startTime;
+  
+  const duration = endTime - startTime;
+  const durationMinutes = duration > 0 ? Math.round(duration / 60000) : 0;
+  
+  const startDate = new Date(startTime);
+  const endDate = new Date(endTime);
+  
+  // Only show time range if times are different, otherwise show single time
+  const timeRange = duration > 60000 // More than 1 minute difference
+    ? `${startDate.toLocaleTimeString()} - ${endDate.toLocaleTimeString()}`
+    : startDate.toLocaleTimeString();
+  
+  const threadId = thread.id;
+  
+  // Count items by type
+  const eventCounts = {
+    events: 0,
+    prompts: 0,
+    terminals: 0,
+    conversations: 0
+  };
+  
+  thread.items.forEach(item => {
+    if (item.itemType === 'event') eventCounts.events++;
+    else if (item.itemType === 'prompt') eventCounts.prompts++;
+    else if (item.itemType === 'terminal') eventCounts.terminals++;
+    else if (item.itemType === 'conversation') eventCounts.conversations++;
+  });
+  
+  const totalItems = thread.items.length;
+  const summary = [
+    eventCounts.events > 0 ? `${eventCounts.events} file change${eventCounts.events !== 1 ? 's' : ''}` : '',
+    eventCounts.prompts > 0 ? `${eventCounts.prompts} prompt${eventCounts.prompts !== 1 ? 's' : ''}` : '',
+    eventCounts.terminals > 0 ? `${eventCounts.terminals} terminal command${eventCounts.terminals !== 1 ? 's' : ''}` : '',
+    eventCounts.conversations > 0 ? `${eventCounts.conversations} conversation${eventCounts.conversations !== 1 ? 's' : ''}` : ''
+  ].filter(Boolean).join(', ');
+  
+  // Sort items within thread chronologically (oldest first within the thread)
+  const sortedItems = [...thread.items].sort((a, b) => a.sortTime - b.sortTime);
+  
+  return `
+    <div class="timeline-item temporal-thread-item">
+      <div class="timeline-content">
+        <div class="timeline-header clickable" onclick="toggleTemporalThread('${threadId}')">
+          <div class="timeline-title">
+            <span id="thread-icon-${threadId}" class="timeline-title-icon">▶</span>
+            <span class="timeline-title-text">Activity Session</span>
+            <span class="timeline-title-meta">(${totalItems} items • ${durationMinutes} min)</span>
+          </div>
+          <div class="timeline-meta">${formatTimeAgo(thread.startTime)}</div>
+        </div>
+        <div class="timeline-description">
+          <span class="badge badge-prompt">${timeRange}</span>
+          <span class="badge">${summary}</span>
+        </div>
+        
+        <!-- Thread items (initially hidden) -->
+        <div id="thread-items-${threadId}" class="temporal-thread-items">
+          ${sortedItems.map(item => {
+            if (item.itemType === 'event') {
+              return renderTimelineItem(item, 'left');
+            } else if (item.itemType === 'terminal') {
+              return renderTerminalTimelineItem(item, 'left');
+            } else if (item.itemType === 'conversation') {
+              return renderConversationThread(item.conversation, 'right');
+            } else if (item.itemType === 'prompt') {
+              return renderPromptTimelineItem(item, 'right');
+            }
+            return '';
+          }).join('')}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function toggleTemporalThread(threadId) {
+  const itemsDiv = document.getElementById(`thread-items-${threadId}`);
+  const icon = document.getElementById(`thread-icon-${threadId}`);
+  
+  if (itemsDiv && icon) {
+    const isHidden = !itemsDiv.classList.contains('visible');
+    if (isHidden) {
+      itemsDiv.classList.add('visible');
+      icon.textContent = '▼';
+    } else {
+      itemsDiv.classList.remove('visible');
+      icon.textContent = '▶';
+    }
+  }
+}
+
+function renderTerminalTimelineItem(cmd, side = 'left') {
   const time = formatTimeAgo(cmd.timestamp);
   const commandText = cmd.command || 'Unknown command';
   const displayText = commandText.length > 80 ? commandText.substring(0, 80) + '...' : commandText;
@@ -1136,19 +1142,19 @@ function renderTerminalTimelineItem(cmd) {
   const source = cmd.source || 'terminal';
   
   return `
-    <div class="timeline-item terminal-timeline-item ${isError ? 'error' : ''}" style="border-left-color: ${isError ? '#ef4444' : '#8b5cf6'}; cursor: pointer;" onclick="showTerminalModal('${cmd.id}')">
+    <div class="timeline-item timeline-item-${side} terminal-timeline-item event-content ${isError ? 'error' : ''}" style="border-left-color: ${isError ? '#ef4444' : '#8b5cf6'};" onclick="showTerminalModal('${cmd.id}')">
       <div class="timeline-content">
         <div class="timeline-header">
-          <div class="timeline-title" style="display: flex; align-items: center; gap: var(--space-sm);">
+          <div class="timeline-title">
             <span>${icon}</span>
-            <code style="background: rgba(0,0,0,0.05); padding: 2px 6px; border-radius: 3px; font-size: 13px;">${displayText}</code>
+            <code class="terminal-command-code">${escapeHtml(displayText)}</code>
           </div>
           <div class="timeline-meta">${time}</div>
         </div>
-        <div class="timeline-description" style="display: flex; gap: var(--space-xs); flex-wrap: wrap;">
-          <span class="badge" style="background: #6366f1; color: white;">${source}</span>
-          ${cmd.shell ? `<span class="badge">${cmd.shell}</span>` : ''}
-          ${cmd.workspace ? `<span class="badge" style="font-size: 11px;">${cmd.workspace.split('/').pop()}</span>` : ''}
+        <div class="timeline-description">
+          <span class="badge" style="background: #6366f1; color: white;">${escapeHtml(source)}</span>
+          ${cmd.shell ? `<span class="badge">${escapeHtml(cmd.shell)}</span>` : ''}
+          ${cmd.workspace ? `<span class="badge" style="font-size: 11px;">${escapeHtml(cmd.workspace.split('/').pop())}</span>` : ''}
           ${isError ? `<span class="badge" style="background: #ef4444; color: white;">Exit ${cmd.exit_code}</span>` : ''}
           ${cmd.duration ? `<span class="badge">${cmd.duration}ms</span>` : ''}
         </div>
@@ -1156,7 +1162,7 @@ function renderTerminalTimelineItem(cmd) {
     </div>
   `;
 }
-function renderTimelineItem(event) {
+function renderTimelineItem(event, side = 'left') {
   const time = new Date(event.timestamp).toLocaleTimeString();
   const title = getEventTitle(event);
   const desc = getEventDescription(event);
@@ -1177,7 +1183,7 @@ function renderTimelineItem(event) {
       }).length;
       
       if (recentPromptCount > 0) {
-        promptBadge = `<span style="display: inline-flex; align-items: center; justify-content: center; background: var(--color-accent); color: white; font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 10px; margin-left: 8px;" title="Has related AI prompts">AI</span>`;
+        promptBadge = `<span class="context-indicator ai" title="Has related AI prompts">AI</span>`;
       }
     }
     
@@ -1187,19 +1193,19 @@ function renderTimelineItem(event) {
       
       // @ files indicator
       if (event.context.atFiles && event.context.atFiles.length > 0) {
-        badges.push(`<span style="display: inline-flex; align-items: center; justify-content: center; background: #10b981; color: white; font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 10px; margin-left: 4px;" title="${event.context.atFiles.length} @ referenced files">[FILE] ${event.context.atFiles.length}</span>`);
+        badges.push(`<span class="context-indicator files" title="${event.context.atFiles.length} @ referenced files">[FILE] ${event.context.atFiles.length}</span>`);
       }
       
       // Context files indicator
       const contextFileCount = (event.context.contextFiles?.attachedFiles?.length || 0) + 
                                (event.context.contextFiles?.codebaseFiles?.length || 0);
       if (contextFileCount > 0) {
-        badges.push(`<span style="display: inline-flex; align-items: center; justify-content: center; background: #3b82f6; color: white; font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 10px; margin-left: 4px;" title="${contextFileCount} context files">${contextFileCount} files</span>`);
+        badges.push(`<span class="context-indicator context-files" title="${contextFileCount} context files">${contextFileCount} files</span>`);
       }
       
       // UI state indicator
       if (event.context.browserState && event.context.browserState.tabs && event.context.browserState.tabs.length > 0) {
-        badges.push(`<span style="display: inline-flex; align-items: center; justify-content: center; background: #8b5cf6; color: white; font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 10px; margin-left: 4px;" title="${event.context.browserState.tabs.length} tabs open">[SYSTEM] ${event.context.browserState.tabs.length}</span>`);
+        badges.push(`<span class="context-indicator system" title="${event.context.browserState.tabs.length} tabs open">[SYSTEM] ${event.context.browserState.tabs.length}</span>`);
       }
       
       contextIndicators = badges.join('');
@@ -1209,7 +1215,7 @@ function renderTimelineItem(event) {
   }
   
   return `
-    <div class="timeline-item" onclick="showEventModal('${event.id || event.timestamp}')">
+    <div class="timeline-item timeline-item-left event-content" onclick="showEventModal('${event.id || event.timestamp}')">
       <div class="timeline-content">
         <div class="timeline-header">
           <div class="timeline-title">
@@ -1266,7 +1272,7 @@ function getEventDescription(event) {
 
 function renderPromptList(entries) {
   return `
-    <div style="display: flex; flex-direction: column; gap: var(--space-md);">
+    <div class="prompt-list">
       ${entries.map(entry => {
         // Get text from various possible fields
         const promptText = entry.prompt || entry.text || entry.preview || entry.content;
@@ -1274,16 +1280,16 @@ function renderPromptList(entries) {
         const source = entry.source || entry.method || 'unknown';
         
         return `
-          <div style="padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md); cursor: pointer; border-left: 3px solid var(--color-accent);" onclick="showThreadModal('${entry.id}')">
-            <div style="font-size: var(--text-sm); color: var(--color-text); margin-bottom: var(--space-xs); line-height: 1.5;">
+          <div class="prompt-item" onclick="showThreadModal('${entry.id}')">
+            <div class="prompt-item-text">
               ${escapeHtml(displayText)}
             </div>
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-              <div style="font-size: var(--text-xs); color: var(--color-text-subtle);">
+            <div class="prompt-item-footer">
+              <div class="prompt-item-timestamp">
                 ${new Date(entry.timestamp).toLocaleString()}
               </div>
-              <div style="font-size: var(--text-xs); color: var(--color-text-muted); padding: 2px var(--space-xs); background: var(--color-surface); border-radius: var(--radius-sm);">
-                ${source}
+              <div class="prompt-item-source">
+                ${escapeHtml(source)}
               </div>
             </div>
           </div>
@@ -1304,18 +1310,18 @@ function renderSystemStatus() {
   const load = latest.system?.loadAverage?.[0]?.toFixed(2) || 'N/A';
 
   return `
-    <div style="display: flex; flex-direction: column; gap: var(--space-md);">
-      <div style="display: flex; justify-content: space-between; padding: var(--space-sm) 0; border-bottom: 1px solid var(--color-border);">
-        <span style="color: var(--color-text-muted);">Memory</span>
-        <span style="color: var(--color-text); font-weight: 600;">${memory}</span>
+    <div class="system-status-list">
+      <div class="system-status-item">
+        <span class="system-status-label">Memory</span>
+        <span class="system-status-value">${memory}</span>
       </div>
-      <div style="display: flex; justify-content: space-between; padding: var(--space-sm) 0; border-bottom: 1px solid var(--color-border);">
-        <span style="color: var(--color-text-muted);">CPU Time</span>
-        <span style="color: var(--color-text); font-weight: 600;">${cpu}</span>
+      <div class="system-status-item">
+        <span class="system-status-label">CPU Time</span>
+        <span class="system-status-value">${cpu}</span>
       </div>
-      <div style="display: flex; justify-content: space-between; padding: var(--space-sm) 0;">
-        <span style="color: var(--color-text-muted);">Load Avg</span>
-        <span style="color: var(--color-text); font-weight: 600;">${load}</span>
+      <div class="system-status-item">
+        <span class="system-status-label">Load Avg</span>
+        <span class="system-status-value">${load}</span>
       </div>
     </div>
   `;
@@ -1327,16 +1333,14 @@ function renderWorkspacesList() {
   }
 
   return `
-    <div style="display: flex; flex-direction: column; gap: var(--space-sm);">
+    <div class="workspaces-list">
       ${state.data.workspaces.map(ws => `
-        <div style="padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md);">
-          <div style="font-size: var(--text-sm); color: var(--color-text); font-weight: 500; margin-bottom: var(--space-xs); position: relative; overflow: hidden; white-space: nowrap; max-width: 100%;">
-            <span style="display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis;">
-              ${ws.path.split('/').pop() || ws.path}
-            </span>
-            <div style="position: absolute; top: 0; right: 0; width: 40px; height: 100%; background: linear-gradient(to right, transparent, var(--color-bg)); pointer-events: none;"></div>
+        <div class="workspace-item">
+          <div class="workspace-item-title">
+            <span class="workspace-item-title-text">${escapeHtml(ws.path.split('/').pop() || ws.path)}</span>
+            <div class="workspace-item-title-fade"></div>
           </div>
-          <div style="display: flex; gap: var(--space-lg); font-size: var(--text-xs); color: var(--color-text-subtle);">
+          <div class="workspace-item-meta">
             <span>${ws.entries || 0} entries</span>
             <span>${ws.events || 0} events</span>
           </div>
@@ -1350,7 +1354,12 @@ function renderWorkspacesList() {
 // Activity View
 // ===================================
 
-function renderActivityView(container) {
+// ===================================
+// Activity View (moved to views/activity/index.js)
+// ===================================
+// Removed: function renderActivityView - see views/activity/index.js
+
+function _legacy_renderActivityView(container) {
   const events = filterEventsByWorkspace(state.data.events);
   const prompts = state.data.prompts || [];
   const terminalCommands = state.data.terminalCommands || [];
@@ -1362,22 +1371,43 @@ function renderActivityView(container) {
       itemType: 'event',
       sortTime: new Date(event.timestamp).getTime()
     })),
-    ...prompts.map(prompt => ({
-      ...prompt,
-      itemType: 'prompt',
-      sortTime: new Date(prompt.timestamp).getTime(),
-      id: prompt.id || `prompt-${prompt.timestamp}`
-    })),
+    ...prompts.map(prompt => {
+      // Handle various timestamp formats
+      let timestamp = prompt.timestamp;
+      if (typeof timestamp === 'string') {
+        timestamp = new Date(timestamp).getTime();
+      } else if (typeof timestamp === 'number') {
+        // Already a timestamp
+      } else {
+        // Fallback to current time if invalid
+        timestamp = Date.now();
+      }
+      // Ensure we have a valid number
+      if (isNaN(timestamp)) {
+        timestamp = Date.now();
+      }
+      
+      return {
+        ...prompt,
+        itemType: 'prompt',
+        sortTime: timestamp,
+        timestamp: prompt.timestamp || new Date().toISOString(),
+        id: prompt.id || `prompt-${timestamp}`
+      };
+    }),
     ...terminalCommands.map(cmd => ({
       ...cmd,
       itemType: 'terminal',
-      sortTime: cmd.timestamp,
+      sortTime: cmd.timestamp || Date.now(),
       id: cmd.id
     }))
-  ].sort((a, b) => b.sortTime - a.sortTime).slice(0, 100);
+  ]
+  .filter(item => item.sortTime && !isNaN(item.sortTime)) // Remove items with invalid timestamps
+  .sort((a, b) => b.sortTime - a.sortTime)
+  .slice(0, 100);
   
   container.innerHTML = `
-    <div style="display: grid; gap: var(--space-xl);">
+    <div class="activity-view">
       
       <!-- Unified Activity Timeline -->
       <div class="card">
@@ -1386,8 +1416,8 @@ function renderActivityView(container) {
             <h3 class="card-title">Activity Timeline</h3>
             <p class="card-subtitle">${timelineItems.length} items (${events.length} file changes, ${prompts.length} AI prompts, ${terminalCommands.length} terminal commands)</p>
           </div>
-          <div style="display: flex; gap: var(--space-md);">
-            <select class="select-input" style="width: auto;" onchange="filterActivityByTimeRange(this.value)">
+          <div class="activity-header-controls">
+            <select class="select-input" onchange="filterActivityByTimeRange(this.value)">
               <option value="all">All Time</option>
               <option value="today">Today</option>
               <option value="week">This Week</option>
@@ -1408,13 +1438,18 @@ function renderActivityView(container) {
 // Threads View  
 // ===================================
 
-function renderThreadsView(container) {
+// ===================================
+// Threads View (moved to views/threads/index.js)
+// ===================================
+// Removed: function renderThreadsView - see views/threads/index.js
+
+function _legacy_renderThreadsView(container) {
   // Group entries by session/thread
   const threads = groupIntoThreads(state.data.entries);
   const prompts = state.data.prompts || [];
   
   container.innerHTML = `
-    <div style="display: grid; gap: var(--space-xl);">
+    <div class="threads-view">
       
       <!-- Captured Prompts Section -->
       <div class="card">
@@ -1423,7 +1458,7 @@ function renderThreadsView(container) {
             <h3 class="card-title">Captured Prompts</h3>
             <p class="card-subtitle">Prompts captured from clipboard and manual entry</p>
           </div>
-          <div style="display: flex; gap: var(--space-md); align-items: center;">
+          <div class="thread-header-controls">
             <span class="thread-badge">[CLIPBOARD] ${prompts.length} captured</span>
             <button class="btn btn-sm" onclick="refreshPrompts()">
               <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor">
@@ -1463,7 +1498,7 @@ function renderPromptsList(prompts) {
   );
 
   return `
-    <div style="display: grid; gap: var(--space-md);">
+    <div class="prompt-list">
       ${sortedPrompts.map(prompt => {
         // Get text from various possible fields
         const promptText = prompt.text || prompt.prompt || prompt.preview || prompt.content;
@@ -1476,7 +1511,7 @@ function renderPromptsList(prompts) {
             <div class="prompt-header">
               <div class="prompt-status ${status}">
                 ${getPromptStatusIcon(status)}
-                ${status}
+                ${escapeHtml(status)}
               </div>
               <div class="prompt-time">${formatTimeAgo(prompt.timestamp)}</div>
             </div>
@@ -1485,9 +1520,9 @@ function renderPromptsList(prompts) {
             </div>
             <div class="prompt-meta">
               ${prompt.linked_entry_id ? '<span class="prompt-tag">Linked</span>' : '<span class="prompt-tag pending">Pending</span>'}
-              <span class="prompt-tag">${source}</span>
-              ${prompt.workspaceName ? `<span class="prompt-tag">[FILE] ${prompt.workspaceName}</span>` : prompt.workspaceId ? `<span class="prompt-tag">[FILE] ${prompt.workspaceId.substring(0, 8)}...</span>` : ''}
-              ${prompt.metadata?.complexity ? `<span class="prompt-tag">Complexity: ${prompt.metadata.complexity}</span>` : ''}
+              <span class="prompt-tag">${escapeHtml(source)}</span>
+              ${prompt.workspaceName ? `<span class="prompt-tag">[FILE] ${escapeHtml(prompt.workspaceName)}</span>` : prompt.workspaceId ? `<span class="prompt-tag">[FILE] ${escapeHtml(prompt.workspaceId.substring(0, 8))}...</span>` : ''}
+              ${prompt.metadata?.complexity ? `<span class="prompt-tag">Complexity: ${escapeHtml(prompt.metadata.complexity)}</span>` : ''}
             </div>
           </div>
         `;
@@ -1527,10 +1562,30 @@ function getPromptStatusIcon(status) {
 }
 
 function formatTimeAgo(timestamp) {
+  if (!timestamp || isNaN(timestamp)) {
+    return 'Unknown time';
+  }
+  
   const now = Date.now();
-  const time = new Date(timestamp).getTime();
+  let time;
+  
+  // Handle various timestamp formats
+  if (typeof timestamp === 'string') {
+    time = new Date(timestamp).getTime();
+  } else if (typeof timestamp === 'number') {
+    time = timestamp;
+  } else {
+    time = new Date(timestamp).getTime();
+  }
+  
+  // Check if time is valid
+  if (isNaN(time)) {
+    return 'Unknown time';
+  }
+  
   const diff = now - time;
   
+  if (diff < 0) return 'Just now'; // Future timestamps
   if (diff < 60000) return 'Just now';
   if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
   if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
@@ -1563,18 +1618,18 @@ function groupIntoThreads(entries) {
 
 function renderThreadsList(threads) {
   return `
-    <div style="display: grid; gap: var(--space-lg);">
+    <div class="thread-list">
       ${threads.map(thread => `
         <div class="thread-card" onclick="showThreadModal('${thread.id}')">
-          <div class="thread-header">
+          <div class="thread-card-header">
             <div>
-              <div class="thread-title">${truncate(thread.messages[0]?.prompt || thread.messages[0]?.text || 'Conversation Thread', 60)}</div>
-              <div class="thread-meta">
+              <div class="thread-card-title">${escapeHtml(truncate(thread.messages[0]?.prompt || thread.messages[0]?.text || 'Conversation Thread', 60))}</div>
+              <div class="thread-card-meta">
                 <span>${thread.messages.length} messages</span>
                 <span>${new Date(thread.lastMessage).toLocaleDateString()}</span>
               </div>
             </div>
-            <div class="thread-badge">${thread.id.substring(0, 8)}</div>
+            <div class="thread-card-badge">${escapeHtml(thread.id.substring(0, 8))}</div>
           </div>
         </div>
       `).join('')}
@@ -1586,7 +1641,12 @@ function renderThreadsList(threads) {
 // Analytics View
 // ===================================
 
-function renderAnalyticsView(container) {
+// ===================================
+// Analytics View (moved to views/analytics/index.js)
+// ===================================
+// Removed: function renderAnalyticsView - see views/analytics/index.js
+
+function _legacy_renderAnalyticsView(container) {
   // Calculate data status
   const totalPrompts = state.data.prompts?.length || 0;
   const totalEvents = state.data.events?.length || 0;
@@ -1614,30 +1674,28 @@ function renderAnalyticsView(container) {
   }
   
   container.innerHTML = `
-    <div style="display: grid; gap: var(--space-xl);">
+    <div class="analytics-view">
       
       ${!hasData ? `
         <!-- Data Status Alert -->
-        <div style="padding: var(--space-lg); background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(139, 92, 246, 0.1)); border-radius: var(--radius-lg); border: 2px solid var(--color-primary);">
-          <div style="display: flex; align-items: start; gap: var(--space-md);">
-            <div style="flex: 1;">
-              <h3 style="margin: 0 0 var(--space-sm) 0; color: var(--color-text); font-size: var(--text-lg); font-weight: 600;">
-                Waiting for Telemetry Data
-              </h3>
-              <p style="margin: 0 0 var(--space-md) 0; color: var(--color-text-muted); line-height: 1.6;">
+        <div class="data-status-alert">
+          <div class="data-status-content">
+            <div class="data-status-content-main">
+              <h3>Waiting for Telemetry Data</h3>
+              <p>
                 No data has been received yet. Make sure the companion service is running:
               </p>
-              <div style="display: grid; gap: var(--space-sm); margin-bottom: var(--space-md);">
-                <div style="display: flex; align-items: center; gap: var(--space-sm);">
-                  <code style="padding: var(--space-xs) var(--space-sm); background: var(--color-bg); border-radius: var(--radius-sm); font-size: var(--text-sm); font-family: 'Geist Mono', monospace;">cd cursor-telemetry/components/activity-logger/companion</code>
+              <div class="data-status-instructions">
+                <div class="data-status-instruction">
+                  <code>cd cursor-telemetry/components/activity-logger/companion</code>
                 </div>
-                <div style="display: flex; align-items: center; gap: var(--space-sm);">
-                  <code style="padding: var(--space-xs) var(--space-sm); background: var(--color-bg); border-radius: var(--radius-sm); font-size: var(--text-sm); font-family: 'Geist Mono', monospace;">node src/index.js</code>
+                <div class="data-status-instruction">
+                  <code>node src/index.js</code>
                 </div>
               </div>
-              <div style="padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md); border-left: 3px solid var(--color-accent);">
-                <div style="font-weight: 600; margin-bottom: var(--space-xs);">Status:</div>
-                <div style="font-size: var(--text-sm); color: var(--color-text-muted);">
+              <div class="data-status-box">
+                <div class="data-status-label">Status:</div>
+                <div class="data-status-value">
                   Events: ${totalEvents} | Prompts: ${totalPrompts}
                 </div>
               </div>
@@ -1646,19 +1704,18 @@ function renderAnalyticsView(container) {
         </div>
       ` : `
         <!-- Data Status Info -->
-        <div style="padding: var(--space-md); background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(59, 130, 246, 0.1)); border-radius: var(--radius-md); border-left: 3px solid var(--color-success);">
-          <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--space-md);">
-            <div style="display: flex; align-items: center; gap: var(--space-md);">
-              <span style="font-size: 1.5rem;">📊</span>
-              <div>
-                <div style="font-weight: 600; color: var(--color-text);">Telemetry Active</div>
-                <div style="font-size: var(--text-sm); color: var(--color-text-muted);">Tracking ${totalPrompts.toLocaleString()} prompts and ${totalEvents.toLocaleString()} events</div>
+        <div class="data-status-info">
+          <div class="data-status-info-content">
+            <div class="data-status-info-left">
+              <div class="data-status-info-text">
+                <h4>Telemetry Active</h4>
+                <p>Tracking ${totalPrompts.toLocaleString()} prompts and ${totalEvents.toLocaleString()} events</p>
               </div>
             </div>
-            <div style="display: flex; gap: var(--space-lg);">
-              <div style="text-align: right;">
-                <div style="font-size: var(--text-xs); color: var(--color-text-muted);">Data Freshness</div>
-                <div style="font-weight: 600; color: var(--color-success);">${dataFreshness}</div>
+            <div class="data-status-info-right">
+              <div class="data-status-freshness">
+                <div class="data-status-freshness-label">Data Freshness</div>
+                <div class="data-status-freshness-value">${dataFreshness}</div>
               </div>
             </div>
           </div>
@@ -1672,26 +1729,26 @@ function renderAnalyticsView(container) {
           <p class="card-subtitle">Prompt frequency and code changes correlation</p>
         </div>
         <div class="card-body">
-          <canvas id="aiActivityChart" style="max-height: 300px;"></canvas>
+          <canvas id="aiActivityChart" class="chart-container"></canvas>
         </div>
       </div>
 
       <!-- Context Usage Over Time -->
       <div class="card">
         <div class="card-header">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-sm);">
-            <h3 class="card-title" style="margin: 0;">Context Usage Over Time</h3>
-            <div style="display: flex; gap: var(--space-xs);">
-              <button class="btn-timescale" data-hours="24" onclick="updateContextChartTimescale(24)" style="padding: 4px 12px; font-size: 12px; border: 1px solid var(--color-border); background: var(--color-primary); color: white; border-radius: 4px; cursor: pointer;">24h</button>
-              <button class="btn-timescale" data-hours="72" onclick="updateContextChartTimescale(72)" style="padding: 4px 12px; font-size: 12px; border: 1px solid var(--color-border); background: var(--color-bg); color: var(--color-text); border-radius: 4px; cursor: pointer;">3d</button>
-              <button class="btn-timescale" data-hours="168" onclick="updateContextChartTimescale(168)" style="padding: 4px 12px; font-size: 12px; border: 1px solid var(--color-border); background: var(--color-bg); color: var(--color-text); border-radius: 4px; cursor: pointer;">7d</button>
-              <button class="btn-timescale" data-hours="720" onclick="updateContextChartTimescale(720)" style="padding: 4px 12px; font-size: 12px; border: 1px solid var(--color-border); background: var(--color-bg); color: var(--color-text); border-radius: 4px; cursor: pointer;">30d</button>
+          <div class="chart-header-controls">
+            <h3 class="card-title">Context Usage Over Time</h3>
+            <div class="timescale-controls">
+              <button class="btn-timescale active" data-hours="24" onclick="updateContextChartTimescale(24)">24h</button>
+              <button class="btn-timescale" data-hours="72" onclick="updateContextChartTimescale(72)">3d</button>
+              <button class="btn-timescale" data-hours="168" onclick="updateContextChartTimescale(168)">7d</button>
+              <button class="btn-timescale" data-hours="720" onclick="updateContextChartTimescale(720)">30d</button>
             </div>
           </div>
           <p class="card-subtitle">AI context window utilization with smart scaling (auto-adjusts range for better detail). Color-coded: <span style="color: #10b981;">Green</span> = Normal, <span style="color: #f59e0b;">Orange</span> = Medium-High, <span style="color: #ef4444;">Red</span> = High</p>
         </div>
         <div class="card-body">
-          <canvas id="promptTokensChart" style="max-height: 250px;"></canvas>
+          <canvas id="promptTokensChart" class="chart-container-small"></canvas>
         </div>
       </div>
 
@@ -1707,7 +1764,7 @@ function renderAnalyticsView(container) {
       </div>
 
       <!-- Breakdown Charts -->
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: var(--space-lg);">
+      <div class="analytics-grid">
         <div class="card">
           <div class="card-header">
             <h3 class="card-title">File Changes by Type</h3>
@@ -1788,7 +1845,7 @@ function renderAnalyticsView(container) {
     // renderFileRelationshipVisualization() - REMOVED: Handled in File Graph view
   }, 300); // Increased from 100ms to 300ms to allow data to settle
 }
-// ✅ REMOVED: Continuous Activity Timeline (per user request)
+// REMOVED: Continuous Activity Timeline (per user request)
 // function renderActivityChart() {
 //   Commented out to remove Continuous Activity Timeline from dashboard
 // }
@@ -1801,12 +1858,12 @@ function renderActivityChart_DISABLED() {
   
   if (allEvents.length === 0 && allPrompts.length === 0) {
     const context = ctx.getContext('2d');
-    context.font = '500 16px Geist, -apple-system, BlinkMacSystemFont, sans-serif';
+    context.font = '500 16px "Stack Sans Text", "Inter", sans-serif';
     context.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-text') || '#1f2937';
     context.textAlign = 'center';
     context.textBaseline = 'middle';
     context.fillText('No Data Available', ctx.width / 2, ctx.height / 2 - 10);
-    context.font = '14px Geist, -apple-system, BlinkMacSystemFont, sans-serif';
+    context.font = '14px "Stack Sans Text", "Inter", sans-serif';
     context.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-text-muted') || '#6b7280';
     context.fillText('Activity data will appear here once you start coding', ctx.width / 2, ctx.height / 2 + 15);
     return;
@@ -1955,180 +2012,18 @@ function renderActivityChart_DISABLED() {
   });
 }
 
-function renderFileTypesChart() {
-  const ctx = document.getElementById('fileTypesChart');
-  if (!ctx) return;
 
-  // Count file types
-  const typeCount = {};
-  state.data.events.forEach(event => {
-    try {
-      const details = typeof event.details === 'string' ? JSON.parse(event.details) : event.details;
-      const path = details?.file_path || '';
-      let ext = path.split('.').pop() || 'unknown';
-      
-      // Group all Git-related extensions under "Git"
-      if (ext.startsWith('Git') || ext === 'COMMIT_EDITMSG' || ext === 'HEAD' || 
-          ext === 'index' || ext === 'FETCH_HEAD' || ext === 'ORIG_HEAD' || 
-          path.includes('.git/')) {
-        ext = 'Git';
-      }
-      
-      typeCount[ext] = (typeCount[ext] || 0) + 1;
-    } catch {}
-  });
-
-  const labels = Object.keys(typeCount).slice(0, 5);
-  const data = labels.map(label => typeCount[label]);
-
-  createChart('fileTypesChart', {
-    type: 'doughnut',
-    data: {
-      labels: labels,
-      datasets: [{
-        data: data,
-        backgroundColor: [
-          CONFIG.CHART_COLORS.primary,
-          CONFIG.CHART_COLORS.secondary,
-          CONFIG.CHART_COLORS.accent,
-          CONFIG.CHART_COLORS.success,
-          CONFIG.CHART_COLORS.warning
-        ]
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: true,
-      plugins: {
-        legend: {position: 'bottom'}
-      }
-    }
-  });
-}
-
-function renderHourlyChart() {
-  const ctx = document.getElementById('hourlyChart');
-  if (!ctx) return;
-
-  const allEvents = state.data.events || [];
-  const allPrompts = state.data.prompts || [];
-  
-  if (allEvents.length === 0 && allPrompts.length === 0) {
-    return;
-  }
-
-  // Create continuous timeline for the last 12 hours (by 15-minute intervals)
-  const now = Date.now();
-  const twelveHoursAgo = now - (12 * 60 * 60 * 1000);
-  const intervalSize = 15 * 60 * 1000; // 15 minutes
-  const numIntervals = 48; // 12 hours / 15 minutes = 48 intervals
-  
-  const intervals = [];
-  for (let i = 0; i < numIntervals; i++) {
-    const intervalStart = twelveHoursAgo + (i * intervalSize);
-    intervals.push({
-      timestamp: intervalStart,
-      events: 0,
-      prompts: 0
-    });
-  }
-  
-  // Fill intervals with events
-  allEvents.forEach(event => {
-    const eventTime = new Date(event.timestamp).getTime();
-    if (eventTime >= twelveHoursAgo) {
-      const intervalIndex = Math.floor((eventTime - twelveHoursAgo) / intervalSize);
-      if (intervalIndex >= 0 && intervalIndex < numIntervals) {
-        intervals[intervalIndex].events++;
-      }
-    }
-  });
-  
-  // Fill intervals with prompts
-  allPrompts.forEach(prompt => {
-    const promptTime = new Date(prompt.timestamp).getTime();
-    if (promptTime >= twelveHoursAgo) {
-      const intervalIndex = Math.floor((promptTime - twelveHoursAgo) / intervalSize);
-      if (intervalIndex >= 0 && intervalIndex < numIntervals) {
-        intervals[intervalIndex].prompts++;
-      }
-    }
-  });
-
-  createChart('hourlyChart', {
-    type: 'bar',
-    data: {
-      labels: intervals.map(interval => {
-        const date = new Date(interval.timestamp);
-        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      }),
-      datasets: [
-        {
-          label: 'File Changes',
-          data: intervals.map(i => i.events),
-          backgroundColor: CONFIG.CHART_COLORS.secondary,
-          borderColor: CONFIG.CHART_COLORS.secondary,
-          borderWidth: 1
-        },
-        {
-          label: 'AI Prompts',
-          data: intervals.map(i => i.prompts),
-          backgroundColor: 'rgba(139, 92, 246, 0.7)',
-          borderColor: '#8b5cf6',
-          borderWidth: 1
-        }
-      ]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: true,
-      interaction: {
-        mode: 'index',
-        intersect: false
-      },
-      plugins: {
-        legend: {
-          display: true,
-          position: 'top',
-          align: 'end',
-          labels: {
-            usePointStyle: true,
-            padding: 10,
-            font: { size: 10 }
-          }
-        },
-        tooltip: {
-          backgroundColor: 'rgba(0, 0, 0, 0.8)',
-          padding: 8,
-          titleFont: { size: 11 },
-          bodyFont: { size: 10 }
-        }
-      },
-      scales: {
-        x: {
-          ticks: {
-            maxRotation: 45,
-            minRotation: 45,
-            font: { size: 8 }
-          }
-        },
-        y: {
-          beginAtZero: true,
-          ticks: {
-            stepSize: 1,
-            font: { size: 10 }
-          }
-        }
-      }
-    }
-  });
-}
 
 // ===================================
 // File Graph View
 // ===================================
 
-function renderFileGraphView(container) {
+// ===================================
+// File Graph View (moved to views/file-graph/index.js)
+// ===================================
+// Removed: function renderFileGraphView - see views/file-graph/index.js
+
+function _legacy_renderFileGraphView(container) {
   container.innerHTML = `
     <div class="file-graph-view">
       <div class="view-header">
@@ -2187,9 +2082,9 @@ function renderFileGraphView(container) {
         </div>
 
         <div class="control-group">
-          <label style="display: flex; align-items: center; gap: 4px;">
+          <label class="with-help">
             Threshold: <span id="thresholdValue">0.2</span>
-            <span title="Minimum similarity score (0-1) required to show connections between files. Higher values show only strongly related files." style="color: var(--color-text-muted); font-size: 12px; cursor: help;">Threshold</span>
+            <span class="help-text" title="Minimum similarity score (0-1) required to show connections between files. Higher values show only strongly related files.">Threshold</span>
           </label>
           <input type="range" id="similarityThreshold" min="0" max="1" step="0.05" value="0.2" 
                  oninput="document.getElementById('thresholdValue').textContent = this.value; updateFileGraph()"
@@ -2198,28 +2093,27 @@ function renderFileGraphView(container) {
 
         <div class="control-group">
           <label>File Types:</label>
-          <select id="fileTypeFilter" multiple style="padding: 4px 8px; border-radius: 4px; border: 1px solid var(--color-border); background: var(--color-bg); color: var(--color-text); font-size: 13px; min-height: 80px; width: 100%;" onchange="updateFileGraph()">
+          <select id="fileTypeFilter" multiple onchange="updateFileGraph()">
             <!-- Options will be populated programmatically -->
           </select>
         </div>
 
         <div class="control-actions">
-          <button class="btn btn-primary" onclick="updateFileGraph()" style="font-size: 13px; padding: 6px 12px;">Refresh</button>
-          <button class="btn btn-secondary" onclick="resetFileGraphZoom()" style="font-size: 13px; padding: 6px 12px;">Reset View</button>
-          <button class="btn btn-secondary" onclick="zoomToFit()" style="font-size: 13px; padding: 6px 12px;">Zoom to Fit</button>
-          <button class="btn btn-secondary" onclick="toggleLabels()" style="font-size: 13px; padding: 6px 12px;" id="labelToggle">Hide Labels</button>
+          <button class="btn btn-primary" onclick="updateFileGraph()">Refresh</button>
+          <button class="btn btn-secondary" onclick="resetFileGraphZoom()">Reset View</button>
+          <button class="btn btn-secondary" onclick="zoomToFit()">Zoom to Fit</button>
+          <button class="btn btn-secondary" onclick="toggleLabels()" id="labelToggle">Hide Labels</button>
         </div>
       </div>
       
       <!-- Search & Navigation Panel -->
-      <div style="padding: var(--space-md); background: var(--color-bg-alt); border-radius: var(--radius-lg); margin-bottom: var(--space-md);">
-        <input type="text" id="fileSearch" placeholder="Search files by name..." 
-               style="width: 100%; padding: var(--space-sm); background: var(--color-bg); border: 1px solid var(--color-border); border-radius: var(--radius-md); color: var(--color-text); font-size: var(--text-sm);"
+      <div class="graph-search-panel">
+        <input type="text" id="fileSearch" class="graph-search-input" placeholder="Search files by name..." 
                oninput="filterGraphNodes(this.value)">
-        <div id="fileSearchResults" style="margin-top: var(--space-sm); max-height: 120px; overflow-y: auto;"></div>
+        <div id="fileSearchResults" class="graph-search-results"></div>
       </div>
 
-      <div class="graph-container" id="fileGraphContainer" style="width: 100%; height: 600px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg); position: relative;">
+      <div class="graph-container" id="fileGraphContainer">
         <!-- File graph will be rendered here -->
       </div>
 
@@ -2243,94 +2137,92 @@ function renderFileGraphView(container) {
       </div>
       
       <!-- Most Similar File Pairs -->
-      <div class="card" style="margin-top: var(--space-lg);">
-        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+      <div class="card similar-pairs-section">
+        <div class="card-header">
           <div>
-            <h3 class="card-title" style="cursor: help;" title="File pairs ranked by co-occurrence in prompts and editing sessions. Shows which files are frequently worked on together.">
+            <h3 class="card-title help-cursor" title="File pairs ranked by co-occurrence in prompts and editing sessions. Shows which files are frequently worked on together.">
               Most Similar File Pairs
-              <span style="font-size: 11px; color: var(--color-text-muted); font-weight: normal; margin-left: 4px;">Most Similar File Pairs</span>
             </h3>
             <p class="card-subtitle">Files frequently modified together with highest co-occurrence scores</p>
           </div>
-          <div style="display: flex; gap: var(--space-sm); align-items: center;">
-            <label style="font-size: var(--text-sm); color: var(--color-text-muted);">Show:</label>
-            <input type="number" id="similarPairsCount" min="1" max="50" value="10" onchange="updateSimilarPairs()" oninput="if(this.value > 50) this.value = 50; if(this.value < 1) this.value = 1;" style="width: 60px; padding: 4px 8px; border-radius: 4px; border: 1px solid var(--color-border); background: var(--color-bg); color: var(--color-text); font-size: 13px; text-align: center;" />
-            <button onclick="highlightSimilarPairs()" class="btn-secondary" style="font-size: 13px; padding: 6px 12px;" title="Highlight these pairs in the graph visualization above">Highlight in Graph</button>
+          <div class="similar-pairs-controls">
+            <label>Show:</label>
+            <input type="number" id="similarPairsCount" class="similar-pairs-count-input" min="1" max="50" value="10" onchange="updateSimilarPairs()" oninput="if(this.value > 50) this.value = 50; if(this.value < 1) this.value = 1;" />
+            <button onclick="highlightSimilarPairs()" class="btn btn-secondary" title="Highlight these pairs in the graph visualization above">Highlight in Graph</button>
           </div>
         </div>
         <div class="card-body">
-          <div id="similarFilePairs" style="display: grid; gap: var(--space-md);">
+          <div id="similarFilePairs" class="similar-pairs-list">
             <!-- Will be populated by JavaScript -->
           </div>
         </div>
       </div>
 
       <!-- Semantic Analysis Panels -->
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-lg); margin-top: var(--space-xl);">
+      <div class="semantic-analysis-grid">
         
         <!-- Prompt Embeddings Analysis -->
         <div class="card">
           <div class="card-header">
-            <h3 class="card-title" style="cursor: help;" title="Visualizes semantic similarity between your AI prompts using TF-IDF embeddings and dimensionality reduction (PCA/t-SNE/MDS). Prompts with similar content appear closer together. Data is extracted from your Cursor database and analyzed locally.">
+            <h3 class="card-title help-cursor" title="Visualizes semantic similarity between your AI prompts using TF-IDF embeddings and dimensionality reduction (PCA/t-SNE/MDS). Prompts with similar content appear closer together. Data is extracted from your Cursor database and analyzed locally.">
               Prompts Embedding Analysis
-              <span style="font-size: 11px; color: var(--color-text-muted); font-weight: normal; margin-left: 4px;">Prompts Embedding Analysis</span>
             </h3>
           </div>
           <div class="card-body">
-            <p style="font-size: 13px; color: var(--color-text-muted); margin-bottom: var(--space-lg);">
+            <p class="embeddings-description">
               Semantic relationships between AI prompts across all time. Colors represent time (purple = older, yellow/green = newer).
             </p>
-            <div style="display: grid; gap: var(--space-md); margin-bottom: var(--space-lg);">
-              <div style="display: flex; justify-content: space-between;">
-                <span style="color: var(--color-text-muted);">Prompts Analyzed:</span>
-                <span id="embeddingsFilesCount" style="font-weight: 600;">0</span>
+            <div class="embeddings-stats">
+              <div class="embeddings-stat-row">
+                <span class="embeddings-stat-label">Prompts Analyzed:</span>
+                <span id="embeddingsFilesCount" class="embeddings-stat-value">0</span>
               </div>
-              <div style="display: flex; justify-content: space-between;">
-                <span style="color: var(--color-text-muted);">Total Tokens:</span>
-                <span id="embeddingsTotalChanges" style="font-weight: 600;">0</span>
+              <div class="embeddings-stat-row">
+                <span class="embeddings-stat-label">Total Tokens:</span>
+                <span id="embeddingsTotalChanges" class="embeddings-stat-value">0</span>
               </div>
-              <div style="display: flex; justify-content: space-between;">
-                <span style="color: var(--color-text-muted);">Avg Similarity:</span>
-                <span id="embeddingsAvgSimilarity" style="font-weight: 600;">0.000</span>
+              <div class="embeddings-stat-row">
+                <span class="embeddings-stat-label">Avg Similarity:</span>
+                <span id="embeddingsAvgSimilarity" class="embeddings-stat-value">0.000</span>
               </div>
             </div>
             
             <!-- Dimensionality Reduction Controls -->
-            <div style="margin-bottom: var(--space-md); padding: var(--space-md); background: var(--color-bg-alt); border-radius: var(--radius-md);">
-              <div style="display: flex; align-items: center; gap: var(--space-md); flex-wrap: wrap;">
-                <div style="display: flex; align-items: center; gap: var(--space-sm);">
-                  <label style="font-size: 13px; color: var(--color-text-muted);" title="PCA: Fastest, linear. t-SNE: Best clusters. MDS: Preserves distances.">Reduction Method:</label>
-                  <select id="embeddingsReductionMethod" style="padding: 4px 8px; border-radius: 4px; border: 1px solid var(--color-border); background: var(--color-bg); color: var(--color-text); font-size: 12px;" onchange="renderEmbeddingsVisualization()">
+            <div class="embeddings-controls">
+              <div class="embeddings-controls-row">
+                <div class="embeddings-control-group">
+                  <label class="embeddings-control-label" title="PCA: Fastest, linear. t-SNE: Best clusters. MDS: Preserves distances.">Reduction Method:</label>
+                  <select id="embeddingsReductionMethod" class="embeddings-control-select" onchange="renderEmbeddingsVisualization()">
                     <option value="pca">PCA (Principal Component Analysis)</option>
                     <option value="tsne">t-SNE (t-Distributed Stochastic Neighbor Embedding)</option>
                     <option value="mds">MDS (Multidimensional Scaling)</option>
                   </select>
                 </div>
-                <div style="display: flex; align-items: center; gap: var(--space-sm);">
-                  <label style="font-size: 13px; color: var(--color-text-muted);" title="Number of dimensions to reduce to (2D for flat visualization, 3D for spatial view)">Dimensions:</label>
-                  <select id="embeddingsDimensions" style="padding: 4px 8px; border-radius: 4px; border: 1px solid var(--color-border); background: var(--color-bg); color: var(--color-text); font-size: 12px;" onchange="renderEmbeddingsVisualization()">
+                <div class="embeddings-control-group">
+                  <label class="embeddings-control-label" title="Number of dimensions to reduce to (2D for flat visualization, 3D for spatial view)">Dimensions:</label>
+                  <select id="embeddingsDimensions" class="embeddings-control-select" onchange="renderEmbeddingsVisualization()">
                     <option value="2" selected>2D</option>
                     <option value="3">3D</option>
                   </select>
                 </div>
-                <div style="display: flex; align-items: center; gap: var(--space-sm);">
-                  <label style="font-size: 13px; color: var(--color-text-muted);" title="Number of principal components to keep (higher = more detail, slower computation)">Components:</label>
-                  <input type="number" id="embeddingsPCAComponents" min="2" max="50" value="10" onchange="renderEmbeddingsVisualization()" oninput="if(this.value > 50) this.value = 50; if(this.value < 2) this.value = 2;" style="width: 55px; padding: 4px 8px; border-radius: 4px; border: 1px solid var(--color-border); background: var(--color-bg); color: var(--color-text); font-size: 12px; text-align: center;" />
+                <div class="embeddings-control-group">
+                  <label class="embeddings-control-label" title="Number of principal components to keep (higher = more detail, slower computation)">Components:</label>
+                  <input type="number" id="embeddingsPCAComponents" class="embeddings-control-input" min="2" max="50" value="10" onchange="renderEmbeddingsVisualization()" oninput="if(this.value > 50) this.value = 50; if(this.value < 2) this.value = 2;" />
                 </div>
               </div>
             </div>
             
             <!-- Embeddings Visualization Canvas -->
-            <div id="embeddingsVisualization" style="width: 100%; height: 300px; background: var(--color-bg); border: 1px solid var(--color-border); border-radius: var(--radius-md); position: relative; margin-bottom: var(--space-md);">
-              <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--color-text-muted); font-size: 13px;">
+            <div id="embeddingsVisualization" class="embeddings-visualization">
+              <div class="embeddings-visualization-placeholder">
                 Embeddings visualization will appear here
               </div>
             </div>
             
-            <div>
-              <h4 style="font-size: 14px; margin-bottom: var(--space-sm); color: var(--color-text-muted);">Most Similar Prompt Pairs:</h4>
-              <div id="similarityPairs" style="display: flex; flex-direction: column; gap: var(--space-xs);">
-                <div style="color: var(--color-text-muted); font-size: 13px;">Analyzing prompts...</div>
+            <div class="embeddings-subsection">
+              <h4 class="embeddings-subsection-title">Most Similar Prompt Pairs:</h4>
+              <div id="similarityPairs" class="embeddings-subsection-content">
+                <div class="embeddings-subsection-placeholder">Analyzing prompts...</div>
               </div>
             </div>
           </div>
@@ -2342,27 +2234,26 @@ function renderFileGraphView(container) {
             <h3 class="card-title">Term Frequency Analysis</h3>
           </div>
           <div class="card-body">
-            <div style="display: grid; gap: var(--space-md); margin-bottom: var(--space-lg);">
-              <div style="display: flex; justify-content: space-between;">
-                <span style="color: var(--color-text-muted);">Total Terms:</span>
-                <span id="tfidfTotalTerms" style="font-weight: 600;">0</span>
+            <div class="tfidf-stats">
+              <div class="tfidf-stat-row">
+                <span class="tfidf-stat-label">Total Terms:</span>
+                <span id="tfidfTotalTerms" class="tfidf-stat-value">0</span>
               </div>
-              <div style="display: flex; justify-content: space-between;">
-                <span style="color: var(--color-text-muted);">Unique Terms:</span>
-                <span id="tfidfUniqueTerms" style="font-weight: 600;">0</span>
+              <div class="tfidf-stat-row">
+                <span class="tfidf-stat-label">Unique Terms:</span>
+                <span id="tfidfUniqueTerms" class="tfidf-stat-value">0</span>
               </div>
-              <div style="display: flex; justify-content: space-between;">
-                <span style="color: var(--color-text-muted);">Avg Term Frequency:</span>
-                <span id="tfidfAvgFreq" style="font-weight: 600;">0.00</span>
+              <div class="tfidf-stat-row">
+                <span class="tfidf-stat-label">Avg Term Frequency:</span>
+                <span id="tfidfAvgFreq" class="tfidf-stat-value">0.00</span>
               </div>
             </div>
-            <div>
-              <h4 style="font-size: 14px; margin-bottom: var(--space-sm); color: var(--color-text-muted); cursor: help;" title="Terms ranked by TF-IDF (Term Frequency-Inverse Document Frequency) score. Higher scores indicate terms that are important in specific files but rare across all files.">
-              Top Terms by Importance:
-              <span style="font-size: 11px; color: var(--color-text-muted); font-weight: normal; margin-left: 4px;">Top Terms by Importance</span>
-            </h4>
-              <div id="topTerms" style="display: flex; flex-direction: column; gap: var(--space-xs); max-height: 300px; overflow-y: auto; overflow-x: hidden;">
-                <div style="color: var(--color-text-muted); font-size: 13px;">Analyzing...</div>
+            <div class="embeddings-subsection">
+              <h4 class="embeddings-subsection-title help" title="Terms ranked by TF-IDF (Term Frequency-Inverse Document Frequency) score. Higher scores indicate terms that are important in specific files but rare across all files.">
+                Top Terms by Importance:
+              </h4>
+              <div id="topTerms" class="embeddings-subsection-content scrollable">
+                <div class="embeddings-subsection-placeholder">Analyzing...</div>
               </div>
             </div>
           </div>
@@ -2717,26 +2608,44 @@ async function initializeD3FileGraph() {
     // Render with D3
     renderD3FileGraph(container, files, links);
     
-    // Update basic stats
-    document.getElementById('graphNodeCount').textContent = files.length;
-    document.getElementById('graphLinkCount').textContent = links.length;
-    document.getElementById('graphPromptCount').textContent = state.data.prompts.length;
+    // Update basic stats (with null checks)
+    const nodeCountEl = document.getElementById('graphNodeCount');
+    const linkCountEl = document.getElementById('graphLinkCount');
+    const promptCountEl = document.getElementById('graphPromptCount');
+    const avgSimEl = document.getElementById('graphAvgSimilarity');
     
-    if (links.length > 0) {
+    if (nodeCountEl) nodeCountEl.textContent = files.length;
+    if (linkCountEl) linkCountEl.textContent = links.length;
+    if (promptCountEl) promptCountEl.textContent = (state.data.prompts || []).length;
+    
+    if (links.length > 0 && avgSimEl) {
       const avgSim = links.reduce((sum, l) => sum + l.similarity, 0) / links.length;
-      document.getElementById('graphAvgSimilarity').textContent = avgSim.toFixed(3);
+      avgSimEl.textContent = avgSim.toFixed(3);
+    } else if (avgSimEl) {
+      avgSimEl.textContent = '0.000';
     }
     
     // Render most similar file pairs
     renderSimilarFilePairs(links, files);
     
-    // Render file similarity based on AI prompts
-    renderEmbeddingsVisualization();
+    // Render prompt embeddings visualization for the "Prompts Embedding Analysis" section
+    // This analyzes prompts themselves, not files (file analysis is in Navigator view)
+    // Use async to prevent blocking
+    renderEmbeddingsVisualization().catch(err => {
+      console.error('[ERROR] Failed to render embeddings:', err);
+      const container = document.getElementById('embeddingsVisualization');
+      if (container) {
+        container.innerHTML = `<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--color-error); font-size: 13px;">Error rendering embeddings: ${err.message}</div>`;
+      }
+    });
     
-    // Update TF-IDF analysis
-    document.getElementById('tfidfTotalTerms').textContent = tfidfStats.totalTerms.toLocaleString();
-    document.getElementById('tfidfUniqueTerms').textContent = tfidfStats.uniqueTerms;
-    document.getElementById('tfidfAvgFreq').textContent = tfidfStats.avgFrequency.toFixed(2);
+    // Update TF-IDF analysis (with null checks)
+    const tfidfTotalTermsEl = document.getElementById('tfidfTotalTerms');
+    const tfidfUniqueTermsEl = document.getElementById('tfidfUniqueTerms');
+    const tfidfAvgFreqEl = document.getElementById('tfidfAvgFreq');
+    if (tfidfTotalTermsEl) tfidfTotalTermsEl.textContent = tfidfStats.totalTerms.toLocaleString();
+    if (tfidfUniqueTermsEl) tfidfUniqueTermsEl.textContent = tfidfStats.uniqueTerms;
+    if (tfidfAvgFreqEl) tfidfAvgFreqEl.textContent = tfidfStats.avgFrequency.toFixed(2);
     
     // Show ALL top terms (not just 10) with scrolling
     const termsHtml = tfidfStats.topTerms.map((term, index) => `
@@ -2748,7 +2657,10 @@ async function initializeD3FileGraph() {
         <span style="font-weight: 600; color: var(--color-accent);">${term.tfidf.toFixed(4)}</span>
       </div>
     `).join('');
-    document.getElementById('topTerms').innerHTML = termsHtml || '<div style="color: var(--color-text-muted); font-size: 13px;">No terms found</div>';
+    const topTermsEl = document.getElementById('topTerms');
+    if (topTermsEl) {
+      topTermsEl.innerHTML = termsHtml || '<div style="color: var(--color-text-muted); font-size: 13px;">No terms found</div>';
+    }
     
   } catch (error) {
     console.error('Failed to initialize file graph:', error);
@@ -2770,7 +2682,7 @@ async function initializeD3FileGraph() {
 /**
  * Render embeddings visualization with dimensionality reduction (for prompts)
  */
-function renderEmbeddingsVisualization() {
+async function renderEmbeddingsVisualization() {
   const container = document.getElementById('embeddingsVisualization');
   if (!container) return;
   
@@ -2789,11 +2701,14 @@ function renderEmbeddingsVisualization() {
   const dimensions = parseInt(document.getElementById('embeddingsDimensions')?.value || '2');
   const numComponents = parseInt(document.getElementById('embeddingsPCAComponents')?.value || '10');
   
+  // Show loading state
+  container.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--color-text-muted);">Processing embeddings... (this may take a moment)</div>';
+  
   try {
     console.log(`[EMBEDDINGS] Starting analysis: method=${method}, dims=${dimensions}, components=${numComponents}`);
     
     // Filter out JSON metadata, composer conversations (which are just names), and prepare actual prompt texts
-    const validPrompts = prompts.filter(p => {
+    let validPrompts = prompts.filter(p => {
       const text = p.text || p.prompt || p.preview || p.content || '';
       const isJsonLike = text.startsWith('{') || text.startsWith('[');
       // Exclude composer conversations as they only contain conversation names, not actual prompt content
@@ -2801,16 +2716,45 @@ function renderEmbeddingsVisualization() {
       return !isJsonLike && !isComposerConversation && text.length > 10;
     });
     
-    console.log(`[EMBEDDINGS] Filtered to ${validPrompts.length} valid prompts`);
+    // LIMIT: Process max 1000 prompts to prevent timeout (O(n²) similarity calculations)
+    const MAX_PROMPTS = 1000;
+    if (validPrompts.length > MAX_PROMPTS) {
+      console.warn(`[EMBEDDINGS] Limiting to ${MAX_PROMPTS} most recent prompts (of ${validPrompts.length} total) to prevent timeout`);
+      // Sort by timestamp and take most recent
+      validPrompts = validPrompts
+        .sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0))
+        .slice(0, MAX_PROMPTS);
+    }
+    
+    console.log(`[EMBEDDINGS] Filtered to ${validPrompts.length} valid prompts (processing ${validPrompts.length} for embeddings)`);
+    
+    // Update stats immediately
+    const filesCountEl = document.getElementById('embeddingsFilesCount');
+    const totalChangesEl = document.getElementById('embeddingsTotalChanges');
+    if (filesCountEl) filesCountEl.textContent = validPrompts.length;
     
     if (validPrompts.length === 0) {
       container.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--color-text-muted); font-size: 13px;">No valid prompts for analysis (filtered out JSON metadata)</div>';
+      if (totalChangesEl) totalChangesEl.textContent = '0';
       return;
     }
     
-    // Tokenize all prompts
+    // Process in chunks to prevent blocking
+    const chunkSize = 100;
+    const chunks = [];
+    for (let i = 0; i < validPrompts.length; i += chunkSize) {
+      chunks.push(validPrompts.slice(i, i + chunkSize));
+    }
+    
+    // Tokenize all prompts (chunked)
     const promptTexts = validPrompts.map(p => p.text || p.prompt || p.preview || p.content || '');
-    const allTokens = promptTexts.map(text => tokenizeCode(text));
+    const allTokens = [];
+    
+    for (const chunk of chunks) {
+      await new Promise(resolve => setTimeout(resolve, 0)); // Yield to browser
+      const chunkTexts = chunk.map(p => p.text || p.prompt || p.preview || p.content || '');
+      allTokens.push(...chunkTexts.map(text => tokenizeCode(text)));
+    }
     
     // Build vocabulary from all prompts - use top terms based on frequency
     const vocab = new Map();
@@ -2829,12 +2773,17 @@ function renderEmbeddingsVisualization() {
     
     console.log(`[EMBEDDINGS] Using vocabulary size: ${topVocab.length}`);
     
-    // Create TF-IDF vectors
+    // Create TF-IDF vectors (chunked)
     const vectors = [];
     const promptLabels = [];
     const promptMetadata = [];
     
-    validPrompts.forEach((prompt, i) => {
+    for (let i = 0; i < validPrompts.length; i++) {
+      if (i % 100 === 0) {
+        await new Promise(resolve => setTimeout(resolve, 0)); // Yield every 100 prompts
+      }
+      
+      const prompt = validPrompts[i];
       const tokens = allTokens[i];
       const vector = [];
       
@@ -2862,19 +2811,49 @@ function renderEmbeddingsVisualization() {
         workspaceName: prompt.workspaceName || 'Unknown',
         source: prompt.source || 'cursor'
       });
-    });
+    }
     
     console.log(`[EMBEDDINGS] Built ${vectors.length} TF-IDF vectors with ${vectors[0]?.length} dimensions`);
     
-    // Apply dimensionality reduction
+    // Apply dimensionality reduction (with timeout protection)
     let reducedVectors;
     if (method === 'pca') {
+      // PCA is fast, can run synchronously
       reducedVectors = applyPCA(vectors, dimensions, numComponents);
       console.log(`[EMBEDDINGS] PCA complete: ${reducedVectors.length} vectors -> ${reducedVectors[0]?.length} dims`);
     } else if (method === 'tsne') {
+      // t-SNE is slow, limit to smaller dataset
+      if (vectors.length > 500) {
+        console.warn(`[EMBEDDINGS] t-SNE is slow with ${vectors.length} prompts, limiting to 500`);
+        const limitedVectors = vectors.slice(0, 500);
+        const limitedLabels = promptLabels.slice(0, 500);
+        const limitedMetadata = promptMetadata.slice(0, 500);
+        reducedVectors = applyTSNE(limitedVectors, dimensions, numComponents);
+        // Re-render with limited data
+        if (dimensions === 2) {
+          renderEmbeddings2D(container, reducedVectors, limitedLabels, limitedMetadata);
+        } else {
+          renderEmbeddings3D(container, reducedVectors, limitedLabels, limitedMetadata);
+        }
+        return;
+      }
       reducedVectors = applyTSNE(vectors, dimensions, numComponents);
       console.log(`[EMBEDDINGS] t-SNE complete`);
     } else {
+      // MDS is also slow, limit if needed
+      if (vectors.length > 500) {
+        console.warn(`[EMBEDDINGS] MDS is slow with ${vectors.length} prompts, limiting to 500`);
+        const limitedVectors = vectors.slice(0, 500);
+        const limitedLabels = promptLabels.slice(0, 500);
+        const limitedMetadata = promptMetadata.slice(0, 500);
+        reducedVectors = applyMDS(limitedVectors, dimensions);
+        if (dimensions === 2) {
+          renderEmbeddings2D(container, reducedVectors, limitedLabels, limitedMetadata);
+        } else {
+          renderEmbeddings3D(container, reducedVectors, limitedLabels, limitedMetadata);
+        }
+        return;
+      }
       reducedVectors = applyMDS(vectors, dimensions);
       console.log(`[EMBEDDINGS] MDS complete`);
     }
@@ -2886,12 +2865,17 @@ function renderEmbeddingsVisualization() {
       renderEmbeddings3D(container, reducedVectors, promptLabels, promptMetadata);
     }
     
+    // Calculate total tokens for display
+    const totalTokens = allTokens.reduce((sum, tokens) => sum + tokens.length, 0);
+    if (totalChangesEl) totalChangesEl.textContent = totalTokens.toLocaleString();
+    
     // Update similarity pairs to show similar prompts
     const avgSim = updatePromptSimilarityPairs(validPrompts, vectors, promptTexts);
     
     // Update average similarity stat
-    if (avgSim !== null) {
-      document.getElementById('embeddingsAvgSimilarity').textContent = avgSim.toFixed(3);
+    const avgSimEl = document.getElementById('embeddingsAvgSimilarity');
+    if (avgSimEl && avgSim !== null) {
+      avgSimEl.textContent = avgSim.toFixed(3);
     }
     
   } catch (error) {
@@ -3956,10 +3940,9 @@ function renderSimilarFilePairs(links, files) {
   
   if (sortedLinks.length === 0) {
     container.innerHTML = `
-      <div style="text-align: center; padding: var(--space-xl); color: var(--color-text-muted);">
-        <div style="font-size: 48px; margin-bottom: var(--space-md);">No Similar Pairs Found</div>
-        <div style="font-size: var(--text-md); margin-bottom: var(--space-sm);">No Similar Pairs Found</div>
-        <div style="font-size: var(--text-sm);">Modify some files together to see relationships</div>
+      <div class="empty-state">
+        <div class="empty-state-text" style="font-size: var(--text-md); margin-bottom: var(--space-sm);">No Similar Pairs Found</div>
+        <div class="empty-state-hint">Modify some files together to see relationships</div>
       </div>
     `;
     return;
@@ -3993,32 +3976,29 @@ function renderSimilarFilePairs(links, files) {
     
     return `
       <div class="similar-pair-item" data-source="${source.id}" data-target="${target.id}" 
-           style="display: flex; align-items: center; gap: var(--space-md); padding: var(--space-md); background: var(--color-bg-alt); border-radius: var(--radius-md); border: 2px solid transparent; transition: all 0.2s; cursor: pointer;"
            onmouseenter="highlightPairInGraph('${source.id}', '${target.id}')"
            onmouseleave="clearGraphHighlights()"
            onclick="focusOnPair('${source.id}', '${target.id}')"
            title="Click to focus on this pair in the graph">
         
         <!-- Rank Badge -->
-        <div style="flex-shrink: 0; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; background: var(--color-primary); color: white; border-radius: 50%; font-weight: bold; font-size: 14px;">
-          ${index + 1}
-        </div>
+        <div class="similar-pair-rank">${index + 1}</div>
         
         <!-- File Pair Info -->
-        <div style="flex: 1; min-width: 0;">
-          <div style="display: flex; align-items: center; gap: var(--space-sm); margin-bottom: var(--space-xs);">
-            <div style="display: flex; align-items: center; gap: var(--space-xs); flex: 1; min-width: 0;">
-              <span style="width: 8px; height: 8px; border-radius: 50%; background: ${sourceColor}; flex-shrink: 0;"></span>
-              <span style="font-family: var(--font-mono); font-size: var(--text-sm); color: var(--color-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${source.path}">${sourceName}</span>
+        <div class="similar-pair-info">
+          <div class="similar-pair-files-row">
+            <div class="similar-pair-file">
+              <span class="similar-pair-file-dot" style="background: ${sourceColor};"></span>
+              <span class="similar-pair-file-name" title="${escapeHtml(source.path)}">${escapeHtml(sourceName)}</span>
             </div>
-            <span style="color: var(--color-text-muted); font-size: var(--text-sm); flex-shrink: 0;">↔</span>
-            <div style="display: flex; align-items: center; gap: var(--space-xs); flex: 1; min-width: 0;">
-              <span style="width: 8px; height: 8px; border-radius: 50%; background: ${targetColor}; flex-shrink: 0;"></span>
-              <span style="font-family: var(--font-mono); font-size: var(--text-sm); color: var(--color-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${target.path}">${targetName}</span>
+            <span class="similar-pair-file-arrow">↔</span>
+            <div class="similar-pair-file">
+              <span class="similar-pair-file-dot" style="background: ${targetColor};"></span>
+              <span class="similar-pair-file-name" title="${escapeHtml(target.path)}">${escapeHtml(targetName)}</span>
             </div>
           </div>
           
-          <div style="display: flex; gap: var(--space-md); font-size: var(--text-xs); color: var(--color-text-muted);">
+          <div class="similar-pair-meta">
             ${sharedPrompts > 0 ? `<span title="Number of AI prompts that referenced both files">${sharedPrompts} shared prompts</span>` : ''}
             ${sharedPrompts > 0 && sharedSessions > 0 ? '<span>•</span>' : ''}
             ${sharedSessions > 0 ? `<span title="Number of coding sessions where both files were modified">${sharedSessions} shared sessions</span>` : ''}
@@ -4028,13 +4008,11 @@ function renderSimilarFilePairs(links, files) {
         </div>
         
         <!-- Similarity Score -->
-        <div style="flex-shrink: 0; text-align: right;">
-          <div style="font-size: var(--text-lg); font-weight: bold; color: var(--color-success);" title="Jaccard similarity coefficient based on prompt and session co-occurrence">
+        <div class="similar-pair-score">
+          <div class="similar-pair-score-value" title="Jaccard similarity coefficient based on prompt and session co-occurrence">
             ${similarityPercent}%
           </div>
-          <div style="font-size: var(--text-xs); color: var(--color-text-muted);">
-            similarity
-          </div>
+          <div class="similar-pair-score-label">similarity</div>
         </div>
       </div>
     `;
@@ -4262,14 +4240,14 @@ async function initializeNavigator() {
     console.log('[NAVIGATOR] Starting initialization...');
     
     // Show loading
-    container.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%;"><div class="loading-spinner"></div><span style="margin-left: 12px;">Computing latent embeddings...</span></div>';
+    container.innerHTML = '<div class="loading-wrapper"><div class="loading-spinner"></div><span>Computing latent embeddings...</span></div>';
     
     // Fetch file data
     const response = await fetch(`${CONFIG.API_BASE}/api/file-contents?limit=100000`);
     const data = await response.json();
     
     if (!data.files || data.files.length === 0) {
-      container.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--color-text-muted);">No file data available</div>';
+      container.innerHTML = '<div class="empty-wrapper">No file data available</div>';
       return;
     }
     
@@ -4377,11 +4355,11 @@ async function initializeNavigator() {
     generateSemanticInsights();
     
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-    console.log(`[NAVIGATOR] ✅ Initialization complete in ${elapsed}s`);
+    console.log(`[NAVIGATOR] Initialization complete in ${elapsed}s`);
     
   } catch (error) {
     console.error('Error initializing navigator:', error);
-    container.innerHTML = `<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--color-error);">Error loading navigator: ${error.message}</div>`;
+    container.innerHTML = `<div class="error-wrapper">Error loading navigator: ${escapeHtml(error.message)}</div>`;
   }
 }
 
@@ -4931,8 +4909,16 @@ function navigateToMiniMapPosition(x, y) {
     .call(navigatorState.zoom.transform, d3.zoomIdentity.translate(translateX, translateY).scale(scale));
 }
 function updateNavigatorStats() {
-  document.getElementById('navFileCount').textContent = navigatorState.nodes.length;
-  document.getElementById('navClusterCount').textContent = navigatorState.clusters.length;
+  const fileCountEl = document.getElementById('navFileCount');
+  const clusterCountEl = document.getElementById('navClusterCount');
+  
+  if (!fileCountEl || !clusterCountEl) {
+    console.warn('[NAVIGATOR] Stats elements not found, skipping update');
+    return;
+  }
+  
+  fileCountEl.textContent = navigatorState.nodes.length;
+  clusterCountEl.textContent = navigatorState.clusters.length;
   
   // Calculate coherence (average intra-cluster distance vs inter-cluster distance)
   let coherence = 0;
@@ -4941,9 +4927,11 @@ function updateNavigatorStats() {
     const interDistances = [];
     
     navigatorState.clusters.forEach(cluster => {
+      if (!cluster.nodes || cluster.nodes.length === 0) return;
       cluster.nodes.forEach((n1, i) => {
+        if (!n1 || typeof n1.x !== 'number' || typeof n1.y !== 'number') return;
         cluster.nodes.forEach((n2, j) => {
-          if (i < j) {
+          if (i < j && n2 && typeof n2.x === 'number' && typeof n2.y === 'number') {
             const dist = Math.sqrt((n1.x - n2.x) ** 2 + (n1.y - n2.y) ** 2);
             intraDistances.push(dist);
           }
@@ -4953,9 +4941,11 @@ function updateNavigatorStats() {
     
     navigatorState.clusters.forEach((c1, i) => {
       navigatorState.clusters.forEach((c2, j) => {
-        if (i < j) {
+        if (i < j && c1.nodes && c1.nodes.length > 0 && c2.nodes && c2.nodes.length > 0) {
           c1.nodes.forEach(n1 => {
+            if (!n1 || typeof n1.x !== 'number' || typeof n1.y !== 'number') return;
             c2.nodes.forEach(n2 => {
+              if (!n2 || typeof n2.x !== 'number' || typeof n2.y !== 'number') return;
               const dist = Math.sqrt((n1.x - n2.x) ** 2 + (n1.y - n2.y) ** 2);
               interDistances.push(dist);
             });
@@ -4969,15 +4959,18 @@ function updateNavigatorStats() {
     coherence = Math.max(0, Math.min(100, (1 - avgIntra / avgInter) * 100));
   }
   
-  document.getElementById('navCoherence').textContent = `${coherence.toFixed(0)}%`;
+  const coherenceEl = document.getElementById('navCoherence');
+  if (coherenceEl) {
+    coherenceEl.textContent = `${coherence.toFixed(0)}%`;
+  }
   
   // Update cluster legend
   const legend = document.getElementById('clusterLegend');
   if (legend) {
     legend.innerHTML = navigatorState.clusters.map(cluster => `
-      <div style="display: flex; align-items: center; gap: var(--space-xs);">
-        <div style="width: 12px; height: 12px; border-radius: 2px; background: ${cluster.color};"></div>
-        <span style="color: var(--color-text);">${cluster.name} (${cluster.nodes.length})</span>
+      <div class="cluster-legend-item">
+        <div class="cluster-legend-color" style="background: ${cluster.color};"></div>
+        <span class="cluster-legend-label">${escapeHtml(cluster.name)} (${cluster.nodes.length})</span>
       </div>
     `).join('');
   }
@@ -4990,16 +4983,28 @@ function generateSemanticInsights() {
   const insights = [];
   
   // Find most isolated cluster
-  const clusterCenters = navigatorState.clusters.map(c => c.centroid);
+  const clusterCenters = navigatorState.clusters
+    .map(c => c.centroid)
+    .filter(centroid => centroid && typeof centroid.x === 'number' && typeof centroid.y === 'number');
+  
+  if (clusterCenters.length === 0) return; // No valid centroids
+  
   let maxDist = 0;
   let isolatedCluster = null;
   
   navigatorState.clusters.forEach((cluster, i) => {
+    if (!cluster.centroid || typeof cluster.centroid.x !== 'number' || typeof cluster.centroid.y !== 'number') {
+      return; // Skip clusters without valid centroids
+    }
+    
     const distances = clusterCenters.map((center, j) => {
-      if (i === j) return 0;
+      if (i === j || !center || typeof center.x !== 'number' || typeof center.y !== 'number') return 0;
       return Math.sqrt((cluster.centroid.x - center.x) ** 2 + (cluster.centroid.y - center.y) ** 2);
     });
-    const minDist = Math.min(...distances.filter(d => d > 0));
+    const validDistances = distances.filter(d => d > 0);
+    if (validDistances.length === 0) return;
+    
+    const minDist = Math.min(...validDistances);
     if (minDist > maxDist) {
       maxDist = minDist;
       isolatedCluster = cluster;
@@ -5029,9 +5034,9 @@ function generateSemanticInsights() {
   
   // Render insights
   container.innerHTML = insights.map(insight => `
-    <div style="padding: var(--space-md); background: var(--color-bg-alt); border-left: 4px solid ${insight.cluster.color}; border-radius: var(--radius-md);">
-      <h4 style="margin: 0 0 var(--space-xs) 0; font-size: var(--text-sm); color: var(--color-text);">${insight.title}</h4>
-      <p style="margin: 0; font-size: var(--text-xs); color: var(--color-text-muted);">${insight.description}</p>
+    <div class="semantic-insight-item" style="border-left-color: ${insight.cluster.color};">
+      <h4 class="semantic-insight-title">${escapeHtml(insight.title)}</h4>
+      <p class="semantic-insight-description">${escapeHtml(insight.description)}</p>
     </div>
   `).join('');
 }
@@ -5092,41 +5097,41 @@ function showFileInfo(file) {
   title.textContent = `File: ${file.name}`;
   
   body.innerHTML = `
-    <div style="display: flex; flex-direction: column; gap: var(--space-lg);">
+    <div class="file-info-section">
       <div>
-        <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">File Information</h4>
-        <div style="display: grid; gap: var(--space-sm);">
-          <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-            <span style="color: var(--color-text-muted);">Path:</span>
-            <span style="color: var(--color-text); font-family: var(--font-mono); font-size: var(--text-xs);" title="${escapeHtml(file.path)}">${escapeHtml(truncate(file.path, 50))}</span>
+        <h4>File Information</h4>
+        <div class="file-info-grid">
+          <div class="file-info-row">
+            <span class="file-info-label">Path:</span>
+            <span class="file-info-value mono" title="${escapeHtml(file.path)}">${escapeHtml(truncate(file.path, 50))}</span>
           </div>
-          <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-            <span style="color: var(--color-text-muted);">Type:</span>
+          <div class="file-info-row">
+            <span class="file-info-label">Type:</span>
             <span class="badge" style="background: var(--color-bg-alt); color: var(--color-text); border: 2px solid ${getFileTypeColor(file.ext)}; font-weight: 600; font-family: var(--font-mono);">${file.ext.toUpperCase()}</span>
           </div>
-          <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-            <span style="color: var(--color-text-muted);">Total Changes:</span>
-            <span style="color: var(--color-text); font-weight: 600;">${file.changes}</span>
+          <div class="file-info-row">
+            <span class="file-info-label">Total Changes:</span>
+            <span class="file-info-value bold">${file.changes}</span>
           </div>
-          <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-            <span style="color: var(--color-text-muted);">Last Modified:</span>
-            <span style="color: var(--color-text);">${formatTimeAgo(file.lastModified)}</span>
+          <div class="file-info-row">
+            <span class="file-info-label">Last Modified:</span>
+            <span class="file-info-value">${formatTimeAgo(file.lastModified)}</span>
           </div>
         </div>
       </div>
       
       <div>
-        <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">Recent Events (${file.events.length})</h4>
-        <div style="display: flex; flex-direction: column; gap: var(--space-sm); max-height: 300px; overflow-y: auto;">
+        <h4>Recent Events (${file.events.length})</h4>
+        <div class="file-events-list">
           ${file.events.slice(-10).reverse().map(event => `
-            <div style="padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md); border-left: 3px solid var(--color-accent);">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-xs);">
-                <span style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">
+            <div class="file-event-item">
+              <div class="file-event-header">
+                <span class="file-event-time">
                   ${formatTimeAgo(event.timestamp)}
                 </span>
-                <span class="badge">${event.type || 'file_change'}</span>
+                <span class="badge">${escapeHtml(event.type || 'file_change')}</span>
               </div>
-              <div style="font-size: var(--text-sm); color: var(--color-text);">
+              <div class="file-event-description">
                 ${escapeHtml(event.description || event.title || 'File modified')}
               </div>
             </div>
@@ -5171,8 +5176,10 @@ function resetFileGraphZoom() {
 // ===================================
 // File Similarity via Prompts Analysis
 // ===================================
+// NOTE: This analyzes FILES based on prompts, not prompts themselves
+// The "Prompts Embedding Analysis" section uses the renderEmbeddingsVisualization() function above (line 2608)
 
-function renderEmbeddingsVisualization() {
+function renderFileSimilarityFromPrompts() {
   console.log('[STYLE] Rendering file similarity embeddings based on prompt context...');
   
   // Get all prompts with valid text (filter out JSON/composer conversations)
@@ -5385,7 +5392,12 @@ function renderFileSimilarityVisualization(files, filePromptMap, similarities) {
 // Navigator View (Latent Space)
 // ===================================
 
-function renderNavigatorView(container) {
+// ===================================
+// Navigator View (moved to views/navigator/index.js)
+// ===================================
+// Removed: function renderNavigatorView - see views/navigator/index.js
+
+function _legacy_renderNavigatorView(container) {
   container.innerHTML = `
     <div class="navigator-view">
       <div class="view-header">
@@ -5394,18 +5406,18 @@ function renderNavigatorView(container) {
       </div>
 
       <!-- View Mode Switcher -->
-      <div class="view-mode-controls" style="display: flex; gap: var(--space-lg); align-items: center; padding: var(--space-lg); background: var(--color-bg-alt); border-radius: var(--radius-lg); margin-bottom: var(--space-lg);">
-        <div style="flex: 1;">
-          <h3 style="margin: 0 0 var(--space-xs) 0; font-size: var(--text-md); color: var(--color-text);">View Mode</h3>
-          <div class="view-mode-switcher" style="display: flex; gap: var(--space-sm);">
+      <div class="view-mode-controls">
+        <div>
+          <h3>View Mode</h3>
+          <div class="view-mode-switcher">
             <button class="view-mode-btn active" data-mode="physical" onclick="setNavigatorViewMode('physical')">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="margin-right: 4px;">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                 <path d="M4 4h3v3H4V4zm5 0h3v3H9V4zM4 9h3v3H4V9zm5 0h3v3H9V9z"/>
               </svg>
               Physical
             </button>
             <button class="view-mode-btn" data-mode="hybrid" onclick="setNavigatorViewMode('hybrid')">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="margin-right: 4px;">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                 <circle cx="8" cy="4" r="2"/>
                 <circle cx="4" cy="12" r="2"/>
                 <circle cx="12" cy="12" r="2"/>
@@ -5414,7 +5426,7 @@ function renderNavigatorView(container) {
               Hybrid
             </button>
             <button class="view-mode-btn" data-mode="latent" onclick="setNavigatorViewMode('latent')">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="margin-right: 4px;">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                 <circle cx="8" cy="8" r="6"/>
                 <circle cx="8" cy="8" r="3"/>
                 <path d="M8 2v4M8 10v4M2 8h4M10 8h4"/>
@@ -5422,18 +5434,17 @@ function renderNavigatorView(container) {
               Latent
             </button>
           </div>
-          <p style="margin: var(--space-xs) 0 0 0; font-size: var(--text-xs); color: var(--color-text-muted);">
+          <p>
             <strong>Physical:</strong> Direct co-modification • 
             <strong>Latent:</strong> Semantic similarity • 
             <strong>Hybrid:</strong> Blend both
           </p>
         </div>
 
-        <div style="border-left: 1px solid var(--color-border); padding-left: var(--space-lg);">
-          <h3 style="margin: 0 0 var(--space-xs) 0; font-size: var(--text-md); color: var(--color-text);">Transition Speed</h3>
-          <input type="range" id="transitionSpeed" min="0.5" max="2" step="0.1" value="1" 
-                 style="width: 200px;" oninput="updateTransitionSpeed(this.value)">
-          <div style="display: flex; justify-content: space-between; font-size: var(--text-xs); color: var(--color-text-muted); margin-top: 4px;">
+        <div>
+          <h3>Transition Speed</h3>
+          <input type="range" id="transitionSpeed" min="0.5" max="2" step="0.1" value="1" oninput="updateTransitionSpeed(this.value)">
+          <div class="speed-label-wrapper">
             <span>Slow</span>
             <span id="speedLabel">1.0x</span>
             <span>Fast</span>
@@ -5442,67 +5453,67 @@ function renderNavigatorView(container) {
       </div>
 
       <!-- Main Content Area -->
-      <div style="display: grid; grid-template-columns: 1fr 200px; gap: var(--space-lg);">
+      <div class="navigator-main-layout">
         
         <!-- Main Visualization -->
-        <div>
-          <div class="navigator-container" id="navigatorContainer" style="width: 100%; height: 700px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg); position: relative;">
+        <div class="navigator-visualization-area">
+          <div class="navigator-container" id="navigatorContainer">
             <!-- Navigator will be rendered here -->
           </div>
 
           <!-- Navigation Controls -->
-          <div style="display: flex; gap: var(--space-md); margin-top: var(--space-md); align-items: center;">
-            <button class="btn btn-primary" onclick="zoomToFitNavigator()" style="font-size: 13px; padding: 8px 16px;">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="margin-right: 4px;">
+          <div class="navigator-controls">
+            <button class="btn btn-primary" onclick="zoomToFitNavigator()">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                 <path d="M2 2h5v5H2V2zm7 0h5v5H9V2zM2 9h5v5H2V9zm7 0h5v5H9V9z"/>
               </svg>
               Zoom to Fit
             </button>
-            <button class="btn btn-secondary" onclick="resetNavigatorView()" style="font-size: 13px; padding: 8px 16px;">Reset View</button>
-            <button class="btn btn-secondary" onclick="toggleNavigatorLabels()" id="navigatorLabelToggle" style="font-size: 13px; padding: 8px 16px;">Hide Labels</button>
+            <button class="btn btn-secondary" onclick="resetNavigatorView()">Reset View</button>
+            <button class="btn btn-secondary" onclick="toggleNavigatorLabels()" id="navigatorLabelToggle">Hide Labels</button>
             
-            <div style="flex: 1;"></div>
+            <div class="spacer"></div>
             
-            <div style="display: flex; gap: var(--space-sm); align-items: center; font-size: var(--text-sm); color: var(--color-text-muted);">
+            <div class="interpolation-display">
               <span>Interpolation:</span>
-              <span id="interpolationValue" style="font-weight: bold; color: var(--color-primary);">0%</span>
+              <span id="interpolationValue" class="interpolation-value">0%</span>
             </div>
           </div>
         </div>
 
         <!-- Mini-Map Widget -->
-        <div>
-          <div class="mini-map-widget" style="background: var(--color-bg-alt); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: var(--space-md);">
-            <h3 style="margin: 0 0 var(--space-sm) 0; font-size: var(--text-sm); color: var(--color-text); display: flex; align-items: center; gap: var(--space-xs);">
+        <div class="navigator-sidebar">
+          <div class="mini-map-widget">
+            <h3>
               <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                 <path d="M8 0a8 8 0 100 16A8 8 0 008 0zm0 2a6 6 0 110 12A6 6 0 018 2z"/>
               </svg>
               Overview
             </h3>
-            <div id="miniMapCanvas" style="width: 100%; height: 180px; background: var(--color-bg); border-radius: var(--radius-sm); border: 1px solid var(--color-border); position: relative; cursor: pointer;">
+            <div id="miniMapCanvas" class="mini-map-canvas">
               <!-- Mini-map will be rendered here -->
             </div>
             
-            <div style="margin-top: var(--space-md); font-size: var(--text-xs); color: var(--color-text-muted);">
-              <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+            <div class="mini-map-stats">
+              <div class="mini-map-stat-row">
                 <span>Files:</span>
-                <span id="navFileCount" style="color: var(--color-text); font-weight: 600;">0</span>
+                <span id="navFileCount" class="mini-map-stat-value">0</span>
               </div>
-              <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+              <div class="mini-map-stat-row">
                 <span>Clusters:</span>
-                <span id="navClusterCount" style="color: var(--color-text); font-weight: 600;">0</span>
+                <span id="navClusterCount" class="mini-map-stat-value">0</span>
               </div>
-              <div style="display: flex; justify-content: space-between;">
+              <div class="mini-map-stat-row">
                 <span>Coherence:</span>
-                <span id="navCoherence" style="color: var(--color-success); font-weight: 600;">0%</span>
+                <span id="navCoherence" class="mini-map-stat-value success">0%</span>
               </div>
             </div>
           </div>
 
           <!-- Cluster Legend -->
-          <div style="margin-top: var(--space-md); background: var(--color-bg-alt); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: var(--space-md);">
-            <h3 style="margin: 0 0 var(--space-sm) 0; font-size: var(--text-sm); color: var(--color-text);">Latent Clusters</h3>
-            <div id="clusterLegend" style="display: flex; flex-direction: column; gap: var(--space-xs); font-size: var(--text-xs);">
+          <div class="cluster-legend">
+            <h3>Latent Clusters</h3>
+            <div id="clusterLegend" class="cluster-legend-list">
               <!-- Cluster legend will be populated -->
             </div>
           </div>
@@ -5510,13 +5521,13 @@ function renderNavigatorView(container) {
       </div>
 
       <!-- Semantic Insights -->
-      <div class="card" style="margin-top: var(--space-lg);">
+      <div class="card semantic-insights">
         <div class="card-header">
           <h3 class="card-title">Semantic Insights</h3>
           <p class="card-subtitle">Discovered patterns in latent space</p>
         </div>
         <div class="card-body">
-          <div id="semanticInsights" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: var(--space-md);">
+          <div id="semanticInsights" class="semantic-insights-grid">
             <!-- Insights will be populated -->
           </div>
         </div>
@@ -5531,26 +5542,17 @@ function renderNavigatorView(container) {
 // System View
 // ===================================
 
-function renderSystemView(container) {
-  const latestGit = state.data.gitData[state.data.gitData.length - 1];
-  const latestIdeState = Array.isArray(state.data.ideState) && state.data.ideState.length > 0 
-    ? state.data.ideState[state.data.ideState.length - 1] 
-    : null;
-  
-  // Extract editor info from the nested structure
-  const openTabs = latestIdeState?.editorState?.activeTabs?.length || 0;
-  const currentFile = latestIdeState?.editorState?.editorLayout?.activeEditor || 'None';
-  const currentFileName = currentFile !== 'None' ? currentFile.split('/').pop() : 'None';
-  const languageMode = latestIdeState?.editorConfiguration?.languageMode || 'Unknown';
-  const cursorPos = latestIdeState?.editorState?.activeTabs?.[0]?.lineNumber && latestIdeState?.editorState?.activeTabs?.[0]?.columnNumber
-    ? `Ln ${latestIdeState.editorState.activeTabs[0].lineNumber}, Col ${latestIdeState.editorState.activeTabs[0].columnNumber}`
-    : 'Unknown';
+// ===================================
+// System View (moved to views/system/index.js)
+// ===================================
+// Removed: function renderSystemView - see views/system/index.js
 
+function _legacy_renderSystemView(container) {
   container.innerHTML = `
-    <div style="display: grid; gap: var(--space-xl);">
+    <div class="system-view">
       
       <!-- Current Stats Row -->
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: var(--space-lg);">
+      <div class="system-stats-grid">
         
         <div class="card">
           <div class="card-header">
@@ -5561,62 +5563,10 @@ function renderSystemView(container) {
           </div>
         </div>
 
-        <div class="card">
-          <div class="card-header">
-            <h3 class="card-title">Git Repository</h3>
-          </div>
-          <div class="card-body">
-            ${latestGit ? `
-              <div style="display: flex; flex-direction: column; gap: var(--space-md);">
-                <div style="display: flex; justify-content: space-between; padding: var(--space-sm) 0; border-bottom: 1px solid var(--color-border);">
-                  <span style="color: var(--color-text-muted);">Branch</span>
-                  <span style="color: var(--color-text); font-family: var(--font-mono); font-size: var(--text-sm);">${latestGit.branch || 'Unknown'}</span>
-                </div>
-                <div style="display: flex; justify-content: space-between; padding: var(--space-sm) 0; border-bottom: 1px solid var(--color-border);">
-                  <span style="color: var(--color-text-muted);">Modified Files</span>
-                  <span style="color: var(--color-text); font-weight: 600;">${latestGit.status?.length || 0}</span>
-                </div>
-                <div style="display: flex; justify-content: space-between; padding: var(--space-sm) 0;">
-                  <span style="color: var(--color-text-muted);">Recent Commits</span>
-                  <span style="color: var(--color-text); font-weight: 600;">${latestGit.recentCommits?.length || 0}</span>
-                </div>
-              </div>
-            ` : '<div class="empty-state-text">No git data available</div>'}
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="card-header">
-            <h3 class="card-title">Editor State</h3>
-          </div>
-          <div class="card-body">
-            ${latestIdeState ? `
-              <div style="display: flex; flex-direction: column; gap: var(--space-md);">
-                <div style="display: flex; justify-content: space-between; padding: var(--space-sm) 0; border-bottom: 1px solid var(--color-border);">
-                  <span style="color: var(--color-text-muted);">Open Tabs</span>
-                  <span style="color: var(--color-text); font-weight: 600;">${openTabs}</span>
-                </div>
-                <div style="display: flex; justify-content: space-between; padding: var(--space-sm) 0; border-bottom: 1px solid var(--color-border);">
-                  <span style="color: var(--color-text-muted);">Current File</span>
-                  <span style="color: var(--color-text); font-family: var(--font-mono); font-size: var(--text-xs);" title="${escapeHtml(currentFile)}">${escapeHtml(truncate(currentFileName, 25))}</span>
-                </div>
-                <div style="display: flex; justify-content: space-between; padding: var(--space-sm) 0; border-bottom: 1px solid var(--color-border);">
-                  <span style="color: var(--color-text-muted);">Language</span>
-                  <span style="color: var(--color-text); font-weight: 600;">${languageMode || 'Unknown'}</span>
-                </div>
-                <div style="display: flex; justify-content: space-between; padding: var(--space-sm) 0;">
-                  <span style="color: var(--color-text-muted);">Position</span>
-                  <span style="color: var(--color-text); font-weight: 600;">${cursorPos}</span>
-                </div>
-              </div>
-            ` : '<div class="empty-state-text">No IDE state available</div>'}
-          </div>
-        </div>
-
       </div>
 
       <!-- Time Series Graphs -->
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: var(--space-lg);">
+      <div class="time-series-grid">
         
         <div class="card">
           <div class="card-header">
@@ -5624,7 +5574,7 @@ function renderSystemView(container) {
             <p class="card-subtitle">Memory usage and CPU load tracking</p>
           </div>
           <div class="card-body">
-            <canvas id="systemResourcesChart" style="max-height: 300px;"></canvas>
+            <canvas id="systemResourcesChart" class="system-chart-container"></canvas>
           </div>
         </div>
 
@@ -5643,7 +5593,12 @@ function renderSystemView(container) {
 // API Documentation View
 // ===================================
 
-function renderAPIDocsView(container) {
+// ===================================
+// API Docs View (moved to views/api-docs/index.js)
+// ===================================
+// Removed: function renderAPIDocsView - see views/api-docs/index.js
+
+function _legacy_renderAPIDocsView(container) {
   container.innerHTML = `
     <div style="max-width: 1200px; margin: 0 auto;">
       <div class="page-header">
@@ -6454,188 +6409,6 @@ socket.on('activity', (event) => {
     </div>
   `;
 }
-function renderSystemResourcesChart() {
-  const canvas = document.getElementById('systemResourcesChart');
-  if (!canvas) return;
-  
-  const ctx = canvas.getContext('2d');
-  const data = state.data.systemResources.slice(-30); // Last 30 data points
-  
-  if (data.length === 0) {
-    // ✅ Use HTML instead of canvas text to avoid blurriness on Retina displays
-    canvas.style.display = 'none';
-    const container = canvas.parentElement;
-    container.innerHTML = `
-      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 200px; text-align: center;">
-        <div style="font-size: var(--text-md); font-weight: 500; color: var(--color-text); margin-bottom: var(--space-xs);">No Data Available</div>
-        <div style="font-size: var(--text-sm); color: var(--color-text-muted);">File type data will appear as you edit files</div>
-      </div>
-    `;
-    return;
-  }
-
-  // Calculate max values for dual-axis scaling
-  // Handle both old format (d.memory as number) and new format (d.memory.rss)
-  const memoryData = data.map(d => {
-    const memBytes = d.memory?.rss || d.memory?.heapUsed || d.memory || 0;
-    return parseFloat((memBytes / 1024 / 1024).toFixed(1));
-  });
-  
-  // Handle both d.loadAverage and d.system.loadAverage
-  const cpuData = data.map(d => {
-    const loadAvg = d.system?.loadAverage || d.loadAverage || [0];
-    return loadAvg[0] || 0;
-  });
-  
-  const maxMemory = Math.max(...memoryData);
-  const maxCpu = Math.max(...cpuData);
-
-  new Chart(ctx, {
-    type: 'line',
-    data: {
-      labels: data.map((d, i) => {
-        const date = new Date(d.timestamp);
-        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      }),
-      datasets: [
-        {
-          label: 'Memory Usage (MB)',
-          data: memoryData,
-          borderColor: CONFIG.CHART_COLORS.primary,
-          backgroundColor: CONFIG.CHART_COLORS.primary + '15',
-          tension: 0.4,
-          fill: true,
-          yAxisID: 'y-memory',
-          borderWidth: 2,
-          pointRadius: 2,
-          pointHoverRadius: 4
-        },
-        {
-          label: 'CPU Load Average',
-          data: cpuData,
-          borderColor: CONFIG.CHART_COLORS.accent,
-          backgroundColor: CONFIG.CHART_COLORS.accent + '15',
-          tension: 0.4,
-          fill: true,
-          yAxisID: 'y-cpu',
-          borderWidth: 2,
-          pointRadius: 2,
-          pointHoverRadius: 4
-        }
-      ]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: true,
-      interaction: {
-        mode: 'index',
-        intersect: false,
-      },
-      plugins: {
-        legend: {
-          display: true,
-          position: 'top',
-          align: 'end',
-          labels: {
-            usePointStyle: true,
-            padding: 15,
-            font: {
-              size: 11,
-              family: 'Inter'
-            }
-          }
-        },
-        tooltip: {
-          backgroundColor: 'rgba(0, 0, 0, 0.8)',
-          padding: 12,
-          titleFont: {
-            size: 13
-          },
-          bodyFont: {
-            size: 12
-          },
-          callbacks: {
-            label: function(context) {
-              let label = context.dataset.label || '';
-              if (label) {
-                label += ': ';
-              }
-              if (context.dataset.yAxisID === 'y-memory') {
-                label += context.parsed.y.toFixed(1) + ' MB';
-              } else {
-                label += context.parsed.y.toFixed(2);
-              }
-              return label;
-            }
-          }
-        }
-      },
-      scales: {
-        x: {
-          grid: {
-            display: false
-          },
-          ticks: {
-            maxRotation: 45,
-            minRotation: 0,
-            font: {
-              size: 10
-            }
-          }
-        },
-        'y-memory': {
-          type: 'linear',
-          position: 'left',
-          beginAtZero: true,
-          title: {
-            display: true,
-            text: 'Memory (MB)',
-            font: {
-              size: 11,
-              weight: 'bold'
-            }
-          },
-          ticks: {
-            callback: function(value) {
-              return value.toFixed(0) + ' MB';
-            },
-            font: {
-              size: 10
-            }
-          },
-          grid: {
-            color: 'rgba(99, 102, 241, 0.1)'
-          }
-        },
-        'y-cpu': {
-          type: 'linear',
-          position: 'right',
-          beginAtZero: true,
-          title: {
-            display: true,
-            text: 'CPU Load',
-            font: {
-              size: 11,
-              weight: 'bold'
-            }
-          },
-          ticks: {
-            callback: function(value) {
-              return value.toFixed(1);
-            },
-            font: {
-              size: 10
-            }
-          },
-          grid: {
-            drawOnChartArea: false,
-            color: 'rgba(245, 158, 11, 0.1)'
-          }
-        }
-      }
-    }
-  });
-}
 
 /**
  * Helper to safely create a chart, destroying any existing instance
@@ -6654,499 +6427,6 @@ function createChart(canvasId, config) {
   state.charts[canvasId] = new Chart(ctx, config);
   return state.charts[canvasId];
 }
-function renderAIActivityChart() {
-  const canvas = document.getElementById('aiActivityChart');
-  if (!canvas) return;
-  
-  // Combine events and prompts to create time-series data
-  const allEvents = state.data.events || [];
-  const allPrompts = state.data.prompts || [];
-  
-  // 🔍 DEBUG: Log data availability
-  console.log('[CHART-DEBUG] AI Activity Chart rendering with:', {
-    totalEvents: allEvents.length,
-    totalPrompts: allPrompts.length,
-    sampleEvent: allEvents[0],
-    samplePrompt: allPrompts[0]
-  });
-  
-  // Group by hour for the last 24 hours or by day for longer periods
-  const now = Date.now();
-  const oneDayAgo = now - (24 * 60 * 60 * 1000);
-  const oneWeekAgo = now - (7 * 24 * 60 * 60 * 1000);
-  
-  // Determine granularity based on data span
-  const oldestEvent = allEvents.length > 0 ? Math.min(...allEvents.map(e => new Date(e.timestamp).getTime())) : now;
-  const oldestPrompt = allPrompts.length > 0 ? Math.min(...allPrompts.map(p => new Date(p.timestamp).getTime())) : now;
-  const oldestData = Math.min(oldestEvent, oldestPrompt);
-  
-  const useHourly = (now - oldestData) < (2 * 24 * 60 * 60 * 1000); // Less than 2 days
-  const bucketSize = useHourly ? 60 * 60 * 1000 : 24 * 60 * 60 * 1000; // 1 hour or 1 day
-  const numBuckets = useHourly ? 24 : 14; // Last 24 hours or 14 days
-  
-  // Create time buckets
-  const buckets = [];
-  for (let i = numBuckets - 1; i >= 0; i--) {
-    const bucketTime = now - (i * bucketSize);
-    buckets.push({
-      timestamp: bucketTime,
-      promptCount: 0,
-      codeChanges: 0, // in KB
-      fileCount: 0
-    });
-  }
-  
-  // Fill buckets with prompt data
-  allPrompts.forEach(prompt => {
-    const promptTime = new Date(prompt.timestamp).getTime();
-    const bucketIndex = Math.floor((now - promptTime) / bucketSize);
-    const actualIndex = numBuckets - 1 - bucketIndex;
-    if (actualIndex >= 0 && actualIndex < numBuckets) {
-      buckets[actualIndex].promptCount++;
-    }
-  });
-  
-  // Fill buckets with code change data
-  allEvents.forEach(event => {
-    const eventTime = new Date(event.timestamp).getTime();
-    const bucketIndex = Math.floor((now - eventTime) / bucketSize);
-    const actualIndex = numBuckets - 1 - bucketIndex;
-    if (actualIndex >= 0 && actualIndex < numBuckets) {
-      buckets[actualIndex].fileCount++;
-      
-      // Try to extract code change size
-      let changeSize = 0;
-      try {
-        const details = typeof event.details === 'string' ? JSON.parse(event.details) : event.details;
-        if (details.chars_added) changeSize += details.chars_added;
-        if (details.chars_deleted) changeSize += details.chars_deleted;
-      } catch (e) {
-        // Use fallback
-        changeSize = 100; // Assume 100 chars per change
-      }
-      buckets[actualIndex].codeChanges += changeSize / 1024; // Convert to KB
-    }
-  });
-  
-  if (buckets.every(b => b.promptCount === 0 && b.codeChanges === 0)) {
-    // ✅ Use HTML with diagnostic information
-    canvas.style.display = 'none';
-    const container = canvas.parentElement;
-    
-    // Check if companion service is running
-    const companionRunning = allEvents.length > 0 || allPrompts.length > 0;
-    
-    container.innerHTML = `
-      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 300px; padding: var(--space-xl); text-align: center;">
-        <div style="font-size: var(--text-lg); font-weight: 500; color: var(--color-text); margin-bottom: var(--space-md);">
-          ${allPrompts.length === 0 && allEvents.length === 0 ? 'Waiting for Data' : 'No Recent Activity'}
-        </div>
-        <div style="font-size: var(--text-sm); color: var(--color-text-muted); max-width: 500px; line-height: 1.6;">
-          ${allPrompts.length === 0 && allEvents.length === 0 ? `
-            <div style="margin-bottom: var(--space-md);">
-              The companion service hasn't sent any data yet. This could mean:
-            </div>
-            <div style="text-align: left; margin: 0 auto; max-width: 400px;">
-              <div style="margin-bottom: var(--space-sm);">• Companion service is still starting up</div>
-              <div style="margin-bottom: var(--space-sm);">• You haven't used Cursor AI yet</div>
-              <div style="margin-bottom: var(--space-sm);">• Database sync is in progress</div>
-            </div>
-            <div style="margin-top: var(--space-md); padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md); border-left: 3px solid var(--color-primary);">
-              <strong>Debug Info:</strong><br>
-              Events: ${allEvents.length} | Prompts: ${allPrompts.length}<br>
-              Check browser console for more details (F12)
-            </div>
-          ` : `
-            Data is loaded (${allPrompts.length} prompts, ${allEvents.length} events) but no activity in the selected time window.
-            <div style="margin-top: var(--space-sm);">Try using Cursor AI to generate new activity.</div>
-          `}
-        </div>
-      </div>
-    `;
-    return;
-  }
-  
-  createChart('aiActivityChart', {
-    type: 'line',
-    data: {
-      labels: buckets.map(b => {
-        const date = new Date(b.timestamp);
-        if (useHourly) {
-          return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        } else {
-          return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
-        }
-      }),
-      datasets: [
-        {
-          label: 'AI Prompts',
-          data: buckets.map(b => b.promptCount),
-          borderColor: '#8b5cf6',
-          backgroundColor: 'rgba(139, 92, 246, 0.15)',
-          tension: 0.4,
-          fill: true,
-          yAxisID: 'y-prompts',
-          borderWidth: 2,
-          pointRadius: 3,
-          pointHoverRadius: 5,
-          pointBackgroundColor: '#8b5cf6'
-        },
-        {
-          label: 'Code Output (KB)',
-          data: buckets.map(b => b.codeChanges),
-          borderColor: '#10b981',
-          backgroundColor: 'rgba(16, 185, 129, 0.15)',
-          tension: 0.4,
-          fill: true,
-          yAxisID: 'y-code',
-          borderWidth: 2,
-          pointRadius: 3,
-          pointHoverRadius: 5,
-          pointBackgroundColor: '#10b981'
-        }
-      ]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: true,
-      interaction: {
-        mode: 'index',
-        intersect: false,
-      },
-      plugins: {
-        legend: {
-          display: true,
-          position: 'top',
-          align: 'end',
-          labels: {
-            usePointStyle: true,
-            padding: 15,
-            font: {
-              size: 11,
-              family: 'Inter'
-            }
-          }
-        },
-        tooltip: {
-          backgroundColor: 'rgba(0, 0, 0, 0.8)',
-          padding: 12,
-          titleFont: {
-            size: 13
-          },
-          bodyFont: {
-            size: 12
-          },
-          callbacks: {
-            label: function(context) {
-              let label = context.dataset.label || '';
-              if (label) {
-                label += ': ';
-              }
-              if (context.dataset.yAxisID === 'y-prompts') {
-                label += context.parsed.y + ' prompts';
-              } else {
-                label += context.parsed.y.toFixed(2) + ' KB';
-              }
-              return label;
-            },
-            afterBody: function(tooltipItems) {
-              const index = tooltipItems[0].dataIndex;
-              const bucket = buckets[index];
-              return [`Files changed: ${bucket.fileCount}`];
-            }
-          }
-        }
-      },
-      scales: {
-        x: {
-          grid: {
-            display: false
-          },
-          ticks: {
-            maxRotation: 45,
-            minRotation: 0,
-            font: {
-              size: 10
-            }
-          }
-        },
-        'y-prompts': {
-          type: 'linear',
-          position: 'left',
-          beginAtZero: true,
-          title: {
-            display: true,
-            text: 'AI Prompts',
-            font: {
-              size: 11,
-              weight: 'bold'
-            }
-          },
-          ticks: {
-            stepSize: 1,
-            callback: function(value) {
-              return Math.floor(value);
-            },
-            font: {
-              size: 10
-            }
-          },
-          grid: {
-            color: 'rgba(139, 92, 246, 0.1)'
-          }
-        },
-        'y-code': {
-          type: 'linear',
-          position: 'right',
-          beginAtZero: true,
-          title: {
-            display: true,
-            text: 'Code Output (KB)',
-            font: {
-              size: 11,
-              weight: 'bold'
-            }
-          },
-          ticks: {
-            callback: function(value) {
-              return value.toFixed(1) + ' KB';
-            },
-            font: {
-              size: 10
-            }
-          },
-          grid: {
-            drawOnChartArea: false,
-            color: 'rgba(16, 185, 129, 0.1)'
-          }
-        }
-      }
-    }
-  });
-}
-function renderPromptTokensChart(hoursParam = 24) {
-  const canvas = document.getElementById('promptTokensChart');
-  if (!canvas) return;
-  
-  const ctx = canvas.getContext('2d');
-  
-  // Extract prompt data with token estimates from Cursor database prompts
-  const prompts = state.data.prompts || [];
-  
-  // Group prompts by time buckets (hourly for last 24 hours)
-  const now = Date.now();
-  const hours = hoursParam;
-  const buckets = Array.from({ length: hours }, (_, i) => {
-    const time = now - (hours - i) * 60 * 60 * 1000;
-    return {
-      timestamp: time,
-      charCount: 0,
-      contextUsage: 0,
-      contextCount: 0,
-      count: 0
-    };
-  });
-  
-  // Aggregate prompts into buckets
-  prompts.forEach(prompt => {
-    const promptTime = new Date(prompt.timestamp).getTime();
-    const bucketIndex = Math.floor((promptTime - (now - hours * 60 * 60 * 1000)) / (60 * 60 * 1000));
-    
-    if (bucketIndex >= 0 && bucketIndex < hours) {
-      // Track character count (not actual tokens, which aren't available)
-      const text = prompt.text || prompt.prompt || prompt.preview || '';
-      const charCount = text.length;
-      
-      // Extract context usage percentage if available (from Cursor's tracking)
-      const contextUsage = prompt.contextUsage || 0;
-      
-      buckets[bucketIndex].charCount += charCount;
-      if (contextUsage > 0) {
-        buckets[bucketIndex].contextUsage += contextUsage;
-        buckets[bucketIndex].contextCount += 1;
-      }
-      buckets[bucketIndex].count += 1;
-    }
-  });
-  
-  if (buckets.every(b => b.count === 0)) {
-    // ✅ Use HTML instead of canvas text to avoid blurriness on Retina displays
-    canvas.style.display = 'none';
-    const container = canvas.parentElement;
-    container.innerHTML = `
-      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 250px; text-align: center;">
-        <div style="font-size: var(--text-md); font-weight: 500; color: var(--color-text); margin-bottom: var(--space-xs);">No Data Available</div>
-        <div style="font-size: var(--text-sm); color: var(--color-text-muted);">Prompt data will appear once you start using Cursor AI</div>
-      </div>
-    `;
-    return;
-  }
-
-  // Calculate average context usage per bucket
-  const avgContextUsage = buckets.map(b => 
-    b.contextCount > 0 ? b.contextUsage / b.contextCount : 0
-  );
-
-  // Intelligently determine y1 axis max based on actual data
-  const maxContextUsage = Math.max(...avgContextUsage.filter(v => v > 0));
-  const hasContextData = avgContextUsage.some(v => v > 0);
-  
-  // Smart scaling: if max usage is < 50%, cap at 60% for better detail
-  // Otherwise use 100% to show the full scale
-  let contextAxisMax = 100;
-  let contextStepSize = 20;
-  
-  if (hasContextData) {
-    if (maxContextUsage <= 30) {
-      contextAxisMax = 40;
-      contextStepSize = 10;
-    } else if (maxContextUsage <= 50) {
-      contextAxisMax = 60;
-      contextStepSize = 10;
-    } else if (maxContextUsage <= 70) {
-      contextAxisMax = 80;
-      contextStepSize = 10;
-    }
-  }
-
-  createChart('promptTokensChart', {
-    type: 'line',
-    data: {
-      labels: buckets.map(b => {
-        const date = new Date(b.timestamp);
-        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      }),
-      datasets: [
-        {
-          label: 'Prompt Length (chars)',
-          data: buckets.map(b => b.charCount),
-          borderColor: '#94a3b8',
-          backgroundColor: 'rgba(148, 163, 184, 0.1)',
-          tension: 0.4,
-          fill: true,
-          borderWidth: 2,
-          pointRadius: 2,
-          pointHoverRadius: 4,
-          yAxisID: 'y'
-        },
-        {
-          label: 'Context Usage %',
-          data: avgContextUsage,
-          borderColor: '#f59e0b',
-          backgroundColor: 'rgba(245, 158, 11, 0.1)',
-          tension: 0.4,
-          fill: true,
-          borderWidth: 2,
-          pointRadius: 2,
-          pointHoverRadius: 4,
-          yAxisID: 'y1',
-          segment: {
-            // Color segments based on usage level
-            borderColor: ctx => {
-              const value = ctx.p1.parsed.y;
-              if (value >= 80) return '#ef4444'; // Red for high usage
-              if (value >= 60) return '#f59e0b'; // Orange for medium-high
-              return '#10b981'; // Green for normal
-            }
-          }
-        }
-      ]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: true,
-      interaction: {
-        mode: 'index',
-        intersect: false
-      },
-      plugins: {
-        legend: { 
-          display: true,
-          position: 'top',
-          align: 'end',
-          labels: {
-            usePointStyle: true,
-            padding: 10,
-            font: { size: 11 }
-          }
-        },
-        tooltip: {
-          backgroundColor: 'rgba(0, 0, 0, 0.8)',
-          padding: 10,
-          callbacks: {
-            label: function(context) {
-              const label = context.dataset.label || '';
-              const value = context.parsed.y;
-              if (label === 'Prompt Length (chars)') {
-                return `${label}: ${value.toLocaleString()} characters`;
-              } else if (label === 'Context Usage %') {
-                let status = '';
-                if (value >= 80) status = ' (High!)';
-                else if (value >= 60) status = ' (Medium-High)';
-                else if (value >= 40) status = ' (Medium)';
-                else status = ' (Normal)';
-                return `${label}: ${value.toFixed(1)}%${status}`;
-              } else {
-                return `${label}: ${value.toLocaleString()}`;
-              }
-            },
-            afterBody: function(context) {
-              const index = context[0].dataIndex;
-              const count = buckets[index].count;
-              return count > 0 ? `\n${count} prompt${count !== 1 ? 's' : ''}` : '';
-            }
-          }
-        }
-      },
-      scales: {
-        y: {
-          type: 'linear',
-          display: true,
-          position: 'left',
-          beginAtZero: true,
-          title: {
-            display: true,
-            text: 'Characters',
-            font: { size: 11 }
-          },
-          ticks: {
-            callback: function(value) {
-              return value >= 1000 ? (value/1000).toFixed(1) + 'k' : value;
-            }
-          }
-        },
-        y1: {
-          type: 'linear',
-          display: true,
-          position: 'right',
-          beginAtZero: true,
-          max: contextAxisMax,
-          title: {
-            display: true,
-            text: `Context % (0-${contextAxisMax}%)`,
-            font: { size: 11 }
-          },
-          ticks: {
-            stepSize: contextStepSize,
-            callback: function(value) {
-              return value.toFixed(0) + '%';
-            }
-          },
-          grid: {
-            drawOnChartArea: false,
-            // Add visual zones
-            color: function(context) {
-              const value = context.tick.value;
-              if (value >= 80) return 'rgba(239, 68, 68, 0.1)'; // Red zone
-              if (value >= 60) return 'rgba(245, 158, 11, 0.1)'; // Orange zone
-              return 'rgba(148, 163, 184, 0.05)'; // Normal
-            }
-          }
-        }
-      }
-    }
-  });
-}
 
 // ===================================
 // Modals
@@ -7158,7 +6438,7 @@ function renderPromptTokensChart(hoursParam = 24) {
  * @param {Number} timeWindowMinutes - Time window in minutes to search (default 5)
  * @returns {Array} Array of related prompts, sorted by relevance
  */
-function findRelatedPrompts(event, timeWindowMinutes = 5) {
+function findRelatedPrompts(event, timeWindowMinutes = 15) {
   if (!event || !state.data.prompts || state.data.prompts.length === 0) {
     return [];
   }
@@ -7166,979 +6446,66 @@ function findRelatedPrompts(event, timeWindowMinutes = 5) {
   const eventTime = new Date(event.timestamp).getTime();
   const timeWindowMs = timeWindowMinutes * 60 * 1000;
   
-  // Extract workspace from event
-  const eventWorkspace = event.workspace_path || event.details?.workspace_path || '';
+  // Extract workspace from event - normalize path
+  const eventWorkspace = (event.workspace_path || event.details?.workspace_path || '').toLowerCase();
+  const eventFile = event.details?.file_path || '';
   
-  // Filter prompts by workspace and time proximity
+  // Filter prompts by workspace and time proximity (more lenient matching)
   const related = state.data.prompts
-    .filter(prompt => {
-      // Check workspace match
-      const promptWorkspace = prompt.workspacePath || prompt.workspaceId || '';
-      const workspaceMatch = !eventWorkspace || !promptWorkspace || 
-                            eventWorkspace.includes(promptWorkspace) || 
-                            promptWorkspace.includes(eventWorkspace);
-      
-      if (!workspaceMatch) return false;
-      
-      // Check temporal proximity (prompts should be BEFORE the event)
-      const promptTime = new Date(prompt.timestamp).getTime();
-      const timeDiff = eventTime - promptTime;
-      
-      // Prompt should be within the time window BEFORE the event
-      return timeDiff >= 0 && timeDiff <= timeWindowMs;
-    })
     .map(prompt => {
       const promptTime = new Date(prompt.timestamp).getTime();
       const timeDiff = eventTime - promptTime;
       
-      // Calculate relevance score (closer in time = higher score)
-      const temporalScore = 1 - (timeDiff / timeWindowMs);
-      const workspaceScore = eventWorkspace && prompt.workspacePath && 
-                            eventWorkspace === prompt.workspacePath ? 1.0 : 0.5;
+      // More lenient: allow prompts within window before OR after (but prefer before)
+      const isWithinWindow = Math.abs(timeDiff) <= timeWindowMs;
+      const isBefore = timeDiff >= 0;
+      
+      // Check workspace match - more lenient
+      const promptWorkspace = (prompt.workspacePath || prompt.workspaceId || prompt.workspace_name || '').toLowerCase();
+      
+      // Match if:
+      // 1. No workspace specified (match all)
+      // 2. Workspace paths overlap
+      // 3. File path matches workspace
+      let workspaceMatch = !eventWorkspace || !promptWorkspace;
+      if (!workspaceMatch && eventWorkspace && promptWorkspace) {
+        // Check if paths share common segments
+        const eventParts = eventWorkspace.split('/').filter(p => p);
+        const promptParts = promptWorkspace.split('/').filter(p => p);
+        const commonParts = eventParts.filter(p => promptParts.includes(p));
+        workspaceMatch = commonParts.length >= 2 || // At least 2 common path segments
+                        eventWorkspace.includes(promptWorkspace) || 
+                        promptWorkspace.includes(eventWorkspace);
+      }
+      
+      // Only include if within time window and workspace matches
+      if (!isWithinWindow || !workspaceMatch) {
+        return null;
+      }
+      
+      // Calculate relevance score
+      const temporalScore = isBefore 
+        ? 1 - (timeDiff / timeWindowMs)  // Before is better
+        : 0.5 - ((timeDiff) / timeWindowMs) * 0.5; // After is less relevant
+      const workspaceScore = workspaceMatch ? 
+        (eventWorkspace && promptWorkspace && eventWorkspace === promptWorkspace ? 1.0 : 0.7) : 0.3;
       
       return {
         ...prompt,
         relevanceScore: (temporalScore * 0.7) + (workspaceScore * 0.3),
-        timeDiffSeconds: Math.floor(timeDiff / 1000)
+        timeDiffSeconds: Math.floor(Math.abs(timeDiff) / 1000),
+        isBefore: isBefore
       };
     })
-    .sort((a, b) => b.relevanceScore - a.relevanceScore);
+    .filter(p => p !== null) // Remove null entries
+    .sort((a, b) => b.relevanceScore - a.relevanceScore)
+    .slice(0, 10); // Limit to top 10
   
   return related;
 }
-async function showEventModal(eventId) {
-  // Check if it's an event or a prompt
-  let event = state.data.events.find(e => e.id === eventId || e.timestamp === eventId);
-  let prompt = state.data.prompts.find(p => p.id === eventId || p.timestamp === eventId);
-  
-  // If not in cache, try fetching from API
-  if (!event && !prompt) {
-    console.log(`[MODAL] Event/prompt ${eventId} not found in cache`);
-    
-    const modal = document.getElementById('eventModal');
-    const title = document.getElementById('modalTitle');
-    const body = document.getElementById('modalBody');
-    
-    if (modal && title && body) {
-      title.textContent = 'Not Found';
-      body.innerHTML = `
-        <div style="text-align: center; padding: var(--space-xl); color: var(--color-text-muted);">
-          <p>Event/Prompt #${eventId} could not be found.</p>
-          <p style="font-size: var(--text-sm); margin-top: var(--space-md);">It may not be loaded yet. Try refreshing the data or checking the Activity view.</p>
-        </div>
-      `;
-      modal.classList.add('active');
-    }
-    return;
-  }
 
-  const modal = document.getElementById('eventModal');
-  const title = document.getElementById('modalTitle');
-  const body = document.getElementById('modalBody');
-  
-  // Handle prompt display
-  if (prompt && !event) {
-    await showPromptInModal(prompt, modal, title, body);
-    return;
-  }
-
-  title.textContent = getEventTitle(event);
-  
-  // Fetch related screenshots
-  let relatedScreenshots = [];
-  try {
-    const screenshotsResponse = await fetch(`http://localhost:43917/api/screenshots/near/${event.timestamp}`);
-    if (screenshotsResponse.ok) {
-      const screenshotsData = await screenshotsResponse.json();
-      if (screenshotsData.success) {
-        relatedScreenshots = screenshotsData.screenshots;
-      }
-    }
-  } catch (error) {
-    console.warn('Could not fetch screenshots:', error);
-  }
-  try {
-    const details = typeof event.details === 'string' ? JSON.parse(event.details) : event.details;
-    
-    // Find related prompts by temporal proximity and workspace
-    const relatedPrompts = findRelatedPrompts(event);
-    const eventTime = new Date(event.timestamp).getTime();
-    
-    // Find related conversations (filter out unhelpful background composer state)
-    const conversationsArray = Array.isArray(state.data.cursorConversations) ? state.data.cursorConversations : [];
-    const relatedConversations = conversationsArray.filter(c => {
-      if (!c || !c.timestamp) return false;
-      
-      // Filter out non-useful internal state mappings
-      if (c.id && (
-        c.id.includes('backgroundComposer.persistentData') ||
-        c.id.includes('backgroundComposer.windowBcMapping') ||
-        c.id.includes('workbench.backgroundComposer')
-      )) {
-        return false;
-      }
-      
-      const convTime = new Date(c.timestamp).getTime();
-      const diff = Math.abs(eventTime - convTime);
-      return diff < 10 * 60 * 1000; // 10 minutes
-    });
-    
-    body.innerHTML = `
-      <div style="display: flex; flex-direction: column; gap: var(--space-xl);">
-        
-        <!-- Event Details -->
-        <div>
-          <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">Event Details</h4>
-          <div style="display: grid; gap: var(--space-sm);">
-            <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-              <span style="color: var(--color-text-muted);">Type:</span>
-              <span style="color: var(--color-text);">${event.type || 'Unknown'}</span>
-            </div>
-            <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-              <span style="color: var(--color-text-muted);">Time:</span>
-              <span style="color: var(--color-text);">${new Date(event.timestamp).toLocaleString()}</span>
-            </div>
-            <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-              <span style="color: var(--color-text-muted);">Workspace:</span>
-              <span style="color: var(--color-text); font-family: var(--font-mono); font-size: var(--text-xs);">${truncate(event.workspace_path || 'Unknown', 40)}</span>
-            </div>
-            ${details?.file_path ? `
-              <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-                <span style="color: var(--color-text-muted);">File:</span>
-                <span style="color: var(--color-text); font-family: var(--font-mono); font-size: var(--text-sm);">${details.file_path}</span>
-              </div>
-            ` : ''}
-            ${details?.file_path && isImageFile(details.file_path) ? `
-              <div style="padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md);">
-                <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-bottom: var(--space-sm);">Screenshot Preview:</div>
-                <div style="border-radius: var(--radius-md); overflow: hidden; background: #000; display: flex; align-items: center; justify-content: center; max-height: 400px;">
-                  <img src="file://${details.file_path}" 
-                       alt="Screenshot" 
-                       style="max-width: 100%; max-height: 400px; object-fit: contain;"
-                       onerror="this.parentElement.innerHTML = '<div style=\\'padding: var(--space-lg); color: var(--color-text-muted); text-align: center;\\'>Image not accessible<br><span style=\\'font-size: 0.85em; font-family: var(--font-mono);\\'>Path: ${details.file_path}</span></div>'">
-                </div>
-                <div style="margin-top: var(--space-sm); text-align: center;">
-                  <a href="file://${details.file_path}" target="_blank" style="color: var(--color-accent); font-size: var(--text-sm); text-decoration: none;">
-                    Open in Finder
-                  </a>
-                </div>
-              </div>
-            ` : ''}
-            ${details?.lines_added !== undefined || details?.chars_added !== undefined ? `
-              <div style="padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md);">
-                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--space-lg); text-align: center;">
-                  <div>
-                    <div style="font-size: var(--text-xl); color: var(--color-success); font-weight: 600; margin-bottom: var(--space-xs);">
-                      +${details.lines_added || 0}
-                    </div>
-                    <div style="font-size: var(--text-xs); color: var(--color-text-muted);">Lines Added</div>
-                    <div style="font-size: var(--text-sm); color: var(--color-success); margin-top: var(--space-xs);">
-                      +${details.chars_added || 0} chars
-                    </div>
-                  </div>
-                  <div>
-                    <div style="font-size: var(--text-xl); color: var(--color-error); font-weight: 600; margin-bottom: var(--space-xs);">
-                      -${details.lines_removed || 0}
-                    </div>
-                    <div style="font-size: var(--text-xs); color: var(--color-text-muted);">Lines Removed</div>
-                    <div style="font-size: var(--text-sm); color: var(--color-error); margin-top: var(--space-xs);">
-                      -${details.chars_deleted || 0} chars
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ` : ''}
-          </div>
-        </div>
-
-        ${event.context ? `
-          <div>
-            <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">Context Information</h4>
-            <div style="display: grid; gap: var(--space-md);">
-              
-              ${event.context.atFiles && event.context.atFiles.length > 0 ? `
-                <div style="padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md); border-left: 3px solid #10b981;">
-                  <div style="font-weight: 600; margin-bottom: var(--space-sm); color: var(--color-text); display: flex; align-items: center; gap: var(--space-xs);">
-                    <span>[FILE] @ Referenced Files</span>
-                    <span style="background: #10b981; color: white; font-size: 10px; padding: 2px 6px; border-radius: 10px;">${event.context.atFiles.length}</span>
-                  </div>
-                  <div style="display: flex; flex-wrap: wrap; gap: var(--space-xs);">
-                    ${event.context.atFiles.map(file => `
-                      <span style="font-family: var(--font-mono); font-size: var(--text-xs); padding: 4px 8px; background: rgba(16, 185, 129, 0.1); color: #10b981; border-radius: 4px;">
-                        ${file.reference || file.fileName || file.filePath}
-                      </span>
-                    `).join('')}
-                  </div>
-                </div>
-              ` : ''}
-              
-              ${(event.context.contextFiles?.attachedFiles?.length || 0) + (event.context.contextFiles?.codebaseFiles?.length || 0) > 0 ? `
-                <div style="padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md); border-left: 3px solid #3b82f6;">
-                  <div style="font-weight: 600; margin-bottom: var(--space-sm); color: var(--color-text); display: flex; align-items: center; gap: var(--space-xs);">
-                    <span>Context Files</span>
-                    <span style="background: #3b82f6; color: white; font-size: 10px; padding: 2px 6px; border-radius: 10px;">
-                      ${(event.context.contextFiles?.attachedFiles?.length || 0) + (event.context.contextFiles?.codebaseFiles?.length || 0)}
-                    </span>
-                  </div>
-                  <div style="display: grid; gap: var(--space-xs);">
-                    ${event.context.contextFiles?.attachedFiles?.map(file => `
-                      <div style="font-family: var(--font-mono); font-size: var(--text-xs); padding: 4px 8px; background: rgba(59, 130, 246, 0.1); color: #3b82f6; border-radius: 4px; display: flex; justify-content: space-between; align-items: center;">
-                        <span>${file.name || file.path}</span>
-                        <span style="font-size: 10px; padding: 2px 4px; background: rgba(59, 130, 246, 0.2); border-radius: 3px;">attached</span>
-                      </div>
-                    `).join('') || ''}
-                    ${event.context.contextFiles?.codebaseFiles?.slice(0, 5).map(file => `
-                      <div style="font-family: var(--font-mono); font-size: var(--text-xs); padding: 4px 8px; background: rgba(59, 130, 246, 0.05); color: #60a5fa; border-radius: 4px; display: flex; justify-content: space-between; align-items: center;">
-                        <span>${file.name || file.path}</span>
-                        <span style="font-size: 10px; padding: 2px 4px; background: rgba(59, 130, 246, 0.1); border-radius: 3px;">codebase</span>
-                      </div>
-                    `).join('') || ''}
-                    ${(event.context.contextFiles?.codebaseFiles?.length || 0) > 5 ? `
-                      <div style="font-size: var(--text-xs); color: var(--color-text-muted); padding: 4px 8px; text-align: center;">
-                        +${event.context.contextFiles.codebaseFiles.length - 5} more files
-                      </div>
-                    ` : ''}
-                  </div>
-                </div>
-              ` : ''}
-              
-              ${event.context.browserState && event.context.browserState.tabs && event.context.browserState.tabs.length > 0 ? `
-                <div style="padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md); border-left: 3px solid #8b5cf6;">
-                  <div style="font-weight: 600; margin-bottom: var(--space-sm); color: var(--color-text); display: flex; align-items: center; gap: var(--space-xs);">
-                    <span>[SYSTEM] UI State</span>
-                    <span style="background: #8b5cf6; color: white; font-size: 10px; padding: 2px 6px; border-radius: 10px;">${event.context.browserState.tabs.length} tabs</span>
-                  </div>
-                  <div style="display: flex; flex-wrap: wrap; gap: var(--space-xs);">
-                    ${event.context.browserState.tabs.map(tab => `
-                      <span style="font-family: var(--font-mono); font-size: var(--text-xs); padding: 4px 8px; background: rgba(139, 92, 246, 0.1); color: #8b5cf6; border-radius: 4px; ${tab.isActive ? 'font-weight: 600; border: 1px solid #8b5cf6;' : ''}">
-                        ${tab.name || tab.path}
-                      </span>
-                    `).join('')}
-                  </div>
-                </div>
-              ` : ''}
-              
-            </div>
-          </div>
-        ` : ''}
-
-        ${relatedScreenshots.length > 0 ? `
-          <div>
-            <h4 style="margin-bottom: var(--space-md); color: var(--color-text); display: flex; align-items: center; gap: var(--space-sm);">
-              <span>Related Screenshots</span>
-              <span style="background: #f59e0b; color: white; font-size: 10px; padding: 2px 6px; border-radius: 10px;">${relatedScreenshots.length}</span>
-            </h4>
-            <div style="font-size: var(--text-sm); color: var(--color-text-muted); margin-bottom: var(--space-md);">
-              Screenshots captured within 5 minutes of this event
-            </div>
-            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: var(--space-md);">
-              ${relatedScreenshots.map(screenshot => {
-                const timeDiff = Math.abs(new Date(event.timestamp).getTime() - new Date(screenshot.timestamp).getTime());
-                const minutesAgo = Math.floor(timeDiff / 60000);
-                const secondsAgo = Math.floor((timeDiff % 60000) / 1000);
-                const timingText = minutesAgo > 0 ? `${minutesAgo}m ${secondsAgo}s` : `${secondsAgo}s`;
-                const isBefore = new Date(screenshot.timestamp) < new Date(event.timestamp);
-                
-                return `
-                  <div style="border: 2px solid var(--color-border); border-radius: var(--radius-md); overflow: hidden; background: var(--color-bg); transition: all 0.2s;" 
-                       onmouseover="this.style.transform='scale(1.02)'; this.style.boxShadow='0 8px 16px rgba(0,0,0,0.15)';" 
-                       onmouseout="this.style.transform=''; this.style.boxShadow='';">
-                    <div style="position: relative; background: #000; aspect-ratio: 16/9; overflow: hidden;">
-                      <img src="file://${screenshot.path}" 
-                           alt="${screenshot.fileName}" 
-                           style="width: 100%; height: 100%; object-fit: contain; cursor: pointer;"
-                           onclick="window.open('file://${screenshot.path}', '_blank')"
-                           onerror="this.parentElement.innerHTML = '<div style=\\'display: flex; align-items: center; justify-content: center; height: 100%; color: var(--color-text-muted); padding: var(--space-md); text-align: center; flex-direction: column;\\'>Image<div style=\\'font-size: 0.75em; margin-top: 8px;\\'>Screenshot not accessible</div></div>'">
-                      <div style="position: absolute; top: 8px; right: 8px; background: rgba(0,0,0,0.7); color: white; padding: 4px 8px; border-radius: 4px; font-size: 10px; font-weight: 600;">
-                        ${timingText} ${isBefore ? 'before' : 'after'}
-                      </div>
-                    </div>
-                    <div style="padding: var(--space-sm);">
-                      <div style="font-size: var(--text-xs); font-family: var(--font-mono); color: var(--color-text); margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${screenshot.fileName}">
-                        ${screenshot.fileName}
-                      </div>
-                      <div style="font-size: 10px; color: var(--color-text-muted);">
-                        ${new Date(screenshot.timestamp).toLocaleTimeString()}
-                      </div>
-                    </div>
-                  </div>
-                `;
-              }).join('')}
-            </div>
-          </div>
-        ` : ''}
-
-        ${details?.before_content !== undefined && details?.after_content !== undefined && (details.before_content || details.after_content) ? `
-          <div>
-            <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">Code Diff</h4>
-            <div style="display: grid; gap: var(--space-md);">
-              ${details.before_content ? `
-                <div>
-                  <div style="padding: var(--space-xs) var(--space-sm); background: rgba(239, 68, 68, 0.1); border-radius: var(--radius-sm) var(--radius-sm) 0 0; font-size: var(--text-xs); color: var(--color-error); font-weight: 500;">
-                    Before (${details.before_content.split('\\n').length} lines)
-                  </div>
-                  <div class="code-block" style="max-height: 250px; overflow-y: auto; border-radius: 0 0 var(--radius-sm) var(--radius-sm);">
-                    <pre style="margin: 0; font-size: var(--text-xs); line-height: 1.5;">${escapeHtml(details.before_content)}</pre>
-                  </div>
-                </div>
-              ` : ''}
-              ${details.after_content ? `
-                <div>
-                  <div style="padding: var(--space-xs) var(--space-sm); background: rgba(34, 197, 94, 0.1); border-radius: var(--radius-sm) var(--radius-sm) 0 0; font-size: var(--text-xs); color: var(--color-success); font-weight: 500;">
-                    After (${details.after_content.split('\\n').length} lines)
-                  </div>
-                  <div class="code-block" style="max-height: 250px; overflow-y: auto; border-radius: 0 0 var(--radius-sm) var(--radius-sm);">
-                    <pre style="margin: 0; font-size: var(--text-xs); line-height: 1.5;">${escapeHtml(details.after_content)}</pre>
-                  </div>
-                </div>
-              ` : ''}
-            </div>
-          </div>
-        ` : ''}
-
-        ${relatedPrompts.length > 0 ? `
-          <div>
-            <h4 style="margin-bottom: var(--space-md); color: var(--color-text); display: flex; align-items: center; gap: var(--space-sm);">
-              <span>Related AI Prompts</span>
-              <span style="background: var(--color-accent); color: white; font-size: var(--text-xs); padding: 2px 8px; border-radius: 12px;">${relatedPrompts.length}</span>
-            </h4>
-            <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-bottom: var(--space-md);">
-              Prompts from the same workspace within 5 minutes before this event, ordered by relevance.
-            </div>
-            <div style="display: grid; gap: var(--space-sm);">
-              ${relatedPrompts.slice(0, 5).map((prompt, idx) => {
-                const promptText = prompt.text || prompt.prompt || prompt.preview || prompt.content || 'No prompt text';
-                const displayText = promptText.length > 150 ? promptText.substring(0, 150) + '...' : promptText;
-                const timeDiffText = prompt.timeDiffSeconds < 60 ? 
-                  `${prompt.timeDiffSeconds}s before` : 
-                  `${Math.floor(prompt.timeDiffSeconds / 60)}m ${prompt.timeDiffSeconds % 60}s before`;
-                const relevancePercent = Math.round(prompt.relevanceScore * 100);
-                
-                return `
-                <div style="padding: var(--space-md); background: var(--color-bg); border-left: 3px solid var(--color-accent); border-radius: var(--radius-md); cursor: pointer; transition: all 0.2s;" 
-                     onmouseover="this.style.transform='translateX(4px)'; this.style.boxShadow='0 4px 12px rgba(0,0,0,0.1)';" 
-                     onmouseout="this.style.transform=''; this.style.boxShadow='';"
-                     onclick="closeEventModal(); setTimeout(() => showEventModal('${prompt.id}'), 100)">
-                  <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: var(--space-xs);">
-                    <div style="display: flex; align-items: center; gap: var(--space-xs);">
-                      <span style="color: var(--color-primary); font-weight: 600; font-size: var(--text-xs);">
-                        #${idx + 1}
-                      </span>
-                      <span style="font-size: var(--text-xs); color: var(--color-text-muted);">
-                        ${timeDiffText}
-                      </span>
-                      <span style="font-size: var(--text-xs); color: var(--color-accent); font-weight: 500;">
-                        ${relevancePercent}% match
-                      </span>
-                    </div>
-                    <span class="badge badge-prompt" style="font-size: 10px; padding: 2px 6px;">
-                      ${prompt.source || 'cursor'}
-                    </span>
-                  </div>
-                  <div style="font-size: var(--text-sm); color: var(--color-text); margin-bottom: var(--space-xs); line-height: 1.5;">
-                    ${escapeHtml(displayText)}
-                  </div>
-                  ${prompt.workspaceName || prompt.composerId ? `
-                    <div style="display: flex; gap: var(--space-xs); flex-wrap: wrap; margin-top: var(--space-sm);">
-                      ${prompt.workspaceName ? `
-                        <span style="font-size: 10px; padding: 2px 6px; background: var(--color-bg-alt); color: var(--color-text-muted); border-radius: 4px; font-family: var(--font-mono);">
-                          ${prompt.workspaceName}
-                        </span>
-                      ` : ''}
-                      ${prompt.composerId ? `
-                        <span style="font-size: 10px; padding: 2px 6px; background: var(--color-bg-alt); color: var(--color-text-muted); border-radius: 4px;">
-                          Composer
-                        </span>
-                      ` : ''}
-                      ${prompt.linesAdded > 0 || prompt.linesRemoved > 0 ? `
-                        <span style="font-size: 10px; padding: 2px 6px; background: var(--color-bg-alt); color: var(--color-text-muted); border-radius: 4px;">
-                          <span style="color: var(--color-success);">+${prompt.linesAdded || 0}</span>
-                          /
-                          <span style="color: var(--color-error);">-${prompt.linesRemoved || 0}</span>
-                        </span>
-                      ` : ''}
-                    </div>
-                  ` : ''}
-                </div>
-              `}).join('')}
-              ${relatedPrompts.length > 5 ? `
-                <div style="text-align: center; padding: var(--space-md); color: var(--color-text-muted); font-size: var(--text-sm); background: var(--color-bg); border-radius: var(--radius-md); border: 1px dashed var(--color-border);">
-                  + ${relatedPrompts.length - 5} more prompts (${Math.round(relatedPrompts.slice(5).reduce((sum, p) => sum + p.relevanceScore, 0) / (relatedPrompts.length - 5) * 100)}% avg match)
-                </div>
-              ` : ''}
-            </div>
-          </div>
-        ` : ''}
-
-        ${relatedConversations.length > 0 ? `
-          <div>
-            <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">
-              Related Conversations (${relatedConversations.length})
-            </h4>
-            <div style="display: grid; gap: var(--space-sm);">
-              ${relatedConversations.slice(0, 2).map(conv => `
-                <div style="padding: var(--space-md); background: var(--color-bg); border-left: 3px solid var(--color-primary); border-radius: var(--radius-md);">
-                  <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-bottom: var(--space-xs);">
-                    ${conv.type} • ${formatTimeAgo(conv.timestamp)}
-                  </div>
-                  <div style="font-size: var(--text-sm); color: var(--color-text);">
-                    ID: ${conv.id}
-                  </div>
-                </div>
-              `).join('')}
-            </div>
-          </div>
-        ` : ''}
-
-        ${state.data.cursorDbStats ? `
-          <div style="padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md); border: 1px solid var(--color-border);">
-            <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-bottom: var(--space-xs);">
-              Cursor Database Stats
-            </div>
-            <div style="display: flex; gap: var(--space-lg); font-size: var(--text-sm);">
-              <span>Conversations: <strong>${state.data.cursorDbStats.totalConversations || 0}</strong></span>
-              <span>Prompts: <strong>${state.data.cursorDbStats.totalPrompts || 0}</strong></span>
-              <span>Workspaces: <strong>${state.data.cursorDbStats.workspaces || 0}</strong></span>
-            </div>
-          </div>
-        ` : ''}
-
-      </div>
-    `;
-  } catch (error) {
-    body.innerHTML = `<div class="empty-state-text">Error loading event details: ${error.message}</div>`;
-  }
-
-  modal.classList.add('active');
-}
-function showPromptInModal(prompt, modal, title, body) {
-  const promptText = prompt.text || prompt.prompt || prompt.preview || prompt.content || 'No prompt text';
-  const isJsonLike = promptText.startsWith('{') || promptText.startsWith('[');
-  
-  // Parse prompt data to determine type and extract metadata
-  let titleText = 'AI Conversation';
-  let promptType = 'unknown';
-  let metadata = {};
-  let conversationDetails = null;
-  
-  if (isJsonLike) {
-    try {
-      const parsed = JSON.parse(promptText);
-      
-      // Detect composer data
-      if (parsed.allComposers && Array.isArray(parsed.allComposers)) {
-        promptType = 'composer';
-        titleText = 'Composer Session';
-        const composer = parsed.allComposers[0];
-        if (composer) {
-          metadata = {
-            composerId: composer.composerId,
-            name: composer.name || 'Unnamed conversation',
-            mode: composer.unifiedMode || composer.forceMode || 'unknown',
-            createdAt: composer.createdAt ? new Date(composer.createdAt).toLocaleString() : null,
-            lastUpdated: composer.lastUpdatedAt ? new Date(composer.lastUpdatedAt).toLocaleString() : null,
-            totalComposers: parsed.allComposers.length
-          };
-          conversationDetails = {
-            name: composer.name,
-            linesAdded: composer.totalLinesAdded,
-            linesRemoved: composer.totalLinesRemoved,
-            contextUsage: composer.contextUsagePercent
-          };
-        }
-      }
-      // Detect panel/view state
-      else if (Object.keys(parsed).some(k => k.includes('workbench.panel'))) {
-        promptType = 'panel-state';
-        titleText = 'AI Chat Panel State';
-        const panels = Object.keys(parsed).filter(k => k.includes('workbench.panel'));
-        metadata = {
-          panelCount: panels.length,
-          panels: panels.map(k => ({
-            id: k.split('.').pop() || k,
-            collapsed: parsed[k].collapsed,
-            hidden: parsed[k].isHidden,
-            size: parsed[k].size
-          }))
-        };
-      }
-      // Detect setup/terminal data
-      else if (parsed.setupPath2 || parsed.terminals) {
-        promptType = 'setup';
-        titleText = 'Development Setup';
-        metadata = {
-          setupPath: parsed.setupPath2,
-          terminals: parsed.terminals?.length || 0,
-          commands: parsed.ranTerminalCommands?.length || 0,
-          currentStep: parsed.currentSetupStep
-        };
-      }
-      // Background composer mapping
-      else if (parsed.composerIdToWindowId || prompt.type === 'background-composer') {
-        promptType = 'background-composer';
-        titleText = 'Background Composer Mapping';
-        metadata = {
-          mappings: Object.keys(parsed.composerIdToWindowId || {}).length
-        };
-      }
-    } catch (e) {
-      // Not valid JSON
-      promptType = 'text';
-    }
-  } else {
-    promptType = 'text';
-    titleText = 'Conversation';
-  }
-  
-  // Override with explicit prompt type if present
-  if (prompt.type === 'conversation') {
-    titleText = 'Composer Conversation';
-    promptType = 'conversation';
-  } else if (prompt.type === 'background-composer') {
-    titleText = 'Background Composer';
-    promptType = 'background-composer';
-  }
-  
-  title.textContent = titleText;
-  
-  // Find related events (within 5 minutes of prompt)
-  const promptTime = new Date(prompt.timestamp).getTime();
-  const relatedEvents = state.data.events.filter(e => {
-    const eventTime = new Date(e.timestamp).getTime();
-    const diff = Math.abs(promptTime - eventTime);
-    return diff < 5 * 60 * 1000; // 5 minutes
-  });
-  
-  body.innerHTML = `
-    <div style="display: flex; flex-direction: column; gap: var(--space-xl);">
-      
-      <!-- Basic Metadata -->
-      <div>
-        <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">Metadata</h4>
-        <div style="display: grid; gap: var(--space-sm);">
-          <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-            <span style="color: var(--color-text-muted);">Type:</span>
-            <span style="color: var(--color-text);"><span class="badge badge-prompt">${promptType}</span></span>
-          </div>
-          <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-            <span style="color: var(--color-text-muted);">Captured:</span>
-            <span style="color: var(--color-text);">${new Date(prompt.timestamp).toLocaleString()}</span>
-          </div>
-          <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-            <span style="color: var(--color-text-muted);">Source:</span>
-            <span style="color: var(--color-text);">${prompt.source || 'cursor-database'}</span>
-          </div>
-          ${prompt.modelName || prompt.modelType ? `
-            <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-              <span style="color: var(--color-text-muted);">Model:</span>
-              <span style="color: var(--color-text);">
-                <span class="badge" style="background: var(--color-accent); color: white;">
-                  ${prompt.modelName || prompt.modelType}
-                </span>
-                ${prompt.isAuto ? '<span class="badge" style="margin-left: 4px; background: var(--color-info); color: white;">Auto</span>' : ''}
-              </span>
-            </div>
-          ` : ''}
-          ${prompt.forceMode ? `
-            <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-              <span style="color: var(--color-text-muted);">Mode:</span>
-              <span style="color: var(--color-text);"><span class="badge">${prompt.forceMode}</span></span>
-            </div>
-          ` : ''}
-          ${prompt.workspaceId ? `
-            <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-              <span style="color: var(--color-text-muted);">Workspace:</span>
-              <span style="color: var(--color-text); font-family: var(--font-mono); font-size: var(--text-xs);">${prompt.workspaceName || prompt.workspaceId.substring(0, 16)}</span>
-            </div>
-          ` : ''}
-          ${prompt.mode || prompt.modelType ? `
-            <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-              <span style="color: var(--color-text-muted);">AI Mode:</span>
-              <span class="badge" style="background: ${(prompt.mode === 'agent' || prompt.isAuto) ? 'var(--color-accent)' : prompt.mode === 'chat' ? 'var(--color-info)' : 'var(--color-secondary)'}; color: white; font-weight: 600;">
-                ${(prompt.mode || prompt.modelType || 'unknown').toUpperCase()}${prompt.isAuto ? ' (AUTO)' : ''}
-              </span>
-            </div>
-          ` : ''}
-          ${prompt.contextUsage && prompt.contextUsage > 0 ? `
-            <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-              <span style="color: var(--color-text-muted);">Context Usage:</span>
-              <span style="color: var(--color-warning); font-weight: 600; font-size: var(--text-lg);">${prompt.contextUsage.toFixed(1)}%</span>
-            </div>
-          ` : ''}
-        </div>
-      </div>
-
-      <!-- Type-specific details -->
-      ${promptType === 'composer' && metadata.name ? `
-        <div>
-          <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">Composer Session</h4>
-          <div style="padding: var(--space-lg); background: var(--color-bg); border-radius: var(--radius-md); border-left: 3px solid var(--color-accent);">
-            <div style="font-size: var(--text-lg); font-weight: 600; color: var(--color-text); margin-bottom: var(--space-md);">
-              ${escapeHtml(metadata.name)}
-            </div>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-md); margin-bottom: var(--space-md);">
-              <div>
-                <div style="font-size: var(--text-xs); color: var(--color-text-muted);">Created</div>
-                <div style="font-size: var(--text-sm); color: var(--color-text);">${metadata.createdAt || 'Unknown'}</div>
-              </div>
-              <div>
-                <div style="font-size: var(--text-xs); color: var(--color-text-muted);">Last Updated</div>
-                <div style="font-size: var(--text-sm); color: var(--color-text);">${metadata.lastUpdated || 'Unknown'}</div>
-              </div>
-              <div>
-                <div style="font-size: var(--text-xs); color: var(--color-text-muted);">Model Mode</div>
-                <div style="font-size: var(--text-sm); color: var(--color-text);">
-                  <span class="badge" style="background: ${metadata.mode === 'agent' ? 'var(--color-accent)' : metadata.mode === 'chat' ? 'var(--color-info)' : 'var(--color-secondary)'}; color: white; font-weight: 600;">
-                    ${metadata.mode.toUpperCase()}${metadata.mode === 'agent' ? ' (AUTO)' : ''}
-                  </span>
-                </div>
-              </div>
-              <div>
-                <div style="font-size: var(--text-xs); color: var(--color-text-muted);">Composer ID</div>
-                <div style="font-size: var(--text-xs); color: var(--color-text); font-family: var(--font-mono);">${metadata.composerId?.substring(0, 12)}...</div>
-              </div>
-            </div>
-            ${conversationDetails && (conversationDetails.linesAdded !== undefined || conversationDetails.linesRemoved !== undefined || conversationDetails.contextUsage !== undefined) ? `
-              <div style="display: flex; gap: var(--space-md); padding-top: var(--space-md); border-top: 1px solid var(--color-border);">
-                ${conversationDetails.linesAdded !== undefined ? `
-                  <div style="flex: 1; text-align: center;">
-                    <div style="font-size: var(--text-xl); color: var(--color-success); font-weight: 600;">+${conversationDetails.linesAdded}</div>
-                    <div style="font-size: var(--text-xs); color: var(--color-text-muted);">Lines Added</div>
-                  </div>
-                ` : ''}
-                ${conversationDetails.linesRemoved !== undefined ? `
-                  <div style="flex: 1; text-align: center;">
-                    <div style="font-size: var(--text-xl); color: var(--color-error); font-weight: 600;">-${conversationDetails.linesRemoved}</div>
-                    <div style="font-size: var(--text-xs); color: var(--color-text-muted);">Lines Removed</div>
-                  </div>
-                ` : ''}
-                ${conversationDetails.contextUsage !== undefined ? `
-                  <div style="flex: 1; text-align: center;">
-                    <div style="font-size: var(--text-xl); color: var(--color-accent); font-weight: 600;">${conversationDetails.contextUsage}%</div>
-                    <div style="font-size: var(--text-xs); color: var(--color-text-muted);">Context Used</div>
-                  </div>
-                ` : ''}
-              </div>
-            ` : ''}
-            <div style="margin-top: var(--space-md); padding: var(--space-md); background: rgba(99, 102, 241, 0.1); border: 1px solid rgba(99, 102, 241, 0.3); border-radius: var(--radius-md);">
-              <div style="display: flex; align-items: center; justify-content: space-between;">
-                <div style="flex: 1;">
-                  <div style="font-size: var(--text-sm); font-weight: 600; color: var(--color-text); margin-bottom: var(--space-xs);">
-                    View Full Conversation
-                  </div>
-                  <div style="font-size: var(--text-xs); color: var(--color-text-muted);">
-                    Cursor stores conversation messages in memory. Open Composer to see the full chat history.
-                  </div>
-                </div>
-                <button 
-                  onclick="copyToClipboard('${metadata.composerId}', 'Composer ID copied!'); alert('Composer ID copied: ${metadata.composerId}\\n\\nTo find this conversation in Cursor:\\n1. Open Composer\\n2. Look for: ${escapeHtml(metadata.name).replace(/'/g, "\\'")}');" 
-                  style="padding: var(--space-sm) var(--space-md); background: var(--color-primary); color: white; border: none; border-radius: var(--radius-sm); cursor: pointer; font-size: var(--text-sm); white-space: nowrap; margin-left: var(--space-md);">
-                  [CLIPBOARD] Copy ID
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      ` : ''}
-      
-      ${promptType === 'panel-state' && metadata.panels ? `
-        <div>
-          <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">AI Chat Panels (${metadata.panelCount})</h4>
-          <div style="display: grid; gap: var(--space-sm);">
-            ${metadata.panels.map(panel => `
-              <div style="padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md); display: flex; justify-content: space-between; align-items: center;">
-                <div>
-                  <div style="font-family: var(--font-mono); font-size: var(--text-sm); color: var(--color-text);">
-                    ${panel.id.substring(0, 16)}...
-                  </div>
-                  <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: 4px;">
-                    ${panel.collapsed ? 'Collapsed' : 'Expanded'} • 
-                    ${panel.hidden ? 'Hidden' : 'Visible'}
-                    ${panel.size ? ` • ${Math.round(panel.size)}px` : ''}
-                  </div>
-                </div>
-                <div style="width: 8px; height: 8px; border-radius: 50%; background: ${panel.hidden ? '#94a3b8' : '#22c55e'};"></div>
-              </div>
-            `).join('')}
-          </div>
-        </div>
-      ` : ''}
-      
-      ${promptType === 'setup' && metadata.setupPath ? `
-        <div>
-          <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">Development Setup</h4>
-          <div style="padding: var(--space-lg); background: var(--color-bg); border-radius: var(--radius-md);">
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-md);">
-              <div>
-                <div style="font-size: var(--text-xs); color: var(--color-text-muted);">Setup Path</div>
-                <div style="font-size: var(--text-sm); color: var(--color-text);"><code>${metadata.setupPath}</code></div>
-              </div>
-              <div>
-                <div style="font-size: var(--text-xs); color: var(--color-text-muted);">Current Step</div>
-                <div style="font-size: var(--text-sm); color: var(--color-text);"><code>${metadata.currentStep}</code></div>
-              </div>
-              <div>
-                <div style="font-size: var(--text-xs); color: var(--color-text-muted);">Terminals</div>
-                <div style="font-size: var(--text-lg); color: var(--color-text); font-weight: 600;">${metadata.terminals}</div>
-              </div>
-              <div>
-                <div style="font-size: var(--text-xs); color: var(--color-text-muted);">Commands Run</div>
-                <div style="font-size: var(--text-lg); color: var(--color-text); font-weight: 600;">${metadata.commands}</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      ` : ''}
-      
-      ${promptType === 'background-composer' && metadata.mappings ? `
-        <div>
-          <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">Background Composer</h4>
-          <div style="padding: var(--space-lg); background: var(--color-bg); border-radius: var(--radius-md); text-align: center;">
-            <div style="font-size: var(--text-2xl); color: var(--color-text); font-weight: 600; margin-bottom: var(--space-xs);">
-              ${metadata.mappings}
-            </div>
-            <div style="font-size: var(--text-sm); color: var(--color-text-muted);">
-              Window Mappings
-            </div>
-          </div>
-        </div>
-      ` : ''}
-
-      <!-- Prompt Content -->
-      ${!isJsonLike || promptText.length < 200 ? `
-        <div>
-          <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">Conversation Title</h4>
-          <div style="padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md); border-left: 3px solid var(--color-accent);">
-            <div style="font-size: var(--text-lg); font-weight: 500; color: var(--color-text); margin-bottom: var(--space-sm);">
-              ${escapeHtml(promptText)}
-            </div>
-            ${prompt.subtitle ? `
-              <div style="font-size: var(--text-sm); color: var(--color-text-muted);">
-                Files: ${escapeHtml(prompt.subtitle)}
-              </div>
-            ` : ''}
-          </div>
-          ${prompt.type === 'conversation' || prompt.composerId ? `
-            <div style="margin-top: var(--space-sm); padding: var(--space-sm); background: rgba(99, 102, 241, 0.1); border-radius: var(--radius-sm);">
-              <div style="font-size: var(--text-xs); color: var(--color-text-muted);">
-                ℹ️ Note: Full conversation messages are stored in Cursor's internal cache and are not accessible via the database. 
-                Only metadata (title, file list, statistics) is available.
-              </div>
-            </div>
-          ` : ''}
-        </div>
-      ` : ''}
-
-      ${relatedEvents.length > 0 ? `
-        <div>
-          <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">
-            Related File Changes (${relatedEvents.length})
-          </h4>
-          <div style="display: grid; gap: var(--space-sm);">
-            ${relatedEvents.slice(0, 5).map(event => `
-              <div style="padding: var(--space-md); background: var(--color-bg); border-left: 3px solid var(--color-primary); border-radius: var(--radius-md); cursor: pointer;" onclick="closeEventModal(); setTimeout(() => showEventModal('${event.id || event.timestamp}'), 100)">
-                <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-bottom: var(--space-xs);">
-                  ${formatTimeAgo(event.timestamp)} • ${event.type || 'file_change'}
-                </div>
-                <div style="font-size: var(--text-sm); color: var(--color-text); font-family: var(--font-mono);">
-                  ${getEventTitle(event)}
-                </div>
-              </div>
-            `).join('')}
-            ${relatedEvents.length > 5 ? `
-              <div style="text-align: center; padding: var(--space-sm); color: var(--color-text-muted); font-size: var(--text-sm);">
-                + ${relatedEvents.length - 5} more events
-              </div>
-            ` : ''}
-          </div>
-        </div>
-      ` : ''}
-
-    </div>
-  `;
-  
-  modal.classList.add('active');
-}
-
-function showThreadModal(threadId) {
-  const thread = groupIntoThreads(state.data.entries).find(t => t.id === threadId);
-  if (!thread) return;
-
-  const modal = document.getElementById('threadModal');
-  const title = document.getElementById('threadModalTitle');
-  const body = document.getElementById('threadModalBody');
-
-  title.textContent = `Thread ${threadId.substring(0, 8)}`;
-  
-  body.innerHTML = `
-    <div style="display: flex; flex-direction: column; gap: var(--space-lg);">
-      ${thread.messages.map(msg => `
-        <div style="padding: var(--space-lg); background: var(--color-bg); border-radius: var(--radius-md); border-left: 3px solid var(--color-primary);">
-          <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-bottom: var(--space-sm);">
-            ${new Date(msg.timestamp).toLocaleString()}
-          </div>
-          ${msg.prompt ? `
-            <div style="margin-bottom: var(--space-md);">
-              <div style="font-weight: 600; color: var(--color-text); margin-bottom: var(--space-xs);">Prompt:</div>
-              <div style="color: var(--color-text-muted);">${escapeHtml(msg.prompt)}</div>
-            </div>
-          ` : ''}
-          ${msg.response ? `
-            <div>
-              <div style="font-weight: 600; color: var(--color-text); margin-bottom: var(--space-xs);">Response:</div>
-              <div style="color: var(--color-text-muted);">${escapeHtml(msg.response)}</div>
-            </div>
-          ` : ''}
-        </div>
-      `).join('')}
-    </div>
-  `;
-
-  modal.classList.add('active');
-}
-
-function closeThreadModal() {
-  document.getElementById('threadModal').classList.remove('active');
-}
-
-function showTerminalModal(id) {
-  // Find the terminal command by ID
-  const cmd = state.data.terminalCommands.find(c => c.id === id);
-  
-  const modal = document.getElementById('eventModal');
-  const title = document.getElementById('modalTitle');
-  const body = document.getElementById('modalBody');
-  
-  if (!modal || !title || !body) {
-    console.error('Modal elements not found');
-    return;
-  }
-  
-  if (!cmd) {
-    console.warn('Terminal command not found:', id);
-    return;
-  }
-  
-  try {
-    const isError = cmd.exit_code && cmd.exit_code !== 0;
-    const icon = isError ? 'Error' : '>';
-    
-    title.innerHTML = `${icon} Terminal Command`;
-    
-    let html = `
-      <div style="display: flex; flex-direction: column; gap: var(--space-xl);">
-        
-        <!-- Command Details -->
-        <div>
-          <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">Command Details</h4>
-          <div style="display: grid; gap: var(--space-sm);">
-            <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-              <span style="color: var(--color-text-muted);">Command:</span>
-              <code style="color: var(--color-text); font-family: var(--font-mono); font-size: var(--text-sm); max-width: 500px; overflow-x: auto;">${escapeHtml(cmd.command)}</code>
-            </div>
-            <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-              <span style="color: var(--color-text-muted);">Source:</span>
-              <span class="badge" style="background: #6366f1; color: white;">${cmd.source || 'unknown'}</span>
-            </div>
-            <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-              <span style="color: var(--color-text-muted);">Timestamp:</span>
-              <span style="color: var(--color-text);">${new Date(cmd.timestamp).toLocaleString()}</span>
-            </div>
-            ${cmd.shell ? `
-              <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-                <span style="color: var(--color-text-muted);">Shell:</span>
-                <span class="badge">${cmd.shell}</span>
-              </div>
-            ` : ''}
-            ${cmd.workspace ? `
-              <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-                <span style="color: var(--color-text-muted);">Workspace:</span>
-                <code style="color: var(--color-text); font-family: var(--font-mono); font-size: var(--text-xs);">${escapeHtml(cmd.workspace)}</code>
-              </div>
-            ` : ''}
-            ${cmd.exit_code !== null && cmd.exit_code !== undefined ? `
-              <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-                <span style="color: var(--color-text-muted);">Exit Code:</span>
-                <span class="badge" style="background: ${isError ? '#ef4444' : '#10b981'}; color: white;">${cmd.exit_code}</span>
-              </div>
-            ` : ''}
-            ${cmd.duration ? `
-              <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-                <span style="color: var(--color-text-muted);">Duration:</span>
-                <span style="color: var(--color-text);">${cmd.duration}ms</span>
-              </div>
-            ` : ''}
-          </div>
-        </div>
-    `;
-    
-    // Show command output if available
-    if (cmd.output) {
-      html += `
-        <div>
-          <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">Output</h4>
-          <pre style="padding: var(--space-md); background: #1e1e1e; color: #d4d4d4; border-radius: var(--radius-md); overflow-x: auto; max-height: 400px; font-size: 12px; line-height: 1.5;"><code>${escapeHtml(cmd.output)}</code></pre>
-        </div>
-      `;
-    }
-    
-    // Show error message if available
-    if (cmd.error) {
-      html += `
-        <div>
-          <h4 style="margin-bottom: var(--space-md); color: var(--color-error);">Error</h4>
-          <div style="padding: var(--space-md); background: #fee2e2; color: #dc2626; border-radius: var(--radius-md); font-family: var(--font-mono); font-size: var(--text-sm);">
-            ${escapeHtml(cmd.error)}
-          </div>
-        </div>
-      `;
-    }
-    
-    // Show related file changes if linked
-    if (cmd.linked_entry_id) {
-      const relatedEntry = state.data.events.find(e => e.id === cmd.linked_entry_id);
-      if (relatedEntry) {
-        html += `
-          <div>
-            <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">Related File Change</h4>
-            <div style="padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md); border-left: 3px solid var(--color-primary);">
-              <div style="font-family: var(--font-mono); font-size: var(--text-sm); color: var(--color-text); margin-bottom: var(--space-xs);">
-                ${escapeHtml(relatedEntry.file_path || 'Unknown file')}
-              </div>
-              <div style="font-size: var(--text-xs); color: var(--color-text-muted);">
-                ${new Date(relatedEntry.timestamp).toLocaleString()}
-              </div>
-            </div>
-          </div>
-        `;
-      }
-    }
-    
-    html += `</div>`;
-    
-    body.innerHTML = html;
-    modal.classList.add('active');
-    
-  } catch (error) {
-    console.error('Error showing terminal modal:', error);
-    title.textContent = 'Error';
-    body.innerHTML = `<div style="color: var(--color-error);">Error loading terminal command details: ${error.message}</div>`;
-    modal.classList.add('active');
-  }
-}
-
-function closeEventModal() {
-  const modal = document.getElementById('eventModal');
-  if (modal) {
-    modal.classList.remove('active');
-  }
-}
-
-// Make modal functions globally accessible
-window.showEventModal = showEventModal;
-window.showTerminalModal = showTerminalModal;
-window.closeEventModal = closeEventModal;
-window.closeThreadModal = closeThreadModal;
+// Export for modal-manager.js
+window.findRelatedPrompts = findRelatedPrompts;
 
 // ===================================
 // Utility Functions
@@ -8293,63 +6660,298 @@ function closeStatusPopup() {
 }
 
 /**
- * Export database as JSON
+ * Export database as JSON (with size limits to prevent browser crashes)
  */
-async function exportDatabase() {
+async function exportDatabase(limit = 1000, includeAllFields = false) {
   try {
-    console.log('📤 Exporting database...');
+    console.log('📤 Exporting database...', { limit, includeAllFields });
     
     // Show loading state
     const exportBtn = document.querySelector('.export-btn');
-    const originalHTML = exportBtn.innerHTML;
-    exportBtn.innerHTML = '<span>Exporting...</span>';
-    exportBtn.disabled = true;
+    if (exportBtn) {
+      const originalHTML = exportBtn.innerHTML;
+      exportBtn.innerHTML = '<span>Exporting...</span>';
+      exportBtn.disabled = true;
+      
+      // Confirm for large exports
+      if (limit > 5000) {
+        const confirmed = confirm(`This will export ${limit} items. Large exports may take time and use significant memory. Continue?`);
+        if (!confirmed) {
+          exportBtn.innerHTML = originalHTML;
+          exportBtn.disabled = false;
+          return;
+        }
+      }
+      
+      // Fetch data from API with limit
+      const url = new URL(`${CONFIG.API_BASE}/api/export/database`);
+      url.searchParams.set('limit', limit.toString());
+      if (includeAllFields) {
+        url.searchParams.set('full', 'true');
+      }
+      
+      console.log('[EXPORT] Fetching from:', url.toString());
+      
+      const response = await fetch(url.toString());
+      
+      if (!response.ok) {
+        throw new Error(`Export failed: ${response.status} ${response.statusText}`);
+      }
+      
+      // Check response size before parsing
+      const contentLength = response.headers.get('content-length');
+      if (contentLength && parseInt(contentLength) > 50 * 1024 * 1024) { // 50MB
+        const proceed = confirm(`Export file is large (${(parseInt(contentLength) / 1024 / 1024).toFixed(1)}MB). This may take time to download. Continue?`);
+        if (!proceed) {
+          exportBtn.innerHTML = originalHTML;
+          exportBtn.disabled = false;
+          return;
+        }
+      }
+      
+      const result = await response.json();
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Export failed');
+      }
+      
+      // Create filename with timestamp and limit info
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+      const limitSuffix = limit < 10000 ? `-${limit}items` : '';
+      const filename = `cursor-telemetry-export-${timestamp}${limitSuffix}.json`;
+      
+      // Convert to JSON string with pretty formatting (use smaller indentation for large files)
+      const indentSize = limit > 5000 ? 0 : 2; // No formatting for very large exports
+      const jsonString = JSON.stringify(result.data, null, indentSize);
+      
+      // Check size before creating blob
+      const sizeMB = new Blob([jsonString]).size / 1024 / 1024;
+      console.log(`[EXPORT] File size: ${sizeMB.toFixed(2)}MB`);
+      
+      if (sizeMB > 100) {
+        throw new Error(`Export file too large (${sizeMB.toFixed(1)}MB). Please reduce the limit.`);
+      }
+      
+      // Create blob and download using streaming for large files
+      const blob = new Blob([jsonString], { type: 'application/json' });
+      const url_obj = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url_obj;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      
+      // Clean up after a delay
+      setTimeout(() => {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url_obj);
+      }, 100);
+      
+      console.log(`[SUCCESS] Exported ${result.data.metadata.totalEntries} entries, ${result.data.metadata.totalPrompts} prompts, ${result.data.metadata.totalEvents} events`);
+      
+      // Show success feedback
+      exportBtn.innerHTML = '<span>Exported!</span>';
+      exportBtn.style.color = '#10b981';
+      setTimeout(() => {
+        exportBtn.innerHTML = originalHTML;
+        exportBtn.disabled = false;
+        exportBtn.style.color = '';
+      }, 2000);
+    } else {
+      // No button found, just log
+      console.log('[EXPORT] Button not found, export completed');
+    }
     
-    // Fetch data from API
-    const response = await fetch(`${CONFIG.API_BASE}/api/export/database`);
+  } catch (error) {
+    console.error('Export error:', error);
+    const exportBtn = document.querySelector('.export-btn');
+    if (exportBtn) {
+      const originalHTML = exportBtn.innerHTML;
+      exportBtn.innerHTML = '<span>✗ Failed</span>';
+      exportBtn.style.color = '#ef4444';
+      setTimeout(() => {
+        exportBtn.innerHTML = originalHTML;
+        exportBtn.disabled = false;
+        exportBtn.style.color = '';
+      }, 3000);
+    }
+    alert(`Export failed: ${error.message}\n\nTry exporting with a smaller limit (e.g., exportDatabase(500))`);
+  }
+}
+
+// Export with options dialog
+async function exportDatabaseWithOptions() {
+  const limit = prompt('How many items to export?\n\nRecommended: 1000 (default)\nMax safe: 5000\nEnter number or leave blank for 1000:', '1000');
+  if (limit === null) return; // User cancelled
+  
+  const numLimit = parseInt(limit) || 1000;
+  if (numLimit > 10000) {
+    alert('Limit too high. Maximum recommended is 10,000 items.');
+    return;
+  }
+  
+  const includeAllFields = confirm('Include all fields?\n\nYes = Full export with all metadata\nNo = Simplified export (recommended)');
+  
+  await exportDatabase(numLimit, includeAllFields);
+}
+
+// Export with filters (for export options modal)
+async function exportDatabaseWithFilters({ dateFrom, dateTo, limit = 1000, types = {}, options = {} }) {
+  try {
+    console.log('📤 Exporting database with filters...', { dateFrom, dateTo, limit, types, options });
+    
+    // Show loading state
+    const exportBtn = document.querySelector('.export-btn');
+    if (exportBtn) {
+      const originalHTML = exportBtn.innerHTML;
+      exportBtn.innerHTML = '<span>Exporting...</span>';
+      exportBtn.disabled = true;
+    }
+    
+    // Confirm for large exports
+    if (limit > 5000) {
+      const confirmed = confirm(`This will export ${limit} items. Large exports may take time and use significant memory. Continue?`);
+      if (!confirmed) {
+        if (exportBtn) {
+          exportBtn.innerHTML = originalHTML;
+          exportBtn.disabled = false;
+        }
+        return;
+      }
+    }
+    
+    // Build URL with all parameters
+    const url = new URL(`${CONFIG.API_BASE}/api/export/database`);
+    url.searchParams.set('limit', limit.toString());
+    
+    // Date range
+    if (dateFrom) {
+      url.searchParams.set('since', dateFrom);
+    }
+    if (dateTo) {
+      url.searchParams.set('until', dateTo);
+    }
+    
+    // Type filters (invert logic - exclude_* means "don't include")
+    if (!types.events) {
+      url.searchParams.set('exclude_events', 'true');
+    }
+    if (!types.prompts) {
+      url.searchParams.set('exclude_prompts', 'true');
+    }
+    if (!types.terminal) {
+      url.searchParams.set('exclude_terminal', 'true');
+    }
+    if (!types.context) {
+      url.searchParams.set('exclude_context', 'true');
+    }
+    
+    // Options
+    if (!options.includeCodeDiffs) {
+      url.searchParams.set('no_code_diffs', 'true');
+    }
+    if (!options.includeLinkedData) {
+      url.searchParams.set('no_linked_data', 'true');
+    }
+    if (!options.includeTemporalChunks) {
+      url.searchParams.set('no_temporal_chunks', 'true');
+    }
+    if (options.fullMetadata) {
+      url.searchParams.set('full', 'true');
+    }
+    
+    console.log('[EXPORT] Fetching from:', url.toString());
+    
+    const response = await fetch(url.toString());
+    
+    if (!response.ok) {
+      throw new Error(`Export failed: ${response.status} ${response.statusText}`);
+    }
+    
+    // Check response size before parsing
+    const contentLength = response.headers.get('content-length');
+    if (contentLength && parseInt(contentLength) > 50 * 1024 * 1024) { // 50MB
+      const proceed = confirm(`Export file is large (${(parseInt(contentLength) / 1024 / 1024).toFixed(1)}MB). This may take time to download. Continue?`);
+      if (!proceed) {
+        if (exportBtn) {
+          exportBtn.innerHTML = originalHTML;
+          exportBtn.disabled = false;
+        }
+        return;
+      }
+    }
+    
     const result = await response.json();
     
     if (!result.success) {
       throw new Error(result.error || 'Export failed');
     }
     
-    // Create filename with timestamp
+    // Create filename with timestamp and filters
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
-    const filename = `cursor-telemetry-export-${timestamp}.json`;
+    const dateSuffix = dateFrom ? `-${dateFrom}` : '';
+    const limitSuffix = limit < 10000 ? `-${limit}items` : '';
+    const filename = `cursor-telemetry-export-${timestamp}${dateSuffix}${limitSuffix}.json`;
     
     // Convert to JSON string with pretty formatting
-    const jsonString = JSON.stringify(result.data, null, 2);
+    const indentSize = limit > 5000 ? 0 : 2;
+    const jsonString = JSON.stringify(result.data, null, indentSize);
+    
+    // Check size before creating blob
+    const sizeMB = new Blob([jsonString]).size / 1024 / 1024;
+    console.log(`[EXPORT] File size: ${sizeMB.toFixed(2)}MB`);
+    
+    if (sizeMB > 100) {
+      throw new Error(`Export file too large (${sizeMB.toFixed(1)}MB). Please reduce the limit.`);
+    }
     
     // Create blob and download
     const blob = new Blob([jsonString], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
+    const url_obj = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url;
+    a.href = url_obj;
     a.download = filename;
     document.body.appendChild(a);
     a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
     
-    console.log(`[SUCCESS] Exported ${result.data.metadata.totalEntries} entries, ${result.data.metadata.totalPrompts} prompts, ${result.data.metadata.totalEvents} events, ${result.data.metadata.totalTerminalCommands || 0} terminal commands, ${result.data.metadata.totalContextSnapshots || 0} context snapshots`);
+    // Clean up after a delay
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url_obj);
+    }, 100);
+    
+    console.log(`[SUCCESS] Exported ${result.data.metadata.totalEntries || 0} entries, ${result.data.metadata.totalPrompts || 0} prompts, ${result.data.metadata.totalEvents || 0} events`);
     
     // Show success feedback
-    exportBtn.innerHTML = '<span>Exported!</span>';
-    setTimeout(() => {
-      exportBtn.innerHTML = originalHTML;
-      exportBtn.disabled = false;
-    }, 2000);
+    if (exportBtn) {
+      exportBtn.innerHTML = '<span>Exported!</span>';
+      exportBtn.style.color = '#10b981';
+      setTimeout(() => {
+        exportBtn.innerHTML = originalHTML;
+        exportBtn.disabled = false;
+        exportBtn.style.color = '';
+      }, 2000);
+    }
     
   } catch (error) {
     console.error('Export error:', error);
     const exportBtn = document.querySelector('.export-btn');
-    exportBtn.innerHTML = '<span>✗ Failed</span>';
-    setTimeout(() => {
-      exportBtn.innerHTML = originalHTML;
-      exportBtn.disabled = false;
-    }, 2000);
+    if (exportBtn) {
+      const originalHTML = exportBtn.innerHTML;
+      exportBtn.innerHTML = '<span>✗ Failed</span>';
+      exportBtn.style.color = '#ef4444';
+      setTimeout(() => {
+        exportBtn.innerHTML = originalHTML;
+        exportBtn.disabled = false;
+        exportBtn.style.color = '';
+      }, 3000);
+    }
+    alert(`Export failed: ${error.message}\n\nTry exporting with a smaller limit or different date range.`);
   }
 }
+
+// Export to window for global access
+window.exportDatabaseWithFilters = exportDatabaseWithFilters;
 
 // Add fadeOut animation to CSS (dynamically)
 const fadeOutStyle = document.createElement('style');
@@ -8375,7 +6977,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Initialize status popup FIRST (before any console.logs)
   initStatusPopup();
   
-  console.log('Initializing Cursor Activity Dashboard');
+  console.log('Initializing Cursor Telemetry Dashboard');
 
   // Setup navigation
   document.querySelectorAll('.nav-link').forEach(link => {
@@ -8429,8 +7031,10 @@ document.addEventListener('DOMContentLoaded', () => {
       updateConnectionStatus(true);
       await initializeDashboard();
       
-      // Initialize search engine
-      initializeSearch();
+      // Initialize search engine (if available)
+      if (typeof initializeSearch === 'function') {
+        initializeSearch();
+      }
       
       console.log('[SUCCESS] Dashboard initialized with warm-start');
     }).catch(error => {
@@ -8460,11 +7064,19 @@ document.addEventListener('DOMContentLoaded', () => {
           await fetchRecentData();
           calculateStats();
           renderCurrentView();
+          // Update status on successful sync
+          if (window.state && window.state.connected) {
+            updateConnectionStatus(true, 'Connected - synced');
+          }
           // Don't reinitialize search on every refresh - it's expensive!
           // Only rebuild if we have significantly more documents
         }
       } catch (error) {
         console.error('Refresh error:', error);
+        // Update status if sync fails
+        if (window.state && window.state.connected) {
+          updateConnectionStatus(false, 'Sync failed - retrying...');
+        }
       } finally {
         refreshInProgress = false;
       }
@@ -8509,8 +7121,16 @@ document.addEventListener('DOMContentLoaded', () => {
         await fetchRecentData();
         calculateStats();
         renderCurrentView();
+        // Update status on successful sync
+        if (window.state && window.state.connected) {
+          updateConnectionStatus(true, 'Connected - synced');
+        }
       } catch (error) {
         console.error('Refresh error:', error);
+        // Update status if sync fails
+        if (window.state && window.state.connected) {
+          updateConnectionStatus(false, 'Sync failed - retrying...');
+        }
       } finally {
         refreshInProgress = false;
       }
@@ -8584,6 +7204,210 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ===================================
+// Search Engine Initialization
+// ===================================
+
+let searchEngine = null;
+let searchSelectedIndex = -1;
+let searchResults = [];
+
+/**
+ * Initialize the semantic search engine with current data
+ */
+async function initializeSearch() {
+  if (!window.SearchEngine) {
+    console.warn('[SEARCH] SearchEngine class not available');
+    return;
+  }
+  
+  try {
+    console.log('[SEARCH] Initializing search engine...');
+    searchEngine = new window.SearchEngine();
+    
+    // Get current data from state
+    const events = state.data.events || [];
+    const prompts = state.data.prompts || [];
+    const conversations = state.data.conversations || [];
+    
+    // Prepare data for search engine
+    const searchData = {
+      events,
+      prompts,
+      conversations,
+      workspaces: state.data.workspaces || []
+    };
+    
+    await searchEngine.initialize(searchData);
+    console.log('[SUCCESS] Search engine initialized');
+  } catch (error) {
+    console.error('[ERROR] Failed to initialize search engine:', error);
+  }
+}
+
+/**
+ * Open the search palette
+ */
+function openSearchPalette() {
+  const palette = document.getElementById('searchPalette');
+  if (palette) {
+    palette.classList.add('active');
+    const input = document.getElementById('searchInput');
+    if (input) {
+      input.focus();
+      input.select();
+    }
+    searchSelectedIndex = -1;
+    searchResults = [];
+  }
+}
+
+/**
+ * Close the search palette
+ */
+function closeSearchPalette() {
+  const palette = document.getElementById('searchPalette');
+  if (palette) {
+    palette.classList.remove('active');
+  }
+  searchSelectedIndex = -1;
+  searchResults = [];
+}
+
+/**
+ * Perform search query
+ */
+async function performSearch(query) {
+  if (!searchEngine || !searchEngine.initialized) {
+    // Show message that search is not ready
+    const resultsEl = document.getElementById('searchResults');
+    if (resultsEl) {
+      resultsEl.innerHTML = '<div class="search-empty">Search engine initializing...</div>';
+    }
+    return;
+  }
+  
+  if (!query || query.trim().length === 0) {
+    const resultsEl = document.getElementById('searchResults');
+    if (resultsEl) {
+      resultsEl.innerHTML = '<div class="search-empty">Type to search events, prompts, and files...</div>';
+    }
+    searchResults = [];
+    searchSelectedIndex = -1;
+    return;
+  }
+  
+  try {
+    const results = searchEngine.search(query, { limit: 20 });
+    searchResults = results;
+    searchSelectedIndex = -1;
+    renderSearchResults(results);
+  } catch (error) {
+    console.error('[ERROR] Search failed:', error);
+    const resultsEl = document.getElementById('searchResults');
+    if (resultsEl) {
+      resultsEl.innerHTML = '<div class="search-error">Search error: ' + error.message + '</div>';
+    }
+  }
+}
+
+/**
+ * Render search results
+ */
+function renderSearchResults(results) {
+  const resultsEl = document.getElementById('searchResults');
+  if (!resultsEl) return;
+  
+  if (results.length === 0) {
+    resultsEl.innerHTML = '<div class="search-empty">No results found</div>';
+    return;
+  }
+  
+  const html = results.map((result, index) => {
+    const type = result.type || 'unknown';
+    const title = result.title || result.content?.substring(0, 80) || 'Untitled';
+    const snippet = result.snippet || result.content?.substring(0, 150) || '';
+    const time = result.timestamp ? window.formatTimeAgo?.(result.timestamp) || new Date(result.timestamp).toLocaleString() : '';
+    
+    return `
+      <div class="search-result-item ${index === searchSelectedIndex ? 'selected' : ''}" 
+           data-index="${index}" 
+           onclick="selectSearchResult(${index})"
+           onmouseenter="searchSelectedIndex = ${index}; renderSearchResults(searchResults)">
+        <div class="search-result-header">
+          <span class="search-result-type badge badge-${type}">${type}</span>
+          <span class="search-result-title">${window.escapeHtml?.(title) || title}</span>
+          ${time ? `<span class="search-result-time">${time}</span>` : ''}
+        </div>
+        ${snippet ? `<div class="search-result-snippet">${window.escapeHtml?.(snippet) || snippet}</div>` : ''}
+      </div>
+    `;
+  }).join('');
+  
+  resultsEl.innerHTML = html;
+}
+
+/**
+ * Navigate search results with arrow keys
+ */
+function navigateSearchResults(direction) {
+  if (searchResults.length === 0) return;
+  
+  if (direction === 'down') {
+    searchSelectedIndex = Math.min(searchSelectedIndex + 1, searchResults.length - 1);
+  } else if (direction === 'up') {
+    searchSelectedIndex = Math.max(searchSelectedIndex - 1, -1);
+  }
+  
+  renderSearchResults(searchResults);
+  
+  // Scroll to selected item
+  const selectedEl = document.querySelector(`.search-result-item[data-index="${searchSelectedIndex}"]`);
+  if (selectedEl) {
+    selectedEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
+}
+
+/**
+ * Select a search result
+ */
+function selectSearchResult(index) {
+  if (index < 0 || index >= searchResults.length) return;
+  
+  const result = searchResults[index];
+  
+  // Close search palette
+  closeSearchPalette();
+  
+  // Navigate to the result based on type
+  if (result.type === 'event' && result.id) {
+    if (window.showEventModal) {
+      window.showEventModal(result.id);
+    }
+  } else if (result.type === 'prompt' && result.id) {
+    if (window.showPromptInModal) {
+      window.showPromptInModal(result.id);
+    }
+  } else if (result.type === 'conversation' && result.id) {
+    // Switch to activity view and highlight conversation
+    if (window.switchView) {
+      window.switchView('activity');
+      // Could scroll to conversation in timeline
+    }
+  } else if (result.file_path) {
+    // Could open file in editor or show file graph
+    console.log('[SEARCH] Selected file:', result.file_path);
+  }
+}
+
+// Export search functions to window
+window.initializeSearch = initializeSearch;
+window.openSearchPalette = openSearchPalette;
+window.closeSearchPalette = closeSearchPalette;
+window.performSearch = performSearch;
+window.navigateSearchResults = navigateSearchResults;
+window.selectSearchResult = selectSearchResult;
+
+// ===================================
 // Prompt Management Functions
 // ===================================
 
@@ -8606,91 +7430,6 @@ async function refreshPrompts() {
   }
 }
 
-function showPromptModal(promptId) {
-  const prompt = state.data.prompts.find(p => p.id == promptId);
-  if (!prompt) {
-    console.error('Prompt not found:', promptId);
-    return;
-  }
-
-  const modal = document.getElementById('eventModal');
-  const title = document.getElementById('modalTitle');
-  const body = document.getElementById('modalBody');
-
-  title.textContent = 'Prompt Details';
-  
-  body.innerHTML = `
-    <div style="display: flex; flex-direction: column; gap: var(--space-xl);">
-      
-      <!-- Prompt Status -->
-      <div>
-        <div class="prompt-status ${prompt.status || 'pending'}" style="display: inline-flex; margin-bottom: var(--space-md);">
-          ${getPromptStatusIcon(prompt.status)}
-          ${prompt.status || 'pending'}
-        </div>
-        <div style="font-size: var(--text-xs); color: var(--color-text-muted);">
-          Captured ${new Date(prompt.timestamp).toLocaleString()}
-        </div>
-      </div>
-
-      <!-- Prompt Content -->
-      <div>
-        <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">Prompt Text</h4>
-        <div class="code-block">
-          <code>${escapeHtml(prompt.text || prompt.content || prompt.prompt || 'No content available')}</code>
-        </div>
-      </div>
-
-      <!-- Metadata -->
-      ${prompt.metadata ? `
-        <div>
-          <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">Metadata</h4>
-          <div style="display: grid; gap: var(--space-sm);">
-            ${prompt.metadata.method ? `
-              <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-                <span style="color: var(--color-text-muted);">Capture Method:</span>
-                <span style="color: var(--color-text);">${prompt.metadata.method}</span>
-              </div>
-            ` : ''}
-            ${prompt.metadata.complexity ? `
-              <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-                <span style="color: var(--color-text-muted);">Complexity:</span>
-                <span style="color: var(--color-text);">${prompt.metadata.complexity}</span>
-              </div>
-            ` : ''}
-            ${prompt.metadata.intent ? `
-              <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-                <span style="color: var(--color-text-muted);">Intent:</span>
-                <span style="color: var(--color-text);">${prompt.metadata.intent}</span>
-              </div>
-            ` : ''}
-          </div>
-        </div>
-      ` : ''}
-
-      <!-- Linked Entry -->
-      ${prompt.linked_entry_id ? `
-        <div>
-          <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">Linked Conversation</h4>
-          <div style="padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md); border-left: 3px solid var(--color-primary);">
-            <div style="color: var(--color-text-muted);">This prompt is linked to conversation entry #${prompt.linked_entry_id}</div>
-            <button class="btn btn-sm" style="margin-top: var(--space-md);" onclick="showThreadModal('${prompt.linked_entry_id}')">
-              View Conversation
-            </button>
-          </div>
-        </div>
-      ` : `
-        <div style="padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md); border-left: 3px solid var(--color-warning);">
-          <div style="color: var(--color-text-muted);">This prompt has not been linked to a conversation yet</div>
-        </div>
-      `}
-
-    </div>
-  `;
-
-  modal.classList.add('active');
-}
-
 async function checkClipboardStatus() {
   try {
     const health = await APIClient.get('/health');
@@ -8701,1577 +7440,10 @@ async function checkClipboardStatus() {
       `Clipboard Monitoring Status\n\n` +
       `Enabled: ${clipboardEnabled ? 'Yes' : 'No'}\n` +
       `Prompts Captured: ${capturedCount}\n\n` +
-      (clipboardEnabled ? 
-        'Clipboard monitoring is active! Copy text containing prompts and they will be captured automatically.' : 
-        'Clipboard monitoring is disabled. Enable it in the companion config.json file by setting "enable_clipboard": true')
+      `Check the companion service logs for more details.`
     );
   } catch (error) {
-    alert('Error checking clipboard status. Make sure the companion service is running.');
+    console.error('Error checking clipboard status:', error);
+    alert('Could not check clipboard status. Make sure the companion service is running.');
   }
 }
-
-// ===================================
-// Search Integration
-// ===================================
-
-let searchEngine = null;
-let searchSelectedIndex = -1;
-let searchCurrentResults = [];
-
-/**
- * Initialize search engine when data is loaded
- */
-async function initializeSearch() {
-  try {
-    if (!window.SearchEngine) {
-      console.warn('SearchEngine class not available');
-      return;
-    }
-    
-    if (!window.lunr) {
-      console.warn('Lunr.js not loaded');
-      return;
-    }
-    
-    console.log('Initializing search engine...');
-    searchEngine = new window.SearchEngine();
-    await searchEngine.initialize(state.data);
-    console.log('Search engine initialized with', searchEngine.documents.length, 'documents');
-  } catch (error) {
-    console.error('Search engine initialization failed:', error);
-  }
-}
-
-/**
- * Open search palette
- */
-function openSearchPalette() {
-  const palette = document.getElementById('searchPalette');
-  const input = document.getElementById('searchInput');
-  
-  if (palette) {
-    palette.classList.add('active');
-    if (input) {
-      setTimeout(() => {
-        input.focus();
-        input.value = '';
-      }, 50); // Small delay to ensure modal is visible
-      showSearchSuggestions();
-    }
-    
-    // Log search engine status for debugging
-    if (searchEngine) {
-      console.log('Search ready with', searchEngine.documents?.length || 0, 'documents');
-    } else {
-      console.warn('Search engine not ready - initializing...');
-      // Try to initialize if not already done
-      initializeSearch();
-    }
-  }
-}
-
-/**
- * Close search palette
- */
-function closeSearchPalette() {
-  const palette = document.getElementById('searchPalette');
-  if (palette) {
-    palette.classList.remove('active');
-    searchSelectedIndex = -1;
-    searchCurrentResults = [];
-  }
-}
-
-/**
- * Perform search
- */
-function performSearch(query) {
-  if (!query.trim()) {
-    showSearchSuggestions();
-    return;
-  }
-  
-  if (!searchEngine) {
-    console.warn('Search engine not initialized');
-    const container = document.getElementById('searchResults');
-    if (container) {
-      container.innerHTML = `
-        <div class="search-empty">
-          <svg class="search-empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-            <circle cx="11" cy="11" r="8" stroke-width="2"/>
-            <path d="M21 21l-4.35-4.35" stroke-width="2" stroke-linecap="round"/>
-          </svg>
-          <div>Search is initializing...</div>
-          <div style="font-size: var(--text-xs); margin-top: var(--space-sm); color: var(--color-text-muted);">
-            Please wait for data to load
-          </div>
-        </div>
-      `;
-    }
-    return;
-  }
-
-  try {
-    console.log('Searching for:', query);
-    const results = searchEngine.search(query, { limit: 20 });
-    console.log('[DATA] Found', results.length, 'results');
-    searchCurrentResults = results;
-    searchSelectedIndex = -1;
-    renderSearchResults(results);
-  } catch (error) {
-    console.error('Search error:', error);
-    const container = document.getElementById('searchResults');
-    if (container) {
-      container.innerHTML = `
-        <div class="search-empty">
-          <svg class="search-empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-            <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" stroke-width="2"/>
-          </svg>
-          <div>Search error</div>
-          <div style="font-size: var(--text-xs); margin-top: var(--space-sm); color: var(--color-text-muted);">
-            ${error.message}
-          </div>
-        </div>
-      `;
-    }
-  }
-}
-
-/**
- * Show search suggestions
- */
-function showSearchSuggestions() {
-  const suggestionsContainer = document.getElementById('searchSuggestions');
-  const resultsContainer = document.getElementById('searchResults');
-  
-  if (!searchEngine || !suggestionsContainer) return;
-
-  const suggestions = searchEngine.getSuggestions('');
-  
-  resultsContainer.innerHTML = '';
-  
-  if (suggestions.length === 0) {
-    suggestionsContainer.innerHTML = `
-      <div class="search-empty">
-        <svg class="search-empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-          <circle cx="11" cy="11" r="8" stroke-width="2"/>
-          <path d="M21 21l-4.35-4.35" stroke-width="2" stroke-linecap="round"/>
-        </svg>
-        <div>Start typing to search...</div>
-        <div style="font-size: var(--text-xs); margin-top: var(--space-sm);">
-          Try: <code>type:prompt</code> or <code>workspace:cursor-telemetry</code>
-        </div>
-      </div>
-    `;
-    return;
-  }
-
-  suggestionsContainer.innerHTML = `
-    <div style="padding: var(--space-sm); color: var(--color-text-muted); font-size: var(--text-xs); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">
-      Recent Searches
-    </div>
-    ${suggestions.map(suggestion => `
-      <div class="search-suggestion-item" onclick="applySearchSuggestion('${escapeHtml(suggestion)}')">
-        <span class="search-suggestion-icon">→</span>
-        <span>${escapeHtml(suggestion)}</span>
-      </div>
-    `).join('')}
-  `;
-}
-/**
- * Apply search suggestion
- */
-function applySearchSuggestion(suggestion) {
-  const input = document.getElementById('searchInput');
-  if (input) {
-    input.value = suggestion;
-    input.focus();
-    performSearch(suggestion);
-  }
-}
-
-/**
- * Render search results
- */
-function renderSearchResults(results) {
-  const container = document.getElementById('searchResults');
-  const suggestionsContainer = document.getElementById('searchSuggestions');
-  
-  if (!container) return;
-
-  suggestionsContainer.innerHTML = '';
-
-  if (results.length === 0) {
-    container.innerHTML = `
-      <div class="search-empty">
-        <svg class="search-empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-          <circle cx="11" cy="11" r="8" stroke-width="2"/>
-          <path d="M21 21l-4.35-4.35" stroke-width="2" stroke-linecap="round"/>
-        </svg>
-        <div>No results found</div>
-        <div style="font-size: var(--text-xs); margin-top: var(--space-sm); color: var(--color-text-muted);">
-          Try different keywords or filters
-        </div>
-      </div>
-    `;
-    return;
-  }
-
-  container.innerHTML = results.map((result, index) => {
-    const icon = getSearchResultIcon(result.type);
-    const typeColor = getSearchResultTypeColor(result.type);
-    const time = new Date(result.timestamp).toLocaleString();
-    
-    return `
-      <div class="search-result-item ${index === searchSelectedIndex ? 'selected' : ''}" 
-           onclick="selectSearchResult(${index})"
-           data-result-index="${index}">
-        <div class="search-result-icon" style="border-color: ${typeColor};">
-          ${icon}
-        </div>
-        <div class="search-result-content">
-          <div class="search-result-title">
-            ${escapeHtml(result.title)}
-          </div>
-          <div class="search-result-description">
-            ${escapeHtml(result.content.substring(0, 150))}${result.content.length > 150 ? '...' : ''}
-          </div>
-          <div class="search-result-meta">
-            <span class="search-result-badge" style="border-color: ${typeColor};">${result.type}</span>
-            <span>${escapeHtml(result.workspace)}</span>
-            <span>${time}</span>
-            ${result.searchMethod ? `<span style="color: var(--color-text-muted); font-size: 10px;">${result.searchMethod}</span>` : ''}
-          </div>
-        </div>
-      </div>
-    `;
-  }).join('');
-}
-
-/**
- * Get icon for search result type
- */
-function getSearchResultIcon(type) {
-  const icons = {
-    event: `<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor">
-      <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z" fill="currentColor"/>
-      <path d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5z" stroke-width="2"/>
-    </svg>`,
-    prompt: `<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor">
-      <path d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2h-1l-3 3z" stroke-width="2" stroke-linecap="round"/>
-    </svg>`,
-    workspace: `<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor">
-      <path d="M3 7v10a2 2 0 002 2h10a2 2 0 002-2V9a2 2 0 00-2-2h-1V5a2 2 0 00-2-2H8a2 2 0 00-2 2v2H5a2 2 0 00-2 2z" stroke-width="2"/>
-    </svg>`
-  };
-  return icons[type] || icons.event;
-}
-
-/**
- * Get color for search result type
- */
-function getSearchResultTypeColor(type) {
-  const colors = {
-    event: 'var(--color-info)',
-    prompt: 'var(--color-accent)',
-    workspace: 'var(--color-success)'
-  };
-  return colors[type] || 'var(--color-border)';
-}
-
-/**
- * Select search result
- */
-function selectSearchResult(index) {
-  if (index < 0 || index >= searchCurrentResults.length) return;
-  
-  const result = searchCurrentResults[index];
-  
-  // Close search palette
-  closeSearchPalette();
-  
-  // Navigate to the result
-  if (result.type === 'event' || result.type === 'prompt') {
-    showEventModal(result.raw.id || result.raw.timestamp);
-  } else if (result.type === 'workspace') {
-    // Switch to workspace and show workspace view
-    state.currentWorkspace = result.raw.name || result.raw.path;
-    switchView('workspace');
-    renderCurrentView();
-  }
-}
-
-/**
- * Navigate search results with keyboard
- */
-function navigateSearchResults(direction) {
-  if (searchCurrentResults.length === 0) return;
-
-  if (direction === 'down') {
-    searchSelectedIndex = (searchSelectedIndex + 1) % searchCurrentResults.length;
-  } else if (direction === 'up') {
-    searchSelectedIndex = searchSelectedIndex <= 0 ? searchCurrentResults.length - 1 : searchSelectedIndex - 1;
-  }
-
-  // Update UI
-  const items = document.querySelectorAll('.search-result-item');
-  items.forEach((item, index) => {
-    if (index === searchSelectedIndex) {
-      item.classList.add('selected');
-      item.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-    } else {
-      item.classList.remove('selected');
-    }
-  });
-}
-
-// Setup search input handler
-document.addEventListener('DOMContentLoaded', () => {
-  const searchInput = document.getElementById('searchInput');
-  
-  if (searchInput) {
-    // Debounce search
-    let searchTimeout;
-    searchInput.addEventListener('input', (e) => {
-      clearTimeout(searchTimeout);
-      searchTimeout = setTimeout(() => {
-        const query = e.target.value.trim();
-        if (query) {
-          performSearch(query);
-        } else {
-          showSearchSuggestions();
-        }
-      }, 300);
-    });
-
-    // Handle keyboard navigation
-    searchInput.addEventListener('keydown', (e) => {
-      if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        navigateSearchResults('down');
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        navigateSearchResults('up');
-      } else if (e.key === 'Enter') {
-        e.preventDefault();
-        if (searchSelectedIndex >= 0) {
-          selectSearchResult(searchSelectedIndex);
-        } else if (searchCurrentResults.length > 0) {
-          selectSearchResult(0);
-        }
-      } else if (e.key === 'Escape') {
-        e.preventDefault();
-        closeSearchPalette();
-      }
-    });
-  }
-
-  // Setup Cmd+K / Ctrl+K shortcut
-  document.addEventListener('keydown', (e) => {
-    if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-      e.preventDefault();
-      openSearchPalette();
-    }
-  });
-});
-
-// Global functions for HTML onclick handlers
-window.showEventModal = showEventModal;
-window.closeEventModal = closeEventModal;
-window.showThreadModal = showThreadModal;
-window.closeThreadModal = closeThreadModal;
-window.renderEmbeddingsVisualization = renderEmbeddingsVisualization;
-window.filterActivityByTimeRange = filterActivityByTimeRange;
-window.refreshPrompts = refreshPrompts;
-window.showPromptModal = showPromptModal;
-window.checkClipboardStatus = checkClipboardStatus;
-window.updateFileGraph = updateFileGraph;
-window.resetFileGraphZoom = resetFileGraphZoom;
-window.showFileInfo = showFileInfo;
-window.openSearchPalette = openSearchPalette;
-window.closeSearchPalette = closeSearchPalette;
-window.applySearchSuggestion = applySearchSuggestion;
-window.selectSearchResult = selectSearchResult;
-window.initializeSearch = initializeSearch;
-
-// Context File Analytics Functions
-async function renderContextFileAnalytics() {
-  const container = document.getElementById('contextFileAnalytics');
-  if (!container) return;
-
-  try {
-    // Fetch from API instead of calculating from prompts
-    const response = await fetch(`${CONFIG.API_BASE}/api/analytics/context`);
-    const result = await response.json();
-    
-    if (!result.success || !result.data) {
-      throw new Error('No context data available');
-    }
-    
-    const stats = result.data;
-    
-    if (stats.totalAtFiles === 0 && stats.totalContextFiles === 0) {
-      container.innerHTML = `
-        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 200px; padding: var(--space-xl); text-align: center;">
-          <div style="font-size: var(--text-lg); color: var(--color-text); margin-bottom: var(--space-xs); font-weight: 500;">No Data Available</div>
-          <div style="font-size: var(--text-sm); color: var(--color-text-muted);">Context data will appear here once you use @ mentions in Cursor</div>
-        </div>
-      `;
-      return;
-    }
-    
-    const promptsWithContext = stats.withContext || 0;
-    
-    // Note: mostReferencedFiles data needs to be added to the API if needed
-    const topFiles = [];
-
-  container.innerHTML = `
-    <div style="display: grid; gap: var(--space-xl);">
-      <!-- Stats Summary -->
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--space-md);">
-        <div style="text-align: center; padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md);">
-          <div style="font-size: 2rem; font-weight: 600; color: #10b981;">${stats.totalAtFiles}</div>
-          <div style="font-size: var(--text-sm); color: var(--color-text-muted); margin-top: var(--space-xs);">@ Files Referenced</div>
-        </div>
-        <div style="text-align: center; padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md);">
-          <div style="font-size: 2rem; font-weight: 600; color: #3b82f6;">${stats.totalContextFiles}</div>
-          <div style="font-size: var(--text-sm); color: var(--color-text-muted); margin-top: var(--space-xs);">Context Files</div>
-        </div>
-        <div style="text-align: center; padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md);">
-          <div style="font-size: 2rem; font-weight: 600; color: #8b5cf6;">${stats.totalUIStates}</div>
-          <div style="font-size: var(--text-sm); color: var(--color-text-muted); margin-top: var(--space-xs);">UI States</div>
-        </div>
-        <div style="text-align: center; padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md);">
-          <div style="font-size: 2rem; font-weight: 600; color: var(--color-accent);">${promptsWithContext.length}</div>
-          <div style="font-size: var(--text-sm); color: var(--color-text-muted); margin-top: var(--space-xs);">With Context</div>
-        </div>
-      </div>
-
-      <!-- Most Referenced Files -->
-      ${topFiles.length > 0 ? `
-        <div>
-          <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">Most Referenced Files</h4>
-          <div style="display: grid; gap: var(--space-sm);">
-            ${topFiles.map(([fileName, count]) => {
-              const percentage = stats.totalAtFiles > 0 ? Math.round((count / stats.totalAtFiles) * 100) : 0;
-              return `
-                <div style="display: flex; align-items: center; gap: var(--space-md); padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-                  <div style="flex: 1;">
-                    <div style="font-family: var(--font-mono); font-size: var(--text-sm); color: var(--color-text); margin-bottom: 4px;">${fileName}</div>
-                    <div style="background: var(--color-bg-alt); height: 6px; border-radius: 3px; overflow: hidden;">
-                      <div style="background: var(--color-primary); height: 100%; width: ${percentage}%;"></div>
-                    </div>
-                  </div>
-                  <div style="text-align: right; min-width: 60px;">
-                    <div style="font-weight: 600; color: var(--color-text);">${count}</div>
-                    <div style="font-size: 10px; color: var(--color-text-muted);">${percentage}%</div>
-                  </div>
-                </div>
-              `;
-            }).join('')}
-          </div>
-        </div>
-      ` : ''}
-    </div>
-  `;
-  } catch (error) {
-    console.error('Error rendering context file analytics:', error);
-    container.innerHTML = `
-      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 200px; padding: var(--space-xl); text-align: center;">
-        <div style="font-size: var(--text-lg); color: var(--color-text); margin-bottom: var(--space-xs); font-weight: 500;">No Data Available</div>
-        <div style="font-size: var(--text-sm); color: var(--color-text-muted);">Context data will appear here once you use @ mentions in Cursor</div>
-      </div>
-    `;
-  }
-}
-
-async function renderContextFileHeatmap() {
-  const container = document.getElementById('contextFileHeatmap');
-  if (!container) return;
-
-  try {
-    // Fetch context snapshots from database
-    const response = await fetch(`${CONFIG.API_BASE}/api/analytics/context/snapshots?source=database&limit=200`);
-    const result = await response.json();
-    
-    if (!result.success || !result.data || result.data.length === 0) {
-      container.innerHTML = `
-        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 200px; padding: var(--space-xl); text-align: center;">
-          <div style="font-size: var(--text-lg); color: var(--color-text); margin-bottom: var(--space-xs); font-weight: 500;">No Data Available</div>
-          <div style="font-size: var(--text-sm); color: var(--color-text-muted);">Context data will appear here once you use @ mentions in Cursor</div>
-        </div>
-      `;
-      return;
-    }
-
-    const snapshots = result.data;
-    
-    // Build co-occurrence matrix
-    const fileCoOccurrence = new Map();
-    
-    snapshots.forEach(snapshot => {
-      const files = [];
-      
-      // Collect all files from this snapshot
-      try {
-        if (snapshot.at_mentions) {
-          const mentions = typeof snapshot.at_mentions === 'string' 
-            ? JSON.parse(snapshot.at_mentions) 
-            : snapshot.at_mentions;
-          if (Array.isArray(mentions)) {
-            files.push(...mentions);
-          }
-        }
-        
-        if (snapshot.context_files) {
-          const contextFiles = typeof snapshot.context_files === 'string'
-            ? JSON.parse(snapshot.context_files)
-            : snapshot.context_files;
-          if (Array.isArray(contextFiles)) {
-            files.push(...contextFiles);
-          } else if (contextFiles.attachedFiles || contextFiles.codebaseFiles) {
-            const attached = contextFiles.attachedFiles || [];
-            const codebase = contextFiles.codebaseFiles || [];
-            files.push(...attached, ...codebase);
-          }
-        }
-      } catch (e) {
-        // Skip malformed JSON
-      }
-      
-      // Record co-occurrences (files used together in same prompt)
-      for (let i = 0; i < files.length; i++) {
-        for (let j = i + 1; j < files.length; j++) {
-          const key = [files[i], files[j]].sort().join('::');
-          fileCoOccurrence.set(key, (fileCoOccurrence.get(key) || 0) + 1);
-        }
-      }
-    });
-
-  // Get top file pairs
-  const topPairs = Array.from(fileCoOccurrence.entries())
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 15);
-
-  if (topPairs.length === 0) {
-    container.innerHTML = '<div style="text-align: center; color: var(--color-text-muted); padding: var(--space-xl);">Not enough data for heatmap</div>';
-    return;
-  }
-
-  const maxCount = topPairs[0][1];
-
-  container.innerHTML = `
-    <div>
-      <div style="font-size: var(--text-sm); color: var(--color-text-muted); margin-bottom: var(--space-md);">
-        Files frequently referenced together in the same prompt
-      </div>
-      <div style="display: grid; gap: var(--space-xs);">
-        ${topPairs.map(([key, count]) => {
-          const [file1, file2] = key.split('::');
-          const intensity = count / maxCount;
-          const color = `rgba(99, 102, 241, ${0.2 + (intensity * 0.8)})`;
-          
-          return `
-            <div style="display: flex; align-items: center; gap: var(--space-sm); padding: var(--space-sm); background: ${color}; border-radius: var(--radius-md); transition: all 0.2s;" 
-                 onmouseover="this.style.transform='translateX(4px)'; this.style.boxShadow='0 2px 8px rgba(0,0,0,0.1)';" 
-                 onmouseout="this.style.transform=''; this.style.boxShadow='';">
-              <div style="flex: 1; display: flex; align-items: center; gap: var(--space-xs); font-family: var(--font-mono); font-size: var(--text-xs);">
-                <span style="color: var(--color-text); font-weight: 500;">${file1}</span>
-                <span style="color: var(--color-text-muted);">↔</span>
-                <span style="color: var(--color-text); font-weight: 500;">${file2}</span>
-              </div>
-              <div style="background: rgba(255, 255, 255, 0.9); padding: 4px 10px; border-radius: 12px; font-weight: 600; font-size: var(--text-xs); color: var(--color-primary);">
-                ${count}x
-              </div>
-            </div>
-          `;
-        }).join('')}
-      </div>
-    </div>
-  `;
-  } catch (error) {
-    console.error('Error rendering context file heatmap:', error);
-    container.innerHTML = '<div style="text-align: center; color: var(--color-text-muted); padding: var(--space-xl);">Unable to load heatmap data</div>';
-  }
-}
-
-// UI State Analytics - DISABLED
-// This feature tracks Cursor tabs/panels via AppleScript (expensive & unreliable)
-// Removed from analytics view to focus on procedural knowledge features instead
-function renderUIStateAnalytics() {
-  const container = document.getElementById('uiStateAnalytics');
-  if (!container) return;
-
-  // Collect UI state data
-  const promptsWithUI = state.data.prompts?.filter(p => p.context?.browserState?.tabs) || [];
-  
-  if (promptsWithUI.length === 0) {
-    container.innerHTML = '<div style="text-align: center; color: var(--color-text-muted); padding: var(--space-xl);">No UI state data available yet</div>';
-    return;
-  }
-
-  // Calculate statistics
-  const tabCounts = promptsWithUI.map(p => p.context.browserState.tabs.length);
-  const averageTabs = (tabCounts.reduce((a, b) => a + b, 0) / tabCounts.length).toFixed(1);
-  const maxTabs = Math.max(...tabCounts);
-  const minTabs = Math.min(...tabCounts);
-  
-  // Most active tabs
-  const tabFrequency = new Map();
-  promptsWithUI.forEach(prompt => {
-    prompt.context.browserState.tabs.forEach(tab => {
-      const tabName = tab.name || tab.path;
-      tabFrequency.set(tabName, (tabFrequency.get(tabName) || 0) + 1);
-    });
-  });
-  
-  const topTabs = Array.from(tabFrequency.entries())
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 10);
-
-  container.innerHTML = `
-    <div style="display: grid; gap: var(--space-xl);">
-      <!-- Tab Statistics -->
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: var(--space-md);">
-        <div style="text-align: center; padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md);">
-          <div style="font-size: 1.5rem; font-weight: 600; color: #8b5cf6;">${averageTabs}</div>
-          <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">Avg Tabs Open</div>
-        </div>
-        <div style="text-align: center; padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md);">
-          <div style="font-size: 1.5rem; font-weight: 600; color: #ec4899;">${maxTabs}</div>
-          <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">Max Tabs</div>
-        </div>
-        <div style="text-align: center; padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md);">
-          <div style="font-size: 1.5rem; font-weight: 600; color: #06b6d4;">${minTabs}</div>
-          <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">Min Tabs</div>
-        </div>
-        <div style="text-align: center; padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md);">
-          <div style="font-size: 1.5rem; font-weight: 600; color: #f59e0b;">${promptsWithUI.length}</div>
-          <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">UI Sessions</div>
-        </div>
-      </div>
-
-      <!-- Most Active Tabs -->
-      ${topTabs.length > 0 ? `
-        <div>
-          <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">Most Active Tabs</h4>
-          <div style="display: grid; gap: var(--space-xs);">
-            ${topTabs.map(([tabName, count]) => {
-              const percentage = Math.round((count / promptsWithUI.length) * 100);
-              return `
-                <div style="display: flex; align-items: center; gap: var(--space-md); padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-                  <div style="flex: 1;">
-                    <div style="font-family: var(--font-mono); font-size: var(--text-sm); color: var(--color-text); margin-bottom: 4px;">${tabName}</div>
-                    <div style="background: var(--color-bg-alt); height: 6px; border-radius: 3px; overflow: hidden;">
-                      <div style="background: var(--color-primary); height: 100%; width: ${percentage}%;"></div>
-                    </div>
-                  </div>
-                  <div style="text-align: right; min-width: 60px;">
-                    <div style="font-weight: 600; color: var(--color-text);">${count}</div>
-                    <div style="font-size: 10px; color: var(--color-text-muted);">${percentage}%</div>
-                  </div>
-                </div>
-              `;
-            }).join('')}
-          </div>
-        </div>
-      ` : ''}
-    </div>
-  `;
-}
-
-
-// ===================================
-// NEW ANALYTICS VISUALIZATION FUNCTIONS
-// ===================================
-
-/**
- * Render Model Usage Analytics
- */
-function renderModelUsageAnalytics() {
-  const container = document.getElementById('modelUsageAnalytics');
-  if (!container) return;
-
-  const prompts = state.data.prompts || [];
-  
-  if (prompts.length === 0) {
-    container.innerHTML = `
-      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 200px; padding: var(--space-xl); text-align: center;">
-        <div style="font-size: var(--text-lg); color: var(--color-text); margin-bottom: var(--space-xs); font-weight: 500;">No Data Available</div>
-        <div style="font-size: var(--text-sm); color: var(--color-text-muted);">Model usage statistics will appear here once you start using Cursor AI</div>
-      </div>
-    `;
-    return;
-  }
-
-  // Count models
-  const modelCounts = {};
-  const modelModes = {};
-  const modelContext = {};
-  
-  prompts.forEach(p => {
-    const model = p.modelName || p.model_name || 'Unknown';
-    const mode = p.mode || 'unknown';
-    const context = p.contextUsage || p.context_usage || 0;
-    
-    // Count by model
-    modelCounts[model] = (modelCounts[model] || 0) + 1;
-    
-    // Count modes per model
-    if (!modelModes[model]) modelModes[model] = {};
-    modelModes[model][mode] = (modelModes[model][mode] || 0) + 1;
-    
-    // Average context per model
-    if (!modelContext[model]) modelContext[model] = { total: 0, count: 0 };
-    modelContext[model].total += context;
-    modelContext[model].count++;
-  });
-
-  // Sort by usage
-  const sortedModels = Object.entries(modelCounts).sort((a, b) => b[1] - a[1]);
-  
-  const totalPrompts = prompts.length;
-
-  let html = '<div style="display: flex; flex-direction: column; gap: var(--space-md);">';
-
-  sortedModels.forEach(([model, count]) => {
-    const percentage = ((count / totalPrompts) * 100).toFixed(1);
-    const avgContext = modelContext[model] ? (modelContext[model].total / modelContext[model].count).toFixed(1) : 0;
-    const modes = modelModes[model] || {};
-    const modesList = Object.entries(modes)
-      .sort((a, b) => b[1] - a[1])
-      .map(([mode, modeCount]) => `${mode}: ${modeCount}`)
-      .join(', ');
-
-    html += `
-      <div style="padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md); border-left: 3px solid var(--color-primary);">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-sm);">
-          <div style="flex: 1;">
-            <div style="font-weight: 600; color: var(--color-text); margin-bottom: var(--space-xs);">
-              ${model === 'Unknown' ? 'Model Not Specified' : model}
-            </div>
-            <div style="font-size: var(--text-sm); color: var(--color-text-muted);">
-              ${modesList}
-            </div>
-          </div>
-          <div style="text-align: right;">
-            <div style="font-size: var(--text-xl); font-weight: 600; color: var(--color-primary);">${count}</div>
-            <div style="font-size: var(--text-xs); color: var(--color-text-muted);">${percentage}%</div>
-          </div>
-        </div>
-        <div style="display: flex; align-items: center; gap: var(--space-sm);">
-          <div style="flex: 1; background: var(--color-bg-alt); height: 6px; border-radius: 3px; overflow: hidden;">
-            <div style="background: var(--color-primary); height: 100%; width: ${percentage}%;"></div>
-          </div>
-          ${avgContext > 0 ? `<span style="font-size: var(--text-xs); color: var(--color-text-muted);">${avgContext}% avg context</span>` : ''}
-        </div>
-      </div>
-    `;
-  });
-
-  html += '</div>';
-  container.innerHTML = html;
-}
-/**
- * Render Enhanced Context Window Analytics
- */
-async function renderEnhancedContextAnalytics() {
-  const container = document.getElementById('enhancedContextAnalytics');
-  if (!container) return;
-
-  const prompts = state.data.prompts || [];
-  
-  if (prompts.length === 0) {
-    container.innerHTML = `
-      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 200px; padding: var(--space-xl); text-align: center;">
-        <div style="font-size: var(--text-lg); color: var(--color-text); margin-bottom: var(--space-xs); font-weight: 500;">No Data Available</div>
-        <div style="font-size: var(--text-sm); color: var(--color-text-muted);">Context data will appear here once you start using Cursor AI</div>
-      </div>
-    `;
-    return;
-  }
-
-  // Calculate context analytics from actual data
-  let totalContextFiles = 0;
-  let promptsWithContext = 0;
-  let totalContextUsage = 0;
-  let contexUsageCount = 0;
-  let totalCharsInPrompts = 0;
-  const fileReferences = new Map();
-  const promptsWithMentions = [];
-  
-  prompts.forEach(p => {
-    const text = p.text || p.prompt || '';
-    totalCharsInPrompts += text.length;
-    
-    // Count context files
-    if (p.contextFiles) {
-      let fileCount = 0;
-      if (typeof p.contextFiles === 'object') {
-        if (p.contextFiles.count) {
-          fileCount = p.contextFiles.count;
-        } else if (p.contextFiles.files && Array.isArray(p.contextFiles.files)) {
-          fileCount = p.contextFiles.files.length;
-          // Track individual file references
-          p.contextFiles.files.forEach(file => {
-            const fileName = typeof file === 'string' ? file : file.path || file.name;
-            if (fileName) {
-              fileReferences.set(fileName, (fileReferences.get(fileName) || 0) + 1);
-            }
-          });
-        }
-      }
-      if (fileCount > 0) {
-        totalContextFiles += fileCount;
-        promptsWithContext++;
-      }
-    }
-    
-    // Count @ mentions in text
-    const atMentions = (text.match(/@[\w\-\.\/]+/g) || []);
-    if (atMentions.length > 0) {
-      atMentions.forEach(mention => {
-        const cleanMention = mention.substring(1); // Remove @
-        fileReferences.set(cleanMention, (fileReferences.get(cleanMention) || 0) + 1);
-      });
-      promptsWithMentions.push(p);
-    }
-    
-    // Track context usage percentage
-    const usage = p.contextUsage || p.context_usage || 0;
-    if (usage > 0) {
-      totalContextUsage += usage;
-      contexUsageCount++;
-    }
-  });
-  
-  const avgFilesPerPrompt = promptsWithContext > 0 ? (totalContextFiles / promptsWithContext) : 0;
-  const avgContextUsage = contexUsageCount > 0 ? (totalContextUsage / contexUsageCount) : 0;
-  const avgCharsPerPrompt = prompts.length > 0 ? (totalCharsInPrompts / prompts.length) : 0;
-  const estimatedTokens = Math.round(avgCharsPerPrompt / 4); // Rough estimate: 4 chars per token
-  const contextUtilizationRate = (promptsWithContext / prompts.length) * 100;
-  
-  // Sort files by reference count
-  const topFiles = Array.from(fileReferences.entries())
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 8)
-    .map(([file, count]) => ({ file, count }));
-  
-  // Analyze context patterns
-  const last24h = Date.now() - 24 * 60 * 60 * 1000;
-  const recentPromptsWithContext = prompts.filter(p => {
-    const time = new Date(p.timestamp).getTime();
-    const hasContext = (p.contextFiles?.count || 0) > 0 || (p.text || '').includes('@');
-    return time >= last24h && hasContext;
-  }).length;
-    
-    container.innerHTML = `
-      <div class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--space-md); margin-bottom: var(--space-lg);">
-        <div class="stat-card">
-        <div class="stat-label" title="Average files referenced per prompt with context">Avg Files/Prompt</div>
-        <div class="stat-value">${avgFilesPerPrompt.toFixed(1)}</div>
-        <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">
-          ${promptsWithContext} of ${prompts.length} with context
-        </div>
-        </div>
-        <div class="stat-card">
-        <div class="stat-label" title="Estimated tokens based on average prompt length">Est. Tokens/Prompt</div>
-        <div class="stat-value">${estimatedTokens.toLocaleString()}</div>
-        <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">
-          ~${Math.round(avgCharsPerPrompt).toLocaleString()} chars avg
-        </div>
-        </div>
-        <div class="stat-card">
-        <div class="stat-label" title="Average context window utilization when context is used">Avg Context Usage</div>
-        <div class="stat-value" style="color: ${avgContextUsage >= 80 ? '#ef4444' : avgContextUsage >= 60 ? '#f59e0b' : '#10b981'};">
-          ${avgContextUsage.toFixed(1)}%
-        </div>
-        <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">
-          ${contexUsageCount} prompts tracked
-        </div>
-        </div>
-        <div class="stat-card">
-        <div class="stat-label" title="% of prompts that include file context or @ mentions">Context Adoption</div>
-        <div class="stat-value">${contextUtilizationRate.toFixed(0)}%</div>
-        <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">
-          ${recentPromptsWithContext} in last 24h
-        </div>
-        </div>
-      </div>
-      
-    ${topFiles.length > 0 ? `
-        <div style="margin-top: var(--space-lg);">
-        <h4 style="margin-bottom: var(--space-md); color: var(--color-text); font-size: var(--text-base); font-weight: 600;">
-          Most Referenced Files & Mentions
-        </h4>
-        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: var(--space-sm);">
-          ${topFiles.map(({ file, count }) => {
-            const fileName = file.split('/').pop() || file;
-            const percentage = ((count / prompts.length) * 100).toFixed(1);
-            return `
-              <div style="display: flex; justify-content: space-between; align-items: center; padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md); border-left: 3px solid var(--color-primary);">
-                <div style="flex: 1; min-width: 0;">
-                  <div style="font-family: 'Geist Mono', monospace; font-size: var(--text-sm); color: var(--color-text); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(file)}">
-                    ${escapeHtml(fileName)}
-              </div>
-                  ${file !== fileName ? `
-                    <div style="font-size: var(--text-xs); color: var(--color-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 2px;" title="${escapeHtml(file)}">
-                      ${escapeHtml(file)}
-          </div>
-                  ` : ''}
-        </div>
-                <div style="text-align: right; margin-left: var(--space-md); flex-shrink: 0;">
-                  <div style="color: var(--color-primary); font-weight: 600; font-size: var(--text-lg);">${count}</div>
-                  <div style="font-size: var(--text-xs); color: var(--color-text-muted);">${percentage}%</div>
-                </div>
-              </div>
-            `;
-          }).join('')}
-      </div>
-      </div>
-    ` : `
-      <div style="color: var(--color-text-muted); text-align: center; padding: var(--space-xl); background: var(--color-bg); border-radius: var(--radius-md);">
-        <div style="font-size: var(--text-base); margin-bottom: var(--space-xs);">No specific file references detected yet</div>
-        <div style="font-size: var(--text-sm);">Use @ mentions in Cursor to reference files explicitly</div>
-      </div>
-    `}
-  `;
-}
-
-/**
- * Render Productivity Insights
- */
-async function renderProductivityInsights() {
-  const container = document.getElementById('productivityInsights');
-  if (!container) return;
-
-  const prompts = state.data.prompts || [];
-  const events = state.data.events || [];
-  
-  if (prompts.length === 0 && events.length === 0) {
-      container.innerHTML = `
-        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 200px; padding: var(--space-xl); text-align: center;">
-          <div style="font-size: var(--text-lg); color: var(--color-text); margin-bottom: var(--space-xs); font-weight: 500;">No Data Available</div>
-          <div style="font-size: var(--text-sm); color: var(--color-text-muted);">Productivity data will accumulate as you work with Cursor</div>
-        </div>
-      `;
-      return;
-    }
-
-  // Calculate productivity metrics from actual data
-  const now = Date.now();
-  const last24h = now - 24 * 60 * 60 * 1000;
-  const last7days = now - 7 * 24 * 60 * 60 * 1000;
-  
-  // File edit activity
-  const fileEditEvents = events.filter(e => e.type === 'file-change' || e.type === 'file-edit');
-  const recentFileEdits = fileEditEvents.filter(e => new Date(e.timestamp).getTime() >= last24h);
-  
-  // Calculate active coding time (based on event density)
-  let activeCodingTime = 0;
-  const sortedEvents = [...events].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-  for (let i = 1; i < sortedEvents.length; i++) {
-    const timeDiff = new Date(sortedEvents[i].timestamp) - new Date(sortedEvents[i - 1].timestamp);
-    // Count as active if events are within 5 minutes of each other
-    if (timeDiff < 5 * 60 * 1000) {
-      activeCodingTime += timeDiff;
-    }
-  }
-  
-  // Prompt metrics
-  const userPrompts = prompts.filter(p => p.messageRole === 'user' || !p.messageRole);
-  const aiResponses = prompts.filter(p => p.messageRole === 'assistant');
-  const recentPrompts = userPrompts.filter(p => new Date(p.timestamp).getTime() >= last24h);
-  const weekPrompts = userPrompts.filter(p => new Date(p.timestamp).getTime() >= last7days);
-  
-  // Calculate thinking time for AI responses
-  const aiResponsesWithTime = aiResponses.filter(p => p.thinkingTimeSeconds && p.thinkingTimeSeconds > 0);
-  const avgThinkingTime = aiResponsesWithTime.length > 0 
-    ? aiResponsesWithTime.reduce((sum, p) => sum + parseFloat(p.thinkingTimeSeconds), 0) / aiResponsesWithTime.length 
-    : 0;
-  
-  // Lines changed analysis
-  const promptsWithLines = prompts.filter(p => (p.linesAdded || 0) > 0 || (p.linesRemoved || 0) > 0);
-  const totalLinesAdded = prompts.reduce((sum, p) => sum + (p.linesAdded || 0), 0);
-  const totalLinesRemoved = prompts.reduce((sum, p) => sum + (p.linesRemoved || 0), 0);
-  const netLinesChanged = totalLinesAdded - totalLinesRemoved;
-  
-  // Code churn (high churn = editing same files repeatedly)
-  const fileEditCounts = new Map();
-  events.filter(e => e.file).forEach(e => {
-    fileEditCounts.set(e.file, (fileEditCounts.get(e.file) || 0) + 1);
-  });
-  const highChurnFiles = Array.from(fileEditCounts.entries())
-    .filter(([_, count]) => count >= 5)
-    .sort((a, b) => b[1] - a[1]);
-  
-  // Conversation length (prompts per conversation)
-  const conversationMap = new Map();
-  prompts.forEach(p => {
-    const convId = p.parentConversationId || p.composerId || 'default';
-    conversationMap.set(convId, (conversationMap.get(convId) || 0) + 1);
-  });
-  const avgPromptsPerConversation = conversationMap.size > 0 
-    ? Array.from(conversationMap.values()).reduce((a, b) => a + b, 0) / conversationMap.size 
-    : 0;
-  
-  // Calculate prompts per day
-  const promptsPerDay = weekPrompts.length > 0 ? (weekPrompts.length / 7).toFixed(1) : '0.0';
-    
-    container.innerHTML = `
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--space-md); margin-bottom: var(--space-lg);">
-        <div class="stat-card">
-        <div class="stat-label" title="Estimated active coding time based on event density">Active Time (Est.)</div>
-        <div class="stat-value">${formatDuration(activeCodingTime)}</div>
-        <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">
-          Based on ${events.length.toLocaleString()} events
-        </div>
-      </div>
-      
-        <div class="stat-card">
-        <div class="stat-label" title="Total user prompts to AI">Total Prompts</div>
-        <div class="stat-value">${userPrompts.length.toLocaleString()}</div>
-        <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">
-          ${recentPrompts.length} in last 24h
-        </div>
-      </div>
-      
-        <div class="stat-card">
-        <div class="stat-label" title="Average prompts per conversation thread">Avg Iteration Depth</div>
-        <div class="stat-value">${avgPromptsPerConversation.toFixed(1)}</div>
-        <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">
-          ${conversationMap.size} conversations
-        </div>
-      </div>
-      
-        <div class="stat-card">
-        <div class="stat-label" title="Average AI response thinking time">Avg AI Think Time</div>
-        <div class="stat-value">${avgThinkingTime > 0 ? avgThinkingTime.toFixed(1) + 's' : 'N/A'}</div>
-        <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">
-          ${aiResponsesWithTime.length} responses tracked
-        </div>
-      </div>
-    </div>
-    
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--space-md); margin-bottom: var(--space-lg);">
-      <div class="stat-card">
-        <div class="stat-label" title="Total lines added across all prompts">Lines Added</div>
-        <div class="stat-value" style="color: #10b981;">${totalLinesAdded.toLocaleString()}</div>
-        <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">
-          ${promptsWithLines.length} prompts with changes
-        </div>
-      </div>
-      
-      <div class="stat-card">
-        <div class="stat-label" title="Total lines removed across all prompts">Lines Removed</div>
-        <div class="stat-value" style="color: #ef4444;">${totalLinesRemoved.toLocaleString()}</div>
-        <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">
-          Net: ${netLinesChanged >= 0 ? '+' : ''}${netLinesChanged.toLocaleString()}
-        </div>
-      </div>
-      
-      <div class="stat-card">
-        <div class="stat-label" title="Files edited repeatedly (potential churn)">High-Churn Files</div>
-        <div class="stat-value">${highChurnFiles.length}</div>
-        <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">
-          ${fileEditEvents.length} total edits
-        </div>
-      </div>
-      
-      <div class="stat-card">
-        <div class="stat-label" title="Average prompts per day over last week">Daily Velocity</div>
-        <div class="stat-value">${promptsPerDay}</div>
-        <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">
-          prompts/day (7-day avg)
-        </div>
-      </div>
-    </div>
-    
-    ${highChurnFiles.length > 0 ? `
-      <div style="margin-top: var(--space-md);">
-        <h4 style="margin-bottom: var(--space-md); color: var(--color-text); font-size: var(--text-base); font-weight: 600;">
-          Most Frequently Edited Files
-        </h4>
-        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: var(--space-sm);">
-          ${highChurnFiles.slice(0, 6).map(([file, count]) => {
-            const fileName = file.split('/').pop() || file;
-            const editIntensity = count >= 20 ? 'Very High' : count >= 10 ? 'High' : 'Moderate';
-            const color = count >= 20 ? '#ef4444' : count >= 10 ? '#f59e0b' : '#10b981';
-            return `
-              <div style="padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md); border-left: 3px solid ${color};">
-                <div style="font-family: 'Geist Mono', monospace; font-size: var(--text-sm); color: var(--color-text); font-weight: 500; margin-bottom: var(--space-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(file)}">
-                  ${escapeHtml(fileName)}
-                </div>
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                  <span style="font-size: var(--text-xs); color: var(--color-text-muted);">${editIntensity} churn</span>
-                  <span style="color: ${color}; font-weight: 600;">${count} edits</span>
-        </div>
-      </div>
-    `;
-          }).join('')}
-      </div>
-      </div>
-    ` : ''}
-    `;
-}
-
-// Update context chart timescale
-function updateContextChartTimescale(hours) {
-  // Update button states
-  document.querySelectorAll('.btn-timescale').forEach(btn => {
-    const btnHours = parseInt(btn.getAttribute('data-hours'));
-    if (btnHours === hours) {
-      btn.style.background = 'var(--color-primary)';
-      btn.style.color = 'white';
-    } else {
-      btn.style.background = 'var(--color-bg)';
-      btn.style.color = 'var(--color-text)';
-    }
-  });
-  
-  // Re-render chart with new timescale
-  renderPromptTokensChart(hours);
-}
-
-// Helper function to format duration
-function formatDuration(ms) {
-  if (ms < 60000) return `${Math.round(ms / 1000)}s`;
-  if (ms < 3600000) return `${Math.round(ms / 60000)}m`;
-  return `${(ms / 3600000).toFixed(1)}h`;
-}
-
-/**
- * ✅ REMOVED: File Relationship Visualization (handled in File Graph view)
- */
-// async function renderFileRelationshipVisualization() {
-//   Disabled - this is better handled in the dedicated File Graph tab
-// }
-async function renderFileRelationshipVisualization_DISABLED() {
-  const container = document.getElementById('fileRelationshipViz');
-  if (!container) return;
-
-  try {
-    // Fetch file relationship data from API
-    const response = await APIClient.get('/api/analytics/context/file-relationships');
-    
-    if (!response.success || !response.data) {
-      throw new Error('No file relationship data available');
-    }
-    
-    const data = response.data;
-    
-    if (!data.nodes || data.nodes.length === 0) {
-      container.innerHTML = `
-        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 200px; padding: var(--space-xl); text-align: center;">
-          <div style="font-size: var(--text-lg); color: var(--color-text); margin-bottom: var(--space-xs); font-weight: 500;">No Data Available</div>
-          <div style="font-size: var(--text-sm); color: var(--color-text-muted);">File relationships will appear once you use @ mentions in Cursor</div>
-        </div>
-      `;
-      return;
-    }
-    
-    // Render file relationship list (simple version for now)
-    container.innerHTML = `
-      <div style="margin-bottom: var(--space-md);">
-        <div style="font-size: var(--text-sm); color: var(--color-text-muted); margin-bottom: var(--space-xs);">
-          ${data.nodes.length} files with ${data.edges.length} relationships
-        </div>
-      </div>
-      <div style="display: flex; flex-direction: column; gap: var(--space-xs);">
-        ${data.nodes.slice(0, 10).map(node => `
-          <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-sm);">
-            <span style="font-family: 'Geist Mono', monospace; font-size: var(--text-sm); color: var(--color-text);">${node.id}</span>
-            <span style="color: var(--color-primary); font-weight: 500;">${node.weight} references</span>
-          </div>
-        `).join('')}
-      </div>
-    `;
-  } catch (error) {
-    console.warn('[INFO] File relationship error:', error.message);
-    container.innerHTML = `
-      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 200px; padding: var(--space-xl); text-align: center;">
-        <div style="font-size: var(--text-lg); color: var(--color-text); margin-bottom: var(--space-xs); font-weight: 500;">No Data Available</div>
-        <div style="font-size: var(--text-sm); color: var(--color-text-muted);">File relationships will appear once you use @ mentions in Cursor</div>
-      </div>
-    `;
-  }
-}
-
-// ===================================
-// TODO View
-// ===================================
-
-async function renderTodoView(container) {
-  container.innerHTML = `
-    <div style="max-width: 1200px; margin: 0 auto;">
-      <div class="card">
-        <div class="card-header">
-          <h2 class="card-title">Task Tracking</h2>
-          <p style="font-size: var(--text-sm); color: var(--color-text-muted); margin-top: var(--space-xs);">
-            TODOs created by AI assistant, linked to prompts and file changes
-          </p>
-        </div>
-        <div class="card-body" id="todoListContainer">
-          <div style="display: flex; justify-content: center; padding: var(--space-2xl);">
-            <div class="spinner"></div>
-          </div>
-        </div>
-      </div>
-    </div>
-  `;
-
-  try {
-    const response = await fetch(`${CONFIG.API_BASE}/api/todos`);
-    const data = await response.json();
-    
-    // ✅ Fix: API returns {success, todos}, not just array
-    const todos = data.todos || data || [];
-    
-    const todoListContainer = document.getElementById('todoListContainer');
-    
-    if (!todos || todos.length === 0) {
-      todoListContainer.innerHTML = `
-        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: var(--space-2xl); text-align: center;">
-          <div style="font-size: var(--text-lg); color: var(--color-text); margin-bottom: var(--space-xs); font-weight: 500;">No TODOs Yet</div>
-          <div style="font-size: var(--text-sm); color: var(--color-text-muted); max-width: 400px;">
-            TODOs will appear here automatically when the AI assistant creates them during your workflow
-          </div>
-        </div>
-      `;
-      return;
-    }
-
-    // Group todos by status
-    const grouped = {
-      in_progress: todos.filter(t => t.status === 'in_progress'),
-      pending: todos.filter(t => t.status === 'pending'),
-      completed: todos.filter(t => t.status === 'completed')
-    };
-
-    const totalCompleted = grouped.completed.length;
-    const totalTodos = todos.length;
-    const completionRate = totalTodos > 0 ? Math.round((totalCompleted / totalTodos) * 100) : 0;
-
-    todoListContainer.innerHTML = `
-      <!-- Progress Summary -->
-      <div style="display: flex; gap: var(--space-lg); margin-bottom: var(--space-xl); padding: var(--space-lg); background: var(--color-bg); border-radius: var(--radius-md);">
-        <div style="flex: 1;">
-          <div style="font-size: var(--text-sm); color: var(--color-text-muted); margin-bottom: var(--space-xs);">Total Tasks</div>
-          <div style="font-size: var(--text-2xl); font-weight: 600; color: var(--color-text);">${totalTodos}</div>
-        </div>
-        <div style="flex: 1;">
-          <div style="font-size: var(--text-sm); color: var(--color-text-muted); margin-bottom: var(--space-xs);">Completed</div>
-          <div style="font-size: var(--text-2xl); font-weight: 600; color: var(--color-success);">${totalCompleted}</div>
-        </div>
-        <div style="flex: 1;">
-          <div style="font-size: var(--text-sm); color: var(--color-text-muted); margin-bottom: var(--space-xs);">In Progress</div>
-          <div style="font-size: var(--text-2xl); font-weight: 600; color: var(--color-primary);">${grouped.in_progress.length}</div>
-        </div>
-        <div style="flex: 1;">
-          <div style="font-size: var(--text-sm); color: var(--color-text-muted); margin-bottom: var(--space-xs);">Completion Rate</div>
-          <div style="font-size: var(--text-2xl); font-weight: 600; color: var(--color-text);">${completionRate}%</div>
-        </div>
-      </div>
-
-      <!-- TODO Sections -->
-      ${grouped.in_progress.length > 0 ? `
-        <div style="margin-bottom: var(--space-xl);">
-          <h3 style="font-size: var(--text-md); font-weight: 600; color: var(--color-text); margin-bottom: var(--space-md); display: flex; align-items: center; gap: var(--space-sm);">
-            <span style="color: var(--color-primary);"></span> In Progress
-          </h3>
-          <div style="display: flex; flex-direction: column; gap: var(--space-md);">
-            ${grouped.in_progress.map(todo => renderTodoItem(todo)).join('')}
-          </div>
-        </div>
-      ` : ''}
-
-      ${grouped.pending.length > 0 ? `
-        <div style="margin-bottom: var(--space-xl);">
-          <h3 style="font-size: var(--text-md); font-weight: 600; color: var(--color-text); margin-bottom: var(--space-md); display: flex; align-items: center; gap: var(--space-sm);">
-            <span style="color: var(--color-text-muted);"></span> Pending
-          </h3>
-          <div style="display: flex; flex-direction: column; gap: var(--space-md);">
-            ${grouped.pending.map(todo => renderTodoItem(todo)).join('')}
-          </div>
-        </div>
-      ` : ''}
-
-      ${grouped.completed.length > 0 ? `
-        <div>
-          <h3 style="font-size: var(--text-md); font-weight: 600; color: var(--color-text); margin-bottom: var(--space-md); display: flex; align-items: center; gap: var(--space-sm);">
-            <span style="color: var(--color-success);"></span> Completed
-          </h3>
-          <div style="display: flex; flex-direction: column; gap: var(--space-md);">
-            ${grouped.completed.map(todo => renderTodoItem(todo)).join('')}
-          </div>
-        </div>
-      ` : ''}
-    `;
-
-    // Attach event listeners
-    todos.forEach(todo => {
-      const expandBtn = document.getElementById(`expand-todo-${todo.id}`);
-      const startBtn = document.getElementById(`start-todo-${todo.id}`);
-      const completeBtn = document.getElementById(`complete-todo-${todo.id}`);
-
-      if (expandBtn) {
-        expandBtn.addEventListener('click', () => expandTodoDetails(todo.id));
-      }
-      if (startBtn) {
-        startBtn.addEventListener('click', () => markTodoInProgress(todo.id));
-      }
-      if (completeBtn) {
-        completeBtn.addEventListener('click', () => markTodoCompleted(todo.id));
-      }
-    });
-
-  } catch (error) {
-    console.error('Error loading todos:', error);
-    const errorContainer = document.getElementById('todoListContainer');
-    if (errorContainer) {
-      errorContainer.innerHTML = `
-        <div style="display: flex; flex-direction: column; align-items: center; padding: var(--space-xl); text-align: center;">
-          <div style="font-size: var(--text-lg); color: var(--color-error); margin-bottom: var(--space-xs); font-weight: 500;">Failed to Load TODOs</div>
-          <div style="font-size: var(--text-sm); color: var(--color-text-muted);">${error.message}</div>
-        </div>
-      `;
-    }
-  }
-}
-function renderTodoItem(todo) {
-  const statusIcon = {
-    'pending': '<span style="color: var(--color-text-muted); font-size: 18px;"></span>',
-    'in_progress': '<span style="color: var(--color-primary); font-size: 18px;"></span>',
-    'completed': '<span style="color: var(--color-success); font-size: 18px;"></span>'
-  }[todo.status] || '○';
-
-  const duration = getTodoDuration(todo);
-  const eventCount = (todo.eventCount || 0);
-  
-  // Parse JSON strings if needed
-  const promptsWhileActive = Array.isArray(todo.promptsWhileActive) 
-    ? todo.promptsWhileActive 
-    : (typeof todo.promptsWhileActive === 'string' && todo.promptsWhileActive.length > 0)
-      ? JSON.parse(todo.promptsWhileActive)
-      : [];
-      
-  const filesModified = Array.isArray(todo.filesModified)
-    ? todo.filesModified
-    : (typeof todo.filesModified === 'string' && todo.filesModified.length > 0)
-      ? JSON.parse(todo.filesModified)
-      : [];
-      
-  const promptCount = promptsWhileActive.length;
-  const fileCount = filesModified.length;
-
-  const isCompleted = todo.status === 'completed';
-  const isPending = todo.status === 'pending';
-  const isInProgress = todo.status === 'in_progress';
-
-  return `
-    <div style="background: var(--color-bg); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: var(--space-lg); ${isCompleted ? 'opacity: 0.7;' : ''}">
-      <!-- Header -->
-      <div style="display: flex; align-items: flex-start; gap: var(--space-md); margin-bottom: var(--space-md);">
-        <div style="flex-shrink: 0; margin-top: 2px;">
-          ${statusIcon}
-        </div>
-        <div style="flex: 1; min-width: 0;">
-          <div style="font-size: var(--text-md); color: var(--color-text); font-weight: 500; ${isCompleted ? 'text-decoration: line-through;' : ''}">${escapeHtml(todo.content)}</div>
-          <div style="display: flex; flex-wrap: wrap; gap: var(--space-md); margin-top: var(--space-sm); font-size: var(--text-sm); color: var(--color-text-muted);">
-            ${duration ? `<span style="color: var(--color-primary); font-weight: 500;">${duration}</span>` : ''}
-            ${todo.createdAt ? `<span>Created ${formatTimestamp(todo.createdAt)}</span>` : ''}
-          </div>
-        </div>
-      </div>
-
-      <!-- Activity Summary (Always Visible) -->
-      ${(promptCount > 0 || fileCount > 0) ? `
-        <div style="margin-bottom: var(--space-md); padding: var(--space-md); background: var(--color-bg-secondary); border-radius: var(--radius-sm);">
-          <div style="font-size: var(--text-xs); font-weight: 600; color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: var(--space-sm);">Activity Summary</div>
-          <div style="display: grid; gap: var(--space-sm);">
-            ${promptCount > 0 ? `
-              <div style="font-size: var(--text-sm); color: var(--color-text);">
-                <span style="color: var(--color-primary); font-weight: 600;">${promptCount}</span> AI prompt${promptCount !== 1 ? 's' : ''}
-              </div>
-            ` : ''}
-            ${fileCount > 0 ? `
-              <div style="font-size: var(--text-sm); color: var(--color-text);">
-                <span style="color: var(--color-primary); font-weight: 600;">${fileCount}</span> file${fileCount !== 1 ? 's' : ''} modified
-                <div style="margin-top: var(--space-xs); font-size: var(--text-xs); color: var(--color-text-muted); font-family: 'Geist Mono', monospace;">
-                  ${filesModified.slice(0, 3).map(f => `<div style="margin-top: 2px;">• ${escapeHtml(f.split('/').pop())}</div>`).join('')}
-                  ${fileCount > 3 ? `<div style="margin-top: 2px;">• +${fileCount - 3} more...</div>` : ''}
-                </div>
-              </div>
-            ` : ''}
-          </div>
-        </div>
-      ` : '<div style="margin-bottom: var(--space-md); padding: var(--space-md); background: var(--color-bg-secondary); border-radius: var(--radius-sm); font-size: var(--text-sm); color: var(--color-text-muted); text-align: center;">No activity yet</div>'}
-
-      <!-- Actions -->
-      <div style="display: flex; gap: var(--space-sm); flex-wrap: wrap; align-items: center;">
-        <button 
-          onclick="expandTodoDetails(${todo.id})"
-          style="padding: var(--space-xs) var(--space-md); font-size: var(--text-sm); background: var(--color-bg-hover); border: 1px solid var(--color-border); border-radius: var(--radius-sm); color: var(--color-text); cursor: pointer; transition: all 0.2s;"
-          onmouseover="this.style.background='var(--color-border)'"
-          onmouseout="this.style.background='var(--color-bg-hover)'"
-        >
-          <span id="expand-btn-text-${todo.id}">${eventCount > 0 ? `Show Timeline (${eventCount} events)` : 'Show Timeline'}</span>
-        </button>
-        
-        <span style="font-size: var(--text-xs); color: var(--color-text-muted); font-style: italic;">
-          Status tracked automatically by AI
-        </span>
-      </div>
-
-      <!-- Event Timeline (Initially Hidden) -->
-      <div id="todo-events-${todo.id}" style="display: none; margin-top: var(--space-lg); padding-top: var(--space-lg); border-top: 1px solid var(--color-border);">
-        <!-- Events will be loaded here -->
-      </div>
-    </div>
-  `;
-}
-
-function getTodoDuration(todo) {
-  if (todo.status === 'completed' && todo.startedAt && todo.completedAt) {
-    const durationMs = todo.completedAt - todo.startedAt;
-    const minutes = Math.floor(durationMs / 60000);
-    const hours = Math.floor(minutes / 60);
-    
-    if (hours > 0) {
-      return `${hours}h ${minutes % 60}m`;
-    } else if (minutes > 0) {
-      return `${minutes}m`;
-    } else {
-      return '< 1m';
-    }
-  } else if (todo.status === 'in_progress' && todo.startedAt) {
-    const durationMs = Date.now() - todo.startedAt;
-    const minutes = Math.floor(durationMs / 60000);
-    const hours = Math.floor(minutes / 60);
-    
-    if (hours > 0) {
-      return `${hours}h ${minutes % 60}m (ongoing)`;
-    } else if (minutes > 0) {
-      return `${minutes}m (ongoing)`;
-    } else {
-      return '< 1m (ongoing)';
-    }
-  }
-  return null;
-}
-
-// Manual TODO actions removed - status is now automatic based on AI activity
-
-async function expandTodoDetails(todoId) {
-  const eventsContainer = document.getElementById(`todo-events-${todoId}`);
-  const btnText = document.getElementById(`expand-btn-text-${todoId}`);
-  if (!eventsContainer) return;
-
-  // Toggle visibility
-  if (eventsContainer.style.display === 'block') {
-    eventsContainer.style.display = 'none';
-    if (btnText) {
-      const eventCount = eventsContainer.dataset.eventCount || 0;
-      btnText.textContent = `Show Timeline (${eventCount} events)`;
-    }
-    return;
-  }
-
-  // Show loading state
-  eventsContainer.style.display = 'block';
-  if (btnText) btnText.textContent = 'Loading...';
-  eventsContainer.innerHTML = `
-    <div style="display: flex; justify-content: center; padding: var(--space-md);">
-      <div class="spinner"></div>
-    </div>
-  `;
-
-  try {
-    const response = await fetch(`${CONFIG.API_BASE}/api/todos/${todoId}/events`);
-    const events = await response.json();
-    
-    // Store event count for toggle button
-    eventsContainer.dataset.eventCount = events.length;
-
-    if (!events || events.length === 0) {
-      eventsContainer.innerHTML = `
-        <div style="text-align: center; padding: var(--space-md); color: var(--color-text-muted); font-size: var(--text-sm);">
-          No events recorded for this TODO yet
-        </div>
-      `;
-      return;
-    }
-
-    // Render timeline
-    eventsContainer.innerHTML = `
-      <h4 style="font-size: var(--text-sm); font-weight: 600; color: var(--color-text); margin-bottom: var(--space-md);">Event Timeline (${events.length})</h4>
-      <div style="display: flex; flex-direction: column; gap: var(--space-sm);">
-        ${events.map(event => `
-          <div style="display: flex; gap: var(--space-md); padding: var(--space-sm); background: var(--color-bg-secondary); border-radius: var(--radius-sm);">
-            <div style="flex-shrink: 0; color: var(--color-text-muted); font-size: var(--text-xs); font-family: 'Geist Mono', monospace;">
-              ${formatTimestamp(event.timestamp)}
-            </div>
-            <div style="flex: 1;">
-              <div style="font-size: var(--text-sm); color: var(--color-text);">
-                ${event.eventType === 'prompt' ? 'Prompt' : 'File Change'}: 
-                ${event.details ? escapeHtml(truncateText(event.details, 100)) : 'N/A'}
-              </div>
-            </div>
-          </div>
-        `).join('')}
-      </div>
-    `;
-    
-    // Update button text
-    if (btnText) btnText.textContent = `Hide Timeline (${events.length} events)`;
-    
-  } catch (error) {
-    console.error('Error loading TODO events:', error);
-    eventsContainer.innerHTML = `
-      <div style="text-align: center; padding: var(--space-md); color: var(--color-error); font-size: var(--text-sm);">
-        Failed to load events: ${error.message}
-      </div>
-    `;
-  }
-}
-
-// Helper function for formatting timestamps
-function formatTimestamp(timestamp) {
-  if (!timestamp) return 'Unknown';
-  const date = new Date(timestamp);
-  const now = new Date();
-  const diffMs = now - date;
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
-  
-  // Relative time for recent timestamps
-  if (diffMins < 1) return 'Just now';
-  if (diffMins < 60) return `${diffMins}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  if (diffDays < 7) return `${diffDays}d ago`;
-  
-  // Absolute time for older timestamps
-  return date.toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-}
-
-// Helper function for escaping HTML
-function escapeHtml(text) {
-  if (!text) return '';
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
-}
-
-// Helper function for truncating text
-function truncateText(text, maxLength) {
-  if (!text || text.length <= maxLength) return text;
-  return text.substring(0, maxLength) + '...';
-}
-
-// Export new functions
-window.renderEnhancedContextAnalytics = renderEnhancedContextAnalytics;
-// window.renderErrorTracking - REMOVED: Section removed from dashboard
-window.renderProductivityInsights = renderProductivityInsights;
-// window.renderFileRelationshipVisualization - REMOVED: Handled in File Graph view
-window.renderTodoView = renderTodoView;

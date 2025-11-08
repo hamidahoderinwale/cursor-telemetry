@@ -24,8 +24,8 @@ Prescriptions are lightweight, prescriptive (not retrospective) rules that are a
 
 Prescriptions are persistent rules that modify AI behavior without needing to repeat instructions in every prompt. They solve the problem of:
 
-- ❌ **Before**: "Don't write markdown files... use TypeScript... follow React patterns..." (every single prompt)
-- [SUCCESS] **After**: Set prescriptions once, they're auto-applied to all future prompts
+- **Before**: "Don't write markdown files... use TypeScript... follow React patterns..." (every single prompt)
+- **After**: Set prescriptions once, they're auto-applied to all future prompts
 
 ### Key Characteristics
 
@@ -589,8 +589,8 @@ Begin with 3-5 critical prescriptions, not 50.
 - **1-49**: Nice-to-have (preferences)
 
 ### 4. Be Specific
-❌ "Use good code"
-[SUCCESS] "Use descriptive variable names (min 3 characters, no abbreviations)"
+**Bad**: "Use good code"
+**Good**: "Use descriptive variable names (min 3 characters, no abbreviations)"
 
 ### 5. Avoid Conflicts
 Check for contradictions:

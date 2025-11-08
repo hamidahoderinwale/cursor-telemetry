@@ -1,0 +1,493 @@
+/**
+ * Hugging Face Semantic Search Module
+ * Uses Transformers.js to run embedding models in the browser for semantic code search
+ * 
+ * Features:
+ * - Natural language query understanding
+ * - Semantic code search using embeddings
+ * - Time-aware search (query about codebase over time)
+ * - Works entirely in browser (no API calls needed)
+ */
+
+class HuggingFaceSemanticSearch {
+  constructor() {
+    this.model = null;
+    this.tokenizer = null;
+    this.embeddings = new Map(); // documentId -> embedding vector
+    this.isInitialized = false;
+    this.modelName = 'Xenova/all-MiniLM-L6-v2'; // Lightweight, fast model (384 dimensions)
+    // Alternative models to try:
+    // 'Xenova/multilingual-e5-base' - Multilingual support
+    // 'Xenova/bge-small-en-v1.5' - Better for English
+    // 'Xenova/codebert-base' - Code-specific (larger, slower)
+    
+    this.embeddingCache = new Map(); // Cache embeddings in IndexedDB
+    this.maxCacheSize = 10000; // Max cached embeddings
+  }
+
+  /**
+   * Initialize the model (lazy loading - only when needed)
+   */
+  async initialize() {
+    if (this.isInitialized) {
+      return true;
+    }
+
+    try {
+      console.log('[HF-SEARCH] Initializing Hugging Face semantic search...');
+      console.log('[HF-SEARCH] Loading model:', this.modelName);
+      
+      // Load Transformers.js dynamically
+      let pipeline;
+      try {
+        // Try to use ES module import
+        const transformers = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2');
+        pipeline = transformers.pipeline;
+      } catch (importError) {
+        // If import fails, try loading via script tag
+        console.log('[HF-SEARCH] ES module import failed, trying script tag...');
+        await this.loadTransformersJS();
+        if (window.pipeline) {
+          pipeline = window.pipeline;
+        } else {
+          throw new Error('Transformers.js not available');
+        }
+      }
+
+      // Initialize the embedding pipeline
+      this.model = await pipeline(
+        'feature-extraction',
+        this.modelName,
+        {
+          quantized: true, // Use quantized model for faster loading
+          progress_callback: (progress) => {
+            if (progress.status === 'progress') {
+              console.log(`[HF-SEARCH] Loading: ${Math.round(progress.progress * 100)}%`);
+            }
+          }
+        }
+      );
+
+      this.isInitialized = true;
+      console.log('[HF-SEARCH] Model loaded successfully');
+      return true;
+    } catch (error) {
+      console.warn('[HF-SEARCH] Failed to initialize model:', error.message);
+      console.warn('[HF-SEARCH] Falling back to TF-IDF semantic search');
+      console.warn('[HF-SEARCH] Note: Hugging Face search requires Transformers.js library');
+      this.isInitialized = false;
+      return false;
+    }
+  }
+
+  /**
+   * Load Transformers.js from CDN if not available
+   */
+  async loadTransformersJS() {
+    return new Promise((resolve, reject) => {
+      if (window.pipeline) {
+        resolve();
+        return;
+      }
+
+      // Check if already loading
+      if (window._transformersLoading) {
+        window.addEventListener('transformers-loaded', resolve, { once: true });
+        return;
+      }
+
+      window._transformersLoading = true;
+
+      // Load via script tag (for browsers that don't support dynamic imports)
+      const script = document.createElement('script');
+      script.type = 'module';
+      script.textContent = `
+        import { pipeline } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2';
+        window.pipeline = pipeline;
+        window._transformersLoading = false;
+        window.dispatchEvent(new Event('transformers-loaded'));
+      `;
+      script.onerror = () => {
+        window._transformersLoading = false;
+        reject(new Error('Failed to load Transformers.js'));
+      };
+      document.head.appendChild(script);
+      
+      window.addEventListener('transformers-loaded', () => {
+        resolve();
+      }, { once: true });
+    });
+  }
+
+  /**
+   * Generate embedding for a text
+   */
+  async generateEmbedding(text) {
+    if (!this.isInitialized) {
+      await this.initialize();
+      if (!this.isInitialized) {
+        return null;
+      }
+    }
+
+    if (!text || text.trim().length === 0) {
+      return null;
+    }
+
+    try {
+      // Check cache first
+      const cacheKey = this.getCacheKey(text);
+      if (this.embeddingCache.has(cacheKey)) {
+        return this.embeddingCache.get(cacheKey);
+      }
+
+      // Generate embedding
+      // The model returns a tensor, we need to extract the data
+      const output = await this.model(text, {
+        pooling: 'mean',
+        normalize: true
+      });
+
+      // Convert tensor to array (handle different output formats)
+      let embedding;
+      if (output.data) {
+        embedding = Array.from(output.data);
+      } else if (Array.isArray(output)) {
+        embedding = output;
+      } else if (output instanceof Float32Array || output instanceof Float64Array) {
+        embedding = Array.from(output);
+      } else {
+        // Try to extract from tensor
+        embedding = Array.from(output);
+      }
+
+      // Cache it
+      if (this.embeddingCache.size < this.maxCacheSize) {
+        this.embeddingCache.set(cacheKey, embedding);
+      }
+
+      return embedding;
+    } catch (error) {
+      console.warn('[HF-SEARCH] Error generating embedding:', error.message);
+      return null;
+    }
+  }
+
+  /**
+   * Generate cache key for text
+   */
+  getCacheKey(text) {
+    // Simple hash for cache key
+    let hash = 0;
+    const str = text.substring(0, 200); // Use first 200 chars for key
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32bit integer
+    }
+    return hash.toString();
+  }
+
+  /**
+   * Generate embeddings for all documents
+   */
+  async generateDocumentEmbeddings(documents) {
+    if (!this.isInitialized) {
+      await this.initialize();
+      if (!this.isInitialized) {
+        console.warn('[HF-SEARCH] Model not available, skipping embeddings');
+        return;
+      }
+    }
+
+    console.log(`[HF-SEARCH] Generating embeddings for ${documents.length} documents...`);
+    const startTime = Date.now();
+
+    // Process in batches to avoid memory issues
+    const batchSize = 10;
+    let processed = 0;
+
+    for (let i = 0; i < documents.length; i += batchSize) {
+      const batch = documents.slice(i, i + batchSize);
+      
+      await Promise.all(batch.map(async (doc) => {
+        try {
+          // Create searchable text from document
+          const searchableText = this.createSearchableText(doc);
+          
+          // Generate embedding
+          const embedding = await this.generateEmbedding(searchableText);
+          
+          if (embedding) {
+            this.embeddings.set(doc.id, embedding);
+            processed++;
+          }
+        } catch (error) {
+          console.warn(`[HF-SEARCH] Error processing document ${doc.id}:`, error.message);
+        }
+      }));
+
+      // Log progress
+      if (processed % 50 === 0) {
+        console.log(`[HF-SEARCH] Processed ${processed}/${documents.length} documents...`);
+      }
+    }
+
+    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+    console.log(`[HF-SEARCH] Generated ${processed} embeddings in ${elapsed}s`);
+  }
+
+  /**
+   * Create searchable text from document
+   */
+  createSearchableText(doc) {
+    const parts = [];
+    
+    // Add title (high importance)
+    if (doc.title) {
+      parts.push(doc.title);
+    }
+    
+    // Add content (truncated for performance)
+    if (doc.content) {
+      const content = doc.content.length > 500 
+        ? doc.content.substring(0, 500) + '...'
+        : doc.content;
+      parts.push(content);
+    }
+    
+    // Add metadata context
+    if (doc.metadata) {
+      if (doc.metadata.source) parts.push(`source: ${doc.metadata.source}`);
+      if (doc.metadata.mode) parts.push(`mode: ${doc.metadata.mode}`);
+      if (doc.type) parts.push(`type: ${doc.type}`);
+    }
+    
+    // Add workspace context
+    if (doc.workspace && doc.workspace !== 'unknown') {
+      parts.push(`workspace: ${doc.workspace}`);
+    }
+
+    return parts.join(' ');
+  }
+
+  /**
+   * Search documents using semantic similarity
+   */
+  async semanticSearch(query, documents, options = {}) {
+    const {
+      limit = 20,
+      minSimilarity = 0.3,
+      includeTimeContext = true
+    } = options;
+
+    if (!this.isInitialized) {
+      await this.initialize();
+      if (!this.isInitialized) {
+        // Fallback to empty results if model not available
+        return [];
+      }
+    }
+
+    if (!query || query.trim().length === 0) {
+      return [];
+    }
+
+    try {
+      // Generate query embedding
+      const queryEmbedding = await this.generateEmbedding(query);
+      if (!queryEmbedding) {
+        return [];
+      }
+
+      // Calculate similarity scores
+      const results = [];
+      
+      for (const doc of documents) {
+        const docEmbedding = this.embeddings.get(doc.id);
+        if (!docEmbedding) {
+          // Generate embedding on-the-fly if not cached
+          const searchableText = this.createSearchableText(doc);
+          const embedding = await this.generateEmbedding(searchableText);
+          if (embedding) {
+            this.embeddings.set(doc.id, embedding);
+            docEmbedding = embedding;
+          } else {
+            continue;
+          }
+        }
+
+        // Calculate cosine similarity
+        const similarity = this.cosineSimilarity(queryEmbedding, docEmbedding);
+        
+        if (similarity >= minSimilarity) {
+          // Apply time-based boosting if enabled
+          let finalScore = similarity;
+          if (includeTimeContext) {
+            finalScore = this.applyTimeBoost(finalScore, doc.timestamp);
+          }
+
+          results.push({
+            ...doc,
+            semanticScore: similarity,
+            score: finalScore,
+            searchMethod: 'huggingface-semantic'
+          });
+        }
+      }
+
+      // Sort by score and return top results
+      results.sort((a, b) => b.score - a.score);
+      return results.slice(0, limit);
+
+    } catch (error) {
+      console.error('[HF-SEARCH] Semantic search error:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Calculate cosine similarity between two vectors
+   */
+  cosineSimilarity(vec1, vec2) {
+    if (!vec1 || !vec2 || vec1.length !== vec2.length) {
+      return 0;
+    }
+
+    let dotProduct = 0;
+    let mag1 = 0;
+    let mag2 = 0;
+
+    for (let i = 0; i < vec1.length; i++) {
+      dotProduct += vec1[i] * vec2[i];
+      mag1 += vec1[i] * vec1[i];
+      mag2 += vec2[i] * vec2[i];
+    }
+
+    if (mag1 === 0 || mag2 === 0) return 0;
+    return dotProduct / (Math.sqrt(mag1) * Math.sqrt(mag2));
+  }
+
+  /**
+   * Apply time-based boosting to search results
+   * Recent items get a small boost, but semantic relevance is primary
+   */
+  applyTimeBoost(baseScore, timestamp) {
+    if (!timestamp) return baseScore;
+
+    const age = Date.now() - new Date(timestamp).getTime();
+    const daysAgo = age / (1000 * 60 * 60 * 24);
+
+    // Small boost for recent items (max 10% boost)
+    let timeBoost = 1.0;
+    if (daysAgo < 1) {
+      timeBoost = 1.1; // 10% boost for today
+    } else if (daysAgo < 7) {
+      timeBoost = 1.05; // 5% boost for this week
+    } else if (daysAgo < 30) {
+      timeBoost = 1.02; // 2% boost for this month
+    }
+
+    return baseScore * timeBoost;
+  }
+
+  /**
+   * Answer natural language questions about the codebase
+   * Example: "What files did I modify when fixing the login bug?"
+   */
+  async answerQuestion(question, documents, options = {}) {
+    const {
+      limit = 10,
+      includeContext = true
+    } = options;
+
+    // Use semantic search to find relevant documents
+    const relevantDocs = await this.semanticSearch(question, documents, {
+      limit: limit * 2, // Get more candidates
+      minSimilarity: 0.25
+    });
+
+    // Group by type and time for better answers
+    const grouped = {
+      events: [],
+      prompts: [],
+      recent: [],
+      older: []
+    };
+
+    const now = Date.now();
+    const oneWeekAgo = now - (7 * 24 * 60 * 60 * 1000);
+
+    relevantDocs.forEach(doc => {
+      if (doc.type === 'event') grouped.events.push(doc);
+      if (doc.type === 'prompt') grouped.prompts.push(doc);
+      
+      const docTime = new Date(doc.timestamp).getTime();
+      if (docTime > oneWeekAgo) {
+        grouped.recent.push(doc);
+      } else {
+        grouped.older.push(doc);
+      }
+    });
+
+    // Return structured answer
+    return {
+      question,
+      answer: this.generateAnswer(question, grouped),
+      relevantDocuments: relevantDocs.slice(0, limit),
+      grouped,
+      confidence: relevantDocs.length > 0 ? relevantDocs[0].semanticScore : 0
+    };
+  }
+
+  /**
+   * Generate natural language answer from search results
+   */
+  generateAnswer(question, grouped) {
+    const parts = [];
+    
+    if (grouped.events.length > 0) {
+      parts.push(`Found ${grouped.events.length} related file change${grouped.events.length !== 1 ? 's' : ''}`);
+    }
+    
+    if (grouped.prompts.length > 0) {
+      parts.push(`${grouped.prompts.length} related AI interaction${grouped.prompts.length !== 1 ? 's' : ''}`);
+    }
+    
+    if (grouped.recent.length > 0) {
+      parts.push(`${grouped.recent.length} from the past week`);
+    }
+
+    if (parts.length === 0) {
+      return 'No relevant results found for your question.';
+    }
+
+    return parts.join(', ') + '.';
+  }
+
+  /**
+   * Clear embeddings cache
+   */
+  clearCache() {
+    this.embeddings.clear();
+    this.embeddingCache.clear();
+    console.log('[HF-SEARCH] Cache cleared');
+  }
+
+  /**
+   * Get statistics about embeddings
+   */
+  getStats() {
+    return {
+      initialized: this.isInitialized,
+      modelName: this.modelName,
+      embeddingsCount: this.embeddings.size,
+      cacheSize: this.embeddingCache.size,
+      maxCacheSize: this.maxCacheSize
+    };
+  }
+}
+
+// Export for use in search engine
+window.HuggingFaceSemanticSearch = HuggingFaceSemanticSearch;
+
