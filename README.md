@@ -219,6 +219,9 @@ The system captures development activity from multiple sources, providing compre
 - **Data stored**: Prompt text, context usage (%), lines added/removed, AI mode (agent/chat/edit), composer IDs, timestamps
 - **Frequency**: Polls every 10 seconds (configurable via `cursor_db_poll_interval`)
 - **Linking**: Automatically links prompts to file changes within 5-minute window
+- **Data Collection Modes**:
+  - **Database Mode (Current)**: Direct reads from Cursor's SQLite database files. Captures all historical conversations, no extension required.
+  - **External Mode (Future)**: Real-time capture via Cursor extension + MCP endpoints. More portable, privacy-friendly, but requires extension installation.
 
 ### 3. Terminal Monitor
 - **What it captures**: Shell commands, process execution, terminal output
@@ -228,10 +231,28 @@ The system captures development activity from multiple sources, providing compre
 - **Configuration**: `enable_terminal_monitoring` in `config.json`
 
 ### 4. MCP (Model Context Protocol) Integration
-- **What it captures**: Standardized AI interaction events from MCP-compatible tools
-- **How it works**: REST endpoints (`/mcp/log-prompt-response`, `/mcp/log-event`) receive structured data from external integrations
-- **Data stored**: Prompt/response pairs, file paths, code changes, session information
-- **Use cases**: Custom IDE extensions, external AI tools, workflow automation
+- **What it captures**: Comprehensive AI interaction events with full metadata matching database mode capabilities
+- **How it works**: 
+  - **REST endpoints**: `/mcp/log-prompt-response`, `/mcp/log-conversation`, `/mcp/log-code-change`, `/mcp/log-event`
+  - **WebSocket streaming**: Real-time conversation updates via Socket.IO (`subscribe-conversation` events)
+  - **Enhanced handler**: `mcp-enhanced-handler.js` supports JSON-RPC over stdio for Cursor extension integration
+- **Data stored**: 
+  - Prompt/response pairs with full metadata (context usage, lines added/removed, AI mode, model, finish reason)
+  - Conversation threads with titles and message threading
+  - Code changes with diff metrics
+  - Session and workspace information
+- **Metadata captured** (matches database mode):
+  - Context usage percentage, context files, @ mentions
+  - Lines added/removed, diff size
+  - AI mode (chat/composer/edit), model name, finish reason
+  - Thinking time, generation UUID, command type
+  - Conversation IDs, titles, and threading
+- **Use cases**: 
+  - Custom IDE extensions (Cursor extension integration)
+  - External AI tools and workflow automation
+  - Real-time conversation streaming
+  - Privacy-friendly data collection (no direct database access)
+- **Streaming**: WebSocket support for real-time conversation updates (`conversation-stream` events)
 - **API**: Fully documented at `/api-docs` with request/response schemas
 
 ### 5. Clipboard Monitor
@@ -272,17 +293,88 @@ The system captures development activity from multiple sources, providing compre
 
 ### MCP Integration Details
 
-The **Model Context Protocol (MCP)** is a standardized interface for AI tool integrations. The companion service implements MCP server endpoints for external tools to log their AI interactions.
+The **Model Context Protocol (MCP)** is a standardized interface for AI tool integrations. The companion service implements enhanced MCP server endpoints with comprehensive data capture and real-time streaming capabilities.
 
-#### MCP Endpoints
+#### Enhanced MCP Endpoints
 
-**POST /mcp/log-prompt-response**
+**POST /mcp/log-prompt-response** (Enhanced)
 ```json
 {
   "session_id": "optional-session-id",
+  "conversation_id": "conv-123",
+  "conversation_title": "Add error handling",
+  "message_id": "msg-456",
+  "message_role": "user",
+  "timestamp": "2024-01-15T10:30:00Z",
   "file_path": "/path/to/file.js",
+  "workspace_path": "/path/to/workspace",
+  "workspace_name": "my-project",
   "prompt": "Add error handling",
-  "response": "Here's the code with error handling..."
+  "response": "Here's the code with error handling...",
+  "metadata": {
+    "contextUsage": 45.2,
+    "linesAdded": 12,
+    "linesRemoved": 3,
+    "aiMode": "chat",
+    "model": "claude-3-opus",
+    "finishReason": "stop",
+    "thinkingTimeSeconds": 2.5,
+    "contextFiles": ["file1.js", "file2.js"],
+    "atFiles": ["@file1.js"],
+    "commandType": "edit",
+    "generationUUID": "uuid-789"
+  }
+}
+```
+
+**POST /mcp/log-conversation** (New)
+```json
+{
+  "conversation_id": "conv-123",
+  "conversation_title": "Feature implementation",
+  "session_id": "session-abc",
+  "workspace_path": "/path/to/workspace",
+  "workspace_name": "my-project",
+  "messages": [
+    {
+      "id": "msg-1",
+      "role": "user",
+      "text": "Implement feature X",
+      "timestamp": "2024-01-15T10:30:00Z",
+      "metadata": { "contextUsage": 30.0 }
+    },
+    {
+      "id": "msg-2",
+      "role": "assistant",
+      "text": "Here's the implementation...",
+      "timestamp": "2024-01-15T10:30:15Z",
+      "metadata": { "model": "claude-3-opus" }
+    }
+  ],
+  "metadata": {
+    "contextUsage": 45.2,
+    "linesAdded": 50,
+    "linesRemoved": 10,
+    "aiMode": "composer"
+  }
+}
+```
+
+**POST /mcp/log-code-change** (Enhanced)
+```json
+{
+  "session_id": "session-abc",
+  "conversation_id": "conv-123",
+  "timestamp": "2024-01-15T10:30:00Z",
+  "file_path": "/path/to/file.js",
+  "workspace_path": "/path/to/workspace",
+  "before_code": "old code...",
+  "after_code": "new code...",
+  "metadata": {
+    "linesAdded": 12,
+    "linesRemoved": 3,
+    "diffSize": 450
+  }
 }
 ```
 
@@ -291,21 +383,70 @@ The **Model Context Protocol (MCP)** is a standardized interface for AI tool int
 {
   "session_id": "optional-session-id",
   "type": "code_execution",
-  "details": {"status": "success", "duration": 1234}
+  "details": {"status": "success", "duration": 1234},
+  "file_path": "/path/to/file.js",
+  "timestamp": "2024-01-15T10:30:00Z"
+}
+```
+
+**POST /mcp/stream-conversation** (New)
+```json
+{
+  "conversation_id": "conv-123",
+  "enable": true
+}
+```
+
+**GET /mcp/streams** (New)
+Returns list of active conversation streams.
+
+#### WebSocket Streaming
+
+Clients can subscribe to real-time conversation updates:
+
+```javascript
+// Subscribe to conversation stream
+socket.emit('subscribe-conversation', 'conv-123');
+
+// Receive real-time updates
+socket.on('conversation-stream', (data) => {
+  console.log('Conversation update:', data.conversation_id);
+  console.log('Messages:', data.data.messages);
+});
+```
+
+#### JSON-RPC Handler (for Cursor Extension)
+
+The enhanced MCP handler (`mcp-enhanced-handler.js`) supports JSON-RPC over stdio:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "logConversation",
+  "params": {
+    "conversation_id": "conv-123",
+    "messages": [...]
+  },
+  "id": 1
 }
 ```
 
 #### Use Cases
-- **Custom IDE Extensions**: Log interactions from VSCode/JetBrains extensions
+- **Custom IDE Extensions**: Log interactions from Cursor/VSCode extensions with full metadata
 - **CLI Tools**: Track AI-powered CLI tool usage (GitHub Copilot CLI, etc.)
 - **Workflow Automation**: Record AI steps in CI/CD pipelines
 - **Third-party AI Tools**: Integrate ChatGPT, Claude, or other AI services
+- **Real-time Monitoring**: Stream conversations live to dashboards
+- **Privacy-friendly Collection**: Capture data without direct database access
 
 #### Benefits
 - **Unified Timeline**: All AI interactions in one dashboard regardless of source
+- **Comprehensive Metadata**: Captures same data as database mode (context usage, lines changed, AI mode, etc.)
+- **Real-time Streaming**: WebSocket support for live conversation updates
 - **Cross-tool Analytics**: Compare effectiveness across different AI tools
 - **Session Tracking**: Group related activities across multiple tools
 - **Persistent History**: Never lose track of AI-generated solutions
+- **Conversation Threading**: Full support for multi-message conversations with titles and threading
 
 ## Quick Start
 

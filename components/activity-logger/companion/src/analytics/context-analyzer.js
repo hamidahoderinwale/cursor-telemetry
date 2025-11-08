@@ -5,7 +5,7 @@
  * Tracks and analyzes @ mentions, context files, token usage, and file relationships
  */
 
-const ContextExtractor = require('./context-extractor');
+const ContextExtractor = require('../capture/context-extractor');
 
 class ContextAnalyzer {
   constructor(persistentDB = null) {

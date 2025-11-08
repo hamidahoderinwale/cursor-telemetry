@@ -331,6 +331,7 @@ The system automatically links related data to provide context and relationships
 - **Bidirectional Navigation** - View prompts from code changes, and code changes from prompts
 - **Event Modals** - Show linked prompts when viewing code changes
 - **Prompt Modals** - Show resulting code changes when viewing prompts
+- **Database Links Over Time Correlation** - Prompt effectiveness metrics use explicit database links (`linked_entry_id`/`prompt_id`) rather than time-based correlation. This ensures accuracy by only counting confirmed relationships, avoiding false positives from coincidental temporal proximity.
 
 ### Temporal Chunks
 

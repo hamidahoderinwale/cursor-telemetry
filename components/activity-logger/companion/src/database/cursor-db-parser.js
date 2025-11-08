@@ -10,7 +10,7 @@ const { promisify } = require('util');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
-const ContextExtractor = require('./context-extractor');
+const ContextExtractor = require('../capture/context-extractor');
 
 const execAsync = promisify(exec);
 

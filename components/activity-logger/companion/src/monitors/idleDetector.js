@@ -1,5 +1,5 @@
 import cron from 'node-cron';
-import { queue } from './queue.js';
+import { queue } from '../utils/queue.js';
 
 class IdleDetector {
   constructor() {

@@ -1,9 +1,9 @@
 import chokidar from 'chokidar';
 import { readFileSync, existsSync } from 'fs';
 import { relative, extname } from 'path';
-import { diffEngine } from './diffEngine.js';
-import { queue } from './queue.js';
-import { config } from './config.js';
+import { diffEngine } from '../utils/diffEngine.js';
+import { queue } from '../utils/queue.js';
+import { config } from '../utils/config.js';
 
 class FileWatcher {
   constructor() {

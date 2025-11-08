@@ -1,5 +1,5 @@
 import clipboard from 'clipboardy';
-import { queue } from './queue.js';
+import { queue } from '../utils/queue.js';
 
 // Simple in-memory database for prompt storage (replacing Dexie/IndexedDB)
 const db = {
