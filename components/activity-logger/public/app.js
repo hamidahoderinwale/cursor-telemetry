@@ -1483,11 +1483,26 @@ function startCompanionPolling() {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
             
-            const response = await fetch(`http://127.0.0.1:43917/queue?since=${since}`, {
-                signal: controller.signal
-            });
+            let response;
+            try {
+              response = await fetch(`http://127.0.0.1:43917/queue?since=${since}`, {
+                  signal: controller.signal
+              });
+              clearTimeout(timeoutId);
+              
+              if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+              }
+            } catch (error) {
+              clearTimeout(timeoutId);
+              if (error.name === 'AbortError') {
+                console.warn('[POLL] Queue fetch timed out');
+              } else {
+                console.warn('[POLL] Failed to fetch queue:', error.message);
+              }
+              return; // Skip this poll cycle
+            }
             
-            clearTimeout(timeoutId);
             if (response.ok) {
                 const data = await response.json();
                 

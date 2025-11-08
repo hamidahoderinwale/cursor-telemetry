@@ -114,12 +114,25 @@ class DataSynchronizer {
       // Add query param to request incremental sync if available
       const syncSince = this.lastSync.cursorDb > 0 ? `?since=${this.lastSync.cursorDb}` : '';
       
-      const response = await fetch(`${this.companionUrl}/api/cursor-database${syncSince}`, {
-        signal: controller.signal
-      });
-      
-      clearTimeout(timeoutId);
-      if (!response.ok) throw new Error('Failed to fetch Cursor database');
+      let response;
+      try {
+        response = await fetch(`${this.companionUrl}/api/cursor-database${syncSince}`, {
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+        
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+      } catch (error) {
+        clearTimeout(timeoutId);
+        if (error.name === 'AbortError') {
+          console.warn('[SYNC] Cursor database fetch timed out after 60s');
+        } else {
+          console.warn('[SYNC] Failed to fetch Cursor database:', error.message);
+        }
+        return; // Gracefully skip this sync
+      }
       
       const data = await response.json();
       
@@ -202,7 +215,17 @@ class DataSynchronizer {
     
     try {
       // Get events
-      const eventsResponse = await fetch(`${this.companionUrl}/queue?since=${this.lastSync.events}`);
+      let eventsResponse;
+      try {
+        eventsResponse = await fetch(`${this.companionUrl}/queue?since=${this.lastSync.events}`);
+        if (!eventsResponse.ok) {
+          throw new Error(`HTTP ${eventsResponse.status}: ${eventsResponse.statusText}`);
+        }
+      } catch (error) {
+        console.warn('[SYNC] Failed to fetch queue events:', error.message);
+        return; // Gracefully skip this sync
+      }
+      
       if (eventsResponse.ok) {
         const eventsData = await eventsResponse.json();
         
