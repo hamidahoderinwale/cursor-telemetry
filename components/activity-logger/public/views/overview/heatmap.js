@@ -31,10 +31,14 @@ function generateYearHeatmapData(weeks = 53) {
     const weekData = [];
     for (let day = 0; day < 7; day++) {
       const cellDate = new Date(startDate);
-      cellDate.setDate(startDate.getDate() + (week * 7 + day));
+      const daysOffset = week * 7 + day;
+      cellDate.setDate(cellDate.getDate() + daysOffset);
       
       weekData.push({
         count: 0,
+        events: 0,
+        prompts: 0,
+        terminal: 0,
         linesAdded: 0,
         linesRemoved: 0,
         date: new Date(cellDate),
@@ -76,6 +80,15 @@ function generateYearHeatmapData(weeks = 53) {
         const cell = heatmap[week][day];
         cell.count++;
         
+        // Track activity types separately
+        if (activity.type === 'event') {
+          cell.events++;
+        } else if (activity.type === 'prompt') {
+          cell.prompts++;
+        } else if (activity.type === 'terminal') {
+          cell.terminal++;
+        }
+        
         // Extract line change data from events
         if (activity.type === 'event' && activity.event) {
           try {
@@ -101,13 +114,17 @@ function generateYearHeatmapData(weeks = 53) {
 /**
  * Get GitHub-style color based on activity level
  * Colors: #ebedf0 (none), #9be9a8 (low), #40c463 (medium), #30a14e (high), #216e39 (very high)
+ * Uses logarithmic scaling for better visual distribution
  */
 function getGitHubColor(intensity) {
   // intensity: 0-1 (0 = no activity, 1 = max activity)
-  if (intensity === 0) return '#ebedf0'; // Light gray - no activity
-  if (intensity < 0.25) return '#9be9a8'; // Light green - low activity
-  if (intensity < 0.5) return '#40c463';  // Medium green - medium activity
-  if (intensity < 0.75) return '#30a14e';  // Dark green - high activity
+  // Apply logarithmic scaling for better distribution
+  const logIntensity = intensity > 0 ? Math.log1p(intensity * 9) / Math.log(10) : 0;
+  
+  if (logIntensity === 0) return '#ebedf0'; // Light gray - no activity
+  if (logIntensity < 0.2) return '#9be9a8'; // Light green - low activity
+  if (logIntensity < 0.4) return '#40c463';  // Medium green - medium activity
+  if (logIntensity < 0.6) return '#30a14e';  // Dark green - high activity
   return '#216e39'; // Very dark green - very high activity
 }
 
@@ -119,10 +136,30 @@ function renderActivityHeatmap(container) {
   
   const { heatmap, startDate, weeks } = generateYearHeatmapData(53);
   
-  // Calculate max values for normalization
-  const maxCount = Math.max(...heatmap.flat().map(week => 
-    Math.max(...week.map(cell => cell.count))
-  ), 1);
+  // Calculate max values for normalization (use logarithmic scaling for better distribution)
+  const allCounts = heatmap.flatMap(week => week.map(cell => cell.count));
+  const maxCount = Math.max(...allCounts, 1);
+  const totalActivities = allCounts.reduce((sum, count) => sum + count, 0);
+  
+  // Show empty state if no data
+  if (totalActivities === 0) {
+    container.innerHTML = `
+      <div class="empty-state" style="padding: 3rem; text-align: center;">
+        <div class="empty-state-icon" style="font-size: 3rem; margin-bottom: 1rem;">📊</div>
+        <div class="empty-state-text" style="font-size: 1.1rem; font-weight: 500; margin-bottom: 0.5rem;">No activity data available</div>
+        <div class="empty-state-hint" style="font-size: 0.9rem; color: var(--color-text-muted);">
+          Start coding to see your activity heatmap. Make sure the companion service is running.
+        </div>
+      </div>
+    `;
+    return;
+  }
+  
+  // Calculate percentiles for better legend
+  const sortedCounts = [...allCounts].sort((a, b) => a - b);
+  const p25 = sortedCounts[Math.floor(sortedCounts.length * 0.25)] || 0;
+  const p50 = sortedCounts[Math.floor(sortedCounts.length * 0.5)] || 0;
+  const p75 = sortedCounts[Math.floor(sortedCounts.length * 0.75)] || 0;
   
   // Day labels (Sun-Sat)
   const dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -190,13 +227,13 @@ function renderActivityHeatmap(container) {
     // Render days (rows) for this week
     for (let day = 0; day < 7; day++) {
       const cell = heatmap[week][day];
-      const { count, linesAdded, linesRemoved, date, isToday, isFuture } = cell;
+      const { count, events, prompts, terminal, linesAdded, linesRemoved, date, isToday, isFuture } = cell;
       
-      // Calculate intensity (0-1)
+      // Calculate intensity (0-1) with logarithmic scaling
       const intensity = maxCount > 0 ? Math.min(count / maxCount, 1) : 0;
       const color = isFuture ? '#f3f4f6' : getGitHubColor(intensity);
       
-      // Build tooltip
+      // Build enhanced tooltip with activity breakdown
       const dateStr = date.toLocaleDateString('en-US', { 
         weekday: 'long', 
         year: 'numeric', 
@@ -206,21 +243,48 @@ function renderActivityHeatmap(container) {
       
       let tooltip = `${dateStr}`;
       if (isFuture) {
-        tooltip += ' - Future date';
+        tooltip += '\nFuture date';
       } else if (count === 0) {
-        tooltip += ' - No activity';
+        tooltip += '\nNo activity';
       } else {
-        tooltip += ` - ${count} contribution${count !== 1 ? 's' : ''}`;
+        tooltip += `\n${count} contribution${count !== 1 ? 's' : ''}`;
+        
+        // Activity breakdown
+        const parts = [];
+        if (events > 0) parts.push(`${events} file change${events !== 1 ? 's' : ''}`);
+        if (prompts > 0) parts.push(`${prompts} AI prompt${prompts !== 1 ? 's' : ''}`);
+        if (terminal > 0) parts.push(`${terminal} terminal command${terminal !== 1 ? 's' : ''}`);
+        
+        if (parts.length > 0) {
+          tooltip += '\n' + parts.join(', ');
+        }
+        
+        // Line changes
         if (linesAdded > 0 || linesRemoved > 0) {
-          tooltip += ` (${linesAdded > 0 ? '+' + linesAdded : ''}${linesAdded > 0 && linesRemoved > 0 ? ' / ' : ''}${linesRemoved > 0 ? '-' + linesRemoved : ''} lines)`;
+          tooltip += `\n${linesAdded > 0 ? '+' + linesAdded.toLocaleString() : ''}${linesAdded > 0 && linesRemoved > 0 ? ' / ' : ''}${linesRemoved > 0 ? '-' + linesRemoved.toLocaleString() : ''} lines`;
         }
       }
       
-      html += `<div class="heatmap-cell ${isToday ? 'today' : ''} ${isFuture ? 'future' : ''}" 
-                    style="background-color: ${color};" 
-                    title="${tooltip}"
+      // Build data attributes for better interactivity
+      const cellClasses = [
+        'heatmap-cell',
+        isToday ? 'today' : '',
+        isFuture ? 'future' : '',
+        count === 0 ? 'no-activity' : '',
+        count > 0 && count <= p25 ? 'low-activity' : '',
+        count > p25 && count <= p50 ? 'medium-activity' : '',
+        count > p50 && count <= p75 ? 'high-activity' : '',
+        count > p75 ? 'very-high-activity' : ''
+      ].filter(Boolean).join(' ');
+      
+      html += `<div class="${cellClasses}" 
+                    style="background-color: ${color}; transition: all 0.2s ease;" 
+                    title="${tooltip.replace(/\n/g, ' • ')}"
                     data-date="${date.toISOString()}"
                     data-count="${count}"
+                    data-events="${events}"
+                    data-prompts="${prompts}"
+                    data-terminal="${terminal}"
                     data-lines-added="${linesAdded}"
                     data-lines-removed="${linesRemoved}">
               </div>`;
@@ -232,18 +296,29 @@ function renderActivityHeatmap(container) {
   html += '</div>'; // heatmap-grid
   html += '</div>'; // heatmap-content
   
-  // Legend
+  // Enhanced Legend with activity summary
+  const activeDays = allCounts.filter(count => count > 0).length;
+  const avgPerDay = activeDays > 0 ? (totalActivities / activeDays).toFixed(1) : 0;
+  
   html += '<div class="heatmap-legend">';
+  html += '<div class="legend-content">';
   html += '<div class="legend-text">';
   html += '<span class="legend-label">Less</span>';
   html += '<div class="legend-cells">';
   for (let i = 0; i <= 4; i++) {
     const intensity = i / 4;
     const color = getGitHubColor(intensity);
-    html += `<div class="legend-cell" style="background-color: ${color};" title="${i === 0 ? 'No' : i === 1 ? 'Low' : i === 2 ? 'Medium' : i === 3 ? 'High' : 'Very high'} activity"></div>`;
+    const label = i === 0 ? 'No' : i === 1 ? 'Low' : i === 2 ? 'Medium' : i === 3 ? 'High' : 'Very high';
+    html += `<div class="legend-cell" style="background-color: ${color};" title="${label} activity"></div>`;
   }
   html += '</div>';
   html += '<span class="legend-label">More</span>';
+  html += '</div>';
+  html += '<div class="legend-stats">';
+  html += `<span class="legend-stat">${totalActivities.toLocaleString()} total activities</span>`;
+  html += `<span class="legend-stat">${activeDays} active days</span>`;
+  html += `<span class="legend-stat">~${avgPerDay} avg/day</span>`;
+  html += '</div>';
   html += '</div>';
   html += '</div>';
   
@@ -279,14 +354,22 @@ function renderActivityHeatmap(container) {
     });
   });
   
-  // Add hover effects
+  // Enhanced hover effects with scale and shadow
   container.querySelectorAll('.heatmap-cell').forEach(cell => {
     cell.addEventListener('mouseenter', function() {
-      this.style.outline = '2px solid var(--color-primary)';
-      this.style.outlineOffset = '2px';
+      if (!this.classList.contains('future')) {
+        this.style.transform = 'scale(1.15)';
+        this.style.zIndex = '10';
+        this.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.15)';
+        this.style.outline = '2px solid var(--color-primary, #6366f1)';
+        this.style.outlineOffset = '2px';
+      }
     });
     
     cell.addEventListener('mouseleave', function() {
+      this.style.transform = 'scale(1)';
+      this.style.zIndex = '1';
+      this.style.boxShadow = 'none';
       this.style.outline = 'none';
     });
   });

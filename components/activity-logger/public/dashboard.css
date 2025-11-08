@@ -3029,10 +3029,32 @@ body {
   padding-right: var(--space-md);
 }
 
+.legend-content {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+}
+
 .legend-text {
   display: flex;
   align-items: center;
   gap: var(--space-xs);
+}
+
+.legend-stats {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  margin-left: var(--space-sm);
+  padding-left: var(--space-md);
+  border-left: 1px solid var(--color-border, rgba(0, 0, 0, 0.1));
+}
+
+.legend-stat {
+  font-size: var(--text-xs);
+  color: var(--color-text, #374151);
+  white-space: nowrap;
 }
 
 .legend-label {
