@@ -937,19 +937,45 @@ function renderPromptEffectiveness() {
     else timeBuckets['>15 min']++;
   });
 
-  // Calculate iteration patterns (prompts followed by more prompts)
-  const iterationPatterns = [];
-  prompts.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-  for (let i = 0; i < prompts.length - 1; i++) {
-    const current = prompts[i];
-    const next = prompts[i + 1];
-    const timeDiff = (new Date(next.timestamp) - new Date(current.timestamp)) / 1000 / 60; // minutes
-    if (timeDiff < 10) { // Within 10 minutes
-      iterationPatterns.push(timeDiff);
+  // Calculate iteration patterns (prompts in same conversation/thread)
+  // Group prompts by conversation_id to find actual iterations
+  const conversationGroups = new Map();
+  prompts.forEach(prompt => {
+    const convId = prompt.conversation_id || prompt.conversationId || 'no-conversation';
+    if (!conversationGroups.has(convId)) {
+      conversationGroups.set(convId, []);
     }
-  }
+    conversationGroups.get(convId).push(prompt);
+  });
+  
+  const iterationPatterns = [];
+  conversationGroups.forEach((conversationPrompts, convId) => {
+    // Only process conversations with 2+ prompts (actual iterations)
+    if (conversationPrompts.length < 2) return;
+    
+    // Sort by timestamp within conversation
+    conversationPrompts.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+    
+    // Calculate time differences between consecutive prompts in same conversation
+    for (let i = 0; i < conversationPrompts.length - 1; i++) {
+      const current = conversationPrompts[i];
+      const next = conversationPrompts[i + 1];
+      const timeDiff = (new Date(next.timestamp) - new Date(current.timestamp)) / 1000 / 60; // minutes
+      
+      // Only count if within reasonable iteration window (30 minutes)
+      // and at least 0.1 minutes apart (to avoid same-timestamp issues)
+      if (timeDiff >= 0.1 && timeDiff <= 30) {
+        iterationPatterns.push(timeDiff);
+      }
+    }
+  });
+  
   const avgIterations = iterationPatterns.length > 0
     ? (iterationPatterns.reduce((a, b) => a + b, 0) / iterationPatterns.length).toFixed(1)
+    : 'N/A';
+  
+  const iterationCount = conversationGroups.size > 0 
+    ? Array.from(conversationGroups.values()).filter(conv => conv.length >= 2).length
     : 0;
 
   const colors = getChartColors();
@@ -970,8 +996,8 @@ function renderPromptEffectiveness() {
         </div>
         <div style="padding: var(--space-md); background: var(--color-surface); border-radius: var(--radius-md); border: 1px solid var(--color-border);">
           <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-bottom: var(--space-xs);">Iteration Patterns</div>
-          <div style="font-size: var(--text-2xl); font-weight: 600; color: var(--color-text);">${iterationPatterns.length}</div>
-          <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">Avg: ${avgIterations} min apart</div>
+          <div style="font-size: var(--text-2xl); font-weight: 600; color: var(--color-text);">${iterationCount}</div>
+          <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">${avgIterations !== 'N/A' ? `Avg: ${avgIterations} min apart` : 'No iterations found'}</div>
         </div>
         <div style="padding: var(--space-md); background: var(--color-surface); border-radius: var(--radius-md); border: 1px solid var(--color-border);">
           <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-bottom: var(--space-xs);">Unlinked Prompts</div>

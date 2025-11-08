@@ -136,7 +136,10 @@ class PersistentDB {
                   // NEW: Conversation tracking
                   `ALTER TABLE prompts ADD COLUMN conversation_id TEXT`,
                   `ALTER TABLE prompts ADD COLUMN conversation_index INTEGER`,
-                  `ALTER TABLE prompts ADD COLUMN conversation_title TEXT`
+                  `ALTER TABLE prompts ADD COLUMN conversation_title TEXT`,
+                  // NEW: Message role and parent conversation
+                  `ALTER TABLE prompts ADD COLUMN message_role TEXT`,
+                  `ALTER TABLE prompts ADD COLUMN parent_conversation_id TEXT`
                 ];
                 
                 // Try to add each column, ignore if already exists

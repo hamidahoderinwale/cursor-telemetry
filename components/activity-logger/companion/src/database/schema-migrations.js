@@ -10,7 +10,7 @@ class SchemaMigrations {
   constructor(persistentDB) {
     this.db = persistentDB;
     this.migrationsPath = path.join(__dirname, 'migrations');
-    this.currentVersion = '1.0.0';
+    this.currentVersion = '1.3.0'; // Current schema version
   }
 
   /**
@@ -178,7 +178,9 @@ class SchemaMigrations {
           const alterQueries = [
             `ALTER TABLE prompts ADD COLUMN conversation_id TEXT`,
             `ALTER TABLE prompts ADD COLUMN conversation_index INTEGER`,
-            `ALTER TABLE prompts ADD COLUMN conversation_title TEXT`
+            `ALTER TABLE prompts ADD COLUMN conversation_title TEXT`,
+            `ALTER TABLE prompts ADD COLUMN message_role TEXT`,
+            `ALTER TABLE prompts ADD COLUMN parent_conversation_id TEXT`
           ];
           
           return Promise.all(alterQueries.map(query => {
@@ -193,6 +195,8 @@ class SchemaMigrations {
           })).then(() => {
             db.db.run(`CREATE INDEX IF NOT EXISTS idx_prompts_conversation ON prompts(conversation_id)`, () => {});
             db.db.run(`CREATE INDEX IF NOT EXISTS idx_prompts_workspace_conversation ON prompts(workspace_id, conversation_id)`, () => {});
+            db.db.run(`CREATE INDEX IF NOT EXISTS idx_prompts_message_role ON prompts(message_role)`, () => {});
+            db.db.run(`CREATE INDEX IF NOT EXISTS idx_prompts_parent_conversation ON prompts(parent_conversation_id)`, () => {});
           });
         },
         down: async (db) => {

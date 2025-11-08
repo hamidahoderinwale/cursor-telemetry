@@ -5581,6 +5581,16 @@ async function loadPersistedData() {
     console.log('[SAVE] Initializing database (lazy loading mode)...');
     await persistentDB.init();
     
+    // Run schema migrations to ensure database is up to date
+    try {
+      const migrationResult = await schemaMigrations.migrate();
+      if (migrationResult.migrations.length > 0) {
+        console.log(`[MIGRATIONS] Applied ${migrationResult.migrations.length} migration(s): ${migrationResult.migrations.map(m => m.migration).join(', ')}`);
+      }
+    } catch (migrationErr) {
+      console.warn('[MIGRATIONS] Migration warning:', migrationErr.message);
+    }
+    
     // DON'T load all data - just get stats and setup
     const stats = await persistentDB.getStats();
     
