@@ -473,7 +473,8 @@ function generateSemanticInsights() {
       title: 'Most Isolated Module',
       description: `${isolatedCluster.name} has minimal semantic overlap with other parts of your codebase.`,
       cluster: isolatedCluster,
-      type: 'isolation'
+      type: 'isolation',
+      priority: 1
     });
   }
   
@@ -486,8 +487,196 @@ function generateSemanticInsights() {
     title: 'Core Module',
     description: `${largestCluster.name} contains ${largestCluster.nodes.length} files (${((largestCluster.nodes.length / navigatorState.nodes.length) * 100).toFixed(0)}% of codebase).`,
     cluster: largestCluster,
-    type: 'core'
+    type: 'core',
+    priority: 1
   });
+  
+  // Find most active cluster (by changes and events)
+  const mostActiveCluster = navigatorState.clusters.map(cluster => {
+    const totalChanges = cluster.nodes.reduce((sum, node) => sum + (node.changes || 0), 0);
+    const totalEvents = cluster.nodes.reduce((sum, node) => sum + (node.events?.length || 0), 0);
+    const activityScore = totalChanges + (totalEvents * 10); // Weight events more
+    return { cluster, activityScore, totalChanges, totalEvents };
+  }).reduce((max, curr) => curr.activityScore > max.activityScore ? curr : max);
+  
+  if (mostActiveCluster.activityScore > 0) {
+    insights.push({
+      title: 'Most Active Module',
+      description: `${mostActiveCluster.cluster.name} has ${mostActiveCluster.totalChanges} changes and ${mostActiveCluster.totalEvents} events - highest activity in the codebase.`,
+      cluster: mostActiveCluster.cluster,
+      type: 'activity',
+      priority: 2
+    });
+  }
+  
+  // Find most cohesive cluster (high intra-cluster similarity)
+  const cohesiveClusters = navigatorState.clusters.map(cluster => {
+    if (!cluster.nodes || cluster.nodes.length < 2) return { cluster, cohesion: 0 };
+    
+    // Calculate average similarity of links within cluster
+    const clusterNodeIds = new Set(cluster.nodes.map(n => n.id));
+    const intraClusterLinks = navigatorState.links.filter(link => {
+      const sourceId = typeof link.source === 'object' ? link.source.id : link.source;
+      const targetId = typeof link.target === 'object' ? link.target.id : link.target;
+      return clusterNodeIds.has(sourceId) && clusterNodeIds.has(targetId);
+    });
+    
+    const avgSimilarity = intraClusterLinks.length > 0
+      ? intraClusterLinks.reduce((sum, link) => sum + (link.similarity || 0), 0) / intraClusterLinks.length
+      : 0;
+    
+    return { cluster, cohesion: avgSimilarity, linkCount: intraClusterLinks.length };
+  }).filter(c => c.cohesion > 0);
+  
+  if (cohesiveClusters.length > 0) {
+    const mostCohesive = cohesiveClusters.reduce((max, curr) => 
+      curr.cohesion > max.cohesion ? curr : max
+    );
+    insights.push({
+      title: 'Most Cohesive Module',
+      description: `${mostCohesive.cluster.name} has ${mostCohesive.linkCount} internal connections with ${(mostCohesive.cohesion * 100).toFixed(0)}% average similarity - tightly integrated.`,
+      cluster: mostCohesive.cluster,
+      type: 'cohesion',
+      priority: 2
+    });
+  }
+  
+  // Find bridge cluster (connects to most other clusters)
+  const bridgeClusters = navigatorState.clusters.map(cluster => {
+    const clusterNodeIds = new Set(cluster.nodes.map(n => n.id));
+    const connectedClusters = new Set();
+    
+    navigatorState.links.forEach(link => {
+      const sourceId = typeof link.source === 'object' ? link.source.id : link.source;
+      const targetId = typeof link.target === 'object' ? link.target.id : link.target;
+      
+      const sourceInCluster = clusterNodeIds.has(sourceId);
+      const targetInCluster = clusterNodeIds.has(targetId);
+      
+      if (sourceInCluster && !targetInCluster) {
+        // Find which cluster target belongs to
+        const targetCluster = navigatorState.clusters.find(c => 
+          c.nodes.some(n => n.id === targetId)
+        );
+        if (targetCluster) connectedClusters.add(targetCluster.id);
+      } else if (!sourceInCluster && targetInCluster) {
+        // Find which cluster source belongs to
+        const sourceCluster = navigatorState.clusters.find(c => 
+          c.nodes.some(n => n.id === sourceId)
+        );
+        if (sourceCluster) connectedClusters.add(sourceCluster.id);
+      }
+    });
+    
+    return { cluster, bridgeCount: connectedClusters.size };
+  });
+  
+  const bestBridge = bridgeClusters.reduce((max, curr) => 
+    curr.bridgeCount > max.bridgeCount ? curr : max
+  );
+  
+  if (bestBridge.bridgeCount > 0) {
+    insights.push({
+      title: 'Bridge Module',
+      description: `${bestBridge.cluster.name} connects to ${bestBridge.bridgeCount} other module${bestBridge.bridgeCount !== 1 ? 's' : ''} - acts as a hub between different parts of your codebase.`,
+      cluster: bestBridge.cluster,
+      type: 'bridge',
+      priority: 2
+    });
+  }
+  
+  // Find file type dominance
+  const typeDominance = navigatorState.clusters.map(cluster => {
+    const fileTypes = {};
+    cluster.nodes.forEach(node => {
+      const ext = node.ext || 'other';
+      fileTypes[ext] = (fileTypes[ext] || 0) + 1;
+    });
+    
+    const total = cluster.nodes.length;
+    const dominantType = Object.entries(fileTypes)
+      .sort((a, b) => b[1] - a[1])[0];
+    
+    if (dominantType && dominantType[1] / total > 0.5) {
+      return {
+        cluster,
+        type: dominantType[0],
+        percentage: (dominantType[1] / total * 100).toFixed(0),
+        count: dominantType[1]
+      };
+    }
+    return null;
+  }).filter(Boolean);
+  
+  if (typeDominance.length > 0) {
+    const mostDominant = typeDominance.reduce((max, curr) => 
+      parseFloat(curr.percentage) > parseFloat(max.percentage) ? curr : max
+    );
+    insights.push({
+      title: 'File Type Dominance',
+      description: `${mostDominant.cluster.name} is ${mostDominant.percentage}% ${mostDominant.type === 'other' ? 'other files' : `.${mostDominant.type} files`} (${mostDominant.count} of ${mostDominant.cluster.nodes.length} files).`,
+      cluster: mostDominant.cluster,
+      type: 'filetype',
+      priority: 3
+    });
+  }
+  
+  // Find high connectivity hub (files with most links)
+  const nodeConnectivity = navigatorState.nodes.map(node => {
+    const linkCount = navigatorState.links.filter(link => {
+      const sourceId = typeof link.source === 'object' ? link.source.id : link.source;
+      const targetId = typeof link.target === 'object' ? link.target.id : link.target;
+      return sourceId === node.id || targetId === node.id;
+    }).length;
+    return { node, linkCount };
+  }).sort((a, b) => b.linkCount - a.linkCount);
+  
+  if (nodeConnectivity.length > 0 && nodeConnectivity[0].linkCount > 5) {
+    const hubNode = nodeConnectivity[0];
+    const hubCluster = navigatorState.clusters.find(c => 
+      c.nodes.some(n => n.id === hubNode.node.id)
+    );
+    if (hubCluster) {
+      insights.push({
+        title: 'High Connectivity Hub',
+        description: `${hubNode.node.name} in ${hubCluster.name} has ${hubNode.linkCount} connections - central to codebase structure.`,
+        cluster: hubCluster,
+        type: 'hub',
+        priority: 3,
+        node: hubNode.node
+      });
+    }
+  }
+  
+  // Find recently modified cluster (temporal activity)
+  const now = Date.now();
+  const recentThreshold = 7 * 24 * 60 * 60 * 1000; // 7 days
+  const temporalClusters = navigatorState.clusters.map(cluster => {
+    const recentNodes = cluster.nodes.filter(node => {
+      if (!node.lastModified) return false;
+      const modified = new Date(node.lastModified).getTime();
+      return (now - modified) < recentThreshold;
+    });
+    return { cluster, recentCount: recentNodes.length, total: cluster.nodes.length };
+  }).filter(c => c.recentCount > 0);
+  
+  if (temporalClusters.length > 0) {
+    const mostRecent = temporalClusters.reduce((max, curr) => 
+      curr.recentCount > max.recentCount ? curr : max
+    );
+    const recentPct = ((mostRecent.recentCount / mostRecent.total) * 100).toFixed(0);
+    insights.push({
+      title: 'Recently Modified Module',
+      description: `${mostRecent.cluster.name} has ${mostRecent.recentCount} files modified in the last 7 days (${recentPct}% of module) - active development area.`,
+      cluster: mostRecent.cluster,
+      type: 'temporal',
+      priority: 3
+    });
+  }
+  
+  // Sort insights by priority and limit to top 6
+  insights.sort((a, b) => (a.priority || 99) - (b.priority || 99));
+  const topInsights = insights.slice(0, 6);
   
   // Render insights
   const escapeHtml = window.escapeHtml || ((str) => {
@@ -496,7 +685,7 @@ function generateSemanticInsights() {
     return div.innerHTML;
   });
   
-  container.innerHTML = insights.map(insight => `
+  container.innerHTML = topInsights.map(insight => `
     <div class="semantic-insight-item" style="border-left-color: ${insight.cluster.color};">
       <h4 class="semantic-insight-title">${escapeHtml(insight.title)}</h4>
       <p class="semantic-insight-description">${escapeHtml(insight.description)}</p>

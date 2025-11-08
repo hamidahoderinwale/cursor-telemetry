@@ -46,8 +46,7 @@ const ScreenshotMonitor = require('./screenshot-monitor.js');
 // Import persistent database
 const PersistentDB = require('./persistent-db.js');
 
-// Import reasoning engine
-const { ReasoningEngine } = require('./reasoning-engine.js');
+// Reasoning engine removed - chat widget no longer used
 
 // Import new analytics modules
 const ContextAnalyzer = require('./context-analyzer.js');
@@ -1673,13 +1672,49 @@ app.get('/entries', async (req, res) => {
 });
 
 // New endpoint specifically for Cursor database data
+// Supports incremental sync via ?since=timestamp query param
 app.get('/api/cursor-database', async (req, res) => {
   try {
+    const since = req.query.since ? parseInt(req.query.since) : null;
+    
+    // If since is provided, try to return only new data (if parser supports it)
+    // For now, we'll use the cache which is updated every 5 minutes
+    // This means incremental sync will work if last sync was > 5 min ago
     const data = await cursorDbParser.getAllData();
+    
+    // Filter prompts by timestamp if since is provided (basic incremental support)
+    let filteredData = data;
+    if (since && data.prompts) {
+      filteredData = {
+        ...data,
+        prompts: data.prompts.filter(p => {
+          const promptTime = p.timestamp ? new Date(p.timestamp).getTime() : 0;
+          return promptTime > since;
+        })
+      };
+      
+      // If no new prompts, return early with empty result
+      if (filteredData.prompts.length === 0) {
+        return res.json({
+          success: true,
+          data: {
+            conversations: [],
+            prompts: [],
+            stats: { totalPrompts: 0, totalConversations: 0 }
+          },
+          timestamp: Date.now(),
+          incremental: true,
+          newItems: 0
+        });
+      }
+    }
+    
     res.json({
       success: true,
-      data: data,
-      timestamp: Date.now()
+      data: filteredData,
+      timestamp: Date.now(),
+      incremental: !!since,
+      newItems: since ? filteredData.prompts.length : data.prompts.length
     });
   } catch (error) {
     console.error('Error fetching Cursor database:', error);
@@ -3467,6 +3502,315 @@ async function handleStreamingExport(req, res, options) {
   }
 }
 
+// Database import/redeploy endpoint - restore exported data
+app.post('/api/import/database', async (req, res) => {
+  try {
+    console.log('📥 Import request received');
+    
+    const importData = req.body;
+    
+    // Validate import data structure
+    if (!importData || !importData.data) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid import data: missing "data" field'
+      });
+    }
+    
+    const data = importData.data;
+    const options = req.body.options || {};
+    const {
+      overwrite = false,  // If true, overwrite existing records; if false, skip duplicates
+      skipLinkedData = false,  // Skip linked_data and temporal_chunks if present
+      dryRun = false  // If true, validate but don't import
+    } = options;
+    
+    const stats = {
+      entries: { imported: 0, skipped: 0, errors: 0 },
+      prompts: { imported: 0, skipped: 0, errors: 0 },
+      events: { imported: 0, skipped: 0, errors: 0 },
+      terminalCommands: { imported: 0, skipped: 0, errors: 0 },
+      contextSnapshots: { imported: 0, skipped: 0, errors: 0 },
+      workspaces: { imported: 0, skipped: 0, errors: 0 }
+    };
+    
+    // Helper to check if record exists
+    const checkExists = async (table, id) => {
+      if (overwrite) return false; // Don't check if overwriting
+      
+      try {
+        if (table === 'entries') {
+          const existing = await persistentDB.getEntryById(id);
+          return !!existing;
+        } else if (table === 'prompts') {
+          const existing = await persistentDB.getPromptById(id);
+          return !!existing;
+        }
+        // For other tables, we'll use INSERT OR IGNORE
+        return false;
+      } catch (err) {
+        return false;
+      }
+    };
+    
+    // Import entries
+    if (data.entries && Array.isArray(data.entries)) {
+      console.log(`[IMPORT] Processing ${data.entries.length} entries...`);
+      
+      for (const entry of data.entries) {
+        try {
+          if (!dryRun) {
+            const exists = await checkExists('entries', entry.id);
+            if (exists) {
+              stats.entries.skipped++;
+              continue;
+            }
+            
+            // Normalize entry data
+            const normalizedEntry = {
+              id: entry.id,
+              session_id: entry.session_id || entry.sessionId,
+              workspace_path: entry.workspace_path || entry.workspacePath,
+              file_path: entry.file_path || entry.filePath,
+              source: entry.source || 'imported',
+              before_code: entry.before_code || entry.beforeCode || entry.before_content,
+              after_code: entry.after_code || entry.afterCode || entry.after_content,
+              notes: entry.notes || entry.description,
+              timestamp: entry.timestamp,
+              tags: entry.tags,
+              prompt_id: entry.prompt_id || entry.promptId,
+              modelInfo: entry.modelInfo || entry.model_info,
+              type: entry.type || 'file_change'
+            };
+            
+            await persistentDB.saveEntry(normalizedEntry);
+            stats.entries.imported++;
+          } else {
+            stats.entries.imported++; // Count in dry run
+          }
+        } catch (error) {
+          console.error(`[IMPORT] Error importing entry ${entry.id}:`, error.message);
+          stats.entries.errors++;
+        }
+      }
+    }
+    
+    // Import prompts
+    if (data.prompts && Array.isArray(data.prompts)) {
+      console.log(`[IMPORT] Processing ${data.prompts.length} prompts...`);
+      
+      for (const prompt of data.prompts) {
+        try {
+          if (!dryRun) {
+            const exists = await checkExists('prompts', prompt.id);
+            if (exists) {
+              stats.prompts.skipped++;
+              continue;
+            }
+            
+            // Normalize prompt data
+            const normalizedPrompt = {
+              id: prompt.id,
+              timestamp: prompt.timestamp,
+              text: prompt.text || prompt.prompt || prompt.preview || prompt.content,
+              status: prompt.status || 'captured',
+              linked_entry_id: prompt.linked_entry_id || prompt.linkedEntryId,
+              source: prompt.source || 'imported',
+              workspaceId: prompt.workspaceId || prompt.workspace_id,
+              workspacePath: prompt.workspacePath || prompt.workspace_path,
+              workspaceName: prompt.workspaceName || prompt.workspace_name,
+              composerId: prompt.composerId || prompt.composer_id,
+              subtitle: prompt.subtitle,
+              linesAdded: prompt.linesAdded || prompt.lines_added || 0,
+              linesRemoved: prompt.linesRemoved || prompt.lines_removed || 0,
+              contextUsage: prompt.contextUsage || prompt.context_usage || 0,
+              mode: prompt.mode,
+              modelType: prompt.modelType || prompt.model_type,
+              modelName: prompt.modelName || prompt.model_name,
+              forceMode: prompt.forceMode || prompt.force_mode,
+              isAuto: prompt.isAuto || prompt.is_auto || false,
+              type: prompt.type,
+              confidence: prompt.confidence,
+              added_from_database: false, // Mark as imported, not from Cursor DB
+              contextFiles: prompt.contextFiles || prompt.context_files,
+              terminalBlocks: prompt.terminalBlocks || prompt.terminal_blocks,
+              thinkingTime: prompt.thinkingTime || prompt.thinking_time,
+              thinkingTimeSeconds: prompt.thinkingTimeSeconds || prompt.thinking_time_seconds,
+              hasAttachments: prompt.hasAttachments || prompt.has_attachments || false,
+              attachmentCount: prompt.attachmentCount || prompt.attachment_count || 0,
+              conversationTitle: prompt.conversationTitle || prompt.conversation_title,
+              messageRole: prompt.messageRole || prompt.message_role,
+              parentConversationId: prompt.parentConversationId || prompt.parent_conversation_id
+            };
+            
+            await persistentDB.savePrompt(normalizedPrompt);
+            stats.prompts.imported++;
+          } else {
+            stats.prompts.imported++;
+          }
+        } catch (error) {
+          console.error(`[IMPORT] Error importing prompt ${prompt.id}:`, error.message);
+          stats.prompts.errors++;
+        }
+      }
+    }
+    
+    // Import events
+    if (data.events && Array.isArray(data.events)) {
+      console.log(`[IMPORT] Processing ${data.events.length} events...`);
+      
+      for (const event of data.events) {
+        try {
+          if (!dryRun) {
+            const normalizedEvent = {
+              id: event.id || `imported-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              session_id: event.session_id || event.sessionId,
+              workspace_path: event.workspace_path || event.workspacePath,
+              timestamp: event.timestamp,
+              type: event.type || 'activity',
+              details: event.details || event.metadata || {}
+            };
+            
+            await persistentDB.saveEvent(normalizedEvent);
+            stats.events.imported++;
+          } else {
+            stats.events.imported++;
+          }
+        } catch (error) {
+          console.error(`[IMPORT] Error importing event:`, error.message);
+          stats.events.errors++;
+        }
+      }
+    }
+    
+    // Import terminal commands
+    if (data.terminal_commands && Array.isArray(data.terminal_commands)) {
+      console.log(`[IMPORT] Processing ${data.terminal_commands.length} terminal commands...`);
+      
+      for (const cmd of data.terminal_commands) {
+        try {
+          if (!dryRun) {
+            const normalizedCmd = {
+              id: cmd.id || `cmd-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              command: cmd.command,
+              shell: cmd.shell || cmd.metadata?.shell,
+              source: cmd.source || cmd.metadata?.source || 'imported',
+              timestamp: cmd.timestamp || cmd.metadata?.timestamp,
+              workspace: cmd.workspace || cmd.workspace_path || cmd.metadata?.workspace,
+              output: cmd.output || cmd.metadata?.output,
+              exitCode: cmd.exit_code || cmd.exitCode || cmd.metadata?.exit_code,
+              duration: cmd.duration || cmd.metadata?.duration,
+              error: cmd.error || cmd.metadata?.error,
+              linkedEntryId: cmd.linked_entry_id || cmd.linkedEntryId,
+              linkedPromptId: cmd.linked_prompt_id || cmd.linkedPromptId,
+              sessionId: cmd.session_id || cmd.sessionId
+            };
+            
+            await persistentDB.saveTerminalCommand(normalizedCmd);
+            stats.terminalCommands.imported++;
+          } else {
+            stats.terminalCommands.imported++;
+          }
+        } catch (error) {
+          console.error(`[IMPORT] Error importing terminal command:`, error.message);
+          stats.terminalCommands.errors++;
+        }
+      }
+    }
+    
+    // Import context snapshots (if present)
+    if (data.context_snapshots && Array.isArray(data.context_snapshots)) {
+      console.log(`[IMPORT] Processing ${data.context_snapshots.length} context snapshots...`);
+      // Context snapshots are typically derived from prompts, so we'll skip explicit import
+      // unless there's a dedicated table for them
+      stats.contextSnapshots.skipped = data.context_snapshots.length;
+    }
+    
+    // Import workspaces (add to in-memory db.workspaces)
+    if (data.workspaces && Array.isArray(data.workspaces)) {
+      console.log(`[IMPORT] Processing ${data.workspaces.length} workspaces...`);
+      
+      if (!dryRun) {
+        for (const workspace of data.workspaces) {
+          try {
+            const workspacePath = workspace.path || workspace.workspace_path || workspace;
+            if (workspacePath && !db.workspaces.includes(workspacePath)) {
+              db.workspaces.push(workspacePath);
+              stats.workspaces.imported++;
+            } else {
+              stats.workspaces.skipped++;
+            }
+          } catch (error) {
+            console.error(`[IMPORT] Error importing workspace:`, error.message);
+            stats.workspaces.errors++;
+          }
+        }
+      } else {
+        stats.workspaces.imported = data.workspaces.length;
+      }
+    }
+    
+    // Reload in-memory data from database after import
+    if (!dryRun) {
+      console.log('[IMPORT] Reloading in-memory data from database...');
+      const recentEntries = await persistentDB.getRecentEntries(1000);
+      const recentPrompts = await persistentDB.getRecentPrompts(1000);
+      db.entries = recentEntries;
+      db.prompts = recentPrompts;
+    }
+    
+    const totalImported = 
+      stats.entries.imported +
+      stats.prompts.imported +
+      stats.events.imported +
+      stats.terminalCommands.imported +
+      stats.contextSnapshots.imported +
+      stats.workspaces.imported;
+    
+    const totalSkipped = 
+      stats.entries.skipped +
+      stats.prompts.skipped +
+      stats.events.skipped +
+      stats.terminalCommands.skipped +
+      stats.contextSnapshots.skipped +
+      stats.workspaces.skipped;
+    
+    const totalErrors = 
+      stats.entries.errors +
+      stats.prompts.errors +
+      stats.events.errors +
+      stats.terminalCommands.errors +
+      stats.contextSnapshots.errors +
+      stats.workspaces.errors;
+    
+    console.log(`[SUCCESS] Import completed: ${totalImported} imported, ${totalSkipped} skipped, ${totalErrors} errors`);
+    
+    res.json({
+      success: true,
+      dryRun,
+      stats,
+      summary: {
+        totalImported,
+        totalSkipped,
+        totalErrors,
+        overwrite,
+        timestamp: new Date().toISOString()
+      },
+      message: dryRun 
+        ? `Dry run: Would import ${totalImported} items (${totalSkipped} would be skipped)`
+        : `Successfully imported ${totalImported} items (${totalSkipped} skipped, ${totalErrors} errors)`
+    });
+    
+  } catch (error) {
+    console.error('Error importing database:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+});
+
 // Cache for file contents (refresh every 5 minutes)
 let fileContentsCache = null;
 let fileContentsCacheTime = 0;
@@ -3573,44 +3917,7 @@ app.get('/api/file-contents', async (req, res) => {
   }
 });
 
-// Chat query endpoint with reasoning engine
-const reasoningEngine = new ReasoningEngine();
-
-app.post('/api/chat/query', async (req, res) => {
-  try {
-    const { query } = req.body;
-    
-    if (!query || typeof query !== 'string') {
-      return res.status(400).json({ error: 'Query is required' });
-    }
-    
-    console.log('[CHAT] Chat query:', query);
-    
-    // ✅ Gather telemetry data - LIMITED for performance
-    const recentEntries = await persistentDB.getRecentEntries(500);  // Last 500 only
-    const recentPrompts = await persistentDB.getRecentPrompts(200);  // Last 200 only
-    const telemetryData = {
-      events: recentEntries,
-      prompts: recentPrompts,
-      sessions: [], // Session data structure to be implemented
-      files: db.entries || []
-    };
-    
-    // Process query with reasoning engine
-    const response = await reasoningEngine.query(query, telemetryData);
-    
-    console.log('[SUCCESS] Generated response with', response.confidence, 'confidence');
-    
-    res.json(response);
-    
-  } catch (error) {
-    console.error('❌ Chat endpoint error:', error);
-    res.status(500).json({ 
-      error: 'Failed to process query',
-      details: error.message 
-    });
-  }
-});
+// Chat query endpoint removed - Qwen widget no longer used
 
 // Acknowledge queue
 app.post('/ack', (req, res) => {

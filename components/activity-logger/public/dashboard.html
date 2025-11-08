@@ -33,20 +33,24 @@
           });
         });
         
-        // Register new service worker
-        navigator.serviceWorker.register('/sw.js')
-          .then(reg => {
-            console.log('[SW] Registered:', reg.scope);
-            // Check for updates
-            reg.addEventListener('updatefound', () => {
-              console.log('[SW] Update found, reloading...');
-              window.location.reload();
+        // Register new service worker (only works over HTTP, not file://)
+        if (window.location.protocol === 'http:' || window.location.protocol === 'https:') {
+          navigator.serviceWorker.register('/sw.js')
+            .then(reg => {
+              console.log('[SW] Registered:', reg.scope);
+              // Check for updates
+              reg.addEventListener('updatefound', () => {
+                console.log('[SW] Update found, reloading...');
+                window.location.reload();
+              });
+            })
+            .catch(err => {
+              console.warn('[SW] Registration failed:', err);
+              console.warn('[SW] If you see OpaqueResponseBlocking errors, set DISABLE_SERVICE_WORKER = true');
             });
-          })
-          .catch(err => {
-            console.warn('[SW] Registration failed:', err);
-            console.warn('[SW] If you see OpaqueResponseBlocking errors, set DISABLE_SERVICE_WORKER = true');
-          });
+        } else {
+          console.warn('[SW] Service worker requires HTTP server. Access dashboard at http://localhost:43917/dashboard.html');
+        }
       });
     } else if (DISABLE_SERVICE_WORKER) {
       console.log('[SW] ServiceWorker disabled (DISABLE_SERVICE_WORKER = true)');
@@ -89,7 +93,7 @@
           </svg>
           <span>Cursor Activity</span>
         </div>
-        <button class="search-trigger" onclick="openSearchPalette()" title="Search (Cmd+K)">
+        <button class="search-trigger" onclick="if(window.openSearchPalette) window.openSearchPalette(); else console.warn('Search not loaded yet');" title="Search (Cmd+K)">
           <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor">
             <circle cx="8" cy="8" r="6" stroke-width="2"/>
             <path d="M13 13l4 4" stroke-width="2" stroke-linecap="round"/>
@@ -174,6 +178,12 @@
             <path d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z"/>
           </svg>
           <span>Export JSON</span>
+        </button>
+        <button class="export-btn" onclick="if(window.showImportModal) window.showImportModal(); else console.warn('Import handler not loaded');" title="Import / Redeploy exported data">
+          <svg width="18" height="18" viewBox="0 0 20 20" fill="currentColor">
+            <path d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" transform="rotate(180 10 10)"/>
+          </svg>
+          <span>Import / Redeploy</span>
         </button>
       </div>
     </aside>
@@ -273,10 +283,17 @@
             type="text" 
             id="searchInput" 
             class="search-input" 
-            placeholder="Search events, prompts, files... (try 'type:prompt' or 'date:today')"
+            placeholder="Search or ask questions... (e.g., 'What files did I modify when fixing bugs?')"
             autocomplete="off"
             spellcheck="false"
           />
+          <div id="searchSemanticStatus" class="search-semantic-status" style="display: none;" title="Hugging Face semantic search enabled">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <path d="M12 2L2 7l10 5 10-5-10-5z" stroke-width="2"/>
+              <path d="M2 17l10 5 10-5M2 12l10 5 10-5" stroke-width="2"/>
+            </svg>
+            <span>AI</span>
+          </div>
           <kbd class="search-kbd">esc</kbd>
         </div>
       </div>
@@ -285,7 +302,24 @@
           <!-- Results will be rendered here -->
         </div>
         <div id="searchSuggestions" class="search-suggestions">
-          <!-- Suggestions will be rendered here -->
+          <!-- Example queries for semantic search -->
+          <div id="searchExamples" class="search-examples" style="display: none;">
+            <div class="search-examples-header">Try asking:</div>
+            <div class="search-examples-list">
+              <button class="search-example" onclick="if(window.setSearchQuery) window.setSearchQuery('What files did I modify when fixing bugs?')">
+                What files did I modify when fixing bugs?
+              </button>
+              <button class="search-example" onclick="if(window.setSearchQuery) window.setSearchQuery('Show me prompts about authentication')">
+                Show me prompts about authentication
+              </button>
+              <button class="search-example" onclick="if(window.setSearchQuery) window.setSearchQuery('Find code changes related to database queries')">
+                Find code changes related to database queries
+              </button>
+              <button class="search-example" onclick="if(window.setSearchQuery) window.setSearchQuery('What did I work on last week?')">
+                What did I work on last week?
+              </button>
+            </div>
+          </div>
         </div>
       </div>
       <div class="search-palette-footer">
@@ -301,20 +335,21 @@
     </div>
   </div>
 
-  <!-- Chat Widget -->
-  <div id="chatWidget"></div>
-
   <script>
-    // Initialize chat widget
-    fetch('widgets/chat-widget.html')
-      .then(response => response.text())
-      .then(html => {
-        document.getElementById('chatWidget').innerHTML = html;
-        if (window.initChatWidget) {
-          window.initChatWidget();
-        }
-      })
-      .catch(err => console.warn('Chat widget not loaded:', err));
+    // Check if accessed via file:// and warn user
+    if (window.location.protocol === 'file:') {
+      console.warn('%c⚠️ IMPORTANT: Dashboard must be accessed via HTTP', 'color: #f59e0b; font-weight: bold; font-size: 14px;');
+      console.warn('%cPlease access the dashboard at: http://localhost:43917/dashboard.html', 'color: #6366f1; font-size: 12px;');
+      console.warn('ES modules, service workers, and fetch API require HTTP/HTTPS protocol.');
+      
+      // Show a visible warning in the page
+      document.addEventListener('DOMContentLoaded', () => {
+        const warning = document.createElement('div');
+        warning.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; background: #fef3c7; border-bottom: 2px solid #f59e0b; padding: 12px; text-align: center; z-index: 10000; font-weight: 600;';
+        warning.innerHTML = '⚠️ Please access this dashboard via <a href="http://localhost:43917/dashboard.html" style="color: #6366f1; text-decoration: underline;">http://localhost:43917/dashboard.html</a> (not file://)';
+        document.body.insertBefore(warning, document.body.firstChild);
+      });
+    }
   </script>
   
   <!-- External Libraries -->
@@ -329,13 +364,13 @@
   <script src="core/api-client.js"></script>
   <script src="core/websocket-manager.js"></script>
   
-  <!-- Algorithm Modules -->
-  <script type="module" src="algorithms/similarity.js"></script>
-  <script type="module" src="algorithms/dimensionality-reduction.js"></script>
-  <script type="module" src="algorithms/clustering.js"></script>
+  <!-- Algorithm Modules (commented out - ES modules require HTTP, not file://) -->
+  <!-- <script type="module" src="algorithms/similarity.js"></script> -->
+  <!-- <script type="module" src="algorithms/dimensionality-reduction.js"></script> -->
+  <!-- <script type="module" src="algorithms/clustering.js"></script> -->
   
-  <!-- UI Modules -->
-  <script type="module" src="modals/modal-manager.js"></script>
+  <!-- UI Modules (commented out - ES modules require HTTP, not file://) -->
+  <!-- <script type="module" src="modals/modal-manager.js"></script> -->
   
   <!-- Utilities (load first - no dependencies) -->
   <script src="utils/helpers.js"></script>
@@ -383,8 +418,9 @@
   
   <!-- Components -->
   <script src="components/charts/chart-utils.js"></script>
-  <script type="module" src="components/charts/chart-renderers.js"></script>
-  <script type="module" src="components/charts/analytics-renderers.js"></script>
+  <!-- Chart renderers (commented out - ES modules require HTTP, not file://) -->
+  <!-- <script type="module" src="components/charts/chart-renderers.js"></script> -->
+  <!-- <script type="module" src="components/charts/analytics-renderers.js"></script> -->
   
   <!-- Services: Data -->
   <script src="services/data/persistent-storage.js"></script>
@@ -393,6 +429,7 @@
   <!-- Services: Search (load before app/search-handler.js) -->
   <script src="services/search/search-engine.js"></script>
   <script src="services/search/semantic-analysis-engine.js"></script>
+  <script src="services/search/huggingface-semantic-search.js"></script>
   
   <!-- Services: Analytics -->
   <script src="services/analytics/analytics-manager.js"></script>
@@ -403,6 +440,7 @@
     <script src="app/progress-tracker.js"></script>
     <script src="app/status-popup.js"></script>
     <script src="app/export-handler.js"></script>
+    <script src="app/import-handler.js"></script>
     <script src="app/search-handler.js"></script>
     <script src="app/ui-helpers.js"></script>
     <script src="app/data-initializer.js"></script>
@@ -419,7 +457,6 @@
   <script src="visualizations/time-series-visualizer.js"></script>
   
   <!-- Widgets -->
-  <script src="widgets/chat-widget.js"></script>
   <script src="widgets/prompt-display-system.js"></script>
 </body>
 </html>

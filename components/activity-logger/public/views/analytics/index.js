@@ -190,6 +190,13 @@ function renderAnalyticsView(container) {
 
   // Render charts after DOM is ready (300ms delay to ensure all modules loaded)
   setTimeout(() => {
+    // Check if analytics view is still active
+    const viewContainer = document.getElementById('viewContainer');
+    if (!viewContainer || !viewContainer.innerHTML.includes('analytics-view')) {
+      // View has been switched away, don't render charts
+      return;
+    }
+    
     const state = window.state || {};
     const events = state.data?.events || [];
     const prompts = state.data?.prompts || [];
@@ -257,10 +264,14 @@ function renderAnalyticsView(container) {
     }
     
     if (window.renderContextFileAnalytics) {
-      window.renderContextFileAnalytics().catch(err => console.warn('[INFO] Context file analytics not available:', err.message));
-    } else {
-      console.warn('[CHART] renderContextFileAnalytics not available');
+      window.renderContextFileAnalytics().catch(err => {
+        // Only log if it's not a missing element error
+        if (!err.message || !err.message.includes('not found')) {
+          console.warn('[INFO] Context file analytics not available:', err.message);
+        }
+      });
     }
+    // Note: renderContextFileAnalytics may not be available if analytics-renderers.js is not loaded (ES module)
     
     if (window.renderModelUsageAnalytics) {
       try {
@@ -268,21 +279,28 @@ function renderAnalyticsView(container) {
       } catch (err) {
         console.error('[CHART] Error rendering Model Usage Analytics:', err);
       }
-    } else {
-      console.warn('[CHART] renderModelUsageAnalytics not available');
     }
+    // Note: renderModelUsageAnalytics may not be available if analytics-renderers.js is not loaded (ES module)
     
     if (window.renderEnhancedContextAnalytics) {
-      window.renderEnhancedContextAnalytics().catch(err => console.warn('[INFO] Context analytics not available:', err.message));
-    } else {
-      console.warn('[CHART] renderEnhancedContextAnalytics not available');
+      window.renderEnhancedContextAnalytics().catch(err => {
+        // Only log if it's not a missing element error
+        if (!err.message || !err.message.includes('not found')) {
+          console.warn('[INFO] Context analytics not available:', err.message);
+        }
+      });
     }
+    // Note: renderEnhancedContextAnalytics may not be available if analytics-renderers.js is not loaded (ES module)
     
     if (window.renderProductivityInsights) {
-      window.renderProductivityInsights().catch(err => console.warn('[INFO] Productivity insights not available:', err.message));
-    } else {
-      console.warn('[CHART] renderProductivityInsights not available');
+      window.renderProductivityInsights().catch(err => {
+        // Only log if it's not a missing element error
+        if (!err.message || !err.message.includes('not found')) {
+          console.warn('[INFO] Productivity insights not available:', err.message);
+        }
+      });
     }
+    // Note: renderProductivityInsights may not be available if analytics-renderers.js is not loaded (ES module)
     
     if (window.renderPromptEffectiveness) {
       try {

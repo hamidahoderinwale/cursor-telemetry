@@ -22,7 +22,9 @@ const navigatorState = {
   labelsVisible: true,
   miniMapSvg: null,
   miniMapViewport: null,
-  miniMapScale: 0.2
+  miniMapScale: 0.2,
+  isInitializing: false,
+  isInitialized: false
 };
 
 /**
@@ -31,6 +33,20 @@ const navigatorState = {
 async function initializeNavigator() {
   const container = document.getElementById('navigatorContainer');
   if (!container) return;
+  
+  // Prevent multiple simultaneous initializations
+  if (navigatorState.isInitializing) {
+    console.log('[NAVIGATOR] Initialization already in progress, skipping...');
+    return;
+  }
+  
+  // If already initialized and container has content, skip
+  if (navigatorState.isInitialized && container.innerHTML && !container.innerHTML.includes('loading-wrapper')) {
+    console.log('[NAVIGATOR] Already initialized, skipping...');
+    return;
+  }
+  
+  navigatorState.isInitializing = true;
   
   try {
     const startTime = Date.now();
@@ -145,12 +161,15 @@ async function initializeNavigator() {
     // Render mini-map
     window.renderMiniMap();
     
-    // Update stats
-    window.updateNavigatorStats();
+    // Update stats (with delay to ensure DOM is ready)
+    setTimeout(() => {
+      window.updateNavigatorStats();
+    }, 100);
     
     // Generate insights
     window.generateSemanticInsights();
     
+    navigatorState.isInitialized = true;
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
     console.log(`[NAVIGATOR] ✅ Initialization complete in ${elapsed}s`);
     
@@ -179,6 +198,8 @@ async function initializeNavigator() {
       });
       container.innerHTML = `<div class="error-wrapper">Error loading navigator: ${escapeHtml(error.message)}</div>`;
     }
+  } finally {
+    navigatorState.isInitializing = false;
   }
 }
 

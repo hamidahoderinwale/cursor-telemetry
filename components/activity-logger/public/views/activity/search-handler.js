@@ -5,7 +5,7 @@
 
 // Search state
 let searchQuery = '';
-let searchResults = [];
+let activitySearchResults = []; // Renamed to avoid conflict with app/search-handler.js
 let currentSearchIndex = -1;
 let searchFilters = {
   type: 'all', // all, event, prompt, terminal
@@ -36,7 +36,7 @@ function initializeActivitySearch() {
   searchInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      if (searchResults.length > 0) {
+      if (activitySearchResults.length > 0) {
         selectSearchResult(currentSearchIndex >= 0 ? currentSearchIndex : 0);
       }
     } else if (e.key === 'ArrowDown') {
@@ -86,7 +86,7 @@ function performActivitySearch(query) {
   let filtered = applySearchFilters(allItems);
   
   // Then search
-  searchResults = filtered.filter(item => {
+  activitySearchResults = filtered.filter(item => {
     if (!searchQuery) return true;
     
     // Search in text content
@@ -110,7 +110,7 @@ function performActivitySearch(query) {
   });
   
   // Sort by relevance (exact matches first, then partial)
-  searchResults.sort((a, b) => {
+  activitySearchResults.sort((a, b) => {
     const aExact = a.searchableText.toLowerCase() === searchQuery;
     const bExact = b.searchableText.toLowerCase() === searchQuery;
     if (aExact && !bExact) return -1;
@@ -237,16 +237,16 @@ function updateSearchResultsDisplay() {
     return;
   }
   
-  if (searchResults.length === 0) {
+  if (activitySearchResults.length === 0) {
     resultsContainer.innerHTML = '<div class="search-results-empty">No results found</div>';
     resultsContainer.style.display = 'block';
     return;
   }
   
   const maxResults = 10;
-  const displayResults = searchResults.slice(0, maxResults);
+  const displayResults = activitySearchResults.slice(0, maxResults);
   
-  let html = `<div class="search-results-header">${searchResults.length} result${searchResults.length !== 1 ? 's' : ''}</div>`;
+  let html = `<div class="search-results-header">${activitySearchResults.length} result${activitySearchResults.length !== 1 ? 's' : ''}</div>`;
   
   html += displayResults.map((item, index) => {
     const isSelected = index === currentSearchIndex;
@@ -277,8 +277,8 @@ function updateSearchResultsDisplay() {
     `;
   }).join('');
   
-  if (searchResults.length > maxResults) {
-    html += `<div class="search-results-more">+${searchResults.length - maxResults} more results</div>`;
+  if (activitySearchResults.length > maxResults) {
+    html += `<div class="search-results-more">+${activitySearchResults.length - maxResults} more results</div>`;
   }
   
   resultsContainer.innerHTML = html;
@@ -289,11 +289,11 @@ function updateSearchResultsDisplay() {
  * Navigate search results
  */
 function navigateSearchResults(direction) {
-  if (searchResults.length === 0) return;
+  if (activitySearchResults.length === 0) return;
   
   currentSearchIndex += direction;
-  if (currentSearchIndex < 0) currentSearchIndex = searchResults.length - 1;
-  if (currentSearchIndex >= searchResults.length) currentSearchIndex = 0;
+  if (currentSearchIndex < 0) currentSearchIndex = activitySearchResults.length - 1;
+  if (currentSearchIndex >= activitySearchResults.length) currentSearchIndex = 0;
   
   updateSearchResultsDisplay();
   
@@ -316,9 +316,9 @@ function highlightSearchResult(index) {
  * Select search result and navigate to it
  */
 function selectSearchResult(index) {
-  if (index < 0 || index >= searchResults.length) return;
+  if (index < 0 || index >= activitySearchResults.length) return;
   
-  const item = searchResults[index];
+  const item = activitySearchResults[index];
   
   // Show modal or scroll to item in timeline
   if (item.itemType === 'event') {
@@ -344,7 +344,7 @@ function selectSearchResult(index) {
  */
 function clearActivitySearch() {
   searchQuery = '';
-  searchResults = [];
+  activitySearchResults = [];
   currentSearchIndex = -1;
   
   const searchInput = document.getElementById('activitySearchInput');

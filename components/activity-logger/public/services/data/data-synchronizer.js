@@ -8,13 +8,28 @@ class DataSynchronizer {
     this.storage = storage;
     this.aggregator = aggregator;
     this.companionUrl = 'http://localhost:43917';
-    this.lastSync = {
+    
+    // Load lastSync from localStorage to persist across page refreshes
+    const savedLastSync = localStorage.getItem('dataSync_lastSync');
+    this.lastSync = savedLastSync ? JSON.parse(savedLastSync) : {
       events: 0,
       prompts: 0,
       cursorDb: 0
     };
+    
     this.syncInterval = null;
     this.isInitialized = false;
+  }
+  
+  /**
+   * Save lastSync to localStorage
+   */
+  _saveLastSync() {
+    try {
+      localStorage.setItem('dataSync_lastSync', JSON.stringify(this.lastSync));
+    } catch (e) {
+      // Ignore localStorage errors (quota exceeded, etc.)
+    }
   }
 
   /**
@@ -28,9 +43,18 @@ class DataSynchronizer {
     
     // Load from static Cursor databases (one-time historical data) - DO IN BACKGROUND
     // This endpoint is VERY SLOW (18+ seconds) so we run it asynchronously
-    this.syncCursorDatabases().catch(err => {
-      console.warn('[WARNING] Cursor database sync failed:', err.message);
-    });
+    // Only sync if not already synced recently (optimization)
+    setTimeout(() => {
+      this.syncCursorDatabases(false).catch(err => {
+        // Suppress expected errors (offline, aborted, etc.)
+        const isExpectedError = err.name === 'AbortError' || 
+                                err.message.includes('aborted') ||
+                                err.message.includes('Failed to fetch');
+        if (!isExpectedError) {
+          console.warn('[WARNING] Cursor database sync failed:', err.message);
+        }
+      });
+    }, 2000); // Delay 2 seconds to let UI render first
     
     // Load from companion service (fast endpoints)
     await this.syncCompanionService();
@@ -50,16 +74,29 @@ class DataSynchronizer {
 
   /**
    * Sync from Cursor databases (historical data)
+   * Optimized: Only syncs if not already synced recently, or if forced
    */
-  async syncCursorDatabases() {
+  async syncCursorDatabases(force = false) {
     const startTime = Date.now();
     const isOffline = window.state?.companionServiceOnline === false;
+    
+    // Check if we've synced recently (within last hour) - skip if so
+    const timeSinceLastSync = Date.now() - this.lastSync.cursorDb;
+    const RECENT_SYNC_THRESHOLD = 60 * 60 * 1000; // 1 hour
+    
+    if (!force && timeSinceLastSync < RECENT_SYNC_THRESHOLD && this.lastSync.cursorDb > 0) {
+      if (!isOffline) {
+        const minutesAgo = Math.floor(timeSinceLastSync / 60000);
+        console.log(`[ARCHIVE] Skipping sync - already synced ${minutesAgo} minute${minutesAgo !== 1 ? 's' : ''} ago`);
+      }
+      return;
+    }
     
     // Only log if not in offline mode
     if (!isOffline) {
       console.log('[ARCHIVE] Syncing from Cursor databases (background)...');
       
-      // Update UI with progress indicator
+      // Update UI with progress indicator (non-blocking)
       if (window.updateConnectionStatus) {
         window.updateConnectionStatus(false, 'Syncing history (background)...');
       }
@@ -68,9 +105,12 @@ class DataSynchronizer {
     try {
       // This endpoint is SLOW (18+ seconds), so we add a longer timeout
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
+      const timeoutId = setTimeout(() => controller.abort(), 60000); // Increased to 60s for large databases
       
-      const response = await fetch(`${this.companionUrl}/api/cursor-database`, {
+      // Add query param to request incremental sync if available
+      const syncSince = this.lastSync.cursorDb > 0 ? `?since=${this.lastSync.cursorDb}` : '';
+      
+      const response = await fetch(`${this.companionUrl}/api/cursor-database${syncSince}`, {
         signal: controller.signal
       });
       
@@ -96,18 +136,27 @@ class DataSynchronizer {
       }
       
       this.lastSync.cursorDb = Date.now();
+      this._saveLastSync(); // Persist to localStorage
       
       // Mark as online if we got a response
       if (window.state) window.state.companionServiceOnline = true;
       
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
       if (!isOffline) {
-        console.log(`[ARCHIVE] ✅ Background sync complete in ${elapsed}s`);
+        const newItems = data.incremental ? data.newItems : 'all';
+        console.log(`[ARCHIVE] ✅ Background sync complete in ${elapsed}s (${newItems} new items)`);
       }
       
       // Restore connection status if still connected
       if (window.updateConnectionStatus && window.state && window.state.connected) {
         window.updateConnectionStatus(true, 'Connected');
+      }
+      
+      // If incremental sync returned no new items, we can extend the skip threshold
+      if (data.incremental && data.newItems === 0) {
+        // Extend last sync time to prevent frequent checks (set to 30 min ago)
+        const RECENT_SYNC_THRESHOLD = 60 * 60 * 1000; // 1 hour
+        this.lastSync.cursorDb = Date.now() - (RECENT_SYNC_THRESHOLD * 0.5); // Half the threshold
       }
     } catch (error) {
       const errorMessage = error.message || error.toString();
@@ -123,10 +172,10 @@ class DataSynchronizer {
       }
       
       // Only log if not a network error (expected when offline) or if we haven't detected offline yet
-      if (!isNetworkError || !isOffline) {
-        if (!isNetworkError) {
-          console.warn('Could not sync Cursor databases:', error.message);
-        }
+      // Also suppress "aborted" errors as they're expected (timeout or navigation)
+      const isAborted = error.name === 'AbortError' || errorMessage.includes('aborted');
+      if (!isNetworkError && !isAborted && !isOffline) {
+        console.warn('Could not sync Cursor databases:', error.message);
       }
       
       // Restore connection status on error if still connected
@@ -159,6 +208,7 @@ class DataSynchronizer {
             console.log(`  ✓ Stored ${stored} new events`);
           }
           this.lastSync.events = eventsData.cursor || this.lastSync.events;
+          this._saveLastSync(); // Persist to localStorage
         }
         
         // Mark as online if we got a response

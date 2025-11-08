@@ -22,7 +22,7 @@ function getChartColors() {
 function renderFileTypesChart() {
   const ctx = document.getElementById('fileTypesChart');
   if (!ctx) {
-    console.warn('[CHART] fileTypesChart canvas not found');
+    // Silently return if canvas not found (view might not be active)
     return;
   }
 
@@ -84,7 +84,7 @@ function renderFileTypesChart() {
 function renderHourlyChart() {
   const ctx = document.getElementById('hourlyChart');
   if (!ctx) {
-    console.warn('[CHART] hourlyChart canvas not found');
+    // Silently return if canvas not found (view might not be active)
     return;
   }
 
@@ -758,7 +758,7 @@ function updateContextChartTimescale(hours, skipRender = false) {
 function renderPromptEffectiveness() {
   const container = document.getElementById('promptEffectiveness');
   if (!container) {
-    console.warn('[CHART] promptEffectiveness container not found');
+    // Silently return if container not found (view might not be active)
     return;
   }
 

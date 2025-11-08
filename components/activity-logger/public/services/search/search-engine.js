@@ -31,6 +31,10 @@ class SearchEngine {
     this.k1 = 1.5; // Term frequency saturation parameter
     this.b = 0.75; // Length normalization parameter
     this.avgDocLength = 0;
+    
+    // Hugging Face semantic search (optional, lazy-loaded)
+    this.hfSemanticSearch = null;
+    this.useHuggingFace = false; // Enable/disable HF search
   }
 
   /**
@@ -185,8 +189,49 @@ class SearchEngine {
     // Build BM25 index
     this.buildBM25Index(docs);
 
+    // Initialize Hugging Face semantic search (in background, non-blocking)
+    this.initializeHuggingFaceSearch(docs).catch(err => {
+      console.warn('[SEARCH] Hugging Face search initialization failed:', err.message);
+    });
+
     this.initialized = true;
     console.log(`[SUCCESS] Search engine initialized with ${this.documents.length} documents`);
+  }
+
+  /**
+   * Initialize Hugging Face semantic search (optional enhancement)
+   */
+  async initializeHuggingFaceSearch(docs) {
+    // Check if HuggingFaceSemanticSearch is available
+    if (typeof window.HuggingFaceSemanticSearch === 'undefined') {
+      console.log('[SEARCH] Hugging Face semantic search not available (module not loaded)');
+      return;
+    }
+
+    try {
+      console.log('[SEARCH] Initializing Hugging Face semantic search...');
+      this.hfSemanticSearch = new window.HuggingFaceSemanticSearch();
+      
+      // Initialize model (this may take a few seconds)
+      const initialized = await this.hfSemanticSearch.initialize();
+      
+      if (initialized) {
+        this.useHuggingFace = true;
+        console.log('[SEARCH] ✅ Hugging Face semantic search enabled');
+        
+        // Generate embeddings in background (non-blocking)
+        setTimeout(() => {
+          this.hfSemanticSearch.generateDocumentEmbeddings(docs).catch(err => {
+            console.warn('[SEARCH] Error generating embeddings:', err.message);
+          });
+        }, 2000); // Delay to let UI render first
+      } else {
+        console.log('[SEARCH] Hugging Face search unavailable, using TF-IDF semantic search');
+      }
+    } catch (error) {
+      console.warn('[SEARCH] Hugging Face initialization error:', error.message);
+      this.useHuggingFace = false;
+    }
   }
 
   /**
@@ -400,9 +445,9 @@ class SearchEngine {
 
   /**
    * Main search function with advanced ranking
-   * Combines full-text, BM25, semantic, and fuzzy search
+   * Combines full-text, BM25, semantic (TF-IDF or Hugging Face), and fuzzy search
    */
-  search(queryString, options = {}) {
+  async search(queryString, options = {}) {
     if (!this.initialized || !queryString.trim()) {
       return [];
     }
@@ -472,23 +517,69 @@ class SearchEngine {
       });
     }
 
-    // 3. Semantic search (TF-IDF cosine similarity)
+    // 3. Semantic search (Hugging Face embeddings if available, otherwise TF-IDF)
     if (searchText && resultMap.size < 30) {
-      const semanticResults = this.semanticSearch(searchText, 15);
-      semanticResults.forEach(sr => {
-        if (resultMap.has(sr.id)) {
-          resultMap.get(sr.id).semanticScore = sr.score;
-          if (!resultMap.get(sr.id).searchMethods.includes('semantic')) {
-            resultMap.get(sr.id).searchMethods.push('semantic');
-          }
-        } else {
-          resultMap.set(sr.id, {
-            ...sr,
-            semanticScore: sr.score,
-            searchMethods: ['semantic']
+      if (this.useHuggingFace && this.hfSemanticSearch && this.hfSemanticSearch.isInitialized) {
+        // Use Hugging Face semantic search
+        try {
+          const hfResults = await this.hfSemanticSearch.semanticSearch(searchText, this.documents, {
+            limit: 15,
+            minSimilarity: 0.3
+          });
+          
+          hfResults.forEach(sr => {
+            if (resultMap.has(sr.id)) {
+              resultMap.get(sr.id).hfSemanticScore = sr.semanticScore;
+              resultMap.get(sr.id).semanticScore = sr.semanticScore; // Also set for compatibility
+              if (!resultMap.get(sr.id).searchMethods.includes('hf-semantic')) {
+                resultMap.get(sr.id).searchMethods.push('hf-semantic');
+              }
+            } else {
+              resultMap.set(sr.id, {
+                ...sr,
+                hfSemanticScore: sr.semanticScore,
+                semanticScore: sr.semanticScore,
+                searchMethods: ['hf-semantic']
+              });
+            }
+          });
+        } catch (error) {
+          console.warn('[SEARCH] Hugging Face search error, falling back to TF-IDF:', error.message);
+          // Fallback to TF-IDF
+          const semanticResults = this.semanticSearch(searchText, 15);
+          semanticResults.forEach(sr => {
+            if (resultMap.has(sr.id)) {
+              resultMap.get(sr.id).semanticScore = sr.score;
+              if (!resultMap.get(sr.id).searchMethods.includes('semantic')) {
+                resultMap.get(sr.id).searchMethods.push('semantic');
+              }
+            } else {
+              resultMap.set(sr.id, {
+                ...sr,
+                semanticScore: sr.score,
+                searchMethods: ['semantic']
+              });
+            }
           });
         }
-      });
+      } else {
+        // Use TF-IDF semantic search (fallback)
+        const semanticResults = this.semanticSearch(searchText, 15);
+        semanticResults.forEach(sr => {
+          if (resultMap.has(sr.id)) {
+            resultMap.get(sr.id).semanticScore = sr.score;
+            if (!resultMap.get(sr.id).searchMethods.includes('semantic')) {
+              resultMap.get(sr.id).searchMethods.push('semantic');
+            }
+          } else {
+            resultMap.set(sr.id, {
+              ...sr,
+              semanticScore: sr.score,
+              searchMethods: ['semantic']
+            });
+          }
+        });
+      }
     }
 
     // 4. Fuzzy search fallback
@@ -518,15 +609,32 @@ class SearchEngine {
       const lunrScore = result.lunrScore || 0;
       const bm25Score = result.bm25Score || 0;
       const semanticScore = result.semanticScore || 0;
+      const hfSemanticScore = result.hfSemanticScore || 0;
       const fuzzyScore = result.fuzzyScore || 0;
       
-      // Weighted combination (BM25 is most important)
-      const combinedScore = (
-        bm25Score * 0.45 +
-        lunrScore * 0.30 +
-        semanticScore * 0.20 +
-        fuzzyScore * 0.05
-      );
+      // Weighted combination
+      // If Hugging Face semantic score is available, use it instead of TF-IDF semantic
+      const effectiveSemanticScore = hfSemanticScore > 0 ? hfSemanticScore : semanticScore;
+      
+      // Adjust weights based on available methods
+      let combinedScore;
+      if (hfSemanticScore > 0) {
+        // Hugging Face available: give it more weight
+        combinedScore = (
+          bm25Score * 0.35 +
+          lunrScore * 0.25 +
+          hfSemanticScore * 0.30 + // Higher weight for HF semantic
+          fuzzyScore * 0.10
+        );
+      } else {
+        // Standard weights
+        combinedScore = (
+          bm25Score * 0.45 +
+          lunrScore * 0.30 +
+          semanticScore * 0.20 +
+          fuzzyScore * 0.05
+        );
+      }
       
       // Context-aware boosting
       const boostedScore = this.applyContextBoost(result, searchText, combinedScore);
@@ -534,7 +642,15 @@ class SearchEngine {
       return {
         ...result,
         score: boostedScore,
-        _debug: { lunrScore, bm25Score, semanticScore, fuzzyScore, combinedScore, boostedScore }
+        _debug: { 
+          lunrScore, 
+          bm25Score, 
+          semanticScore: effectiveSemanticScore, 
+          hfSemanticScore,
+          fuzzyScore, 
+          combinedScore, 
+          boostedScore 
+        }
       };
     });
 
@@ -562,6 +678,41 @@ class SearchEngine {
     }
 
     return results.slice(0, options.limit || 50);
+  }
+
+  /**
+   * Answer natural language questions about the codebase
+   * Uses Hugging Face semantic search if available
+   * Example: "What files did I modify when fixing the login bug?"
+   */
+  async answerQuestion(question, options = {}) {
+    if (!this.initialized) {
+      return {
+        question,
+        answer: 'Search engine not initialized yet.',
+        relevantDocuments: [],
+        confidence: 0
+      };
+    }
+
+    // Try Hugging Face semantic search first
+    if (this.useHuggingFace && this.hfSemanticSearch && this.hfSemanticSearch.isInitialized) {
+      try {
+        return await this.hfSemanticSearch.answerQuestion(question, this.documents, options);
+      } catch (error) {
+        console.warn('[SEARCH] HF question answering failed:', error.message);
+      }
+    }
+
+    // Fallback to regular search
+    const results = await this.search(question, { limit: options.limit || 10 });
+    
+    return {
+      question,
+      answer: `Found ${results.length} relevant result${results.length !== 1 ? 's' : ''} for your question.`,
+      relevantDocuments: results,
+      confidence: results.length > 0 ? results[0].score : 0
+    };
   }
 
   /**

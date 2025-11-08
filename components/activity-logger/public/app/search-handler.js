@@ -3,6 +3,10 @@
  * Handles search palette, search engine initialization, and result navigation
  */
 
+// Wrap in IIFE to avoid global scope conflicts
+(function() {
+'use strict';
+
 // Search state
 let searchEngine = null;
 let searchSelectedIndex = -1;
@@ -54,6 +58,12 @@ async function initializeSearch() {
     
     await searchEngine.initialize(searchData);
     console.log(`[SUCCESS] Search engine initialized with ${totalItems} items (${events.length} events, ${prompts.length} prompts, ${conversations.length} conversations, ${terminalCommands.length} terminal commands)`);
+    
+    // Update semantic status after initialization
+    setTimeout(() => {
+      updateSemanticStatus();
+    }, 3000); // Wait a bit for HF to initialize
+    
     return true;
   } catch (error) {
     console.error('[ERROR] Failed to initialize search engine:', error);
@@ -99,6 +109,53 @@ function openSearchPalette() {
     }
     searchSelectedIndex = -1;
     searchResults = [];
+    
+    // Show example queries if search is empty and HF is available
+    updateSearchExamples();
+    updateSemanticStatus();
+  }
+}
+
+/**
+ * Set search query from example
+ */
+function setSearchQuery(query) {
+  const input = document.getElementById('searchInput');
+  if (input) {
+    input.value = query;
+    input.focus();
+    performSearch(query);
+  }
+}
+
+/**
+ * Update search examples visibility
+ */
+function updateSearchExamples() {
+  const input = document.getElementById('searchInput');
+  const examples = document.getElementById('searchExamples');
+  if (examples && input) {
+    if (input.value.trim().length === 0) {
+      examples.style.display = 'block';
+    } else {
+      examples.style.display = 'none';
+    }
+  }
+}
+
+/**
+ * Update semantic search status indicator
+ */
+function updateSemanticStatus() {
+  const statusEl = document.getElementById('searchSemanticStatus');
+  if (!statusEl) return;
+  
+  // Check if Hugging Face search is available
+  if (searchEngine && searchEngine.useHuggingFace && searchEngine.hfSemanticSearch && searchEngine.hfSemanticSearch.isInitialized) {
+    statusEl.style.display = 'flex';
+    statusEl.title = 'Hugging Face semantic search enabled - Ask natural language questions!';
+  } else {
+    statusEl.style.display = 'none';
   }
 }
 
@@ -150,7 +207,14 @@ async function performSearch(query) {
   }
   
   try {
-    const results = searchEngine.search(query, { limit: 20 });
+    // Hide examples when searching
+    const examples = document.getElementById('searchExamples');
+    if (examples) {
+      examples.style.display = 'none';
+    }
+    
+    // Search is now async (supports Hugging Face semantic search)
+    const results = await searchEngine.search(query, { limit: 20 });
     searchResults = results;
     searchSelectedIndex = -1;
     renderSearchResults(results);
@@ -277,6 +341,9 @@ window.performSearch = performSearch;
 window.navigateSearchResults = navigateSearchResults;
 window.selectSearchResult = selectSearchResult;
 window.renderSearchResults = renderSearchResults;
+window.setSearchQuery = setSearchQuery;
+window.updateSearchExamples = updateSearchExamples;
+window.updateSemanticStatus = updateSemanticStatus;
 
 // Export search state for event listeners in dashboard.js
 Object.defineProperty(window, 'searchSelectedIndex', {
@@ -288,3 +355,4 @@ Object.defineProperty(window, 'searchResults', {
   set: (value) => { searchResults = value; }
 });
 
+})(); // End IIFE

@@ -22,7 +22,7 @@ class CursorDatabaseParser {
       prompts: [],
       lastUpdate: 0
     };
-    this.updateInterval = 10000; // Update every 10 seconds
+    this.updateInterval = 300000; // Update every 5 minutes (increased from 10s to reduce DB reads)
     this.contextExtractor = new ContextExtractor();
     
     // Add mutex to prevent concurrent database reads (thundering herd)

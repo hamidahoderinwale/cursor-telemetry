@@ -44,49 +44,9 @@ if (!window.CONFIG || !window.state || !window.APIClient) {
 // NOTE: initializeDashboard, loadFromCache, fetchRecentData, fetchOlderHistory, fetchAllData
 // are now loaded from app/data-initializer.js
 // They are available as window.initializeDashboard, window.loadFromCache, etc.
-
-// Legacy function stubs for backward compatibility (delegate to extracted module)
-async function initializeDashboard() {
-  if (window.initializeDashboard) {
-    return window.initializeDashboard();
-  }
-  console.error('[ERROR] data-initializer.js not loaded');
-}
-
-async function loadFromCache() {
-  if (window.loadFromCache) {
-    return window.loadFromCache();
-  }
-  console.error('[ERROR] data-initializer.js not loaded');
-}
-
-async function fetchRecentData() {
-  if (window.fetchRecentData) {
-    return window.fetchRecentData();
-  }
-  console.error('[ERROR] data-initializer.js not loaded');
-}
-
-/**
- * Fetch older history in background (pagination)
- */
-async function fetchOlderHistory() {
-  if (window.fetchOlderHistory) {
-    return window.fetchOlderHistory();
-  }
-  console.error('[ERROR] data-initializer.js not loaded');
-}
-
-async function fetchAllData() {
-  if (window.fetchAllData) {
-    return window.fetchAllData();
-  }
-  // Fallback: use fetchRecentData if available
-  if (window.fetchRecentData) {
-    return window.fetchRecentData();
-  }
-  console.error('[ERROR] data-initializer.js not loaded');
-}
+// 
+// IMPORTANT: Do NOT define local functions with the same names - this causes infinite recursion!
+// Always use window.initializeDashboard, window.fetchRecentData, etc. directly.
 
 function calculateStats() {
   const events = state.data.events;
@@ -1809,7 +1769,7 @@ document.addEventListener('DOMContentLoaded', () => {
       // Use new optimized initialization
       state.connected = true;
       updateConnectionStatus(true);
-      await initializeDashboard();
+      await (window.initializeDashboard || (() => { console.error('[ERROR] initializeDashboard not available'); }))();
       
       // Initialize search engine after data is loaded (with delay to ensure state is populated)
       setTimeout(() => {
@@ -1845,7 +1805,7 @@ document.addEventListener('DOMContentLoaded', () => {
       try {
         if (storage && synchronizer) {
           // Use optimized fetch for refresh
-          await fetchRecentData();
+          await (window.fetchRecentData || (() => { console.error('[ERROR] fetchRecentData not available'); }))();
           calculateStats();
           renderCurrentView();
           // Update status on successful sync
@@ -1876,7 +1836,7 @@ document.addEventListener('DOMContentLoaded', () => {
   
   // Non-persistent initialization function
   function initializeNonPersistent() {
-    initializeDashboard().then(() => {
+    (window.initializeDashboard || (() => { console.error('[ERROR] initializeDashboard not available'); return Promise.resolve(); }))().then(() => {
       state.connected = true;
       updateConnectionStatus(true);
       // Initialize search engine after data is loaded
@@ -1891,7 +1851,7 @@ document.addEventListener('DOMContentLoaded', () => {
       console.error('Initial data fetch failed:', error);
       updateConnectionStatus(false);
       // Fallback to old method
-      fetchAllData().then(() => {
+      (window.fetchAllData || (() => { console.error('[ERROR] fetchAllData not available'); return Promise.resolve(); }))().then(() => {
         renderCurrentView();
         setTimeout(() => {
           if (typeof window.initializeSearch === 'function') {
@@ -1918,7 +1878,7 @@ document.addEventListener('DOMContentLoaded', () => {
       lastRefreshTime = Date.now();
       
       try {
-        await fetchRecentData();
+        await (window.fetchRecentData || (() => { console.error('[ERROR] fetchRecentData not available'); }))();
         calculateStats();
         renderCurrentView();
         // Update status on successful sync
@@ -1969,15 +1929,51 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
   
-  // Setup search input with debouncing
+  // Setup search input with debouncing and example visibility
   const searchInput = document.getElementById('searchInput');
   if (searchInput) {
     let debounceTimeout;
     searchInput.addEventListener('input', (e) => {
+      // Update examples visibility
+      if (window.updateSearchExamples) {
+        window.updateSearchExamples();
+      }
+      
+      // Debounce search
       clearTimeout(debounceTimeout);
-      debounceTimeout = setTimeout(() => {
-        performSearch(e.target.value);
-      }, 300); // 300ms debounce
+      const query = e.target.value.trim();
+      if (query.length > 0) {
+        debounceTimeout = setTimeout(() => {
+          if (window.performSearch) {
+            window.performSearch(query);
+          }
+        }, 300); // 300ms debounce
+      } else {
+        // Show examples when empty
+        if (window.updateSearchExamples) {
+          window.updateSearchExamples();
+        }
+      }
+    });
+    
+    // Handle keyboard navigation
+    searchInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const query = searchInput.value.trim();
+        if (query && window.performSearch) {
+          window.performSearch(query);
+        }
+      } else if (e.key === 'Escape') {
+        if (window.closeSearchPalette) {
+          window.closeSearchPalette();
+        }
+      } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (window.navigateSearchResults) {
+          window.navigateSearchResults(e.key === 'ArrowDown' ? 'down' : 'up');
+        }
+      }
     });
   }
   
