@@ -145,7 +145,6 @@ function renderActivityHeatmap(container) {
   if (totalActivities === 0) {
     container.innerHTML = `
       <div class="empty-state" style="padding: 3rem; text-align: center;">
-        <div class="empty-state-icon" style="font-size: 3rem; margin-bottom: 1rem;">📊</div>
         <div class="empty-state-text" style="font-size: 1.1rem; font-weight: 500; margin-bottom: 0.5rem;">No activity data available</div>
         <div class="empty-state-hint" style="font-size: 0.9rem; color: var(--color-text-muted);">
           Start coding to see your activity heatmap. Make sure the companion service is running.
