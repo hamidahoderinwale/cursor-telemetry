@@ -8,11 +8,17 @@
  */
 function updateStatsDisplay() {
   // Defensive checks for DOM elements
+  const statWorkspaces = document.getElementById('statWorkspaces');
   const statSessions = document.getElementById('statSessions');
   const statFileChanges = document.getElementById('statFileChanges');
   const statAIInteractions = document.getElementById('statAIInteractions');
   const statCodeChanged = document.getElementById('statCodeChanged');
   const statAvgContext = document.getElementById('statAvgContext');
+  
+  // Update workspace count
+  const workspaceCount = window.state.stats.workspaces || 
+                        (window.state.data?.workspaces?.length || 0);
+  if (statWorkspaces) statWorkspaces.textContent = workspaceCount;
   
   if (statSessions) statSessions.textContent = window.state.stats.sessions || 0;
   if (statFileChanges) statFileChanges.textContent = window.state.stats.fileChanges || 0;

@@ -1,5 +1,5 @@
 /**
- * Cursor Activity Dashboard - Main Application
+ * Cursor Telemetry Dashboard - Main Application
  * Clean, modern implementation with full feature support
  * 
  * MODULE DEPENDENCIES:
@@ -192,14 +192,17 @@ function groupIntoTemporalThreads(items, timeWindowMs = 15 * 60 * 1000) {
 }
 
 // NOTE: renderUnifiedTimeline is now in views/activity/timeline-helpers.js
-// Legacy stub for backward compatibility
+// Legacy stub for backward compatibility - DO NOT assign to window to avoid recursion
 function renderUnifiedTimeline(items) {
-  if (window.renderUnifiedTimeline) {
-    return window.renderUnifiedTimeline(items);
+  // Check if the real implementation is available (from timeline-helpers.js)
+  const realRenderer = window.renderUnifiedTimeline;
+  if (realRenderer && realRenderer !== renderUnifiedTimeline) {
+    return realRenderer(items);
   }
   console.error('[ERROR] views/activity/timeline-helpers.js not loaded');
   return '<div class="empty-state">Timeline helpers not loaded</div>';
 }
+// DO NOT assign this stub to window - it would cause infinite recursion
 
 // NOTE: renderConversationThread is now in views/activity/timeline-helpers.js
 // Legacy stub for backward compatibility
@@ -691,12 +694,12 @@ function renderActivityChart_DISABLED() {
   
   if (allEvents.length === 0 && allPrompts.length === 0) {
     const context = ctx.getContext('2d');
-    context.font = '500 16px Geist, -apple-system, BlinkMacSystemFont, sans-serif';
+    context.font = '500 16px "Stack Sans Text", "Inter", sans-serif';
     context.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-text') || '#1f2937';
     context.textAlign = 'center';
     context.textBaseline = 'middle';
     context.fillText('No Data Available', ctx.width / 2, ctx.height / 2 - 10);
-    context.font = '14px Geist, -apple-system, BlinkMacSystemFont, sans-serif';
+    context.font = '14px "Stack Sans Text", "Inter", sans-serif';
     context.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-text-muted') || '#6b7280';
     context.fillText('Activity data will appear here once you start coding', ctx.width / 2, ctx.height / 2 + 15);
     return;
@@ -1717,7 +1720,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Initialize status popup FIRST (before any console.logs)
   initStatusPopup();
   
-  console.log('Initializing Cursor Activity Dashboard');
+  console.log('Initializing Cursor Telemetry Dashboard');
 
   // Setup navigation
   document.querySelectorAll('.nav-link').forEach(link => {

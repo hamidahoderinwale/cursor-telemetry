@@ -132,19 +132,71 @@ class PersistentDB {
                   `ALTER TABLE prompts ADD COLUMN terminal_blocks_json TEXT`,
                   `ALTER TABLE prompts ADD COLUMN terminal_block_count INTEGER DEFAULT 0`,
                   `ALTER TABLE prompts ADD COLUMN has_attachments INTEGER DEFAULT 0`,
-                  `ALTER TABLE prompts ADD COLUMN attachment_count INTEGER DEFAULT 0`
+                  `ALTER TABLE prompts ADD COLUMN attachment_count INTEGER DEFAULT 0`,
+                  // NEW: Conversation tracking
+                  `ALTER TABLE prompts ADD COLUMN conversation_id TEXT`,
+                  `ALTER TABLE prompts ADD COLUMN conversation_index INTEGER`,
+                  `ALTER TABLE prompts ADD COLUMN conversation_title TEXT`
                 ];
                 
                 // Try to add each column, ignore if already exists
-                alterQueries.forEach(query => {
-                  this.db.run(query, (alterErr) => {
-                    // Silently ignore "duplicate column" errors
-                    if (alterErr && !alterErr.message.includes('duplicate column')) {
-                      console.warn('Column may already exist:', alterErr.message);
+                Promise.all(alterQueries.map(query => {
+                  return new Promise((resolve) => {
+                    this.db.run(query, (alterErr) => {
+                      // Silently ignore "duplicate column" errors
+                      if (alterErr && !alterErr.message.includes('duplicate column')) {
+                        console.warn('Column may already exist:', alterErr.message);
+                      }
+                      resolve();
+                    });
+                  });
+                })).then(() => {
+                  // Create indexes for conversation queries after columns are added
+                  this.db.run(`CREATE INDEX IF NOT EXISTS idx_prompts_conversation ON prompts(conversation_id)`, (idxErr) => {
+                    if (idxErr && !idxErr.message.includes('already exists')) {
+                      console.warn('Error creating prompts conversation index:', idxErr);
+                    }
+                  });
+                  this.db.run(`CREATE INDEX IF NOT EXISTS idx_prompts_workspace_conversation ON prompts(workspace_id, conversation_id)`, (idxErr) => {
+                    if (idxErr && !idxErr.message.includes('already exists')) {
+                      console.warn('Error creating prompts workspace_conversation index:', idxErr);
                     }
                   });
                 });
                 
+                res();
+              }
+            });
+          }));
+
+          // Conversations table (explicit conversation entity)
+          tables.push(new Promise((res, rej) => {
+            this.db.run(`
+              CREATE TABLE IF NOT EXISTS conversations (
+                id TEXT PRIMARY KEY,
+                workspace_id TEXT NOT NULL,
+                workspace_path TEXT,
+                title TEXT,
+                status TEXT DEFAULT 'active',
+                tags TEXT,
+                metadata TEXT,
+                created_at TEXT,
+                updated_at TEXT,
+                last_message_at TEXT,
+                message_count INTEGER DEFAULT 0
+              )
+            `, (err) => {
+              if (err) {
+                console.error('Error creating conversations table:', err);
+                rej(err);
+              } else {
+                // Create indexes
+                this.db.run(`CREATE INDEX IF NOT EXISTS idx_conversations_workspace ON conversations(workspace_id)`, (idxErr) => {
+                  if (idxErr) console.warn('Error creating conversations workspace index:', idxErr);
+                });
+                this.db.run(`CREATE INDEX IF NOT EXISTS idx_conversations_status ON conversations(status)`, (idxErr) => {
+                  if (idxErr) console.warn('Error creating conversations status index:', idxErr);
+                });
                 res();
               }
             });
@@ -225,6 +277,35 @@ class PersistentDB {
                 this.db.run(`CREATE INDEX IF NOT EXISTS idx_context_changes_event ON context_changes(event_id)`, () => {});
                 this.db.run(`CREATE INDEX IF NOT EXISTS idx_context_changes_task ON context_changes(task_id)`, () => {});
                 this.db.run(`CREATE INDEX IF NOT EXISTS idx_context_changes_timestamp ON context_changes(timestamp)`, () => {});
+                res();
+              }
+            });
+          }));
+
+          // Audit log table for import/export history
+          tables.push(new Promise((res, rej) => {
+            this.db.run(`
+              CREATE TABLE IF NOT EXISTS audit_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                operation TEXT NOT NULL,
+                operation_type TEXT NOT NULL,
+                target_type TEXT,
+                target_id TEXT,
+                workspace_id TEXT,
+                user_id TEXT,
+                details TEXT,
+                status TEXT,
+                error_message TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+              )
+            `, (err) => {
+              if (err) {
+                console.error('Error creating audit_log table:', err);
+                rej(err);
+              } else {
+                this.db.run(`CREATE INDEX IF NOT EXISTS idx_audit_operation ON audit_log(operation_type)`, () => {});
+                this.db.run(`CREATE INDEX IF NOT EXISTS idx_audit_workspace ON audit_log(workspace_id)`, () => {});
+                this.db.run(`CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at)`, () => {});
                 res();
               }
             });
@@ -438,9 +519,13 @@ class PersistentDB {
          context_file_count_tabs, context_file_count_auto,
          thinking_time, thinking_time_seconds, terminal_blocks_json, 
          terminal_block_count, has_attachments, attachment_count,
-         conversation_title, message_role, parent_conversation_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         conversation_title, message_role, parent_conversation_id,
+         conversation_id, conversation_index)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
+      
+      // Ensure conversation_id is set (use composerId or parentConversationId as fallback)
+      const conversationId = prompt.conversationId || prompt.composerId || prompt.parentConversationId || null;
       
       stmt.run(
         prompt.id,
@@ -478,8 +563,17 @@ class PersistentDB {
         prompt.attachmentCount || 0,
         prompt.conversationTitle || null,
         prompt.messageRole || null,
-        prompt.parentConversationId || null
+        prompt.parentConversationId || null,
+        conversationId,
+        prompt.conversationIndex || null
       );
+      
+      // Update conversation if conversation_id is set
+      if (conversationId && prompt.workspaceId) {
+        this.updateConversationMetadata(conversationId, prompt.workspaceId, prompt.workspacePath, prompt.conversationTitle).catch(err => {
+          console.warn('[DB] Could not update conversation metadata:', err.message);
+        });
+      }
       
       stmt.finalize((err) => {
         if (err) {
@@ -2227,6 +2321,273 @@ class PersistentDB {
    */
   _getCurrentSessionId() {
     return new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+  }
+
+  /**
+   * Save or update a conversation
+   */
+  async saveConversation(conversation) {
+    await this.init();
+    
+    return new Promise((resolve, reject) => {
+      const now = new Date().toISOString();
+      const stmt = this.db.prepare(`
+        INSERT OR REPLACE INTO conversations 
+        (id, workspace_id, workspace_path, title, status, tags, metadata, 
+         created_at, updated_at, last_message_at, message_count)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 
+                COALESCE(?, ?), ?, ?, ?)
+      `);
+      
+      // If updating, preserve original created_at
+      this.db.get(`SELECT created_at FROM conversations WHERE id = ?`, [conversation.id], (err, row) => {
+        const createdAt = row ? row.created_at : now;
+        
+        stmt.run(
+          conversation.id,
+          conversation.workspaceId || conversation.workspace_id,
+          conversation.workspacePath || conversation.workspace_path,
+          conversation.title,
+          conversation.status || 'active',
+          conversation.tags ? JSON.stringify(conversation.tags) : null,
+          conversation.metadata ? JSON.stringify(conversation.metadata) : null,
+          createdAt,
+          now,
+          conversation.lastMessageAt || conversation.last_message_at || now,
+          conversation.messageCount || conversation.message_count || 0
+        );
+        
+        stmt.finalize((finalErr) => {
+          if (finalErr) {
+            console.error('Error saving conversation:', finalErr);
+            reject(finalErr);
+          } else {
+            resolve(conversation);
+          }
+        });
+      });
+    });
+  }
+
+  /**
+   * Update conversation metadata (title, last message time, message count)
+   */
+  async updateConversationMetadata(conversationId, workspaceId, workspacePath, title) {
+    await this.init();
+    
+    return new Promise((resolve, reject) => {
+      // Get current message count
+      this.db.get(
+        `SELECT COUNT(*) as count FROM prompts WHERE conversation_id = ?`,
+        [conversationId],
+        (err, row) => {
+          if (err) {
+            reject(err);
+            return;
+          }
+          
+          const messageCount = row ? row.count : 0;
+          const now = new Date().toISOString();
+          
+          // Get or create conversation
+          this.db.get(
+            `SELECT * FROM conversations WHERE id = ?`,
+            [conversationId],
+            (getErr, existing) => {
+              if (getErr) {
+                reject(getErr);
+                return;
+              }
+              
+              if (existing) {
+                // Update existing
+                this.db.run(
+                  `UPDATE conversations SET 
+                   title = COALESCE(?, title),
+                   workspace_path = COALESCE(?, workspace_path),
+                   last_message_at = ?,
+                   message_count = ?,
+                   updated_at = ?
+                   WHERE id = ?`,
+                  [title, workspacePath, now, messageCount, now, conversationId],
+                  (updateErr) => {
+                    if (updateErr) reject(updateErr);
+                    else resolve();
+                  }
+                );
+              } else {
+                // Create new conversation
+                this.db.run(
+                  `INSERT INTO conversations 
+                   (id, workspace_id, workspace_path, title, status, created_at, updated_at, last_message_at, message_count)
+                   VALUES (?, ?, ?, ?, 'active', ?, ?, ?, ?)`,
+                  [conversationId, workspaceId, workspacePath, title, now, now, now, messageCount],
+                  (insertErr) => {
+                    if (insertErr) reject(insertErr);
+                    else resolve();
+                  }
+                );
+              }
+            }
+          );
+        }
+      );
+    });
+  }
+
+  /**
+   * Get conversations for a workspace
+   */
+  async getConversationsByWorkspace(workspaceId, limit = 100) {
+    await this.init();
+    
+    return new Promise((resolve, reject) => {
+      this.db.all(
+        `SELECT * FROM conversations 
+         WHERE workspace_id = ? 
+         ORDER BY last_message_at DESC 
+         LIMIT ?`,
+        [workspaceId, limit],
+        (err, rows) => {
+          if (err) {
+            console.error('Error getting conversations:', err);
+            reject(err);
+          } else {
+            resolve(rows.map(row => ({
+              id: row.id,
+              workspaceId: row.workspace_id,
+              workspacePath: row.workspace_path,
+              title: row.title,
+              status: row.status,
+              tags: row.tags ? JSON.parse(row.tags) : [],
+              metadata: row.metadata ? JSON.parse(row.metadata) : {},
+              createdAt: row.created_at,
+              updatedAt: row.updated_at,
+              lastMessageAt: row.last_message_at,
+              messageCount: row.message_count
+            })));
+          }
+        }
+      );
+    });
+  }
+
+  /**
+   * Get conversation by ID
+   */
+  async getConversationById(conversationId) {
+    await this.init();
+    
+    return new Promise((resolve, reject) => {
+      this.db.get(
+        `SELECT * FROM conversations WHERE id = ?`,
+        [conversationId],
+        (err, row) => {
+          if (err) {
+            reject(err);
+          } else if (!row) {
+            resolve(null);
+          } else {
+            resolve({
+              id: row.id,
+              workspaceId: row.workspace_id,
+              workspacePath: row.workspace_path,
+              title: row.title,
+              status: row.status,
+              tags: row.tags ? JSON.parse(row.tags) : [],
+              metadata: row.metadata ? JSON.parse(row.metadata) : {},
+              createdAt: row.created_at,
+              updatedAt: row.updated_at,
+              lastMessageAt: row.last_message_at,
+              messageCount: row.message_count
+            });
+          }
+        }
+      );
+    });
+  }
+
+  /**
+   * Log an audit event
+   */
+  async logAuditEvent(operation, operationType, details = {}) {
+    await this.init();
+    
+    return new Promise((resolve, reject) => {
+      const stmt = this.db.prepare(`
+        INSERT INTO audit_log 
+        (operation, operation_type, target_type, target_id, workspace_id, user_id, details, status, error_message)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      
+      stmt.run(
+        operation,
+        operationType, // 'import', 'export', 'delete', 'update', etc.
+        details.targetType || null,
+        details.targetId || null,
+        details.workspaceId || null,
+        details.userId || null,
+        JSON.stringify(details),
+        details.status || 'success',
+        details.errorMessage || null
+      );
+      
+      stmt.finalize((err) => {
+        if (err) {
+          console.error('Error logging audit event:', err);
+          reject(err);
+        } else {
+          resolve();
+        }
+      });
+    });
+  }
+
+  /**
+   * Get audit log entries
+   */
+  async getAuditLog(options = {}) {
+    await this.init();
+    
+    const { workspaceId, operationType, limit = 100, offset = 0 } = options;
+    
+    return new Promise((resolve, reject) => {
+      let query = `SELECT * FROM audit_log WHERE 1=1`;
+      const params = [];
+      
+      if (workspaceId) {
+        query += ` AND workspace_id = ?`;
+        params.push(workspaceId);
+      }
+      
+      if (operationType) {
+        query += ` AND operation_type = ?`;
+        params.push(operationType);
+      }
+      
+      query += ` ORDER BY created_at DESC LIMIT ? OFFSET ?`;
+      params.push(limit, offset);
+      
+      this.db.all(query, params, (err, rows) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(rows.map(row => ({
+            id: row.id,
+            operation: row.operation,
+            operationType: row.operation_type,
+            targetType: row.target_type,
+            targetId: row.target_id,
+            workspaceId: row.workspace_id,
+            userId: row.user_id,
+            details: row.details ? JSON.parse(row.details) : {},
+            status: row.status,
+            errorMessage: row.error_message,
+            createdAt: row.created_at
+          })));
+        }
+      });
+    });
   }
 }
 

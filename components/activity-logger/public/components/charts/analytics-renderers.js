@@ -62,10 +62,20 @@ export class AnalyticsRenderers {
       modelCounts.set(model, (modelCounts.get(model) || 0) + 1);
       
       // Extract mode (composer/chat/inline/user-prompt)
-      const mode = (p.type || p.mode || p.metadata?.mode || 'unknown')
-                   .replace('user-prompt', 'User Prompt')
-                   .replace(/_/g, ' ')
-                   .replace(/\b\w/g, l => l.toUpperCase());
+      const rawMode = p.type || p.mode || p.metadata?.mode || null;
+      let mode;
+      if (!rawMode) {
+        mode = 'Not Specified'; // Not to be confused with "Auto" mode
+      } else {
+        mode = String(rawMode)
+          .replace('user-prompt', 'User Prompt')
+          .replace(/_/g, ' ')
+          .replace(/\b\w/g, l => l.toUpperCase());
+        // Check if it's auto mode (case-insensitive)
+        if (mode.toLowerCase().includes('auto')) {
+          mode = 'Auto';
+        }
+      }
       modeCounts.set(mode, (modeCounts.get(mode) || 0) + 1);
     });
 
@@ -110,9 +120,10 @@ export class AnalyticsRenderers {
                 'composer': '#10b981',
                 'chat': '#3b82f6',
                 'inline': '#f59e0b',
-                'unknown': '#6b7280'
+                'auto': '#06b6d4',
+                'not specified': '#6b7280'
               };
-              const color = modeColors[mode.toLowerCase()] || modeColors.unknown;
+              const color = modeColors[mode.toLowerCase()] || modeColors['not specified'];
               
               return `
                 <div style="display: flex; align-items: center; gap: var(--space-md);">

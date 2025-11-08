@@ -1126,10 +1126,10 @@ function renderTimelineItem(event, side = 'left', timelineItems = null) {
     eventTags = window.autoTagEvent(event);
   }
   
-  // Render tags
+  // Render tags (including workspace)
   let tagsHtml = '';
-  if (eventTags && eventTags.length > 0 && window.renderTags) {
-    tagsHtml = `<div style="display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px;">${window.renderTags(eventTags, true)}</div>`;
+  if (window.renderTags) {
+    tagsHtml = `<div style="display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px;">${window.renderTags(eventTags, true, event)}</div>`;
   }
   
   // Find related prompts using improved algorithm

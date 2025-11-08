@@ -39,7 +39,8 @@ async function initializeDashboard() {
         window.updateConnectionStatus(false, 'Companion service offline');
       }
     } catch (error) {
-      const isNetworkError = error.message?.includes('CORS') || 
+      const isNetworkError = window.APIClient?.isOfflineError(error) || 
+                             error.message?.includes('CORS') || 
                              error.message?.includes('NetworkError') || 
                              error.message?.includes('Failed to fetch') ||
                              error.name === 'NetworkError' ||
@@ -55,18 +56,27 @@ async function initializeDashboard() {
         window.state.connected = false;
         window.state.companionServiceOnline = false;
       }
-      window.updateConnectionStatus(false, 'Cannot reach companion service');
+      
+      // Provide more helpful error message
+      const apiBase = window.APIClient?.getApiBase() || window.CONFIG?.API_BASE || 'http://localhost:43917';
+      const errorMessage = isNetworkError 
+        ? `Offline - using cached data (service at ${apiBase} not reachable)`
+        : `Connection failed - ${error.message || 'Unknown error'}`;
+      
+      window.updateConnectionStatus(false, errorMessage);
       window.initProgress.update('server', 100);
     }
     
-    const cacheStale = serverHealth ? await window.persistentStorage.isCacheStale(serverHealth.sequence || 0) : false;
+    const cacheStale = serverHealth && window.persistentStorage ? await window.persistentStorage.isCacheStale(serverHealth.sequence || 0) : false;
     
     if (cacheStale && isConnected) {
       console.log('Cache stale, fetching updates...');
       window.initProgress.update('data', 0);
       try {
         await fetchRecentData();
-        await window.persistentStorage.updateServerSequence(serverHealth.sequence || 0);
+        if (window.persistentStorage) {
+          await window.persistentStorage.updateServerSequence(serverHealth.sequence || 0);
+        }
         window.updateConnectionStatus(true, 'Connected - data synced');
         window.initProgress.update('data', 100);
       } catch (error) {
@@ -110,14 +120,31 @@ async function initializeDashboard() {
     console.log('Heavy analytics deferred until idle/tab focus');
     
   } catch (error) {
-    console.error('Initialization error:', error);
-    window.updateConnectionStatus(false, 'Connection failed');
+    console.error('[ERROR] Initialization error:', error);
+    
+    const isNetworkError = window.APIClient?.isOfflineError(error) || 
+                           error.message?.includes('CORS') || 
+                           error.message?.includes('NetworkError') || 
+                           error.message?.includes('Failed to fetch');
+    
+    const apiBase = window.APIClient?.getApiBase() || window.CONFIG?.API_BASE || 'http://localhost:43917';
+    const errorMessage = isNetworkError
+      ? `Offline - using cached data (service at ${apiBase} not reachable)`
+      : `Initialization error: ${error.message || 'Unknown error'}`;
+    
+    window.updateConnectionStatus(false, errorMessage);
     if (window.state) {
       window.state.connected = false;
+      window.state.companionServiceOnline = false;
     }
+    
     // Fallback to old method
     if (window.fetchAllData) {
-      await window.fetchAllData();
+      try {
+        await window.fetchAllData();
+      } catch (fallbackError) {
+        console.error('[ERROR] Fallback data fetch also failed:', fallbackError);
+      }
     }
   }
 }
@@ -127,6 +154,12 @@ async function initializeDashboard() {
  */
 async function loadFromCache() {
   console.log('[PACKAGE] Loading from cache...');
+  
+  // Check if persistentStorage is available
+  if (!window.persistentStorage) {
+    console.warn('[WARNING] PersistentStorage not available, skipping cache load');
+    return;
+  }
   
   const cached = await window.persistentStorage.getAll();
   
@@ -277,7 +310,9 @@ async function fetchRecentData() {
       }
       
       // Store in cache
-      await window.persistentStorage.storeEvents(recentEvents);
+      if (window.persistentStorage) {
+        await window.persistentStorage.storeEvents(recentEvents);
+      }
     } else {
       console.warn('[WARNING] Activity data not in expected format:', activity);
       window.state.data.events = [];
@@ -318,7 +353,9 @@ async function fetchRecentData() {
       }
       
       // Store in cache
-      await window.persistentStorage.storePrompts(mappedPrompts);
+      if (window.persistentStorage) {
+        await window.persistentStorage.storePrompts(mappedPrompts);
+      }
     } else {
       console.warn('[WARNING] Prompts data not in expected format:', prompts);
       window.state.data.prompts = [];
@@ -369,6 +406,10 @@ async function fetchRecentData() {
         window.state.data.workspaces = Array.from(workspaceMap.values());
       }
     }
+    
+    // Store workspace count in stats
+    if (!window.state.stats) window.state.stats = {};
+    window.state.stats.workspaces = window.state.data.workspaces?.length || 0;
     
     // Fetch system resources if available
     try {

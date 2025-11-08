@@ -19,7 +19,8 @@ const DEFAULT_CONFIG = {
   enable_clipboard: false,
   enable_preload: false,
   strict_auth: true,
-  companion_token: null
+  companion_token: null,
+  enable_mcp: false  // MCP endpoints disabled by default (optional/future feature)
 };
 
 let currentConfig = { ...DEFAULT_CONFIG };

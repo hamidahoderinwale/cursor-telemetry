@@ -1,5 +1,5 @@
 /**
- * Cursor Activity Dashboard - Main Application
+ * Cursor Telemetry Dashboard - Main Application
  * Clean, modern implementation with full feature support
  * 
  * MODULE DEPENDENCIES:
@@ -640,11 +640,17 @@ const initProgress = {
 
 function updateStatsDisplay() {
   // Defensive checks for DOM elements
+  const statWorkspaces = document.getElementById('statWorkspaces');
   const statSessions = document.getElementById('statSessions');
   const statFileChanges = document.getElementById('statFileChanges');
   const statAIInteractions = document.getElementById('statAIInteractions');
   const statCodeChanged = document.getElementById('statCodeChanged');
   const statAvgContext = document.getElementById('statAvgContext');
+  
+  // Update workspace count
+  const workspaceCount = state.stats.workspaces || 
+                        (state.data?.workspaces?.length || 0);
+  if (statWorkspaces) statWorkspaces.textContent = workspaceCount.toLocaleString();
   
   if (statSessions) statSessions.textContent = state.stats.sessions || 0;
   if (statFileChanges) statFileChanges.textContent = state.stats.fileChanges || 0;
@@ -1852,12 +1858,12 @@ function renderActivityChart_DISABLED() {
   
   if (allEvents.length === 0 && allPrompts.length === 0) {
     const context = ctx.getContext('2d');
-    context.font = '500 16px Geist, -apple-system, BlinkMacSystemFont, sans-serif';
+    context.font = '500 16px "Stack Sans Text", "Inter", sans-serif';
     context.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-text') || '#1f2937';
     context.textAlign = 'center';
     context.textBaseline = 'middle';
     context.fillText('No Data Available', ctx.width / 2, ctx.height / 2 - 10);
-    context.font = '14px Geist, -apple-system, BlinkMacSystemFont, sans-serif';
+    context.font = '14px "Stack Sans Text", "Inter", sans-serif';
     context.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-text-muted') || '#6b7280';
     context.fillText('Activity data will appear here once you start coding', ctx.width / 2, ctx.height / 2 + 15);
     return;
@@ -6971,7 +6977,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Initialize status popup FIRST (before any console.logs)
   initStatusPopup();
   
-  console.log('Initializing Cursor Activity Dashboard');
+  console.log('Initializing Cursor Telemetry Dashboard');
 
   // Setup navigation
   document.querySelectorAll('.nav-link').forEach(link => {

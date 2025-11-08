@@ -3,7 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Cursor Activity Dashboard</title>
+  <title>Cursor Telemetry Dashboard</title>
+  
+  <!-- Fonts -->
+  <!-- Load Stack Sans Text and Inter from Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Stack+Sans+Text:wght@200..700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   
   <!-- Styles -->
   <link rel="stylesheet" href="dashboard.css">
@@ -85,16 +91,7 @@
     <aside class="sidebar">
       <div class="sidebar-header">
         <div class="logo">
-          <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
-            <path d="M16 8L24 16L16 24L8 16L16 8Z" fill="url(#gradient)" opacity="0.9"/>
-            <defs>
-              <linearGradient id="gradient" x1="0" y1="0" x2="32" y2="32">
-                <stop offset="0%" stop-color="#8B5CF6"/>
-                <stop offset="100%" stop-color="#6366F1"/>
-              </linearGradient>
-            </defs>
-          </svg>
-          <span>Cursor Activity</span>
+          <span>Cursor Telemetry</span>
         </div>
         <button class="search-trigger" onclick="if(window.openSearchPalette) window.openSearchPalette(); else console.warn('Search not loaded yet');" title="Search (Cmd+K)">
           <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor">
@@ -110,6 +107,7 @@
           <div class="connection-status-row">
             <span class="status-dot"></span>
             <span class="status-text">Connecting...</span>
+            <button class="connection-retry-btn" id="connectionRetryBtn" onclick="testConnection()" title="Retry connection to companion service">Retry</button>
           </div>
           <div class="connection-progress" id="connectionProgress">
             <div class="connection-progress-bar" id="connectionProgressBar" style="width: 0%"></div>
@@ -203,6 +201,12 @@
       <!-- Header Stats -->
       <header class="dashboard-header">
         <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-content">
+              <span class="stat-label" title="Total number of workspaces tracked across all projects">Total Workspaces</span>
+              <span class="stat-value" id="statWorkspaces">0</span>
+            </div>
+          </div>
           <div class="stat-card">
             <div class="stat-content">
               <span class="stat-label" title="Unique coding sessions detected">Active Sessions</span>
@@ -393,6 +397,7 @@
   <script src="utils/event-tagging.js"></script>
   <script src="utils/templates.js"></script>
   <script src="utils/export-options-modal.js"></script>
+  <script src="utils/schema-validator.js"></script>
   
   <!-- Views (must load before view-router) -->
   <script src="views/activity/context-visualization.js"></script>
@@ -407,6 +412,7 @@
   <script src="views/threads/helpers.js"></script>
   <script src="views/threads/index.js"></script>
   <script src="views/analytics/chart-helpers.js"></script>
+  <script src="views/analytics/model-usage-diagnostics.js"></script>
   <script src="views/analytics/index.js"></script>
   <script src="views/system/templates.js"></script>
   <script src="views/system/index.js"></script>

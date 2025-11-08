@@ -54,8 +54,13 @@ class SchemaConfigView {
           <h2>Database Schema Configuration</h2>
           <p class="schema-description">
             View and configure your database schema. Add custom fields, modify table structures, 
-            and manage field configurations.
+            and manage field configurations. Schema-aware imports validate data compatibility before importing.
           </p>
+          <div class="schema-header-actions">
+            <button class="btn btn-secondary" onclick="if(window.showImportModal) window.showImportModal(); else console.warn('Import handler not loaded');" title="Import data with schema validation">
+              Import / Redeploy Data
+            </button>
+          </div>
         </div>
 
         <div class="schema-content">
@@ -91,10 +96,56 @@ class SchemaConfigView {
   }
 
   renderWelcome() {
+    if (!this.schema || !this.schema.tables || this.schema.tables.length === 0) {
+      return `
+        <div class="welcome-message">
+          <h3>Loading schema...</h3>
+          <p>Fetching database schema information.</p>
+        </div>
+      `;
+    }
+
+    // Show schema overview by default
     return `
-      <div class="welcome-message">
-        <h3>Select a table to view its schema</h3>
-        <p>Choose a table from the sidebar to view and configure its structure.</p>
+      <div class="schema-overview">
+        <div class="overview-header">
+          <h3>Current Database Schema</h3>
+          <p class="overview-description">
+            Overview of all tables and their structure. Click on any table to view details and make modifications.
+          </p>
+        </div>
+
+        <div class="tables-overview">
+          ${this.schema.tables.map(table => `
+            <div class="table-overview-card" data-table="${table.name}" style="cursor: pointer;">
+              <div class="table-overview-header">
+                <h4 class="table-overview-name">${table.name}</h4>
+                <span class="table-overview-count">${table.columns.length} columns</span>
+              </div>
+              <div class="table-overview-columns">
+                ${table.columns.slice(0, 5).map(col => `
+                  <div class="column-preview">
+                    <span class="column-preview-name">${col.name}</span>
+                    <span class="column-preview-type">${col.type}</span>
+                    ${col.primaryKey ? '<span class="badge badge-primary badge-small">PK</span>' : ''}
+                    ${col.notnull ? '<span class="badge badge-info badge-small">NN</span>' : ''}
+                  </div>
+                `).join('')}
+                ${table.columns.length > 5 ? `
+                  <div class="column-preview-more">
+                    +${table.columns.length - 5} more columns
+                  </div>
+                ` : ''}
+              </div>
+            </div>
+          `).join('')}
+        </div>
+
+        <div class="overview-actions">
+          <p class="overview-hint">
+            <strong>Tip:</strong> Select a table from the sidebar or click on any table card above to view its full schema and make modifications.
+          </p>
+        </div>
       </div>
     `;
   }
@@ -114,27 +165,43 @@ class SchemaConfigView {
     return `
       <div class="table-details">
         <div class="table-header">
-          <h3>${this.selectedTable}</h3>
-          <button class="btn btn-primary" onclick="schemaConfigView.showAddColumnModal()">
-            Add Column
-          </button>
+          <div>
+            <h3>${this.selectedTable}</h3>
+            <p class="table-subtitle">Current schema structure and configuration options</p>
+          </div>
+          <div class="table-header-actions">
+            <button class="btn btn-secondary" onclick="schemaConfigView.selectedTable = null; schemaConfigView.render();" title="Back to schema overview">
+              Back to Overview
+            </button>
+            <button class="btn btn-primary" onclick="schemaConfigView.showAddColumnModal()" title="Add a new column to this table">
+              Add Column
+            </button>
+          </div>
         </div>
 
         <div class="table-sections">
           <div class="section">
-            <h4>Columns</h4>
+            <div class="section-header">
+              <h4>Current Columns</h4>
+              <span class="section-count">${table.columns.length} columns</span>
+            </div>
+            <p class="section-description">These are the columns currently defined in the database schema.</p>
             <div class="columns-list">
               ${this.renderColumns(table.columns)}
             </div>
           </div>
 
           <div class="section">
-            <h4>Custom Field Configurations</h4>
+            <div class="section-header">
+              <h4>Custom Field Configurations</h4>
+              <span class="section-count">${tableCustomFields.length} configured</span>
+            </div>
+            <p class="section-description">Metadata and display configurations for fields. These don't modify the database schema but control how fields are displayed and used.</p>
             <div class="custom-fields-list">
               ${this.renderCustomFields(tableCustomFields)}
             </div>
             <button class="btn btn-secondary" onclick="schemaConfigView.showAddCustomFieldModal()">
-              Add Custom Field
+              Add Custom Field Configuration
             </button>
           </div>
         </div>
@@ -191,6 +258,15 @@ class SchemaConfigView {
     tableItems.forEach(item => {
       item.addEventListener('click', () => {
         const tableName = item.dataset.table;
+        this.selectTable(tableName);
+      });
+    });
+
+    // Add click handlers for table overview cards
+    const tableCards = document.querySelectorAll('.table-overview-card');
+    tableCards.forEach(card => {
+      card.addEventListener('click', () => {
+        const tableName = card.dataset.table;
         this.selectTable(tableName);
       });
     });

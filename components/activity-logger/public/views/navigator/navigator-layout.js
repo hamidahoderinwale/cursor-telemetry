@@ -290,3 +290,4 @@ window.buildKNN = buildKNN;
 window.createFeatureVector = createFeatureVector;
 window.detectLatentClusters = detectLatentClusters;
 
+

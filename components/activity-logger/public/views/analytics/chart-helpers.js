@@ -820,28 +820,90 @@ function renderPromptEffectiveness() {
     return;
   }
 
-  // Find linked prompts (prompts with code changes within 5-15 minutes)
+  // Create event lookup map by ID for fast access
+  const eventMap = new Map();
+  events.forEach(event => {
+    const eventId = event.id || event.entry_id;
+    if (eventId) {
+      eventMap.set(String(eventId), event);
+      // Also index by numeric ID if different
+      if (typeof eventId === 'string' && !isNaN(parseInt(eventId))) {
+        eventMap.set(String(parseInt(eventId)), event);
+      }
+    }
+  });
+
+  // Find linked prompts using actual database links (linked_entry_id)
   const linkedPrompts = [];
   const unlinkedPrompts = [];
+  const processedPromptIds = new Set();
   
+  // Method 1: Check prompts with linked_entry_id (prompt -> entry link)
   prompts.forEach(prompt => {
+    const promptId = prompt.id || prompt.prompt_id;
+    if (processedPromptIds.has(promptId)) return;
+    
+    const linkedEntryId = prompt.linked_entry_id || prompt.linkedEntryId;
     const promptTime = new Date(prompt.timestamp).getTime();
-    // Check for related events within 15 minutes (before or after)
-    const relatedEvents = events.filter(event => {
-      const eventTime = new Date(event.timestamp).getTime();
-      const timeDiff = Math.abs(eventTime - promptTime);
-      return timeDiff <= 15 * 60 * 1000; // 15 minutes
+    
+    if (linkedEntryId) {
+      // Find the linked event/entry
+      const linkedEvent = eventMap.get(String(linkedEntryId));
+      
+      if (linkedEvent) {
+        const eventTime = new Date(linkedEvent.timestamp).getTime();
+        const timeToChange = (eventTime - promptTime) / 1000 / 60; // minutes (positive = event after prompt)
+        
+        // Only count if event happened after prompt (within reasonable time: 30 minutes)
+        if (timeToChange >= 0 && timeToChange <= 30) {
+          linkedPrompts.push({
+            prompt,
+            timeToChange: timeToChange,
+            eventCount: 1,
+            success: true,
+            linkedEvent: linkedEvent
+          });
+          processedPromptIds.add(promptId);
+          return;
+        }
+      }
+    }
+  });
+  
+  // Method 2: Check events with prompt_id (entry -> prompt link) - catch any we missed
+  events.forEach(event => {
+    const eventPromptId = event.prompt_id || event.promptId;
+    if (!eventPromptId) return;
+    
+    // Find the linked prompt
+    const linkedPrompt = prompts.find(p => {
+      const pId = p.id || p.prompt_id;
+      return String(pId) === String(eventPromptId) || parseInt(pId) === parseInt(eventPromptId);
     });
     
-    if (relatedEvents.length > 0) {
-      const timeToFirstChange = Math.min(...relatedEvents.map(e => Math.abs(new Date(e.timestamp).getTime() - promptTime)));
-      linkedPrompts.push({
-        prompt,
-        timeToChange: timeToFirstChange / 1000 / 60, // minutes
-        eventCount: relatedEvents.length,
-        success: true
-      });
-    } else {
+    if (linkedPrompt && !processedPromptIds.has(linkedPrompt.id || linkedPrompt.prompt_id)) {
+      const promptTime = new Date(linkedPrompt.timestamp).getTime();
+      const eventTime = new Date(event.timestamp).getTime();
+      const timeToChange = (eventTime - promptTime) / 1000 / 60; // minutes
+      
+      // Only count if event happened after prompt (within reasonable time: 30 minutes)
+      if (timeToChange >= 0 && timeToChange <= 30) {
+        linkedPrompts.push({
+          prompt: linkedPrompt,
+          timeToChange: timeToChange,
+          eventCount: 1,
+          success: true,
+          linkedEvent: event
+        });
+        processedPromptIds.add(linkedPrompt.id || linkedPrompt.prompt_id);
+      }
+    }
+  });
+  
+  // Collect unlinked prompts (those not in processedPromptIds)
+  prompts.forEach(prompt => {
+    const promptId = prompt.id || prompt.prompt_id;
+    if (!processedPromptIds.has(promptId)) {
       unlinkedPrompts.push(prompt);
     }
   });
@@ -857,7 +919,7 @@ function renderPromptEffectiveness() {
     ? linkedPrompts.sort((a, b) => a.timeToChange - b.timeToChange)[Math.floor(linkedPrompts.length / 2)]?.timeToChange.toFixed(1) || 0
     : 0;
 
-  // Time distribution buckets
+  // Time distribution buckets (based on actual database-linked prompts)
   const timeBuckets = {
     '0-2 min': 0,
     '2-5 min': 0,
@@ -999,11 +1061,292 @@ function updateAIActivityChartTimescale(scale) {
 }
 
 // Export to window for global access
+/**
+ * Render AI Model Usage Analytics
+ * Shows model distribution and usage patterns with charts
+ */
+function renderModelUsageAnalytics() {
+  const container = document.getElementById('modelUsageAnalytics');
+  if (!container) {
+    // Silently return if container not found (view might not be active)
+    console.debug('[MODEL-USAGE] Container not found, skipping render');
+    return;
+  }
+
+  try {
+    const prompts = window.state?.data?.prompts || [];
+    
+    console.log('[MODEL-USAGE] Rendering with', prompts.length, 'prompts');
+  
+  if (prompts.length === 0) {
+    container.innerHTML = `
+      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 250px; padding: var(--space-xl); text-align: center;">
+        <div style="font-size: var(--text-lg); color: var(--color-text); margin-bottom: var(--space-xs); font-weight: 500;">No Data Available</div>
+        <div style="font-size: var(--text-sm); color: var(--color-text-muted);">Model usage data will appear as you use AI features in Cursor</div>
+      </div>
+    `;
+    return;
+  }
+
+  // Parse model information from prompts
+  const modelCounts = new Map();
+  const modeCounts = new Map();
+  const modelModeCombos = new Map();
+  const modelTimeSeries = new Map(); // Track model usage over time
+  
+  // Helper to extract model name
+  const getModelName = (p) => {
+    // Try multiple sources for model information
+    if (p.modelName) return p.modelName;
+    if (p.model_name) return p.model_name;
+    if (p.model) return p.model;
+    if (p.modelInfo?.model) return p.modelInfo.model;
+    if (p.modelInfo?.modelName) return p.modelInfo.modelName;
+    if (p.modelInfo?.model_name) return p.modelInfo.model_name;
+    if (p.metadata?.model) return p.metadata.model;
+    
+    // Try combining modelType and modelName
+    const modelType = p.modelType || p.model_type || p.modelInfo?.modelType || p.modelInfo?.model_type;
+    const modelName = p.modelName || p.model_name || p.modelInfo?.modelName || p.modelInfo?.model_name;
+    if (modelType && modelName) return `${modelType}/${modelName}`;
+    if (modelName) return modelName;
+    if (modelType) return modelType;
+    
+    return 'Unknown';
+  };
+  
+  // Helper to extract mode
+  const getMode = (p) => {
+    const rawMode = p.type || p.mode || p.metadata?.mode || null;
+    
+    // If no mode is found, return "Not Specified" (not to be confused with "Auto")
+    if (!rawMode) {
+      return 'Not Specified';
+    }
+    
+    // Normalize the mode string
+    const normalized = String(rawMode)
+      .replace('user-prompt', 'User Prompt')
+      .replace(/_/g, ' ')
+      .replace(/\b\w/g, l => l.toUpperCase());
+    
+    // Check if it's auto mode (case-insensitive)
+    if (normalized.toLowerCase().includes('auto')) {
+      return 'Auto';
+    }
+    
+    return normalized;
+  };
+
+  prompts.forEach(p => {
+    const modelName = getModelName(p);
+    const mode = getMode(p);
+    const timestamp = new Date(p.timestamp).getTime();
+    
+    // Count models
+    modelCounts.set(modelName, (modelCounts.get(modelName) || 0) + 1);
+    
+    // Count modes
+    modeCounts.set(mode, (modeCounts.get(mode) || 0) + 1);
+    
+    // Count model-mode combinations
+    const combo = `${modelName} (${mode})`;
+    modelModeCombos.set(combo, (modelModeCombos.get(combo) || 0) + 1);
+    
+    // Track model usage over time (by day)
+    const day = new Date(timestamp).toDateString();
+    if (!modelTimeSeries.has(modelName)) {
+      modelTimeSeries.set(modelName, new Map());
+    }
+    const dayCounts = modelTimeSeries.get(modelName);
+    dayCounts.set(day, (dayCounts.get(day) || 0) + 1);
+  });
+
+  // Sort by frequency
+  const sortedModels = Array.from(modelCounts.entries()).sort((a, b) => b[1] - a[1]);
+  const sortedModes = Array.from(modeCounts.entries()).sort((a, b) => b[1] - a[1]);
+  const sortedCombos = Array.from(modelModeCombos.entries()).sort((a, b) => b[1] - a[1]).slice(0, 10); // Top 10
+
+  // Log diagnostic info
+  console.log('[MODEL-USAGE] Analysis complete:', {
+    totalPrompts: prompts.length,
+    uniqueModels: modelCounts.size,
+    uniqueModes: modeCounts.size,
+    topModels: sortedModels.slice(0, 5).map(([m, c]) => `${m}: ${c}`),
+    topModes: sortedModes.slice(0, 5).map(([m, c]) => `${m}: ${c}`)
+  });
+
+  // Calculate statistics
+  const totalPrompts = prompts.length;
+  const uniqueModels = modelCounts.size;
+  const uniqueModes = modeCounts.size;
+  const mostUsedModel = sortedModels[0]?.[0] || 'N/A';
+  const mostUsedModelCount = sortedModels[0]?.[1] || 0;
+  const mostUsedMode = sortedModes[0]?.[0] || 'N/A';
+  const mostUsedModeCount = sortedModes[0]?.[1] || 0;
+
+  // Helper to escape HTML
+  const escapeHtml = (text) => {
+    if (typeof text !== 'string') return String(text);
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  };
+
+  // Generate color for model (consistent colors)
+  const modelColors = [
+    '#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', '#ef4444',
+    '#ec4899', '#06b6d4', '#84cc16', '#f97316', '#6366f1'
+  ];
+  const getModelColor = (index) => modelColors[index % modelColors.length];
+
+  // Mode colors
+  const modeColors = {
+    'Composer': '#10b981',
+    'Chat': '#3b82f6',
+    'Inline': '#f59e0b',
+    'User Prompt': '#8b5cf6',
+    'Auto': '#06b6d4',
+    'Not Specified': '#6b7280'
+  };
+  const getModeColor = (mode) => modeColors[mode] || modeColors['Not Specified'];
+
+  container.innerHTML = `
+    <div style="display: flex; flex-direction: column; gap: var(--space-lg);">
+      <!-- Statistics Summary -->
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--space-md);">
+        <div style="background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: var(--space-md);">
+          <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-bottom: var(--space-xs);">Total Prompts</div>
+          <div style="font-size: var(--text-2xl); font-weight: 700; color: var(--color-text);">${totalPrompts.toLocaleString()}</div>
+        </div>
+        <div style="background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: var(--space-md);">
+          <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-bottom: var(--space-xs);">Unique Models</div>
+          <div style="font-size: var(--text-2xl); font-weight: 700; color: var(--color-text);">${uniqueModels}</div>
+        </div>
+        <div style="background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: var(--space-md);">
+          <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-bottom: var(--space-xs);">Most Used Model</div>
+          <div style="font-size: var(--text-sm); font-weight: 600; color: var(--color-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${escapeHtml(mostUsedModel)}">${escapeHtml(mostUsedModel)}</div>
+          <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: 2px;">${mostUsedModelCount} prompts</div>
+        </div>
+        <div style="background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: var(--space-md);">
+          <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-bottom: var(--space-xs);">Most Used Mode</div>
+          <div style="font-size: var(--text-sm); font-weight: 600; color: var(--color-text);">${escapeHtml(mostUsedMode)}</div>
+          <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: 2px;">${mostUsedModeCount} prompts</div>
+        </div>
+      </div>
+
+      <!-- Charts Grid -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-lg);" class="model-usage-grid">
+        <!-- Models Distribution -->
+        <div>
+          <h4 style="margin-bottom: var(--space-md); color: var(--color-text); font-size: var(--text-md); font-weight: 600;">Models Used</h4>
+          <div style="display: flex; flex-direction: column; gap: var(--space-sm);">
+            ${sortedModels.map(([model, count], index) => {
+              const percentage = ((count / totalPrompts) * 100).toFixed(1);
+              const color = getModelColor(index);
+              return `
+                <div style="display: flex; align-items: center; gap: var(--space-md); padding: var(--space-sm); background: var(--color-surface); border-radius: var(--radius-sm); border: 1px solid var(--color-border);">
+                  <div style="width: 12px; height: 12px; border-radius: 3px; background: ${color}; flex-shrink: 0;"></div>
+                  <div style="flex: 1; min-width: 0;">
+                    <div style="font-size: var(--text-sm); color: var(--color-text); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${escapeHtml(model)}">
+                      ${escapeHtml(model)}
+                    </div>
+                    <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: 2px;">
+                      ${count.toLocaleString()} prompts • ${percentage}%
+                    </div>
+                  </div>
+                  <div style="width: 120px; height: 10px; background: var(--color-bg); border-radius: 5px; overflow: hidden; flex-shrink: 0;">
+                    <div style="width: ${percentage}%; height: 100%; background: ${color}; border-radius: 5px; transition: width 0.3s ease;"></div>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+
+        <!-- Usage by Mode -->
+        <div>
+          <h4 style="margin-bottom: var(--space-md); color: var(--color-text); font-size: var(--text-md); font-weight: 600;">Usage by Mode</h4>
+          <div style="display: flex; flex-direction: column; gap: var(--space-sm);">
+            ${sortedModes.map(([mode, count]) => {
+              const percentage = ((count / totalPrompts) * 100).toFixed(1);
+              const color = getModeColor(mode);
+              return `
+                <div style="display: flex; align-items: center; gap: var(--space-md); padding: var(--space-sm); background: var(--color-surface); border-radius: var(--radius-sm); border: 1px solid var(--color-border);">
+                  <div style="width: 12px; height: 12px; border-radius: 3px; background: ${color}; flex-shrink: 0;"></div>
+                  <div style="flex: 1; min-width: 0;">
+                    <div style="font-size: var(--text-sm); color: var(--color-text); font-weight: 500;">
+                      ${escapeHtml(mode)}
+                    </div>
+                    <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: 2px;">
+                      ${count.toLocaleString()} prompts • ${percentage}%
+                    </div>
+                  </div>
+                  <div style="width: 120px; height: 10px; background: var(--color-bg); border-radius: 5px; overflow: hidden; flex-shrink: 0;">
+                    <div style="width: ${percentage}%; height: 100%; background: ${color}; border-radius: 5px; transition: width 0.3s ease;"></div>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      </div>
+
+      <!-- Model-Mode Combinations (Top 10) -->
+      ${sortedCombos.length > 0 ? `
+        <div>
+          <h4 style="margin-bottom: var(--space-md); color: var(--color-text); font-size: var(--text-md); font-weight: 600;">Top Model-Mode Combinations</h4>
+          <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: var(--space-sm);">
+            ${sortedCombos.map(([combo, count], index) => {
+              const percentage = ((count / totalPrompts) * 100).toFixed(1);
+              const color = getModelColor(index);
+              return `
+                <div style="padding: var(--space-sm); background: var(--color-surface); border-radius: var(--radius-sm); border: 1px solid var(--color-border);">
+                  <div style="font-size: var(--text-xs); color: var(--color-text); font-weight: 500; margin-bottom: var(--space-xs); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${escapeHtml(combo)}">
+                    ${escapeHtml(combo)}
+                  </div>
+                  <div style="display: flex; align-items: center; gap: var(--space-xs);">
+                    <div style="flex: 1; height: 6px; background: var(--color-bg); border-radius: 3px; overflow: hidden;">
+                      <div style="width: ${percentage}%; height: 100%; background: ${color}; border-radius: 3px;"></div>
+                    </div>
+                    <div style="font-size: var(--text-xs); color: var(--color-text-muted); white-space: nowrap;">
+                      ${count} (${percentage}%)
+                    </div>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      ` : ''}
+    </div>
+  `;
+  } catch (error) {
+    console.error('[CHART] Error rendering Model Usage Analytics:', error);
+    console.error('[CHART] Error stack:', error.stack);
+    container.innerHTML = `
+      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 250px; padding: var(--space-xl); text-align: center;">
+        <div style="font-size: var(--text-lg); color: var(--color-error); margin-bottom: var(--space-xs); font-weight: 500;">Error Loading Data</div>
+        <div style="font-size: var(--text-sm); color: var(--color-text-muted); margin-bottom: var(--space-sm);">Unable to render model usage analytics. Please refresh the page.</div>
+        <div style="font-size: var(--text-xs); color: var(--color-text-subtle); font-family: var(--font-mono); padding: var(--space-sm); background: var(--color-surface); border-radius: var(--radius-sm); max-width: 500px; word-break: break-word;">
+          ${error.message || 'Unknown error'}
+        </div>
+        <div style="margin-top: var(--space-md); font-size: var(--text-xs); color: var(--color-text-muted);">
+          <button onclick="if(window.diagnoseModelUsageData) window.diagnoseModelUsageData(); else console.log('Diagnostics not available')" style="padding: var(--space-xs) var(--space-sm); background: var(--color-primary); color: white; border: none; border-radius: var(--radius-sm); cursor: pointer;">
+            Run Diagnostics
+          </button>
+        </div>
+      </div>
+    `;
+  }
+}
+
 window.renderFileTypesChart = renderFileTypesChart;
 window.renderHourlyChart = renderHourlyChart;
 window.renderPromptEffectiveness = renderPromptEffectiveness;
 window.renderAIActivityChart = renderAIActivityChart;
 window.renderPromptTokensChart = renderPromptTokensChart;
+window.renderModelUsageAnalytics = renderModelUsageAnalytics;
 window.updateContextChartTimescale = updateContextChartTimescale;
 window.updateAIActivityChartTimescale = updateAIActivityChartTimescale;
 

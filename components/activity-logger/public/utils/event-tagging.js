@@ -174,6 +174,33 @@ function detectCodeIntent(beforeCode, afterCode, filePath) {
 }
 
 /**
+ * Extract workspace information from event
+ */
+function getEventWorkspace(event) {
+  const details = typeof event.details === 'string' ? 
+    (() => { try { return JSON.parse(event.details); } catch(e) { return {}; } })() : 
+    event.details || {};
+  
+  return event.workspace_path || 
+         event.workspacePath || 
+         event.workspace || 
+         details.workspace_path || 
+         details.workspacePath || 
+         details.workspace || 
+         '';
+}
+
+/**
+ * Get workspace display name (shortened)
+ */
+function getWorkspaceDisplayName(workspacePath) {
+  if (!workspacePath) return '';
+  const parts = workspacePath.split('/').filter(p => p);
+  if (parts.length === 0) return '';
+  return parts[parts.length - 1]; // Last segment
+}
+
+/**
  * Auto-tag an event based on its properties
  */
 function autoTagEvent(event) {
@@ -253,11 +280,50 @@ function renderTagBadge(tag, compact = false) {
 }
 
 /**
- * Render multiple tags
+ * Render workspace badge
  */
-function renderTags(tags, compact = false) {
-  if (!tags || tags.length === 0) return '';
-  return tags.map(tag => renderTagBadge(tag, compact)).join(' ');
+function renderWorkspaceBadge(workspacePath, compact = false) {
+  if (!workspacePath) return '';
+  
+  const displayName = getWorkspaceDisplayName(workspacePath);
+  if (!displayName) return '';
+  
+  const escapedPath = window.escapeHtml ? window.escapeHtml(workspacePath) : workspacePath;
+  const escapedName = window.escapeHtml ? window.escapeHtml(displayName) : displayName;
+  
+  if (compact) {
+    return `<span class="event-tag workspace-tag" style="background: rgba(139, 92, 246, 0.15); color: #a78bfa; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 500; display: inline-flex; align-items: center; gap: 4px; border: 1px solid rgba(139, 92, 246, 0.3);" title="Workspace: ${escapedPath}">[WS] ${escapedName}</span>`;
+  }
+  
+  return `<span class="event-tag workspace-tag" style="background: rgba(139, 92, 246, 0.15); color: #a78bfa; padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: 500; display: inline-flex; align-items: center; gap: 4px; border: 1px solid rgba(139, 92, 246, 0.3);" title="Workspace: ${escapedPath}">[Workspace] ${escapedName}</span>`;
+}
+
+/**
+ * Render multiple tags with optional workspace
+ */
+function renderTags(tags, compact = false, event = null) {
+  if (!tags || tags.length === 0) {
+    // If no tags but event has workspace, show workspace badge
+    if (event) {
+      const workspace = getEventWorkspace(event);
+      if (workspace) {
+        return renderWorkspaceBadge(workspace, compact);
+      }
+    }
+    return '';
+  }
+  
+  const tagHtml = tags.map(tag => renderTagBadge(tag, compact)).join(' ');
+  
+  // Add workspace badge if event provided
+  if (event) {
+    const workspace = getEventWorkspace(event);
+    if (workspace) {
+      return tagHtml + ' ' + renderWorkspaceBadge(workspace, compact);
+    }
+  }
+  
+  return tagHtml;
 }
 
 // Export to window
@@ -266,6 +332,9 @@ window.TAG_STYLES = TAG_STYLES;
 window.autoTagEvent = autoTagEvent;
 window.renderTagBadge = renderTagBadge;
 window.renderTags = renderTags;
+window.renderWorkspaceBadge = renderWorkspaceBadge;
+window.getEventWorkspace = getEventWorkspace;
+window.getWorkspaceDisplayName = getWorkspaceDisplayName;
 window.getFileType = getFileType;
 window.isDocumentUpload = isDocumentUpload;
 window.isCodeChange = isCodeChange;

@@ -1,5 +1,5 @@
 /**
- * Advanced Semantic Search Engine for Cursor Activity Dashboard
+ * Advanced Semantic Search Engine for Cursor Telemetry Dashboard
  * 
  * Features:
  * - Full-text search with Lunr.js

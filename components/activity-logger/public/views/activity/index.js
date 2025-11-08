@@ -6,18 +6,56 @@
 let currentWorkspaceFilter = 'all';
 let currentTimeRangeFilter = 'all';
 
-function renderActivityView(container) {
+async function renderActivityView(container) {
   let events = window.state?.data?.events || [];
-  const prompts = window.state?.data?.prompts || [];
-  const terminalCommands = window.state?.data?.terminalCommands || [];
+  let prompts = window.state?.data?.prompts || [];
+  let terminalCommands = window.state?.data?.terminalCommands || [];
   
   // Apply workspace filter
   if (currentWorkspaceFilter !== 'all') {
     events = events.filter(event => {
       const eventWorkspace = event.workspace_path || event.workspacePath || event.workspace || '';
-      return eventWorkspace === currentWorkspaceFilter || eventWorkspace.includes(currentWorkspaceFilter);
+      const details = typeof event.details === 'string' ? 
+        (() => { try { return JSON.parse(event.details); } catch(e) { return {}; } })() : 
+        event.details || {};
+      const detailsWorkspace = details.workspace_path || details.workspacePath || details.workspace || '';
+      const fullWorkspace = eventWorkspace || detailsWorkspace;
+      return fullWorkspace === currentWorkspaceFilter || 
+             fullWorkspace.includes(currentWorkspaceFilter) ||
+             currentWorkspaceFilter.includes(fullWorkspace);
+    });
+    
+    // Filter prompts by workspace
+    prompts = prompts.filter(prompt => {
+      const promptWorkspace = prompt.workspace_path || prompt.workspacePath || prompt.workspaceName || prompt.workspaceId || '';
+      return promptWorkspace === currentWorkspaceFilter || 
+             promptWorkspace.includes(currentWorkspaceFilter) ||
+             currentWorkspaceFilter.includes(promptWorkspace);
+    });
+    
+    // Filter terminal commands by workspace
+    terminalCommands = terminalCommands.filter(cmd => {
+      const cmdWorkspace = cmd.workspace_path || cmd.workspacePath || cmd.workspace || cmd.cwd || '';
+      return cmdWorkspace === currentWorkspaceFilter || 
+             cmdWorkspace.includes(currentWorkspaceFilter) ||
+             currentWorkspaceFilter.includes(cmdWorkspace);
     });
   }
+  
+  // Enhance prompts with context information
+  prompts = await Promise.all(
+    prompts.map(async (prompt) => {
+      if (window.enhancePromptWithContext) {
+        try {
+          return await window.enhancePromptWithContext(prompt);
+        } catch (error) {
+          console.warn('Error enhancing prompt with context:', error);
+          return prompt;
+        }
+      }
+      return prompt;
+    })
+  );
   
   // Apply time range filter
   if (currentTimeRangeFilter !== 'all') {
@@ -39,22 +77,6 @@ function renderActivityView(container) {
     events = events.filter(event => new Date(event.timestamp).getTime() >= cutoffTime);
   }
   
-  // Enhance prompts with context information
-  const enhancedPrompts = await Promise.all(
-    prompts.map(async (prompt) => {
-      // Try to enhance with context if function is available
-      if (window.enhancePromptWithContext) {
-        try {
-          return await window.enhancePromptWithContext(prompt);
-        } catch (error) {
-          console.warn('Error enhancing prompt with context:', error);
-          return prompt;
-        }
-      }
-      return prompt;
-    })
-  );
-  
   // Merge events, prompts, and terminal commands into unified timeline
   let timelineItems = [
     ...events.map(event => ({
@@ -62,7 +84,7 @@ function renderActivityView(container) {
       itemType: 'event',
       sortTime: new Date(event.timestamp).getTime()
     })),
-    ...enhancedPrompts.map(prompt => ({
+    ...prompts.map(prompt => ({
       ...prompt,
       itemType: 'prompt',
       sortTime: new Date(prompt.timestamp).getTime(),
@@ -73,7 +95,8 @@ function renderActivityView(container) {
       itemType: 'terminal',
       sortTime: cmd.timestamp,
       id: cmd.id
-    })).sort((a, b) => b.sortTime - a.sortTime);
+    }))
+  ].sort((a, b) => b.sortTime - a.sortTime);
   
   // Enhance timeline with status messages if available
   if (window.enhanceTimelineWithStatusMessages) {

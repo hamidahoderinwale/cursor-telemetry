@@ -15,8 +15,8 @@ const fs = require('fs');
 const crypto = require('crypto');
 const lunr = require('lunr'); // Import lunr
 // Import the new queue system and clipboard monitor
-const { queue: queueSystem } = require('./queue.js');
-const { clipboardMonitor } = require('./clipboardMonitor.js');
+const { queue: queueSystem } = require('./utils/queue.js');
+const { clipboardMonitor } = require('./monitors/clipboardMonitor.js');
 
 // Initialize query cache (30 second TTL, check every 60s for expired)
 const queryCache = new NodeCache({ 
@@ -32,33 +32,41 @@ const { promisify } = require('util');
 const execAsync = promisify(exec);
 
 // Import IDE state capture service
-const IDEStateCapture = require('./ide-state-capture.js');
+const IDEStateCapture = require('./monitors/ide-state-capture.js');
 
 // Import prompt capture system
-const PromptCaptureSystem = require('./prompt-capture-system.js');
+const PromptCaptureSystem = require('./capture/prompt-capture-system.js');
 
 // Import Cursor database parser
-const CursorDatabaseParser = require('./cursor-db-parser.js');
+const CursorDatabaseParser = require('./database/cursor-db-parser.js');
 
 // Import screenshot monitor
-const ScreenshotMonitor = require('./screenshot-monitor.js');
+const ScreenshotMonitor = require('./monitors/screenshot-monitor.js');
 
 // Import persistent database
-const PersistentDB = require('./persistent-db.js');
+const PersistentDB = require('./database/persistent-db.js');
+
+// Import schema migrations
+const SchemaMigrations = require('./database/schema-migrations.js');
 
 // Reasoning engine removed - chat widget no longer used
 
-// Import new analytics modules
-const ContextAnalyzer = require('./context-analyzer.js');
-const ContextChangeTracker = require('./context-change-tracker.js');
-const StatusMessageTracker = require('./status-message-tracker.js');
-const ErrorTracker = require('./error-tracker.js');
-const ProductivityTracker = require('./productivity-tracker.js');
-const TerminalMonitor = require('./terminal-monitor.js');
-const AbstractionEngine = require('./abstraction-engine.js');
+// Import analytics modules
+const ContextAnalyzer = require('./analytics/context-analyzer.js');
+const ContextChangeTracker = require('./analytics/context-change-tracker.js');
+const ErrorTracker = require('./analytics/error-tracker.js');
+const ProductivityTracker = require('./analytics/productivity-tracker.js');
+const AbstractionEngine = require('./analytics/abstraction-engine.js');
+
+// Import monitor modules
+const StatusMessageTracker = require('./monitors/status-message-tracker.js');
+const TerminalMonitor = require('./monitors/terminal-monitor.js');
 
 // Initialize persistent database
 const persistentDB = new PersistentDB();
+
+// Initialize schema migrations
+const schemaMigrations = new SchemaMigrations(persistentDB);
 
 // Initialize analytics trackers
 const contextAnalyzer = new ContextAnalyzer(persistentDB);
@@ -137,6 +145,9 @@ const io = new Server(server, {
   }
 });
 
+// Track active conversation streams (defined early for use in broadcast functions)
+const conversationStreams = new Map();
+
 // Real-time broadcast function with cache invalidation
 function broadcastUpdate(type, data) {
   io.emit('activityUpdate', { type, data });
@@ -151,6 +162,26 @@ function broadcastUpdate(type, data) {
     invalidateCache('context_');
   } else if (type === 'error') {
     invalidateCache('error_');
+  }
+}
+
+// Helper function to broadcast conversation updates to subscribed clients
+function broadcastConversationUpdate(conversationId, data) {
+  const stream = conversationStreams.get(conversationId);
+  if (stream && stream.subscribers) {
+    stream.subscribers.forEach(socketId => {
+      const socket = io.sockets.sockets.get(socketId);
+      if (socket) {
+        socket.emit('conversation-stream', {
+          conversation_id: conversationId,
+          data: data,
+          timestamp: Date.now()
+        });
+      }
+    });
+    
+    // Update stream stats
+    stream.messageCount++;
   }
 }
 
@@ -1134,6 +1165,54 @@ app.get('/queue', (req, res) => {
 });
 
 // Multi-workspace API endpoints
+// Get conversations for a workspace
+app.get('/api/workspaces/:workspaceId/conversations', async (req, res) => {
+  try {
+    const { workspaceId } = req.params;
+    const limit = parseInt(req.query.limit) || 100;
+    
+    const conversations = await persistentDB.getConversationsByWorkspace(workspaceId, limit);
+    
+    res.json({
+      success: true,
+      data: conversations,
+      count: conversations.length
+    });
+  } catch (error) {
+    console.error('Error getting conversations:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Get audit log
+app.get('/api/audit-log', async (req, res) => {
+  try {
+    const options = {
+      workspaceId: req.query.workspaceId || null,
+      operationType: req.query.operationType || null,
+      limit: parseInt(req.query.limit) || 100,
+      offset: parseInt(req.query.offset) || 0
+    };
+    
+    const auditLog = await persistentDB.getAuditLog(options);
+    
+    res.json({
+      success: true,
+      data: auditLog,
+      count: auditLog.length
+    });
+  } catch (error) {
+    console.error('Error getting audit log:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 app.get('/api/workspaces', async (req, res) => {
   try {
     // Get ALL workspaces from Cursor (including old/stale ones)
@@ -3404,11 +3483,21 @@ app.get('/api/export/database', async (req, res) => {
       };
     });
     
+    // Get current schema version
+    let schemaVersion = '1.0.0';
+    try {
+      const schema = await persistentDB.getSchema();
+      schemaVersion = schema.version || '1.0.0';
+    } catch (err) {
+      console.warn('[EXPORT] Could not get schema version:', err.message);
+    }
+
     // Get in-memory data with improved structure
     const exportData = {
       metadata: {
         exportedAt: new Date().toISOString(),
         version: '2.4',  // Bumped for export filters
+        schema_version: schemaVersion,
         exportLimit: limit,
         fullExport: includeAllFields,
         dateRange: {
@@ -3480,6 +3569,7 @@ app.get('/api/export/database', async (req, res) => {
     
     res.json({
       success: true,
+      schema_version: schemaVersion,
       data: finalExportData
     });
     
@@ -3553,10 +3643,20 @@ async function handleStreamingExport(req, res, options) {
     // Start writing JSON structure
     writeChunk('{\n  "success": true,\n  "data": {\n');
     
+    // Get current schema version
+    let schemaVersion = '1.0.0';
+    try {
+      const schema = await persistentDB.getSchema();
+      schemaVersion = schema.version || '1.0.0';
+    } catch (err) {
+      console.warn('[EXPORT] Could not get schema version:', err.message);
+    }
+
     // Write metadata first (small, can load all at once)
     const metadata = {
       exportedAt: new Date().toISOString(),
       version: '2.4',
+      schema_version: schemaVersion,
       exportLimit: limit,
       fullExport: includeAllFields,
       dateRange: {
@@ -3768,7 +3868,7 @@ async function handleStreamingExport(req, res, options) {
 // Database import/redeploy endpoint - restore exported data
 app.post('/api/import/database', async (req, res) => {
   try {
-    console.log('Import request received');
+    console.log('[IMPORT] Import request received');
     
     const importData = req.body;
     
@@ -3785,8 +3885,67 @@ app.post('/api/import/database', async (req, res) => {
     const {
       overwrite = false,  // If true, overwrite existing records; if false, skip duplicates
       skipLinkedData = false,  // Skip linked_data and temporal_chunks if present
-      dryRun = false  // If true, validate but don't import
+      dryRun = false,  // If true, validate but don't import
+      workspaceFilter = null,  // If set, only import data for this workspace
+      mergeStrategy = 'skip'  // 'skip', 'overwrite', 'merge', 'append'
     } = options;
+
+    // Get current schema for schema version comparison
+    let currentSchema = null;
+    let currentSchemaVersion = '1.0.0';
+    try {
+      currentSchema = await persistentDB.getSchema();
+      currentSchemaVersion = currentSchema.version || '1.0.0';
+    } catch (err) {
+      console.warn('[IMPORT] Could not load current schema:', err.message);
+    }
+
+    // Detect import schema version
+    const importSchemaVersion = 
+      importData.schema_version || 
+      importData.metadata?.schema_version || 
+      data.metadata?.schema_version || 
+      '1.0.0';
+    
+    console.log(`[IMPORT] Schema versions - Import: ${importSchemaVersion}, Current: ${currentSchemaVersion}`);
+    
+    // Schema compatibility check and migration
+    const schemaCompatible = importSchemaVersion === currentSchemaVersion;
+    if (!schemaCompatible) {
+      console.log(`[IMPORT] Schema version mismatch detected - will normalize data during import`);
+      
+      // Run migrations if needed (migrate to current version)
+      if (!dryRun) {
+        try {
+          const migrationResult = await schemaMigrations.migrate();
+          if (migrationResult.migrations.length > 0) {
+            console.log(`[IMPORT] Schema migrations completed: ${migrationResult.migrations.length} migration(s) applied`);
+          }
+        } catch (migrationErr) {
+          console.warn(`[IMPORT] Schema migration warning:`, migrationErr.message);
+        }
+      }
+      
+      // Normalize data structure
+      try {
+        const normalizedData = await schemaMigrations.normalizeData(data, importSchemaVersion, currentSchemaVersion);
+        Object.assign(data, normalizedData);
+      } catch (normalizeErr) {
+        console.warn(`[IMPORT] Data normalization warning:`, normalizeErr.message);
+      }
+    }
+    
+    // Log audit event for import start
+    if (!dryRun) {
+      await persistentDB.logAuditEvent('Import started', 'import', {
+        workspaceId: workspaceFilter,
+        importVersion: importSchemaVersion,
+        currentVersion: currentSchemaVersion,
+        mergeStrategy,
+        overwrite,
+        status: 'in_progress'
+      }).catch(err => console.warn('[IMPORT] Could not log audit event:', err.message));
+    }
     
     const stats = {
       entries: { imported: 0, skipped: 0, errors: 0 },
@@ -3797,22 +3956,42 @@ app.post('/api/import/database', async (req, res) => {
       workspaces: { imported: 0, skipped: 0, errors: 0 }
     };
     
-    // Helper to check if record exists
-    const checkExists = async (table, id) => {
-      if (overwrite) return false; // Don't check if overwriting
+    // Helper to check if record exists and apply merge strategy
+    const shouldImport = async (table, item) => {
+      if (mergeStrategy === 'append') return true; // Always import with append
+      
+      // Filter by workspace if specified
+      if (workspaceFilter) {
+        const itemWorkspace = item.workspaceId || item.workspace_id || item.workspace_path || item.workspacePath;
+        if (itemWorkspace && !itemWorkspace.includes(workspaceFilter) && !workspaceFilter.includes(itemWorkspace)) {
+          return false; // Skip items not matching workspace filter
+        }
+      }
       
       try {
+        let existing = null;
         if (table === 'entries') {
-          const existing = await persistentDB.getEntryById(id);
-          return !!existing;
+          existing = await persistentDB.getEntryById(item.id);
         } else if (table === 'prompts') {
-          const existing = await persistentDB.getPromptById(id);
-          return !!existing;
+          existing = await persistentDB.getPromptById(item.id);
         }
-        // For other tables, we'll use INSERT OR IGNORE
+        
+        if (!existing) return true; // New item, import it
+        
+        // Item exists, apply merge strategy
+        if (mergeStrategy === 'skip' || (!overwrite && mergeStrategy !== 'overwrite' && mergeStrategy !== 'merge')) {
+          return false; // Skip existing
+        } else if (mergeStrategy === 'overwrite' || overwrite) {
+          return true; // Overwrite existing
+        } else if (mergeStrategy === 'merge') {
+          // Merge: combine data, prefer existing for conflicts
+          Object.assign(item, existing, item);
+          return true;
+        }
+        
         return false;
       } catch (err) {
-        return false;
+        return true; // On error, try to import
       }
     };
     
@@ -3823,8 +4002,8 @@ app.post('/api/import/database', async (req, res) => {
       for (const entry of data.entries) {
         try {
           if (!dryRun) {
-            const exists = await checkExists('entries', entry.id);
-            if (exists) {
+            const shouldImportEntry = await shouldImport('entries', entry);
+            if (!shouldImportEntry) {
               stats.entries.skipped++;
               continue;
             }
@@ -3865,8 +4044,8 @@ app.post('/api/import/database', async (req, res) => {
       for (const prompt of data.prompts) {
         try {
           if (!dryRun) {
-            const exists = await checkExists('prompts', prompt.id);
-            if (exists) {
+            const shouldImportPrompt = await shouldImport('prompts', prompt);
+            if (!shouldImportPrompt) {
               stats.prompts.skipped++;
               continue;
             }
@@ -3903,8 +4082,20 @@ app.post('/api/import/database', async (req, res) => {
               attachmentCount: prompt.attachmentCount || prompt.attachment_count || 0,
               conversationTitle: prompt.conversationTitle || prompt.conversation_title,
               messageRole: prompt.messageRole || prompt.message_role,
-              parentConversationId: prompt.parentConversationId || prompt.parent_conversation_id
+              parentConversationId: prompt.parentConversationId || prompt.parent_conversation_id,
+              conversationId: prompt.conversationId || prompt.composerId || prompt.parentConversationId,
+              conversationIndex: prompt.conversationIndex || prompt.conversation_index
             };
+            
+            // Update conversation metadata if conversation_id is set
+            if (normalizedPrompt.conversationId && normalizedPrompt.workspaceId) {
+              await persistentDB.updateConversationMetadata(
+                normalizedPrompt.conversationId,
+                normalizedPrompt.workspaceId,
+                normalizedPrompt.workspacePath,
+                normalizedPrompt.conversationTitle
+              ).catch(err => console.warn('[IMPORT] Could not update conversation:', err.message));
+            }
             
             await persistentDB.savePrompt(normalizedPrompt);
             stats.prompts.imported++;
@@ -4048,6 +4239,21 @@ app.post('/api/import/database', async (req, res) => {
     
     console.log(`[SUCCESS] Import completed: ${totalImported} imported, ${totalSkipped} skipped, ${totalErrors} errors`);
     
+    // Log audit event for import completion
+    if (!dryRun) {
+      await persistentDB.logAuditEvent('Import completed', 'import', {
+        workspaceId: workspaceFilter,
+        importVersion: importSchemaVersion,
+        currentVersion: currentSchemaVersion,
+        mergeStrategy,
+        overwrite,
+        totalImported,
+        totalSkipped,
+        totalErrors,
+        status: totalErrors > 0 ? 'partial' : 'success'
+      }).catch(err => console.warn('[IMPORT] Could not log audit event:', err.message));
+    }
+    
     res.json({
       success: true,
       dryRun,
@@ -4057,7 +4263,14 @@ app.post('/api/import/database', async (req, res) => {
         totalSkipped,
         totalErrors,
         overwrite,
+        mergeStrategy,
+        workspaceFilter,
         timestamp: new Date().toISOString()
+      },
+      schema: {
+        importVersion: importSchemaVersion,
+        currentVersion: currentSchemaVersion,
+        compatible: schemaCompatible
       },
       message: dryRun 
         ? `Dry run: Would import ${totalImported} items (${totalSkipped} would be skipped)`
@@ -4066,6 +4279,16 @@ app.post('/api/import/database', async (req, res) => {
     
   } catch (error) {
     console.error('Error importing database:', error);
+    
+    // Log audit event for import failure
+    if (!req.body.options?.dryRun) {
+      await persistentDB.logAuditEvent('Import failed', 'import', {
+        workspaceId: req.body.options?.workspaceFilter,
+        error: error.message,
+        status: 'error'
+      }).catch(err => console.warn('[IMPORT] Could not log audit event:', err.message));
+    }
+    
     res.status(500).json({
       success: false,
       error: error.message,
@@ -4373,77 +4596,212 @@ app.post('/privacy/delete-sensitive', (req, res) => {
   }
 });
 
-// MCP endpoints
-app.post('/mcp/log-prompt-response', (req, res) => {
-  console.log('[NOTE] MCP request received:', req.body);
-  // Check if we need to create a new session due to timeout
+// ============================================================================
+// MCP (Model Context Protocol) Endpoints - OPTIONAL/FUTURE FEATURE
+// These endpoints are disabled by default. Set enable_mcp: true in config.json
+// to enable external data collection via MCP instead of direct database reads.
+// ============================================================================
+
+// Check if MCP is enabled (default: false)
+const isMCPEnabled = () => {
+  try {
+    const cfg = require('./utils/config.js');
+    return cfg.get().enable_mcp === true;
+  } catch (e) {
+    return false; // Default to disabled
+  }
+};
+
+// Enhanced MCP endpoints with comprehensive data capture (OPTIONAL)
+app.post('/mcp/log-prompt-response', async (req, res) => {
+  if (!isMCPEnabled()) {
+    return res.status(503).json({ 
+      success: false, 
+      error: 'MCP endpoints are disabled. Set enable_mcp: true in config.json to enable.',
+      note: 'MCP is an optional feature for external data collection. Database mode is the default.'
+    });
+  }
+  console.log('[MCP] Enhanced prompt-response received:', Object.keys(req.body));
   checkSessionTimeout();
   updateActivityTime();
   
-  const { session_id, file_path, prompt, response } = req.body;
+  const {
+    session_id,
+    conversation_id,
+    conversation_title,
+    message_id,
+    timestamp,
+    file_path,
+    workspace_path,
+    workspace_name,
+    prompt,
+    response,
+    message_role = 'user',
+    metadata = {}
+  } = req.body;
   
   // Detect workspace for this file
-  const workspacePath = file_path ? detectWorkspace(file_path) : currentWorkspace;
+  const workspacePath = workspace_path || (file_path ? detectWorkspace(file_path) : currentWorkspace);
   const workspaceSession = getWorkspaceSession(workspacePath);
   
+  const entryId = message_id || crypto.randomUUID();
+  const entryTimestamp = timestamp || new Date().toISOString();
+  
+  // Create entry with enhanced metadata
   const entry = {
-    id: crypto.randomUUID(),
+    id: entryId,
     session_id: session_id || workspaceSession,
     workspace_path: workspacePath,
-    timestamp: new Date().toISOString(),
+    workspace_name: workspace_name || path.basename(workspacePath),
+    timestamp: entryTimestamp,
     source: 'mcp',
     file_path: file_path || '',
     prompt: prompt || '',
     response: response || '',
-    notes: 'Logged via MCP'
+    notes: 'Logged via MCP (Enhanced)',
+    conversation_id: conversation_id,
+    conversation_title: conversation_title,
+    message_role: message_role
   };
   
-  console.log('[SUCCESS] Creating entry:', entry);
+  // Create prompt record with comprehensive metadata (matching database mode structure)
+  const promptData = {
+    id: crypto.randomUUID(),
+    session_id: entry.session_id,
+    workspace_path: workspacePath,
+    workspace_name: entry.workspace_name,
+    timestamp: entryTimestamp,
+    source: 'mcp',
+    conversation_id: conversation_id || entryId,
+    conversation_title: conversation_title,
+    message_role: message_role,
+    text: message_role === 'user' ? prompt : response,
+    linked_entry_id: entryId,
+    // Enhanced metadata
+    context_usage: metadata.contextUsage || metadata.context_usage || null,
+    lines_added: metadata.linesAdded || metadata.lines_added || null,
+    lines_removed: metadata.linesRemoved || metadata.lines_removed || null,
+    ai_mode: metadata.aiMode || metadata.ai_mode || 'chat',
+    model: metadata.model || null,
+    finish_reason: metadata.finishReason || metadata.finish_reason || null,
+    thinking_time_seconds: metadata.thinkingTimeSeconds || metadata.thinking_time_seconds || null,
+    context_files: JSON.stringify(metadata.contextFiles || metadata.context_files || []),
+    at_files: JSON.stringify(metadata.atFiles || metadata.at_files || []),
+    command_type: metadata.commandType || metadata.command_type || null,
+    generation_uuid: metadata.generationUUID || metadata.generation_uuid || null,
+    status: 'captured',
+    confidence: 'high'
+  };
   
   // Create matching event
   const event = {
     id: crypto.randomUUID(),
     session_id: entry.session_id,
     workspace_path: workspacePath,
-    timestamp: entry.timestamp,
+    timestamp: entryTimestamp,
     type: 'prompt_response',
-    details: JSON.stringify({ file_path: entry.file_path })
+    details: JSON.stringify({
+      file_path: entry.file_path,
+      conversation_id: conversation_id,
+      message_role: message_role,
+      metadata: metadata
+    })
   };
+  
+  // Store in database if persistent DB is available
+  if (persistentDB) {
+    try {
+      await persistentDB.savePrompt(promptData);
+      if (message_role === 'assistant' && response) {
+        // Also save as entry for AI responses
+        await persistentDB.saveEntry(entry);
+      }
+    } catch (dbError) {
+      console.warn('[MCP] Failed to save to persistent DB:', dbError.message);
+    }
+  }
   
   // Use enqueue function for reliable queuing
   enqueue('entry', entry);
   enqueue('event', event);
   
+  // Add prompt to in-memory store
+  if (!db.prompts) db.prompts = [];
+  db.prompts.push(promptData);
+  
   // Update workspace data
   updateWorkspaceData(workspacePath, entry, event);
   
-  console.log(`[SUCCESS] MCP entry added: ${entry.id} - ${entry.file_path} in workspace: ${workspacePath}`);
+  // Broadcast real-time update via WebSocket
+  broadcastUpdate('prompt-captured', {
+    prompt: promptData,
+    entry: entry,
+    conversation_id: conversation_id
+  });
   
-  res.json({ success: true, entry_id: entry.id });
+  console.log(`[SUCCESS] MCP enhanced entry added: ${entry.id} - ${entry.file_path} in workspace: ${workspacePath}`);
+  
+  res.json({ success: true, entry_id: entry.id, prompt_id: promptData.id });
 });
 
-app.post('/mcp/log-code-change', (req, res) => {
-  // Check if we need to create a new session due to timeout
+app.post('/mcp/log-code-change', async (req, res) => {
+  if (!isMCPEnabled()) {
+    return res.status(503).json({ 
+      success: false, 
+      error: 'MCP endpoints are disabled. Set enable_mcp: true in config.json to enable.',
+      note: 'MCP is an optional feature for external data collection. Database mode is the default.'
+    });
+  }
+  
   checkSessionTimeout();
   updateActivityTime();
   
-  const { session_id, file_path, before_code, after_code } = req.body;
+  const {
+    session_id,
+    conversation_id,
+    timestamp,
+    file_path,
+    workspace_path,
+    before_code,
+    after_code,
+    metadata = {}
+  } = req.body;
   
   // Detect workspace for this file
-  const workspacePath = file_path ? detectWorkspace(file_path) : currentWorkspace;
+  const workspacePath = workspace_path || (file_path ? detectWorkspace(file_path) : currentWorkspace);
   const workspaceSession = getWorkspaceSession(workspacePath);
+  
+  // Calculate diff metrics if not provided
+  const linesAdded = metadata.linesAdded || metadata.lines_added || 
+    Math.max(0, (after_code || '').split('\n').length - (before_code || '').split('\n').length);
+  const linesRemoved = metadata.linesRemoved || metadata.lines_removed || 
+    Math.max(0, (before_code || '').split('\n').length - (after_code || '').split('\n').length);
   
   const entry = {
     id: crypto.randomUUID(),
     session_id: session_id || workspaceSession,
     workspace_path: workspacePath,
-    timestamp: new Date().toISOString(),
+    timestamp: timestamp || new Date().toISOString(),
     source: 'mcp',
     file_path: file_path || '',
     before_code: before_code || '',
     after_code: after_code || '',
-    notes: 'Code change logged via MCP'
+    notes: 'Code change logged via MCP (Enhanced)',
+    conversation_id: conversation_id,
+    lines_added: linesAdded,
+    lines_removed: linesRemoved,
+    diff_size: metadata.diffSize || metadata.diff_size || 
+      Math.abs((after_code || '').length - (before_code || '').length)
   };
+  
+  // Store in database if persistent DB is available
+  if (persistentDB) {
+    try {
+      await persistentDB.saveEntry(entry);
+    } catch (dbError) {
+      console.warn('[MCP] Failed to save entry to persistent DB:', dbError.message);
+    }
+  }
   
   // Use enqueue function for reliable queuing
   enqueue('entry', entry);
@@ -4455,25 +4813,209 @@ app.post('/mcp/log-code-change', (req, res) => {
     workspace_path: workspacePath,
     timestamp: entry.timestamp,
     type: 'code_change',
-    details: JSON.stringify({ file_path: entry.file_path })
+    details: JSON.stringify({
+      file_path: entry.file_path,
+      conversation_id: conversation_id,
+      lines_added: linesAdded,
+      lines_removed: linesRemoved,
+      metadata: metadata
+    })
   };
   enqueue('event', event);
   
   // Update workspace data
   updateWorkspaceData(workspacePath, entry, event);
   
-  console.log(`[SUCCESS] MCP code change added: ${entry.id} - ${entry.file_path} in workspace: ${workspacePath}`);
+  // Broadcast real-time update
+  broadcastUpdate('file-changed', {
+    entry: entry,
+    event: event
+  });
+  
+  console.log(`[SUCCESS] MCP enhanced code change added: ${entry.id} - ${entry.file_path} in workspace: ${workspacePath}`);
   console.log(`[DATA] Total entries: ${entries.length}, events: ${events.length}`);
   
   res.json({ success: true, entry_id: entry.id });
 });
 
-app.post('/mcp/log-event', (req, res) => {
-  // Check if we need to create a new session due to timeout
+// conversationStreams is defined at the top of the file
+
+// Enhanced conversation logging endpoint (OPTIONAL)
+app.post('/mcp/log-conversation', async (req, res) => {
+  if (!isMCPEnabled()) {
+    return res.status(503).json({ 
+      success: false, 
+      error: 'MCP endpoints are disabled. Set enable_mcp: true in config.json to enable.',
+      note: 'MCP is an optional feature for external data collection. Database mode is the default.'
+    });
+  }
+  
+  console.log('[MCP] Conversation received:', req.body.conversation_id);
   checkSessionTimeout();
   updateActivityTime();
   
-  const { session_id, type, details, file_path } = req.body;
+  const {
+    conversation_id,
+    conversation_title,
+    session_id,
+    workspace_path,
+    workspace_name,
+    messages = [],
+    metadata = {}
+  } = req.body;
+  
+  const workspacePath = workspace_path || currentWorkspace;
+  const workspaceSession = getWorkspaceSession(workspacePath);
+  
+  // Process all messages in the conversation
+  const savedPrompts = [];
+  const savedEntries = [];
+  
+  for (const message of messages) {
+    const messageId = message.id || crypto.randomUUID();
+    const messageTimestamp = message.timestamp || new Date().toISOString();
+    
+    // Create prompt record for each message
+    const promptData = {
+      id: messageId,
+      session_id: session_id || workspaceSession,
+      workspace_path: workspacePath,
+      workspace_name: workspace_name || path.basename(workspacePath),
+      timestamp: messageTimestamp,
+      source: 'mcp',
+      conversation_id: conversation_id,
+      conversation_title: conversation_title,
+      message_role: message.role || 'user',
+      text: message.text || message.content || '',
+      linked_entry_id: null,
+      context_usage: message.metadata?.contextUsage || metadata.contextUsage || null,
+      lines_added: message.metadata?.linesAdded || metadata.linesAdded || null,
+      lines_removed: message.metadata?.linesRemoved || metadata.linesRemoved || null,
+      ai_mode: message.metadata?.aiMode || metadata.aiMode || 'chat',
+      model: message.metadata?.model || metadata.model || null,
+      finish_reason: message.metadata?.finishReason || metadata.finishReason || null,
+      thinking_time_seconds: message.metadata?.thinkingTimeSeconds || metadata.thinkingTimeSeconds || null,
+      context_files: JSON.stringify(message.metadata?.contextFiles || metadata.contextFiles || []),
+      at_files: JSON.stringify(message.metadata?.atFiles || metadata.atFiles || []),
+      status: 'captured',
+      confidence: 'high'
+    };
+    
+    savedPrompts.push(promptData);
+    
+    // Store in database
+    if (persistentDB) {
+      try {
+        await persistentDB.savePrompt(promptData);
+      } catch (dbError) {
+        console.warn('[MCP] Failed to save prompt:', dbError.message);
+      }
+    }
+    
+    // Add to in-memory store
+    if (!db.prompts) db.prompts = [];
+    db.prompts.push(promptData);
+  }
+  
+  // Create conversation event
+  const event = {
+    id: crypto.randomUUID(),
+    session_id: session_id || workspaceSession,
+    workspace_path: workspacePath,
+    timestamp: new Date().toISOString(),
+    type: 'conversation',
+    details: JSON.stringify({
+      conversation_id: conversation_id,
+      conversation_title: conversation_title,
+      message_count: messages.length,
+      metadata: metadata
+    })
+  };
+  
+  enqueue('event', event);
+  updateWorkspaceData(workspacePath, null, event);
+  
+  // Broadcast conversation update
+  broadcastUpdate('conversation-update', {
+    conversation_id: conversation_id,
+    conversation_title: conversation_title,
+    messages: savedPrompts,
+    metadata: metadata
+  });
+  
+  // Broadcast to subscribed WebSocket clients
+  broadcastConversationUpdate(conversation_id, {
+    conversation_id: conversation_id,
+    conversation_title: conversation_title,
+    messages: savedPrompts,
+    metadata: metadata
+  });
+  
+  console.log(`[SUCCESS] MCP conversation logged: ${conversation_id} with ${messages.length} messages`);
+  
+  res.json({
+    success: true,
+    conversation_id: conversation_id,
+    message_count: messages.length,
+    prompt_ids: savedPrompts.map(p => p.id)
+  });
+});
+
+// Conversation streaming endpoint (OPTIONAL)
+app.post('/mcp/stream-conversation', (req, res) => {
+  if (!isMCPEnabled()) {
+    return res.status(503).json({ 
+      success: false, 
+      error: 'MCP endpoints are disabled. Set enable_mcp: true in config.json to enable.',
+      note: 'MCP is an optional feature for external data collection. Database mode is the default.'
+    });
+  }
+  
+  const { conversation_id, enable = true } = req.body;
+  
+  if (enable) {
+    conversationStreams.set(conversation_id, {
+      id: conversation_id,
+      enabled: true,
+      startTime: Date.now(),
+      messageCount: 0
+    });
+    console.log(`[MCP] Conversation streaming enabled: ${conversation_id}`);
+  } else {
+    conversationStreams.delete(conversation_id);
+    console.log(`[MCP] Conversation streaming disabled: ${conversation_id}`);
+  }
+  
+  res.json({ success: true, streaming: enable, conversation_id });
+});
+
+// Get active conversation streams (OPTIONAL)
+app.get('/mcp/streams', (req, res) => {
+  if (!isMCPEnabled()) {
+    return res.status(503).json({ 
+      success: false, 
+      error: 'MCP endpoints are disabled. Set enable_mcp: true in config.json to enable.',
+      note: 'MCP is an optional feature for external data collection. Database mode is the default.'
+    });
+  }
+  
+  const streams = Array.from(conversationStreams.values());
+  res.json({ success: true, streams: streams });
+});
+
+app.post('/mcp/log-event', (req, res) => {
+  if (!isMCPEnabled()) {
+    return res.status(503).json({ 
+      success: false, 
+      error: 'MCP endpoints are disabled. Set enable_mcp: true in config.json to enable.',
+      note: 'MCP is an optional feature for external data collection. Database mode is the default.'
+    });
+  }
+  
+  checkSessionTimeout();
+  updateActivityTime();
+  
+  const { session_id, type, details, file_path, timestamp } = req.body;
   
   // Detect workspace from file_path if provided, or use details
   let workspacePath = currentWorkspace;
@@ -4489,7 +5031,7 @@ app.post('/mcp/log-event', (req, res) => {
     id: crypto.randomUUID(),
     session_id: session_id || workspaceSession,
     workspace_path: workspacePath,
-    timestamp: new Date().toISOString(),
+    timestamp: timestamp || new Date().toISOString(),
     type: type || 'unknown',
     details: typeof details === 'string' ? details : JSON.stringify(details || {})
   };
@@ -4499,6 +5041,9 @@ app.post('/mcp/log-event', (req, res) => {
   
   // Update workspace data
   updateWorkspaceData(workspacePath, null, event);
+  
+  // Broadcast real-time update
+  broadcastUpdate('event', event);
   
   console.log(`[SUCCESS] MCP event added: ${event.id} - ${event.type} in workspace: ${workspacePath}`);
   console.log(`[DATA] Total events: ${events.length}`);
@@ -4798,9 +5343,12 @@ function startFileWatcher() {
     });
 }
 
-// Socket.IO connection handling
+// Socket.IO connection handling with conversation streaming
 io.on('connection', (socket) => {
   console.log(`Client connected: ${socket.id}`);
+  
+  // Track client's subscribed conversation streams
+  const clientStreams = new Set();
   
   // Send initial data when client connects
   socket.emit('initial-data', {
@@ -4808,11 +5356,55 @@ io.on('connection', (socket) => {
     prompts: db.prompts,
     queue: queueSystem.getQueue(),
     ideState: ideStateCapture ? ideStateCapture.getLatestState() : null,
+    activeStreams: Array.from(conversationStreams.keys()),
     timestamp: Date.now()
   });
   
   socket.on('disconnect', () => {
     console.log(`Client disconnected: ${socket.id}`);
+    // Clean up client streams
+    clientStreams.clear();
+  });
+  
+  // Subscribe to conversation stream
+  socket.on('subscribe-conversation', (conversationId) => {
+    if (conversationId) {
+      clientStreams.add(conversationId);
+      console.log(`[WS] Client ${socket.id} subscribed to conversation: ${conversationId}`);
+      
+      // Enable streaming for this conversation if not already enabled
+      if (!conversationStreams.has(conversationId)) {
+        conversationStreams.set(conversationId, {
+          id: conversationId,
+          enabled: true,
+          startTime: Date.now(),
+          messageCount: 0,
+          subscribers: new Set([socket.id])
+        });
+      } else {
+        conversationStreams.get(conversationId).subscribers.add(socket.id);
+      }
+      
+      socket.emit('conversation-subscribed', { conversation_id: conversationId });
+    }
+  });
+  
+  // Unsubscribe from conversation stream
+  socket.on('unsubscribe-conversation', (conversationId) => {
+    if (conversationId && clientStreams.has(conversationId)) {
+      clientStreams.delete(conversationId);
+      console.log(`[WS] Client ${socket.id} unsubscribed from conversation: ${conversationId}`);
+      
+      const stream = conversationStreams.get(conversationId);
+      if (stream && stream.subscribers) {
+        stream.subscribers.delete(socket.id);
+        if (stream.subscribers.size === 0) {
+          conversationStreams.delete(conversationId);
+        }
+      }
+      
+      socket.emit('conversation-unsubscribed', { conversation_id: conversationId });
+    }
   });
   
   // Handle client requests for specific data
@@ -4831,12 +5423,30 @@ io.on('connection', (socket) => {
         case 'ide-state':
           socket.emit('ide-state-update', ideStateCapture.getLatestState());
           break;
+        case 'conversations':
+          // Get all conversations from prompts
+          const conversations = {};
+          (db.prompts || []).forEach(prompt => {
+            if (prompt.conversation_id) {
+              if (!conversations[prompt.conversation_id]) {
+                conversations[prompt.conversation_id] = {
+                  id: prompt.conversation_id,
+                  title: prompt.conversation_title,
+                  messages: []
+                };
+              }
+              conversations[prompt.conversation_id].messages.push(prompt);
+            }
+          });
+          socket.emit('conversations-update', Object.values(conversations));
+          break;
         case 'all':
           socket.emit('full-update', {
             entries: db.entries,
             prompts: db.prompts,
             queue: queueSystem.getQueue(),
             ideState: ideStateCapture.getLatestState(),
+            activeStreams: Array.from(conversationStreams.keys()),
             timestamp: Date.now()
           });
           break;
@@ -4850,7 +5460,8 @@ io.on('connection', (socket) => {
   socket.emit('initial-data', {
     entries: db.entries,
     events: events,
-    queue: queue
+    queue: queue,
+    activeStreams: Array.from(conversationStreams.keys())
   });
 });
 

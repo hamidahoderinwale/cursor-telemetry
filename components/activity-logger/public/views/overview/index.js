@@ -39,6 +39,9 @@ function renderOverviewView(container) {
   });
   const avgContext = contextCount > 0 ? (totalContext / contextCount).toFixed(1) : 0;
   
+  // Get workspace count
+  const workspaceCount = window.state.stats?.workspaces || window.state.data?.workspaces?.length || 0;
+  
   // Calculate active sessions (unique days with activity in last 7 days)
   const now = Date.now();
   const sevenDaysAgo = now - (7 * 24 * 60 * 60 * 1000);
@@ -79,6 +82,11 @@ function renderOverviewView(container) {
       
       <!-- Summary Stats -->
       <div class="overview-stats-grid">
+        <div class="overview-stat-card" title="Total number of workspaces tracked across all your projects. Workspaces are automatically detected from your Cursor activity">
+          <div class="overview-stat-value" id="overviewWorkspacesCount">${workspaceCount > 0 ? workspaceCount.toLocaleString() : '-'}</div>
+          <div class="overview-stat-label">Total Workspaces</div>
+          <div class="overview-stat-hint">All tracked projects</div>
+        </div>
         <div class="overview-stat-card" title="Number of unique days in the last 7 days where you had any development activity (file changes, AI prompts, or terminal commands)">
           <div class="overview-stat-value">${activeDays.size}</div>
           <div class="overview-stat-label">Active Sessions (7d)</div>
@@ -109,8 +117,8 @@ function renderOverviewView(container) {
             <!-- Activity Heatmap -->
             <div class="card">
               <div class="card-header">
-                <h3 class="card-title" title="Visual representation of your development activity over the last 7 days. Each cell represents one hour. Color indicates code changes: green = more additions, red = more deletions, yellow = balanced. Darkness indicates overall activity level. Click any cell to filter the Activity view to that time period">Activity Heatmap</h3>
-                <p class="card-subtitle">Last 7 days of development activity (click cells to filter)</p>
+                <h3 class="card-title" title="GitHub-style contribution graph showing your development activity over the past year. Each cell represents one day. Color intensity indicates activity level: light green = low activity, dark green = high activity. Click any cell to filter the Activity view to that date">Activity Heatmap</h3>
+                <p class="card-subtitle">Past year of development activity (click cells to filter)</p>
               </div>
         <div class="card-body">
           <div id="activityHeatmap"></div>
@@ -162,6 +170,46 @@ function renderOverviewView(container) {
 
     </div>
   `;
+  
+  // Fetch and update workspace count
+  (async () => {
+    let workspaceCount = window.state.stats?.workspaces || window.state.data?.workspaces?.length || 0;
+    
+    // If workspace count is 0, try to fetch from API
+    if (workspaceCount === 0 && window.APIClient) {
+      try {
+        const workspaces = await window.APIClient.get('/api/workspaces', {
+          timeout: 5000,
+          retries: 1,
+          silent: true
+        }).catch(() => null);
+        
+        if (workspaces && Array.isArray(workspaces) && workspaces.length > 0) {
+          workspaceCount = workspaces.length;
+          if (!window.state.stats) window.state.stats = {};
+          window.state.stats.workspaces = workspaceCount;
+          if (!window.state.data) window.state.data = {};
+          window.state.data.workspaces = workspaces;
+        }
+      } catch (err) {
+        console.debug('[OVERVIEW] Could not fetch workspaces:', err.message);
+      }
+    }
+    
+    // Update workspace count in the overview
+    setTimeout(() => {
+      const overviewWorkspacesCount = document.getElementById('overviewWorkspacesCount');
+      if (overviewWorkspacesCount) {
+        overviewWorkspacesCount.textContent = workspaceCount.toLocaleString();
+      }
+      
+      // Update header stat as well
+      const statWorkspaces = document.getElementById('statWorkspaces');
+      if (statWorkspaces) {
+        statWorkspaces.textContent = workspaceCount.toLocaleString();
+      }
+    }, 100);
+  })();
   
   // Render heatmap after DOM is ready
   setTimeout(() => {

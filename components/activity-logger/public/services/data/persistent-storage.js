@@ -745,3 +745,9 @@ class PersistentStorage {
 // Export singleton
 const persistentStorage = new PersistentStorage();
 
+// Export to window for global access
+if (typeof window !== 'undefined') {
+  window.persistentStorage = persistentStorage;
+  window.PersistentStorage = PersistentStorage;
+}
+

@@ -1,12 +1,12 @@
 /**
  * Import Handler Module
- * Handles importing/redeploying exported database data
+ * Handles importing/redeploying exported database data with schema validation
  */
 
 /**
  * Show import modal and handle file selection
  */
-function showImportModal() {
+async function showImportModal() {
   // Check if modal already exists and remove it
   const existingModal = document.getElementById('importModal');
   if (existingModal) {
@@ -39,12 +39,27 @@ function showImportModal() {
         
         <div class="import-section">
           <h3 class="card-title">Import Options</h3>
+          <div class="export-modal-field-group">
+            <label class="form-label">Workspace Filter (optional):</label>
+            <input type="text" id="importWorkspaceFilter" class="form-input" placeholder="Leave empty to import all workspaces">
+            <div class="file-input-hint">Only import data for a specific workspace. Leave empty to import all.</div>
+          </div>
+          <div class="export-modal-field-group">
+            <label class="form-label">Merge Strategy:</label>
+            <select id="importMergeStrategy" class="form-input">
+              <option value="skip">Skip duplicates (default)</option>
+              <option value="overwrite">Overwrite existing</option>
+              <option value="merge">Merge (combine data)</option>
+              <option value="append">Append all (allow duplicates)</option>
+            </select>
+            <div class="file-input-hint">How to handle records that already exist in the database.</div>
+          </div>
           <div class="export-modal-checkbox-group">
             <label class="export-modal-checkbox-label">
               <input type="checkbox" id="importOverwrite">
               <span>
                 <strong>Overwrite existing records</strong>
-                <div class="description">If checked, existing records with the same ID will be replaced. If unchecked, duplicates will be skipped.</div>
+                <div class="description">Legacy option - use Merge Strategy above instead. If checked, sets strategy to "overwrite".</div>
               </span>
             </label>
             <label class="export-modal-checkbox-label">
@@ -55,6 +70,11 @@ function showImportModal() {
               </span>
             </label>
           </div>
+        </div>
+        
+        <div id="schemaValidation" class="schema-validation-section" style="display: none;">
+          <h3 class="card-title">Schema Compatibility</h3>
+          <div id="schemaValidationContent"></div>
         </div>
         
         <div id="importStatus" class="import-status" style="display: none;"></div>
@@ -73,11 +93,20 @@ function showImportModal() {
   const fileInput = document.getElementById('importFileInput');
   const importButton = document.getElementById('importButton');
   
-  fileInput.addEventListener('change', (e) => {
+  fileInput.addEventListener('change', async (e) => {
     const hasFile = e.target.files && e.target.files.length > 0;
     importButton.disabled = !hasFile;
+    
     if (hasFile) {
       importButton.textContent = 'Import';
+      // Validate schema when file is selected
+      await validateImportFile(e.target.files[0]);
+    } else {
+      // Hide schema validation
+      const schemaSection = document.getElementById('schemaValidation');
+      if (schemaSection) {
+        schemaSection.style.display = 'none';
+      }
     }
   });
   
@@ -109,12 +138,180 @@ function closeImportModal() {
 }
 
 /**
+ * Validate import file and show schema compatibility
+ */
+async function validateImportFile(file) {
+  const schemaSection = document.getElementById('schemaValidation');
+  const schemaContent = document.getElementById('schemaValidationContent');
+  
+  if (!schemaSection || !schemaContent) return;
+
+  try {
+    schemaSection.style.display = 'block';
+    schemaContent.innerHTML = '<div style="color: var(--color-info);">Analyzing file structure...</div>';
+
+    // Read and parse file
+    const fileText = await file.text();
+    const importData = JSON.parse(fileText);
+
+    // Initialize validator if needed
+    if (!window.schemaValidator) {
+      window.schemaValidator = new window.SchemaValidator();
+    }
+
+    const validator = window.schemaValidator;
+
+    // Load current schema
+    await validator.loadCurrentSchema();
+
+    // Analyze import data
+    const analysis = validator.analyzeImportData(importData);
+    
+    // Validate structure
+    const validation = validator.validateImportData(importData);
+    
+    // Check compatibility
+    const compatibility = await validator.checkCompatibility(analysis);
+
+    // Render schema validation results
+    let html = '';
+
+    // Schema version info
+    html += `
+      <div class="schema-info">
+        <div class="schema-info-item">
+          <strong>Import Schema Version:</strong> 
+          <span class="schema-version">${analysis.schemaVersion}</span>
+        </div>
+        <div class="schema-info-item">
+          <strong>Current Schema Version:</strong> 
+          <span class="schema-version">${validator.schemaVersion}</span>
+        </div>
+        ${!compatibility.schemaVersionMatch ? `
+          <div class="schema-warning">
+            Schema versions differ - data will be normalized during import
+          </div>
+        ` : `
+          <div class="schema-success">
+            Schema versions match
+          </div>
+        `}
+      </div>
+    `;
+
+    // Data summary
+    html += `
+      <div class="schema-data-summary">
+        <h4>Import Data Summary</h4>
+        <div class="data-summary-grid">
+          ${analysis.hasEntries ? `
+            <div class="data-summary-item">
+              <strong>Entries:</strong> ${analysis.tables.entries.count.toLocaleString()}
+            </div>
+          ` : ''}
+          ${analysis.hasPrompts ? `
+            <div class="data-summary-item">
+              <strong>Prompts:</strong> ${analysis.tables.prompts.count.toLocaleString()}
+            </div>
+          ` : ''}
+          ${analysis.hasEvents ? `
+            <div class="data-summary-item">
+              <strong>Events:</strong> ${analysis.tables.events.count.toLocaleString()}
+            </div>
+          ` : ''}
+          ${analysis.hasTerminalCommands ? `
+            <div class="data-summary-item">
+              <strong>Terminal Commands:</strong> ${analysis.tables.terminal_commands.count.toLocaleString()}
+            </div>
+          ` : ''}
+          ${analysis.hasWorkspaces ? `
+            <div class="data-summary-item">
+              <strong>Workspaces:</strong> ${analysis.tables.workspaces.count.toLocaleString()}
+            </div>
+          ` : ''}
+        </div>
+        <div class="data-summary-total">
+          <strong>Total Records:</strong> ${analysis.totalRecords.toLocaleString()}
+        </div>
+      </div>
+    `;
+
+    // Compatibility status
+    if (compatibility.errors.length > 0) {
+      html += `
+        <div class="schema-errors">
+          <h4>Schema Errors</h4>
+          <ul>
+            ${compatibility.errors.map(err => `<li>${err}</li>`).join('')}
+          </ul>
+          <div class="schema-error-note">
+            These errors must be resolved before import can proceed.
+          </div>
+        </div>
+      `;
+    }
+
+    if (compatibility.warnings.length > 0) {
+      html += `
+        <div class="schema-warnings">
+          <h4>Schema Warnings</h4>
+          <ul>
+            ${compatibility.warnings.map(warn => `<li>${warn}</li>`).join('')}
+          </ul>
+          <div class="schema-warning-note">
+            These warnings won't prevent import but may affect data quality.
+          </div>
+        </div>
+      `;
+    }
+
+    if (compatibility.errors.length === 0 && compatibility.warnings.length === 0) {
+      html += `
+        <div class="schema-success-message">
+          Schema validation passed. Import is compatible with current database schema.
+        </div>
+      `;
+    }
+
+    schemaContent.innerHTML = html;
+
+    // Disable import button if there are errors
+    const importButton = document.getElementById('importButton');
+    if (importButton && compatibility.errors.length > 0) {
+      importButton.disabled = true;
+      importButton.title = 'Please fix schema errors before importing';
+    } else if (importButton) {
+      importButton.disabled = false;
+      importButton.title = '';
+    }
+
+  } catch (error) {
+    console.error('[IMPORT] Schema validation error:', error);
+    schemaContent.innerHTML = `
+      <div class="schema-error">
+        <strong>Validation Error:</strong> ${error.message}
+        <div class="schema-error-note">File structure could not be validated. Import may still work.</div>
+      </div>
+    `;
+  }
+}
+
+/**
  * Handle the import process
  */
 async function handleImport() {
   const fileInput = document.getElementById('importFileInput');
   const overwrite = document.getElementById('importOverwrite').checked;
   const dryRun = document.getElementById('importDryRun').checked;
+  const workspaceFilter = document.getElementById('importWorkspaceFilter').value.trim() || null;
+  const mergeStrategySelect = document.getElementById('importMergeStrategy');
+  let mergeStrategy = mergeStrategySelect ? mergeStrategySelect.value : 'skip';
+  
+  // Legacy overwrite checkbox takes precedence
+  if (overwrite && mergeStrategy !== 'append') {
+    mergeStrategy = 'overwrite';
+  }
+  
   const statusDiv = document.getElementById('importStatus');
   const importButton = document.getElementById('importButton');
   
@@ -161,7 +358,9 @@ async function handleImport() {
         data: data,
         options: {
           overwrite,
-          dryRun
+          dryRun,
+          workspaceFilter,
+          mergeStrategy
         }
       })
     });
@@ -176,6 +375,7 @@ async function handleImport() {
       // Show success message with stats
       const stats = result.stats;
       const summary = result.summary;
+      const schemaInfo = result.schema || {};
       
       let statsHTML = `
         <div class="import-success-message">
@@ -185,6 +385,18 @@ async function handleImport() {
           <div class="import-success-text">
             ${result.message}
           </div>
+          ${schemaInfo.importVersion ? `
+            <div class="import-schema-info" style="margin-top: var(--space-sm); padding-top: var(--space-sm); border-top: 1px solid rgba(16, 185, 129, 0.3); font-size: var(--text-xs);">
+              <strong>Schema:</strong> Import v${schemaInfo.importVersion} → Current v${schemaInfo.currentVersion || '1.0.0'}
+              ${schemaInfo.compatible === false ? ' <span style="color: #f59e0b;">(normalized during import)</span>' : ''}
+            </div>
+          ` : ''}
+          ${summary.mergeStrategy ? `
+            <div class="import-schema-info" style="margin-top: var(--space-xs); font-size: var(--text-xs);">
+              <strong>Merge Strategy:</strong> ${summary.mergeStrategy}
+              ${summary.workspaceFilter ? ` | <strong>Workspace:</strong> ${summary.workspaceFilter}` : ''}
+            </div>
+          ` : ''}
         </div>
         
         <div class="import-stats-grid">

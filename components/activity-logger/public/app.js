@@ -988,7 +988,7 @@ async function renderFeed() {
         if (sessions.length === 0) {
             elements.feedContent.innerHTML = `
                 <div class="dashboard-empty">
-                    <h2> Cursor Activity Dashboard</h2>
+                    <h2> Cursor Telemetry Dashboard</h2>
                     <p>No activity yet. Copy content from Cursor to begin capturing your interactions automatically.</p>
                     <div class="empty-actions">
                         <button class="btn btn-primary" onclick="startNewSession()">Start New Session</button>
@@ -1257,7 +1257,7 @@ async function exportMarkdown() {
         const entries = await db.entries.toArray();
         const events = await db.events.toArray();
         
-        let markdown = `# Cursor Activity Log\n\n`;
+        let markdown = `# Cursor Telemetry Log\n\n`;
         markdown += `**Export Date:** ${new Date().toLocaleString()}\n`;
         markdown += `**Total Sessions:** ${sessions.length}\n`;
         markdown += `**Total Entries:** ${entries.length}\n`;
@@ -2685,7 +2685,7 @@ async function init() {
         
         // Try to connect to companion service first
         // Initialize event stream
-        addEventToStream('info', 'Initializing Cursor Activity Logger');
+        addEventToStream('info', 'Initializing Cursor Telemetry Logger');
         
         addEventToStream('info', 'Attempting to connect to companion service...');
         
@@ -3102,7 +3102,7 @@ function renderActivityItem(entry) {
             description = `Cursor: Response logged`;
         } else {
             activityIcon = '';
-            activityType = 'Cursor Activity';
+            activityType = 'Cursor Telemetry';
             description = `Cursor: Activity logged`;
         }
     } else if (entry.source === 'clipboard') {

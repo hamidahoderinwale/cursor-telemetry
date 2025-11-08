@@ -16,6 +16,7 @@ function updateConnectionStatus(connected, message = null, progress = null) {
     dot.classList.add('connected');
     dot.classList.remove('disconnected');
     text.textContent = message || 'Connected';
+    text.title = message || 'Connected to companion service';
     
     // Hide progress bar when connected
     if (progressContainer) {
@@ -24,7 +25,34 @@ function updateConnectionStatus(connected, message = null, progress = null) {
   } else {
     dot.classList.remove('connected');
     dot.classList.add('disconnected');
-    text.textContent = message || 'Disconnected';
+    const displayMessage = message || 'Disconnected';
+    text.textContent = displayMessage;
+    
+    // Show retry button when disconnected
+    const retryBtn = document.getElementById('connectionRetryBtn');
+    if (retryBtn) {
+      retryBtn.style.display = 'flex';
+      retryBtn.classList.add('visible');
+    }
+    
+    // Add helpful tooltip for connection issues
+    if (displayMessage.includes('not reachable') || displayMessage.includes('Offline')) {
+      const apiBase = window.APIClient?.getApiBase() || window.CONFIG?.API_BASE || 'http://localhost:43917';
+      text.title = `Companion service not running. Make sure it's started at ${apiBase}. The dashboard will work with cached data.`;
+    } else if (displayMessage.includes('Connection failed')) {
+      text.title = 'Failed to connect to companion service. Check if the service is running and the API endpoint is correct.';
+    } else {
+      text.title = displayMessage;
+    }
+  }
+  
+  // Hide retry button when connected
+  if (connected) {
+    const retryBtn = document.getElementById('connectionRetryBtn');
+    if (retryBtn) {
+      retryBtn.style.display = 'none';
+      retryBtn.classList.remove('visible');
+    }
   }
   
   // Update progress bar if progress value provided
@@ -75,7 +103,78 @@ const initProgress = {
   }
 };
 
+/**
+ * Test connection to companion service
+ */
+async function testConnection() {
+  const retryBtn = document.getElementById('connectionRetryBtn');
+  if (retryBtn) {
+    retryBtn.disabled = true;
+    retryBtn.textContent = 'Testing...';
+  }
+  
+  updateConnectionStatus(false, 'Testing connection...');
+  
+  try {
+    const apiBase = window.APIClient?.getApiBase() || window.CONFIG?.API_BASE || 'http://localhost:43917';
+    
+    // Create abort controller for timeout (compatible with older browsers)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    
+    const response = await fetch(`${apiBase}/health`, {
+      method: 'GET',
+      signal: controller.signal
+    });
+    
+    clearTimeout(timeoutId);
+    
+    if (response.ok) {
+      const health = await response.json();
+      if (window.state) {
+        window.state.connected = true;
+        window.state.companionServiceOnline = true;
+      }
+      updateConnectionStatus(true, 'Connected to companion service');
+      
+      // Trigger data refresh
+      if (window.fetchRecentData) {
+        setTimeout(() => {
+          window.fetchRecentData().catch(err => {
+            console.warn('[CONNECTION] Data refresh failed:', err.message);
+          });
+        }, 500);
+      }
+    } else {
+      throw new Error(`HTTP ${response.status}`);
+    }
+  } catch (error) {
+    const isNetworkError = window.APIClient?.isOfflineError(error) || 
+                           error.message?.includes('CORS') || 
+                           error.message?.includes('NetworkError') || 
+                           error.message?.includes('Failed to fetch');
+    
+    const apiBase = window.APIClient?.getApiBase() || window.CONFIG?.API_BASE || 'http://localhost:43917';
+    const errorMessage = isNetworkError
+      ? `Offline - using cached data (service at ${apiBase} not reachable)`
+      : `Connection failed - ${error.message || 'Unknown error'}`;
+    
+    updateConnectionStatus(false, errorMessage);
+    
+    if (window.state) {
+      window.state.connected = false;
+      window.state.companionServiceOnline = false;
+    }
+  } finally {
+    if (retryBtn) {
+      retryBtn.disabled = false;
+      retryBtn.textContent = 'Retry';
+    }
+  }
+}
+
 // Export to window for global access
 window.updateConnectionStatus = updateConnectionStatus;
 window.initProgress = initProgress;
+window.testConnection = testConnection;
 

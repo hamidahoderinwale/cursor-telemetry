@@ -553,18 +553,59 @@ class CursorDatabaseParser {
         timestamp = correspondingGen.timestamp - 30000; // 30 seconds before AI response
       }
 
-      // Create conversation ID from generation UUID or workspace + index
-      const conversationId = prompt.generationUUID || prompt.conversationId || `${workspaceId}_${idx}`;
+      // Create stable conversation ID: prefer generationUUID (from Cursor DB), then conversationId, then create workspace-scoped ID
+      let conversationId = prompt.generationUUID || prompt.conversationId;
+      
+      // If no stable ID, create one based on workspace + a hash of first message
+      if (!conversationId) {
+        const firstMessageHash = require('crypto')
+          .createHash('md5')
+          .update(prompt.text || '')
+          .digest('hex')
+          .substring(0, 8);
+        conversationId = `${workspaceId}_${firstMessageHash}`;
+      }
+      
+      // Ensure conversation ID is workspace-scoped to prevent collisions
+      if (workspaceId && !conversationId.includes(workspaceId)) {
+        conversationId = `${workspaceId}:${conversationId}`;
+      }
 
-      // Determine conversation title: prefer explicit title, then metadata map, then prompt text
+      // Determine conversation title: prefer explicit title, then metadata map, then smart extraction
       let conversationTitle = prompt.conversationTitle || 
                               conversationTitleMap.get(conversationId) ||
                               conversationTitleMap.get(prompt.conversationId) ||
                               null;
       
-      // Fallback to first 100 chars of prompt text if no title found
-      if (!conversationTitle) {
-        conversationTitle = prompt.text.substring(0, 100);
+      // Smart title extraction: look for common patterns
+      if (!conversationTitle && prompt.text) {
+        const text = prompt.text.trim();
+        
+        // Pattern 1: First line if it's short and looks like a title
+        const firstLine = text.split('\n')[0];
+        if (firstLine.length < 100 && firstLine.length > 10 && !firstLine.includes('```')) {
+          conversationTitle = firstLine;
+        }
+        // Pattern 2: Extract from "Fix X", "Add Y", "Implement Z" patterns
+        else if (text.match(/^(fix|add|implement|create|update|refactor|remove|delete|improve|investigate|debug|test|write|build|design)\s+/i)) {
+          const match = text.match(/^([A-Z][^.!?]{10,80})/);
+          if (match) {
+            conversationTitle = match[1].trim();
+          }
+        }
+        // Pattern 3: First sentence if reasonable length
+        else {
+          const firstSentence = text.match(/^([^.!?]{15,100})[.!?]/);
+          if (firstSentence) {
+            conversationTitle = firstSentence[1].trim();
+          } else {
+            // Fallback: first 80 chars, but clean it up
+            conversationTitle = text.substring(0, 80).replace(/\n/g, ' ').trim();
+            if (conversationTitle.length < 10) {
+              conversationTitle = text.substring(0, 100).replace(/\n/g, ' ').trim();
+            }
+          }
+        }
       }
 
       // Add user message
@@ -577,6 +618,8 @@ class CursorDatabaseParser {
         workspacePath: workspacePath,
         workspaceName: workspaceName,
         composerId: conversationId,
+        conversationId: conversationId, // Explicit conversation ID
+        conversationIndex: 0, // Will be updated when messages are saved
         source: 'aiService',
         type: isConversationThread ? 'conversation-thread' : 'user-prompt',
         messageRole: 'user',
@@ -598,6 +641,8 @@ class CursorDatabaseParser {
           workspacePath: workspacePath,
           workspaceName: workspaceName,
           composerId: conversationId,
+          conversationId: conversationId, // Explicit conversation ID
+          conversationIndex: 1, // Will be updated when messages are saved
           source: 'aiService',
           type: 'ai-response',
           messageRole: 'assistant',
