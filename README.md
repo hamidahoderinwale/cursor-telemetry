@@ -231,6 +231,9 @@ The system captures development activity from multiple sources, providing compre
 - **Configuration**: `enable_terminal_monitoring` in `config.json`
 
 ### 4. MCP (Model Context Protocol) Integration
+
+**Note**: MCP endpoints are disabled by default. To enable, set `enable_mcp: true` in `config.json`. This is an optional/future feature. Database mode (direct SQLite reads from Cursor's database) is the current default and recommended approach for data collection.
+
 - **What it captures**: Comprehensive AI interaction events with full metadata matching database mode capabilities
 - **How it works**: 
   - **REST endpoints**: `/mcp/log-prompt-response`, `/mcp/log-conversation`, `/mcp/log-code-change`, `/mcp/log-event`
@@ -293,7 +296,9 @@ The system captures development activity from multiple sources, providing compre
 
 ### MCP Integration Details
 
-The **Model Context Protocol (MCP)** is a standardized interface for AI tool integrations. The companion service implements enhanced MCP server endpoints with comprehensive data capture and real-time streaming capabilities.
+**Important**: MCP endpoints are disabled by default. Set `enable_mcp: true` in `config.json` to enable external data collection via MCP. When disabled, all MCP endpoints return HTTP 503 with a clear error message. Database mode (direct SQLite reads from Cursor's database files) is the current default and recommended approach.
+
+The **Model Context Protocol (MCP)** is a standardized interface for AI tool integrations. The companion service implements enhanced MCP server endpoints with comprehensive data capture and real-time streaming capabilities. This is an optional/future feature for users who prefer external data collection over direct database access.
 
 #### Enhanced MCP Endpoints
 
@@ -666,6 +671,7 @@ Located at `components/activity-logger/companion/config.json`:
   "port": 43917,
   "enable_clipboard": true,
   "enable_screenshots": true,
+  "enable_mcp": false,
   "ignore": [
     "node_modules",
     ".git",
@@ -687,6 +693,7 @@ Located at `components/activity-logger/companion/config.json`:
 - **port**: HTTP server port (default: 43917)
 - **enable_clipboard**: Capture clipboard content (requires permission)
 - **enable_screenshots**: Capture browser screenshots when available
+- **enable_mcp**: Enable MCP endpoints for external data collection (default: false, optional/future feature)
 - **cursor_db_poll_interval**: Cursor DB polling frequency (ms)
 - **ignore**: File patterns to exclude from monitoring
 
