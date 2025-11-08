@@ -1,0 +1,92 @@
+/**
+ * Schema configuration API routes
+ */
+
+function createSchemaRoutes(deps) {
+  const { app, persistentDB } = deps;
+
+  app.get('/api/schema', async (req, res) => {
+    try {
+      const schema = await persistentDB.getSchema();
+      res.json({ success: true, data: schema });
+    } catch (error) {
+      console.error('Error getting schema:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.get('/api/schema/:tableName', async (req, res) => {
+    try {
+      const { tableName } = req.params;
+      const tableSchema = await persistentDB.getTableSchema(tableName);
+      res.json({ success: true, data: tableSchema });
+    } catch (error) {
+      console.error(`Error getting schema for table ${req.params.tableName}:`, error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.post('/api/schema/:tableName/columns', async (req, res) => {
+    try {
+      const { tableName } = req.params;
+      const columnDef = req.body;
+      
+      if (!columnDef.name || !columnDef.type) {
+        return res.status(400).json({
+          success: false,
+          error: 'Column name and type are required'
+        });
+      }
+      
+      const result = await persistentDB.addColumn(tableName, columnDef);
+      res.json({ success: true, data: result });
+    } catch (error) {
+      console.error(`Error adding column to ${req.params.tableName}:`, error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.get('/api/schema/config/fields', async (req, res) => {
+    try {
+      const { tableName } = req.query;
+      const configs = await persistentDB.getCustomFieldConfigs(tableName || null);
+      res.json({ success: true, data: configs });
+    } catch (error) {
+      console.error('Error getting custom field configs:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.post('/api/schema/config/fields', async (req, res) => {
+    try {
+      const config = req.body;
+      
+      if (!config.tableName || !config.fieldName || !config.fieldType) {
+        return res.status(400).json({
+          success: false,
+          error: 'tableName, fieldName, and fieldType are required'
+        });
+      }
+      
+      const result = await persistentDB.saveCustomFieldConfig(config);
+      res.json({ success: true, data: result });
+    } catch (error) {
+      console.error('Error saving custom field config:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.delete('/api/schema/config/fields/:tableName/:fieldName', async (req, res) => {
+    try {
+      const { tableName, fieldName } = req.params;
+      const result = await persistentDB.deleteCustomFieldConfig(tableName, fieldName);
+      res.json({ success: true, data: result });
+    } catch (error) {
+      console.error('Error deleting custom field config:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+}
+
+module.exports = createSchemaRoutes;
+

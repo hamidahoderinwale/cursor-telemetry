@@ -92,7 +92,7 @@ function renderOverviewView(container) {
           <div class="overview-stat-label">Active Sessions (7d)</div>
           <div class="overview-stat-hint">Days with activity in the last week</div>
         </div>
-        <div class="overview-stat-card" title="Total number of file modification events tracked. Includes code changes, file saves, and other file-related activities captured by the companion service">
+        <div class="overview-stat-card" title="Total number of file modification events tracked. Each time you edit, save, or modify a file, it counts as one file change. Includes: code changes (additions/deletions), file saves, and other file-related activities captured by the companion service's file watcher. This metric represents your total tracked file modifications since data collection began.">
           <div class="overview-stat-value">${totalEvents.toLocaleString()}</div>
           <div class="overview-stat-label">File Changes</div>
           <div class="overview-stat-hint">Total tracked file modifications</div>
