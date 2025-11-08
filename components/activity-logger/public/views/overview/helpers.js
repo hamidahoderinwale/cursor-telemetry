@@ -10,9 +10,9 @@ function renderSystemStatus() {
   if (!latest) {
     return `
       <div class="empty-state">
-        <div class="empty-state-text">System monitoring not active</div>
+        <div class="empty-state-text">No system data available</div>
         <div class="empty-state-hint" style="font-size: 0.85em; margin-top: 8px;">
-          System resource monitoring is optional. Enable it in the companion service to see CPU, memory, and load metrics.
+          System resource monitoring is optional. The companion service collects CPU, memory, and load metrics every 5 seconds when running.
         </div>
       </div>
     `;
@@ -94,8 +94,12 @@ function renderWorkspacesList() {
       return `
         <div class="empty-state">
           <div class="empty-state-text">No workspaces detected</div>
-          <div class="empty-state-hint" style="font-size: 0.85em; margin-top: 8px;">
+          <div class="empty-state-hint" style="font-size: 0.85em; margin-top: 8px; line-height: 1.5;">
             Workspaces will appear as you work in different projects. Make sure the companion service is running and monitoring your activity.
+            <br><br>
+            <span style="font-size: 0.9em; color: var(--color-text-subtle);">
+              Workspaces are automatically detected from file paths in your events and prompts.
+            </span>
           </div>
         </div>
       `;

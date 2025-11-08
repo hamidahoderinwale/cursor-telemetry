@@ -39,14 +39,30 @@ function renderActivityView(container) {
     events = events.filter(event => new Date(event.timestamp).getTime() >= cutoffTime);
   }
   
+  // Enhance prompts with context information
+  const enhancedPrompts = await Promise.all(
+    prompts.map(async (prompt) => {
+      // Try to enhance with context if function is available
+      if (window.enhancePromptWithContext) {
+        try {
+          return await window.enhancePromptWithContext(prompt);
+        } catch (error) {
+          console.warn('Error enhancing prompt with context:', error);
+          return prompt;
+        }
+      }
+      return prompt;
+    })
+  );
+  
   // Merge events, prompts, and terminal commands into unified timeline
-  const timelineItems = [
+  let timelineItems = [
     ...events.map(event => ({
       ...event,
       itemType: 'event',
       sortTime: new Date(event.timestamp).getTime()
     })),
-    ...prompts.map(prompt => ({
+    ...enhancedPrompts.map(prompt => ({
       ...prompt,
       itemType: 'prompt',
       sortTime: new Date(prompt.timestamp).getTime(),
@@ -57,8 +73,19 @@ function renderActivityView(container) {
       itemType: 'terminal',
       sortTime: cmd.timestamp,
       id: cmd.id
-    }))
-  ].sort((a, b) => b.sortTime - a.sortTime).slice(0, 100);
+    })).sort((a, b) => b.sortTime - a.sortTime);
+  
+  // Enhance timeline with status messages if available
+  if (window.enhanceTimelineWithStatusMessages) {
+    try {
+      timelineItems = await window.enhanceTimelineWithStatusMessages(timelineItems);
+    } catch (error) {
+      console.warn('Error enhancing timeline with status messages:', error);
+    }
+  }
+  
+  // Limit to 100 items after enhancement
+  timelineItems = timelineItems.slice(0, 100);
   
   // Extract unique workspaces for filter dropdown
   const workspaceMap = new Map();
@@ -101,7 +128,7 @@ function renderActivityView(container) {
       <div class="card">
         <div class="card-header">
           <div>
-            <h3 class="card-title">Activity Timeline</h3>
+            <h3 class="card-title" title="Chronological timeline of all your development activity including file changes, AI prompts, and terminal commands. Items are displayed in chronological order with the most recent first. Use filters to narrow down by workspace, time range, or grouping">Activity Timeline</h3>
             <p class="card-subtitle">${timelineItems.length} items (${events.length} file changes, ${prompts.length} AI prompts, ${terminalCommands.length} terminal commands)</p>
           </div>
           <div class="activity-header-controls" style="display: flex; gap: var(--space-sm); align-items: center; flex-wrap: wrap;">

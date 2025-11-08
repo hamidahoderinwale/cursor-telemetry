@@ -110,7 +110,7 @@ class ErrorTracker {
       this.testFailures = this.testFailures.slice(-200);
     }
 
-    console.log(`❌ Tracked test failure: ${testRecord.failedCount}/${testRecord.totalTests} failed`);
+    console.log(`Tracked test failure: ${testRecord.failedCount}/${testRecord.totalTests} failed`);
     return testRecord;
   }
 
@@ -136,7 +136,7 @@ class ErrorTracker {
       this.terminalErrors = this.terminalErrors.slice(-300);
     }
 
-    console.log(`⚠️  Tracked terminal error: ${errorType}`);
+    console.log(`Tracked terminal error: ${errorType}`);
     return errorRecord;
   }
 

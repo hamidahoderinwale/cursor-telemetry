@@ -180,7 +180,7 @@ async function handleImport() {
       let statsHTML = `
         <div class="import-success-message">
           <div class="import-success-header">
-            ${dryRun ? '✓ Dry run completed' : '✓ Import successful'}
+            ${dryRun ? 'Dry run completed' : 'Import successful'}
           </div>
           <div class="import-success-text">
             ${result.message}

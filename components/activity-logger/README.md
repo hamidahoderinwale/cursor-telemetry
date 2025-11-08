@@ -14,7 +14,7 @@ A modern, intuitive dashboard for monitoring and visualizing all your Cursor IDE
 - **Data Linking** - Automatic linking of prompts to resulting code changes
 - **Image Proxy** - Secure local image serving for screenshots and images in prompts
 - **Temporal Analysis** - Time-based grouping of related activities
-- **🐛 Debug Tools** - Built-in debugging and connection testing
+- **Debug Tools** - Built-in debugging and connection testing
 
 ## Quick Start
 
@@ -46,7 +46,7 @@ cd cursor-telemetry/components/activity-logger
 
 The dashboard uses a **modular, refactored architecture** with clear separation of concerns:
 
-### 🏗️ Project Structure
+### Project Structure
 
 ```
 public/
@@ -408,7 +408,7 @@ Screenshots captured near events are automatically displayed using the image pro
 
 All endpoints support CORS and are accessible from the dashboard running on any port.
 
-## 🔄 Auto-refresh
+## Auto-refresh
 
 The dashboard automatically:
 - Polls the companion service every 2 seconds
@@ -417,7 +417,7 @@ The dashboard automatically:
 - Maintains connection status indicators
 - Uses IndexedDB for persistent caching
 
-## 🐛 Troubleshooting
+## Troubleshooting
 
 ### No Data Showing
 1. Check companion service is running on port 43917
@@ -435,7 +435,7 @@ The dashboard automatically:
 2. Verify view function exported to `window`
 3. Check browser console for JavaScript errors
 
-## 📦 Dependencies
+## Dependencies
 
 ### Core Libraries
 - **Chart.js** - Chart rendering
@@ -459,7 +459,7 @@ The dashboard is now ready to use! It will automatically display all your Cursor
 
 ### Refactoring Status
 
-✅ **Completed:**
+**Completed:**
 - All HTML templates extracted to separate modules
 - View logic separated from templates
 - Utility functions organized into dedicated modules
@@ -470,7 +470,7 @@ The dashboard is now ready to use! It will automatically display all your Cursor
 - Image proxy support
 - Temporal chunks and analytics
 
-🔄 **In Progress:**
+**In Progress:**
 - Modular architecture with functions in `app/`, `views/`, `services/`, and `components/` directories
 - Gradually migrating remaining inline HTML to templates
 

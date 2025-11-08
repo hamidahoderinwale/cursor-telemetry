@@ -678,7 +678,7 @@ function renderThreadsList(threads) {
 // Removed: function renderAnalyticsView - see views/analytics/index.js
 
 // Removed: _legacy_renderAnalyticsView - see views/analytics/index.js
-// ✅ REMOVED: Continuous Activity Timeline (per user request)
+// REMOVED: Continuous Activity Timeline (per user request)
 // function renderActivityChart() {
 //   Commented out to remove Continuous Activity Timeline from dashboard
 // }

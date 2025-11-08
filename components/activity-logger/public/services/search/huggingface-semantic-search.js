@@ -69,7 +69,7 @@ class HuggingFaceSemanticSearch {
       );
 
       this.isInitialized = true;
-      console.log('[HF-SEARCH] ✅ Model loaded successfully');
+      console.log('[HF-SEARCH] Model loaded successfully');
       return true;
     } catch (error) {
       console.warn('[HF-SEARCH] Failed to initialize model:', error.message);
@@ -234,7 +234,7 @@ class HuggingFaceSemanticSearch {
     }
 
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-    console.log(`[HF-SEARCH] ✅ Generated ${processed} embeddings in ${elapsed}s`);
+    console.log(`[HF-SEARCH] Generated ${processed} embeddings in ${elapsed}s`);
   }
 
   /**

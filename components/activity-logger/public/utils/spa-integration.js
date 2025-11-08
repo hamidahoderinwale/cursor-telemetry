@@ -36,17 +36,17 @@ class CompanionIntegration {
       this.pollingTimer = null;
     }
     this.isPolling = false;
-    console.log('🛑 Companion integration stopped');
+    console.log('Companion integration stopped');
   }
 
   async checkCompanionHealth() {
     try {
       const response = await fetch(`${this.companionUrl}/health`);
       const data = await response.json();
-      console.log('🏥 Companion health:', data);
+      console.log('Companion health:', data);
       return response.ok;
     } catch (error) {
-      console.error('❌ Companion health check failed:', error);
+      console.error('Companion health check failed:', error);
       return false;
     }
   }
@@ -59,14 +59,14 @@ class CompanionIntegration {
       const response = await fetch(`${this.companionUrl}/queue?since=${since}`);
       
       if (!response.ok) {
-        console.error('❌ Failed to fetch queue:', response.status);
+        console.error('Failed to fetch queue:', response.status);
         return;
       }
 
       const data = await response.json();
       
       if (data.entries && data.entries.length > 0) {
-        console.log(`📥 Received ${data.entries.length} entries from companion`);
+        console.log(`Received ${data.entries.length} entries from companion`);
         await this.processEntries(data.entries);
       }
 
@@ -82,7 +82,7 @@ class CompanionIntegration {
       }
 
     } catch (error) {
-      console.error('❌ Error polling companion:', error);
+      console.error('Error polling companion:', error);
     }
   }
 
@@ -112,7 +112,7 @@ class CompanionIntegration {
         }
 
       } catch (error) {
-        console.error('❌ Error processing entry:', error);
+        console.error('Error processing entry:', error);
       }
     }
 
@@ -141,7 +141,7 @@ class CompanionIntegration {
         console.log(`[SUCCESS] Added event from companion: ${dbEvent.id}`);
 
       } catch (error) {
-        console.error('❌ Error processing event:', error);
+        console.error('Error processing event:', error);
       }
     }
 
@@ -185,7 +185,7 @@ class CompanionIntegration {
         body: JSON.stringify({ cursor })
       });
     } catch (error) {
-      console.error('❌ Error acknowledging cursor:', error);
+      console.error('Error acknowledging cursor:', error);
     }
   }
 
@@ -222,10 +222,10 @@ class CompanionIntegration {
       if (response.ok) {
         console.log('[SUCCESS] Companion config updated');
       } else {
-        console.error('❌ Failed to update companion config');
+        console.error('Failed to update companion config');
       }
     } catch (error) {
-      console.error('❌ Error updating companion config:', error);
+      console.error('Error updating companion config:', error);
     }
   }
 }

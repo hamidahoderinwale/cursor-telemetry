@@ -7,7 +7,7 @@ function renderNavigatorViewTemplate(data) {
   return `
     <div class="navigator-view">
       <div class="view-header">
-        <h2>Semantic Navigator</h2>
+        <h2 title="Visualizes your codebase in a 2D space where files with similar code or that are frequently modified together appear closer. Uses UMAP dimensionality reduction to create a semantic map of your code">Semantic Navigator</h2>
         <p class="view-subtitle">Explore your codebase in latent space - where semantic similarity becomes visual proximity</p>
       </div>
 
@@ -16,13 +16,13 @@ function renderNavigatorViewTemplate(data) {
         <div>
           <h3>View Mode</h3>
           <div class="view-mode-switcher">
-            <button class="view-mode-btn active" data-mode="physical" onclick="setNavigatorViewMode('physical')">
+            <button class="view-mode-btn active" data-mode="physical" onclick="setNavigatorViewMode('physical')" title="Shows files based on direct co-modification relationships - files that are frequently edited together appear closer">
               <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                 <path d="M4 4h3v3H4V4zm5 0h3v3H9V4zM4 9h3v3H4V9zm5 0h3v3H9V9z"/>
               </svg>
               Physical
             </button>
-            <button class="view-mode-btn" data-mode="hybrid" onclick="setNavigatorViewMode('hybrid')">
+            <button class="view-mode-btn" data-mode="hybrid" onclick="setNavigatorViewMode('hybrid')" title="Blends both physical co-modification and semantic similarity to show a balanced view of file relationships">
               <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                 <circle cx="8" cy="4" r="2"/>
                 <circle cx="4" cy="12" r="2"/>
@@ -31,7 +31,7 @@ function renderNavigatorViewTemplate(data) {
               </svg>
               Hybrid
             </button>
-            <button class="view-mode-btn" data-mode="latent" onclick="setNavigatorViewMode('latent')">
+            <button class="view-mode-btn" data-mode="latent" onclick="setNavigatorViewMode('latent')" title="Shows files based on semantic similarity using UMAP - files with similar code content appear closer regardless of when they were modified">
               <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                 <circle cx="8" cy="8" r="6"/>
                 <circle cx="8" cy="8" r="3"/>
@@ -129,7 +129,7 @@ function renderNavigatorViewTemplate(data) {
       <!-- Semantic Insights -->
       <div class="card semantic-insights">
         <div class="card-header">
-          <h3 class="card-title">Semantic Insights</h3>
+          <h3 class="card-title" title="Automatically discovered patterns and clusters in your codebase based on semantic analysis. Shows groups of related files and insights about code organization">Semantic Insights</h3>
           <p class="card-subtitle">Discovered patterns in latent space</p>
         </div>
         <div class="card-body">

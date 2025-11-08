@@ -180,7 +180,7 @@ function renderHourlyChart() {
   });
 }
 
-function renderAIActivityChart() {
+function renderAIActivityChart(timeScale = null) {
   const canvas = document.getElementById('aiActivityChart');
   if (!canvas) return;
   
@@ -189,7 +189,8 @@ function renderAIActivityChart() {
   
   console.log('[CHART-DEBUG] AI Activity Chart rendering with:', {
     totalEvents: allEvents.length,
-    totalPrompts: allPrompts.length
+    totalPrompts: allPrompts.length,
+    timeScale: timeScale || 'auto'
   });
   
   const now = Date.now();
@@ -201,41 +202,76 @@ function renderAIActivityChart() {
   const timeSpan = now - oldestData;
   const daysSpan = timeSpan / (24 * 60 * 60 * 1000);
   
-  // Use daily buckets, but adapt based on available data
-  // If less than 1 day of data, use hourly buckets
-  // If 1-7 days, use daily buckets
-  // If 7-30 days, use daily buckets (show last 30 days)
-  // If more than 30 days, use daily buckets (show last 30 days)
-  let bucketSize, numBuckets, timeUnit;
+  // Determine time scale (use provided or auto-detect)
+  let bucketSize, numBuckets, timeUnit, startTime;
   
-  if (daysSpan < 1) {
-    // Less than 1 day: use hourly buckets for last 24 hours
-    bucketSize = 60 * 60 * 1000; // 1 hour
-    numBuckets = 24;
-    timeUnit = 'hourly';
-  } else if (daysSpan <= 7) {
-    // 1-7 days: use daily buckets
-    bucketSize = 24 * 60 * 60 * 1000; // 1 day
-    numBuckets = Math.ceil(daysSpan) || 1; // Show all available days
-    timeUnit = 'daily';
-  } else {
-    // More than 7 days: show last 30 days
-    bucketSize = 24 * 60 * 60 * 1000; // 1 day
-    numBuckets = 30;
-    timeUnit = 'daily';
+  if (timeScale) {
+    // Use provided time scale
+    switch (timeScale) {
+      case 'hourly':
+        bucketSize = 60 * 60 * 1000; // 1 hour
+        numBuckets = 24; // Last 24 hours
+        timeUnit = 'hourly';
+        startTime = now - (24 * 60 * 60 * 1000);
+        break;
+      case 'daily':
+        bucketSize = 24 * 60 * 60 * 1000; // 1 day
+        numBuckets = 30; // Last 30 days
+        timeUnit = 'daily';
+        startTime = now - (30 * 24 * 60 * 60 * 1000);
+        break;
+      case 'weekly':
+        bucketSize = 7 * 24 * 60 * 60 * 1000; // 1 week
+        numBuckets = 12; // Last 12 weeks (~3 months)
+        timeUnit = 'weekly';
+        startTime = now - (12 * 7 * 24 * 60 * 60 * 1000);
+        break;
+      case 'monthly':
+        bucketSize = 30 * 24 * 60 * 60 * 1000; // ~1 month (30 days)
+        numBuckets = 12; // Last 12 months
+        timeUnit = 'monthly';
+        startTime = now - (12 * 30 * 24 * 60 * 60 * 1000);
+        break;
+      default:
+        // Fallback to auto-detect
+        timeScale = null;
+    }
   }
   
-  // Create buckets starting from oldest data (or last N days if data is older)
+  // Auto-detect if no time scale provided or invalid
+  if (!timeScale) {
+    if (daysSpan < 1) {
+      // Less than 1 day: use hourly buckets for last 24 hours
+      bucketSize = 60 * 60 * 1000; // 1 hour
+      numBuckets = 24;
+      timeUnit = 'hourly';
+      startTime = now - (24 * 60 * 60 * 1000);
+    } else if (daysSpan <= 7) {
+      // 1-7 days: use daily buckets
+      bucketSize = 24 * 60 * 60 * 1000; // 1 day
+      numBuckets = Math.ceil(daysSpan) || 1; // Show all available days
+      timeUnit = 'daily';
+      startTime = oldestData;
+    } else if (daysSpan <= 30) {
+      // 7-30 days: show last 30 days
+      bucketSize = 24 * 60 * 60 * 1000; // 1 day
+      numBuckets = 30;
+      timeUnit = 'daily';
+      startTime = now - (30 * 24 * 60 * 60 * 1000);
+    } else {
+      // More than 30 days: use daily buckets for last 30 days
+      bucketSize = 24 * 60 * 60 * 1000; // 1 day
+      numBuckets = 30;
+      timeUnit = 'daily';
+      startTime = now - (30 * 24 * 60 * 60 * 1000);
+    }
+  }
+  
+  // Create buckets
   const buckets = [];
-  const startTime = timeUnit === 'daily' && daysSpan > 30 
-    ? now - (30 * 24 * 60 * 60 * 1000) // Last 30 days
-    : oldestData; // From oldest data point
+  const actualNumBuckets = Math.ceil((now - startTime) / bucketSize) || 1;
   
-  // Calculate how many buckets we need from startTime to now
-  const actualNumBuckets = timeUnit === 'daily' && daysSpan > 30 
-    ? 30 
-    : Math.ceil((now - startTime) / bucketSize) || 1;
-  
+  // Create buckets from startTime to now
   for (let i = 0; i < actualNumBuckets; i++) {
     const bucketTime = startTime + (i * bucketSize);
     buckets.push({
@@ -315,9 +351,15 @@ function renderAIActivityChart() {
         const date = new Date(b.timestamp);
         if (timeUnit === 'hourly') {
           return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        } else {
-          // Daily: show day and date
+        } else if (timeUnit === 'daily') {
           return date.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+        } else if (timeUnit === 'weekly') {
+          return date.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' - ' + 
+                 new Date(b.timestamp + bucketSize).toLocaleDateString([], { month: 'short', day: 'numeric' });
+        } else if (timeUnit === 'monthly') {
+          return date.toLocaleDateString([], { month: 'short', year: 'numeric' });
+        } else {
+          return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
         }
       }),
       datasets: [
@@ -374,6 +416,14 @@ function renderAIActivityChart() {
               const date = new Date(buckets[context[0].dataIndex].timestamp);
               if (timeUnit === 'hourly') {
                 return date.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+              } else if (timeUnit === 'daily') {
+                return date.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+              } else if (timeUnit === 'weekly') {
+                const endDate = new Date(buckets[context[0].dataIndex].timestamp + bucketSize);
+                return date.toLocaleDateString([], { month: 'long', day: 'numeric' }) + ' - ' + 
+                       endDate.toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' });
+              } else if (timeUnit === 'monthly') {
+                return date.toLocaleDateString([], { month: 'long', year: 'numeric' });
               } else {
                 return date.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
               }
@@ -926,6 +976,28 @@ function renderPromptEffectiveness() {
   }, 100);
 }
 
+/**
+ * Update AI Activity chart time scale
+ */
+function updateAIActivityChartTimescale(scale) {
+  // Update button states
+  const controls = document.getElementById('aiActivityTimescaleControls');
+  if (controls) {
+    controls.querySelectorAll('.btn-timescale').forEach(btn => {
+      if (btn.dataset.scale === scale) {
+        btn.classList.add('active');
+      } else {
+        btn.classList.remove('active');
+      }
+    });
+  }
+  
+  // Re-render chart with new time scale
+  if (window.renderAIActivityChart) {
+    window.renderAIActivityChart(scale);
+  }
+}
+
 // Export to window for global access
 window.renderFileTypesChart = renderFileTypesChart;
 window.renderHourlyChart = renderHourlyChart;
@@ -933,4 +1005,5 @@ window.renderPromptEffectiveness = renderPromptEffectiveness;
 window.renderAIActivityChart = renderAIActivityChart;
 window.renderPromptTokensChart = renderPromptTokensChart;
 window.updateContextChartTimescale = updateContextChartTimescale;
+window.updateAIActivityChartTimescale = updateAIActivityChartTimescale;
 

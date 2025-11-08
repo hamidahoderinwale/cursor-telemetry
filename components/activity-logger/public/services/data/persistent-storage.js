@@ -642,7 +642,7 @@ class PersistentStorage {
     
     await new Promise((resolve) => {
       eventsTransaction.oncomplete = () => {
-        console.log(`🗑️ Cleaned up ${eventsDeleted} old events`);
+        console.log(`Cleaned up ${eventsDeleted} old events`);
         resolve();
       };
     });

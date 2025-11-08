@@ -48,6 +48,9 @@ function renderCurrentView() {
     case 'api-docs':
       if (window.renderAPIDocsView) window.renderAPIDocsView(container);
       break;
+    case 'schema-config':
+      if (window.renderSchemaConfigView) window.renderSchemaConfigView(container);
+      break;
     default:
       container.innerHTML = '<div class="empty-state">View not found</div>';
   }

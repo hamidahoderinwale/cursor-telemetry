@@ -10,8 +10,7 @@ class DataSynchronizer {
     this.companionUrl = 'http://localhost:43917';
     
     // Load lastSync from localStorage to persist across page refreshes
-    const savedLastSync = localStorage.getItem('dataSync_lastSync');
-    this.lastSync = savedLastSync ? JSON.parse(savedLastSync) : {
+    this.lastSync = (window.LocalStorageHelper?.get('dataSync_lastSync')) || {
       events: 0,
       prompts: 0,
       cursorDb: 0
@@ -25,10 +24,15 @@ class DataSynchronizer {
    * Save lastSync to localStorage
    */
   _saveLastSync() {
-    try {
-      localStorage.setItem('dataSync_lastSync', JSON.stringify(this.lastSync));
-    } catch (e) {
-      // Ignore localStorage errors (quota exceeded, etc.)
+    if (window.LocalStorageHelper) {
+      window.LocalStorageHelper.set('dataSync_lastSync', this.lastSync);
+    } else {
+      // Fallback for compatibility
+      try {
+        localStorage.setItem('dataSync_lastSync', JSON.stringify(this.lastSync));
+      } catch (e) {
+        // Ignore localStorage errors (quota exceeded, etc.)
+      }
     }
   }
 
@@ -123,7 +127,7 @@ class DataSynchronizer {
       if (data.data && data.data.conversations) {
         await this.storage.storePrompts(data.data.conversations);
         if (!isOffline) {
-          console.log(`  ✓ Stored ${data.data.conversations.length} conversations`);
+          console.log(`  Stored ${data.data.conversations.length} conversations`);
         }
       }
       
@@ -131,7 +135,7 @@ class DataSynchronizer {
       if (data.data && data.data.prompts) {
         const stored = await this.storage.storePrompts(data.data.prompts);
         if (!isOffline) {
-          console.log(`  ✓ Stored ${stored} new prompts from Cursor DB`);
+          console.log(`  Stored ${stored} new prompts from Cursor DB`);
         }
       }
       
@@ -144,7 +148,7 @@ class DataSynchronizer {
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
       if (!isOffline) {
         const newItems = data.incremental ? data.newItems : 'all';
-        console.log(`[ARCHIVE] ✅ Background sync complete in ${elapsed}s (${newItems} new items)`);
+        console.log(`[ARCHIVE] Background sync complete in ${elapsed}s (${newItems} new items)`);
       }
       
       // Restore connection status if still connected
@@ -205,7 +209,7 @@ class DataSynchronizer {
         if (eventsData.events && eventsData.events.length > 0) {
           const stored = await this.storage.storeEvents(eventsData.events);
           if (!isOffline) {
-            console.log(`  ✓ Stored ${stored} new events`);
+            console.log(`  Stored ${stored} new events`);
           }
           this.lastSync.events = eventsData.cursor || this.lastSync.events;
           this._saveLastSync(); // Persist to localStorage
@@ -223,12 +227,33 @@ class DataSynchronizer {
         if (entriesData.entries && entriesData.entries.length > 0) {
           const stored = await this.storage.storePrompts(entriesData.entries);
           if (!isOffline) {
-            console.log(`  ✓ Stored ${stored} new entries`);
+            console.log(`  Stored ${stored} new entries`);
           }
         }
         
         // Mark as online if we got a response
         if (window.state) window.state.companionServiceOnline = true;
+      }
+      
+      // Get system resources (optional, don't fail if unavailable)
+      try {
+        const systemResResponse = await fetch(`${this.companionUrl}/raw-data/system-resources?limit=100`);
+        if (systemResResponse.ok) {
+          const systemResData = await systemResResponse.json();
+          if (systemResData.success && systemResData.data && Array.isArray(systemResData.data)) {
+            if (window.state && window.state.data) {
+              window.state.data.systemResources = systemResData.data;
+              // Trigger chart re-render if system view is active
+              if (window.renderSystemResourcesChart && document.getElementById('systemResourcesChart')) {
+                setTimeout(() => {
+                  window.renderSystemResourcesChart();
+                }, 100);
+              }
+            }
+          }
+        }
+      } catch (systemResError) {
+        // System resources are optional, silently ignore errors
       }
       
     } catch (error) {
@@ -290,7 +315,7 @@ class DataSynchronizer {
     if (this.syncInterval) {
       clearInterval(this.syncInterval);
       this.syncInterval = null;
-      console.log('⏸️ Periodic sync stopped');
+      console.log('Periodic sync stopped');
     }
   }
 

@@ -71,7 +71,7 @@ const initProgress = {
         progressContainer.classList.remove('active');
       }
     }, 500);
-    console.log('[PROGRESS] ✅ Initialization complete');
+    console.log('[PROGRESS] Initialization complete');
   }
 };
 

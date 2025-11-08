@@ -15,6 +15,9 @@
   <link rel="stylesheet" href="views/overview/styles.css">
   <link rel="stylesheet" href="views/system/styles.css">
   <link rel="stylesheet" href="views/file-graph/styles.css">
+  <link rel="stylesheet" href="views/schema-config/styles.css">
+  <link rel="stylesheet" href="views/activity/context-visualization.css">
+  <link rel="stylesheet" href="views/activity/status-message-visualization.css">
   
   <!-- Service Worker Registration -->
   <script>
@@ -162,6 +165,13 @@
             <path d="M9 4.804A7.968 7.968 0 005.5 4c-1.255 0-2.443.29-3.5.804v10A7.969 7.969 0 015.5 14c1.669 0 3.218.51 4.5 1.385A7.962 7.962 0 0114.5 14c1.255 0 2.443.29 3.5.804v-10A7.968 7.968 0 0014.5 4c-1.255 0-2.443.29-3.5.804V12a1 1 0 11-2 0V4.804z"/>
           </svg>
           <span>API Docs</span>
+        </a>
+        
+        <a href="#schema-config" class="nav-link" data-view="schema-config">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z"/>
+          </svg>
+          <span>Schema Config</span>
         </a>
       </nav>
 
@@ -338,7 +348,7 @@
   <script>
     // Check if accessed via file:// and warn user
     if (window.location.protocol === 'file:') {
-      console.warn('%c⚠️ IMPORTANT: Dashboard must be accessed via HTTP', 'color: #f59e0b; font-weight: bold; font-size: 14px;');
+      console.warn('%cWARNING: Dashboard must be accessed via HTTP', 'color: #f59e0b; font-weight: bold; font-size: 14px;');
       console.warn('%cPlease access the dashboard at: http://localhost:43917/dashboard.html', 'color: #6366f1; font-size: 12px;');
       console.warn('ES modules, service workers, and fetch API require HTTP/HTTPS protocol.');
       
@@ -346,7 +356,7 @@
       document.addEventListener('DOMContentLoaded', () => {
         const warning = document.createElement('div');
         warning.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; background: #fef3c7; border-bottom: 2px solid #f59e0b; padding: 12px; text-align: center; z-index: 10000; font-weight: 600;';
-        warning.innerHTML = '⚠️ Please access this dashboard via <a href="http://localhost:43917/dashboard.html" style="color: #6366f1; text-decoration: underline;">http://localhost:43917/dashboard.html</a> (not file://)';
+        warning.innerHTML = 'WARNING: Please access this dashboard via <a href="http://localhost:43917/dashboard.html" style="color: #6366f1; text-decoration: underline;">http://localhost:43917/dashboard.html</a> (not file://)';
         document.body.insertBefore(warning, document.body.firstChild);
       });
     }
@@ -385,6 +395,8 @@
   <script src="utils/export-options-modal.js"></script>
   
   <!-- Views (must load before view-router) -->
+  <script src="views/activity/context-visualization.js"></script>
+  <script src="views/activity/status-message-visualization.js"></script>
   <script src="views/activity/timeline-helpers.js"></script>
   <script src="views/activity/search-handler.js"></script>
   <script src="views/activity/grouping-handler.js"></script>
@@ -404,6 +416,7 @@
   <script src="views/file-graph/helpers.js"></script>
   <script src="views/file-graph/d3-renderer.js"></script>
   <script src="views/file-graph/file-graph.js"></script>
+  <script src="views/schema-config/index.js"></script>
   <script src="views/file-graph/index.js"></script>
   <script src="views/navigator/templates.js"></script>
   <script src="views/navigator/navigator-layout.js"></script>
@@ -446,6 +459,7 @@
     <script src="app/data-initializer.js"></script>
   
   <!-- Utilities -->
+  <script src="utils/local-storage-helper.js"></script>
   <script src="utils/dashboard-helpers.js"></script>
   
   <!-- Config & Main Dashboard -->

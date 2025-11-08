@@ -38,18 +38,18 @@ const EVENT_TAG_CATEGORIES = {
  * Tag icons and colors
  */
 const TAG_STYLES = {
-  [EVENT_TAG_CATEGORIES.FILE_UPLOAD]: { icon: '📄', color: '#8b5cf6', bg: 'rgba(139, 92, 246, 0.1)' },
-  [EVENT_TAG_CATEGORIES.CODE_CHANGE]: { icon: '💻', color: '#3b82f6', bg: 'rgba(59, 130, 246, 0.1)' },
-  [EVENT_TAG_CATEGORIES.DOCUMENT_UPLOAD]: { icon: '📑', color: '#10b981', bg: 'rgba(16, 185, 129, 0.1)' },
-  [EVENT_TAG_CATEGORIES.IMAGE_UPLOAD]: { icon: '🖼️', color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.1)' },
-  [EVENT_TAG_CATEGORIES.CONFIG_CHANGE]: { icon: '⚙️', color: '#6366f1', bg: 'rgba(99, 102, 241, 0.1)' },
-  [EVENT_TAG_CATEGORIES.AI_GENERATED]: { icon: '✨', color: '#ec4899', bg: 'rgba(236, 72, 153, 0.1)' },
-  [EVENT_TAG_CATEGORIES.MANUAL]: { icon: '✋', color: '#6b7280', bg: 'rgba(107, 114, 128, 0.1)' },
-  [EVENT_TAG_CATEGORIES.REFACTORING]: { icon: '♻️', color: '#8b5cf6', bg: 'rgba(139, 92, 246, 0.1)' },
-  [EVENT_TAG_CATEGORIES.BUG_FIX]: { icon: '🐛', color: '#ef4444', bg: 'rgba(239, 68, 68, 0.1)' },
-  [EVENT_TAG_CATEGORIES.FEATURE_ADD]: { icon: '➕', color: '#10b981', bg: 'rgba(16, 185, 129, 0.1)' },
-  [EVENT_TAG_CATEGORIES.TEST_UPDATE]: { icon: '🧪', color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.1)' },
-  [EVENT_TAG_CATEGORIES.DOCUMENTATION]: { icon: '📝', color: '#6366f1', bg: 'rgba(99, 102, 241, 0.1)' }
+  [EVENT_TAG_CATEGORIES.FILE_UPLOAD]: { icon: '[File]', color: '#8b5cf6', bg: 'rgba(139, 92, 246, 0.1)' },
+  [EVENT_TAG_CATEGORIES.CODE_CHANGE]: { icon: '[Code]', color: '#3b82f6', bg: 'rgba(59, 130, 246, 0.1)' },
+  [EVENT_TAG_CATEGORIES.DOCUMENT_UPLOAD]: { icon: '[Doc]', color: '#10b981', bg: 'rgba(16, 185, 129, 0.1)' },
+  [EVENT_TAG_CATEGORIES.IMAGE_UPLOAD]: { icon: '[Image]', color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.1)' },
+  [EVENT_TAG_CATEGORIES.CONFIG_CHANGE]: { icon: '[Config]', color: '#6366f1', bg: 'rgba(99, 102, 241, 0.1)' },
+  [EVENT_TAG_CATEGORIES.AI_GENERATED]: { icon: '[AI]', color: '#ec4899', bg: 'rgba(236, 72, 153, 0.1)' },
+  [EVENT_TAG_CATEGORIES.MANUAL]: { icon: '[Manual]', color: '#6b7280', bg: 'rgba(107, 114, 128, 0.1)' },
+  [EVENT_TAG_CATEGORIES.REFACTORING]: { icon: '[Refactor]', color: '#8b5cf6', bg: 'rgba(139, 92, 246, 0.1)' },
+  [EVENT_TAG_CATEGORIES.BUG_FIX]: { icon: '[Bug]', color: '#ef4444', bg: 'rgba(239, 68, 68, 0.1)' },
+  [EVENT_TAG_CATEGORIES.FEATURE_ADD]: { icon: '[Feature]', color: '#10b981', bg: 'rgba(16, 185, 129, 0.1)' },
+  [EVENT_TAG_CATEGORIES.TEST_UPDATE]: { icon: '[Test]', color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.1)' },
+  [EVENT_TAG_CATEGORIES.DOCUMENTATION]: { icon: '[Docs]', color: '#6366f1', bg: 'rgba(99, 102, 241, 0.1)' }
 };
 
 /**
@@ -242,7 +242,7 @@ function autoTagEvent(event) {
  * Get tag badge HTML
  */
 function renderTagBadge(tag, compact = false) {
-  const style = TAG_STYLES[tag] || { icon: '🏷️', color: '#6b7280', bg: 'rgba(107, 114, 128, 0.1)' };
+  const style = TAG_STYLES[tag] || { icon: '[Tag]', color: '#6b7280', bg: 'rgba(107, 114, 128, 0.1)' };
   const label = tag.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
   
   if (compact) {

@@ -29,10 +29,10 @@ cleanup() {
 trap cleanup SIGINT SIGTERM
 
 # Start companion service
-echo "📦 Starting companion service..."
+echo "Starting companion service..."
 cd companion
 if [ ! -d "node_modules" ]; then
-    echo "📥 Installing companion dependencies..."
+    echo "Installing companion dependencies..."
     npm install
 fi
 
@@ -45,14 +45,14 @@ sleep 3
 
 # Check if companion started successfully
 if ! kill -0 $COMPANION_PID 2>/dev/null; then
-    echo " Failed to start companion service"
+    echo "ERROR: Failed to start companion service"
     exit 1
 fi
 
-echo " Companion service started (PID: $COMPANION_PID)"
+echo "Companion service started (PID: $COMPANION_PID)"
 
 # Start SPA
-echo "🌐 Starting SPA server..."
+echo "Starting SPA server..."
 cd ../public
 
 # Start SPA in background

@@ -370,7 +370,7 @@ class PromptAnalyticsEngine {
         type: 'high_activity',
         title: 'High AI Interaction',
         message: `You're averaging ${promptsPerHour.toFixed(1)} prompts per hour, indicating heavy AI assistance usage.`,
-        icon: '🔥'
+        icon: '[Hot]'
       });
     }
 
@@ -402,7 +402,7 @@ class PromptAnalyticsEngine {
         type: 'code_heavy',
         title: 'Code-Focused Usage',
         message: `${((codePrompts.length / promptEvents.length) * 100).toFixed(0)}% of your prompts resulted in code generation.`,
-        icon: '💻'
+        icon: '[Code]'
       });
     }
 

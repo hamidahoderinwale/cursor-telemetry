@@ -8,15 +8,50 @@ function renderSystemView(container) {
 
   // Render charts after DOM is updated
   setTimeout(() => {
-    if (window.renderSystemResourcesChart) window.renderSystemResourcesChart();
-  }, 0);
+    // Try to fetch latest system resources if not available
+    if (!window.state?.data?.systemResources || window.state.data.systemResources.length === 0) {
+      fetchSystemResources().then(() => {
+        if (window.renderSystemResourcesChart) window.renderSystemResourcesChart();
+      }).catch(() => {
+        // Still try to render even if fetch fails
+        if (window.renderSystemResourcesChart) window.renderSystemResourcesChart();
+      });
+    } else {
+      if (window.renderSystemResourcesChart) window.renderSystemResourcesChart();
+    }
+  }, 100);
+}
+
+/**
+ * Fetch system resources from the API
+ */
+async function fetchSystemResources() {
+  if (!window.APIClient) return false;
+  
+  try {
+    const systemRes = await window.APIClient.get('/raw-data/system-resources?limit=100', {
+      timeout: 5000,
+      retries: 1,
+      silent: true
+    }).catch(() => null);
+    
+    if (systemRes && systemRes.data && Array.isArray(systemRes.data)) {
+      if (!window.state.data) window.state.data = {};
+      window.state.data.systemResources = systemRes.data;
+      return true;
+    }
+  } catch (err) {
+    // System resources are optional
+    console.debug('[SYSTEM] Could not fetch system resources:', err.message);
+  }
+  return false;
 }
 
 function renderSystemResourcesChart() {
   const canvas = document.getElementById('systemResourcesChart');
   if (!canvas) return;
   
-  const data = (window.state?.data?.systemResources || []).slice(-30);
+  const data = (window.state?.data?.systemResources || []).slice(-100); // Show last 100 data points for better visualization
   
   if (data.length === 0) {
     canvas.style.display = 'none';
@@ -24,10 +59,19 @@ function renderSystemResourcesChart() {
     container.innerHTML = `
       <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 200px; text-align: center;">
         <div style="font-size: var(--text-md); font-weight: 500; color: var(--color-text); margin-bottom: var(--space-xs);">No Data Available</div>
-        <div style="font-size: var(--text-sm); color: var(--color-text-muted);">System data will appear as resources are monitored</div>
+        <div style="font-size: var(--text-sm); color: var(--color-text-muted); margin-bottom: var(--space-sm);">System data will appear as resources are monitored</div>
+        <div style="font-size: var(--text-xs); color: var(--color-text-subtle);">
+          <p>Make sure the companion service is running and collecting system metrics.</p>
+          <p style="margin-top: var(--space-xs);">The service collects CPU, memory, and load average every 5 seconds.</p>
+        </div>
       </div>
     `;
     return;
+  }
+  
+  // Destroy existing chart if it exists
+  if (canvas.chart) {
+    canvas.chart.destroy();
   }
 
   const memoryData = data.map(d => {
@@ -40,10 +84,11 @@ function renderSystemResourcesChart() {
     return loadAvg[0] || 0;
   });
   
-  const maxMemory = Math.max(...memoryData);
-  const maxCpu = Math.max(...cpuData);
+  const maxMemory = Math.max(...memoryData, 100); // Minimum 100MB for scale
+  const maxCpu = Math.max(...cpuData, 1); // Minimum 1 for scale
 
-  new Chart(canvas.getContext('2d'), {
+  // Store chart instance for cleanup
+  canvas.chart = new Chart(canvas.getContext('2d'), {
     type: 'line',
     data: {
       labels: data.map((d, i) => {
@@ -121,3 +166,4 @@ function renderSystemResourcesChart() {
 // Export to window for global access
 window.renderSystemView = renderSystemView;
 window.renderSystemResourcesChart = renderSystemResourcesChart;
+window.fetchSystemResources = fetchSystemResources;

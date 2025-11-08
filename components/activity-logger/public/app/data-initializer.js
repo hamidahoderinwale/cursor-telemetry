@@ -62,7 +62,7 @@ async function initializeDashboard() {
     const cacheStale = serverHealth ? await window.persistentStorage.isCacheStale(serverHealth.sequence || 0) : false;
     
     if (cacheStale && isConnected) {
-      console.log('📥 Cache stale, fetching updates...');
+      console.log('Cache stale, fetching updates...');
       window.initProgress.update('data', 0);
       try {
         await fetchRecentData();
@@ -107,7 +107,7 @@ async function initializeDashboard() {
     }
     
     // Step 5: Heavy analytics will be loaded on-demand via analyticsManager
-    console.log('⏳ Heavy analytics deferred until idle/tab focus');
+    console.log('Heavy analytics deferred until idle/tab focus');
     
   } catch (error) {
     console.error('Initialization error:', error);
@@ -155,7 +155,7 @@ async function loadFromCache() {
  * Fetch only recent data (last 24 hours by default)
  */
 async function fetchRecentData() {
-  // ✅ FIX: Check if APIClient is available before using it
+  // FIX: Check if APIClient is available before using it
   if (!window.APIClient || typeof window.APIClient.get !== 'function') {
     console.error('[ERROR] APIClient is not available. Ensure core/api-client.js is loaded before dashboard.js');
     // Fallback to using cached data only
@@ -174,7 +174,7 @@ async function fetchRecentData() {
     return;
   }
   
-  // ✅ FIX: Ensure state.data exists
+  // FIX: Ensure state.data exists
   if (!window.state) {
     console.error('[ERROR] state is not defined');
     return;
@@ -385,7 +385,7 @@ async function fetchRecentData() {
       // System resources are optional, don't fail if unavailable
     }
     
-    // ✅ Calculate stats after fetching data
+    // Calculate stats after fetching data
     if (!isOffline) {
       console.log(`[SYNC] Fetch complete. Events: ${window.state.data.events.length}, Prompts: ${window.state.data.prompts.length}`);
     }
@@ -393,7 +393,7 @@ async function fetchRecentData() {
       window.calculateStats();
     }
     
-    // 🔧 FIX: Re-render current view to update charts with fresh data
+    // FIX: Re-render current view to update charts with fresh data
     if (window.state.currentView === 'analytics') {
       console.log('[CHART] Re-rendering charts with fresh data...');
       setTimeout(() => {

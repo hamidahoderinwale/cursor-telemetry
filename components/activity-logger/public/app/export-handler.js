@@ -92,7 +92,7 @@ async function exportDatabase(limit = 1000, includeAllFields = false) {
       console.log(`[SUCCESS] Exported ${result.data.metadata.totalEntries} entries, ${result.data.metadata.totalPrompts} prompts, ${result.data.metadata.totalEvents} events`);
       
       // Show success feedback
-      exportBtn.innerHTML = '<span>✓ Exported!</span>';
+      exportBtn.innerHTML = '<span>Exported!</span>';
       exportBtn.style.color = '#10b981';
       setTimeout(() => {
         exportBtn.innerHTML = originalHTML;
@@ -320,7 +320,7 @@ async function handleStreamingExport(url, exportBtn, originalHTML, { dateFrom, l
     console.log(`[SUCCESS] Streamed export: ${result.data?.metadata?.totalEntries || 0} entries, ${result.data?.metadata?.totalPrompts || 0} prompts`);
     
     if (exportBtn) {
-      exportBtn.innerHTML = '<span>✓ Exported!</span>';
+      exportBtn.innerHTML = '<span>Exported!</span>';
       exportBtn.style.color = '#10b981';
       setTimeout(() => {
         exportBtn.innerHTML = originalHTML;

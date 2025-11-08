@@ -7,7 +7,7 @@ function renderFileGraphViewTemplate(data) {
   return `
     <div class="file-graph-view">
       <div class="view-header">
-        <h2>Semantic File Network</h2>
+        <h2 title="Interactive network graph showing relationships between files in your codebase. Files are connected based on semantic similarity, co-modification patterns, or temporal proximity. You can overlay AI activity, complexity metrics, and apply various clustering algorithms">Semantic File Network</h2>
         <p class="view-subtitle">Interactive code relationship visualization with AI activity overlay</p>
       </div>
 

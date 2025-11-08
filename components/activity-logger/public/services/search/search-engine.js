@@ -217,7 +217,7 @@ class SearchEngine {
       
       if (initialized) {
         this.useHuggingFace = true;
-        console.log('[SEARCH] ✅ Hugging Face semantic search enabled');
+        console.log('[SEARCH] Hugging Face semantic search enabled');
         
         // Generate embeddings in background (non-blocking)
         setTimeout(() => {
@@ -1144,6 +1144,10 @@ class SearchEngine {
    * Load search history from localStorage
    */
   loadSearchHistory() {
+    if (window.LocalStorageHelper) {
+      return window.LocalStorageHelper.get('cursor-dashboard-search-history', []);
+    }
+    // Fallback
     try {
       const history = localStorage.getItem('cursor-dashboard-search-history');
       return history ? JSON.parse(history) : [];
@@ -1156,10 +1160,15 @@ class SearchEngine {
    * Save search history to localStorage
    */
   saveSearchHistory() {
-    try {
-      localStorage.setItem('cursor-dashboard-search-history', JSON.stringify(this.searchHistory));
-    } catch (e) {
-      console.warn('Failed to save search history:', e);
+    if (window.LocalStorageHelper) {
+      window.LocalStorageHelper.set('cursor-dashboard-search-history', this.searchHistory);
+    } else {
+      // Fallback
+      try {
+        localStorage.setItem('cursor-dashboard-search-history', JSON.stringify(this.searchHistory));
+      } catch (e) {
+        console.warn('Failed to save search history:', e);
+      }
     }
   }
 
@@ -1168,13 +1177,21 @@ class SearchEngine {
    */
   clearHistory() {
     this.searchHistory = [];
-    localStorage.removeItem('cursor-dashboard-search-history');
+    if (window.LocalStorageHelper) {
+      window.LocalStorageHelper.remove('cursor-dashboard-search-history');
+    } else {
+      localStorage.removeItem('cursor-dashboard-search-history');
+    }
   }
 
   /**
    * Load search analytics from localStorage
    */
   loadSearchAnalytics() {
+    if (window.LocalStorageHelper) {
+      return window.LocalStorageHelper.get('cursor-dashboard-search-analytics', { searches: [], clicks: {} });
+    }
+    // Fallback
     try {
       const analytics = localStorage.getItem('cursor-dashboard-search-analytics');
       return analytics ? JSON.parse(analytics) : { searches: [], clicks: {} };
@@ -1187,10 +1204,15 @@ class SearchEngine {
    * Save search analytics to localStorage
    */
   saveSearchAnalytics() {
-    try {
-      localStorage.setItem('cursor-dashboard-search-analytics', JSON.stringify(this.searchAnalytics));
-    } catch (e) {
-      console.warn('Failed to save search analytics:', e);
+    if (window.LocalStorageHelper) {
+      window.LocalStorageHelper.set('cursor-dashboard-search-analytics', this.searchAnalytics);
+    } else {
+      // Fallback
+      try {
+        localStorage.setItem('cursor-dashboard-search-analytics', JSON.stringify(this.searchAnalytics));
+      } catch (e) {
+        console.warn('Failed to save search analytics:', e);
+      }
     }
   }
 

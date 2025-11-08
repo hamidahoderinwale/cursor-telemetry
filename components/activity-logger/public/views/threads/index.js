@@ -15,7 +15,7 @@ function renderThreadsView(container) {
       <div class="card">
         <div class="card-header">
           <div>
-            <h3 class="card-title">Captured Prompts</h3>
+            <h3 class="card-title" title="All prompts you've sent to Cursor, captured automatically from your clipboard or entered manually. Shows the full prompt text, timestamp, and any linked code changes">Captured Prompts</h3>
             <p class="card-subtitle">Prompts captured from clipboard and manual entry</p>
           </div>
           <div class="thread-header-controls">
@@ -37,7 +37,7 @@ function renderThreadsView(container) {
       <div class="card">
         <div class="card-header">
           <div>
-            <h3 class="card-title">Conversation Threads</h3>
+            <h3 class="card-title" title="AI conversation threads grouped by session. Each thread represents a continuous conversation with the AI, showing the back-and-forth exchange of prompts and responses">Conversation Threads</h3>
             <p class="card-subtitle">AI conversations grouped by session</p>
           </div>
           <div class="thread-badge">${threads.length} threads</div>

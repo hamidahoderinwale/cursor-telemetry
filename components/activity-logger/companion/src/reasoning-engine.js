@@ -27,13 +27,13 @@ class ReasoningEngine {
         
         // Determine which API to use
         if (this.hfApiKey) {
-            console.log(`🤗 Using Hugging Face API with ${this.hfModel}`);
+            console.log(`Using Hugging Face API with ${this.hfModel}`);
             this.useHuggingFace = true;
         } else if (this.openRouterKey) {
-            console.log(`🔀 Using OpenRouter API with ${this.openRouterModel}`);
+            console.log(`Using OpenRouter API with ${this.openRouterModel}`);
             this.useHuggingFace = false;
         } else {
-            console.warn('⚠️ No API key found (HF_TOKEN, HUGGINGFACE_API_KEY, or OPENROUTER_API_KEY)');
+            console.warn('No API key found (HF_TOKEN, HUGGINGFACE_API_KEY, or OPENROUTER_API_KEY)');
             console.log('[IDEA] Using rule-based fallback responses');
             this.useHuggingFace = false;
         }
@@ -44,7 +44,7 @@ class ReasoningEngine {
      */
     async query(userQuery, telemetryData) {
         try {
-            console.log('🧠 Processing query:', userQuery);
+            console.log('Processing query:', userQuery);
             
             // Extract temporal context from query
             const temporalContext = this.extractTemporalContext(userQuery);
@@ -67,7 +67,7 @@ class ReasoningEngine {
             };
             
         } catch (error) {
-            console.error('❌ Reasoning engine error:', error);
+            console.error('Reasoning engine error:', error);
             throw error;
         }
     }

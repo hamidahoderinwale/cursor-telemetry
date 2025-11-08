@@ -48,11 +48,11 @@ Open Settings (`Cmd+,` / `Ctrl+,`) and search for "Cursor Telemetry":
 
 ## What It Captures
 
-✅ User prompts (from clipboard or manual)  
-✅ Conversation titles  
-✅ Timestamps  
-⚠️ AI responses (requires Cursor API access - not available yet)  
-⚠️ Attachments (requires Cursor API access - not available yet)  
+- User prompts (from clipboard or manual)  
+- Conversation titles  
+- Timestamps  
+- AI responses (requires Cursor API access - not available yet)  
+- Attachments (requires Cursor API access - not available yet)  
 
 ## Troubleshooting
 

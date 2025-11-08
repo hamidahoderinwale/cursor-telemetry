@@ -167,8 +167,8 @@ async function logEvent(type, details = {}) {
             }
         }
     } catch (error) {
-        console.error('❌ Error logging event:', error);
-        console.error('❌ Event data:', { type, details, sessionId: currentSession?.id });
+        console.error('Error logging event:', error);
+        console.error('Event data:', { type, details, sessionId: currentSession?.id });
         // Don't throw - event logging failure shouldn't break the main flow
     }
 }
@@ -264,7 +264,7 @@ function getSystemComponent(type) {
 async function startClipboardWatcher() {
     
     if (!navigator.clipboard || !navigator.clipboard.readText) {
-        console.error('❌ Clipboard API not supported');
+        console.error('Clipboard API not supported');
         showNotification('Clipboard API not supported in this browser', 'error');
         return false;
     }
@@ -280,7 +280,7 @@ async function startClipboardWatcher() {
         return true;
         
     } catch (error) {
-        console.error('❌ Clipboard permission denied:', error);
+        console.error('Clipboard permission denied:', error);
         
         if (error.name === 'NotAllowedError') {
             showNotification('Clipboard permission required. Click "Request Permission" button to enable.', 'warning');
@@ -435,7 +435,7 @@ async function handleClipboardCopy(testData = null) {
         // Add visual indicator to show content was captured
         showCaptureIndicator();
     } catch (error) {
-        console.error('❌ Error reading clipboard:', error);
+        console.error('Error reading clipboard:', error);
         
         // Show user-friendly error message for common issues
         if (error.name === 'NotAllowedError') {
@@ -1067,7 +1067,7 @@ async function renderFeed() {
         // Update status dashboard after rendering
         await updateStatusDashboard();
     } catch (error) {
-        console.error('❌ Error rendering feed:', error);
+        console.error('Error rendering feed:', error);
         elements.feedContent.innerHTML = '<p class="empty-state">Error loading sessions</p>';
     }
 }
@@ -1150,11 +1150,11 @@ function renderEvent(event) {
         'database_cleared': '',
         'clipboard_enabled': '',
         'clipboard_disabled': '[ERROR]',
-        'attachment_added': '📎',
+        'attachment_added': '[Attach]',
         'search_performed': ''
     };
     
-    const icon = eventIcons[event.type] || '📌';
+    const icon = eventIcons[event.type] || '[Event]';
     
     return `
         <div class="timeline-item event-item">
@@ -1402,7 +1402,7 @@ async function cleanupInternalEvents() {
         showNotification(`Cleaned up ${deletedCount} internal events`, 'success');
         
     } catch (error) {
-        console.error('❌ Error cleaning up internal events:', error);
+        console.error('Error cleaning up internal events:', error);
         showNotification('Error cleaning up internal events', 'error');
     }
 }
@@ -1555,8 +1555,8 @@ function startCompanionPolling() {
                                 }
                             }
                         } catch (error) {
-                            console.error('❌ Error adding companion entry:', error);
-                            console.error('❌ Entry that failed:', entry);
+                            console.error('Error adding companion entry:', error);
+                            console.error('Entry that failed:', entry);
                         }
                     }
                     
@@ -1570,8 +1570,8 @@ function startCompanionPolling() {
                                 type: event.type
                             });
                         } catch (error) {
-                            console.error('❌ Error adding companion event:', error);
-                            console.error('❌ Event that failed:', event);
+                            console.error('Error adding companion event:', error);
+                            console.error('Event that failed:', event);
                         }
                     }
                     
@@ -1678,7 +1678,7 @@ This component demonstrates:
     try {
         await handleClipboardCopy(testData);
     } catch (error) {
-        console.error('❌ Test clipboard capture failed:', error);
+        console.error('Test clipboard capture failed:', error);
     }
 }
 
@@ -1693,7 +1693,7 @@ async function requestClipboardPermission() {
         showNotification('Clipboard permission granted! Auto-logging can now capture content.', 'success');
         return true;
     } catch (error) {
-        console.error('❌ Clipboard permission denied:', error);
+        console.error('Clipboard permission denied:', error);
         showNotification('Clipboard permission denied. Please allow clipboard access to enable auto-logging.', 'error');
         return false;
     }
@@ -1846,7 +1846,7 @@ function checkForNewPromptResponse() {
         }
         
     } catch (error) {
-        console.error('❌ Error in DOM watcher:', error);
+        console.error('Error in DOM watcher:', error);
     }
 }
 
@@ -1898,7 +1898,7 @@ async function createEntryFromDOM(prompt, response) {
         showCaptureIndicator('prompt');
         
     } catch (error) {
-        console.error('❌ Error saving DOM entry:', error);
+        console.error('Error saving DOM entry:', error);
     }
 }
 
@@ -1988,7 +1988,7 @@ async function checkForCodeChanges() {
         updateActivityTime();
         
     } catch (error) {
-        console.error('❌ Error in diff poller:', error);
+        console.error('Error in diff poller:', error);
     }
 }
 
@@ -2125,7 +2125,7 @@ async function createCodeChangeEntry(filePath, beforeCode, afterCode) {
         showCaptureIndicator('code');
         
     } catch (error) {
-        console.error('❌ Error saving code change entry:', error);
+        console.error('Error saving code change entry:', error);
     }
 }
 
@@ -2184,7 +2184,7 @@ function detectAndUpdateActiveFile() {
         }
         
     } catch (error) {
-        console.error('❌ Error in file detector:', error);
+        console.error('Error in file detector:', error);
     }
 }
 
@@ -2505,7 +2505,7 @@ async function updateActivityInsights(entries, events) {
         }
         
     } catch (error) {
-        console.error('❌ Error updating activity insights:', error);
+        console.error('Error updating activity insights:', error);
     }
 }
 
@@ -2739,15 +2739,15 @@ async function init() {
             showNotification('Telemetry system ready - Click "Request Permission" for full clipboard support.', 'warning');
         }
     } catch (error) {
-        console.error('❌ Error initializing app:', error);
-        console.error('❌ Error stack:', error.stack);
+        console.error('Error initializing app:', error);
+        console.error('Error stack:', error.stack);
         showNotification('Error initializing app: ' + error.message, 'error');
         
         // Try to render feed anyway in case of partial initialization
         try {
             await renderFeed();
         } catch (renderError) {
-            console.error('❌ Error rendering feed after init error:', renderError);
+            console.error('Error rendering feed after init error:', renderError);
         }
     }
 }
@@ -3112,7 +3112,7 @@ function renderActivityItem(entry) {
         description = `App: Clipboard content captured`;
     } else if (entry.source === 'dom') {
         // App events - DOM detection
-        activityIcon = '🌐';
+        activityIcon = '[Web]';
         activityType = 'App DOM';
         description = `App: DOM change detected`;
     } else {
@@ -3229,7 +3229,7 @@ function renderEventItem(event) {
         'database_cleared': '',
         'clipboard_enabled': '',
         'clipboard_disabled': '[ERROR]',
-        'attachment_added': '📎',
+        'attachment_added': '[Attach]',
         'search_performed': '',
         'code_change': '',
         'file_changed': '',

@@ -80,8 +80,16 @@ function renderAnalyticsView(container) {
       <!-- AI Activity & Code Output -->
       <div class="card">
         <div class="card-header">
-          <h3 class="card-title">AI Activity & Code Output</h3>
-          <p class="card-subtitle">Daily prompt frequency and code changes correlation. Shows available history (may be limited).</p>
+          <div class="chart-header-controls">
+            <h3 class="card-title" title="Shows the correlation between AI prompts and resulting code changes over time. The chart displays prompt frequency alongside code modifications to help identify patterns in your AI-assisted development workflow. Use the time scale buttons to view different time periods">AI Activity & Code Output</h3>
+            <div class="timescale-controls" id="aiActivityTimescaleControls">
+              <button class="btn-timescale active" data-scale="hourly" onclick="updateAIActivityChartTimescale('hourly')" title="View activity aggregated by hour - shows the last 24 hours">Hourly</button>
+              <button class="btn-timescale" data-scale="daily" onclick="updateAIActivityChartTimescale('daily')" title="View activity aggregated by day - shows the last 30 days">Daily</button>
+              <button class="btn-timescale" data-scale="weekly" onclick="updateAIActivityChartTimescale('weekly')" title="View activity aggregated by week - shows the last 12 weeks">Weekly</button>
+              <button class="btn-timescale" data-scale="monthly" onclick="updateAIActivityChartTimescale('monthly')" title="View activity aggregated by month - shows the last 12 months">Monthly</button>
+            </div>
+          </div>
+          <p class="card-subtitle">Prompt frequency and code changes correlation. Select time scale to view different time periods.</p>
         </div>
         <div class="card-body">
           <canvas id="aiActivityChart" class="chart-container"></canvas>
@@ -92,12 +100,12 @@ function renderAnalyticsView(container) {
       <div class="card">
         <div class="card-header">
           <div class="chart-header-controls">
-            <h3 class="card-title">Context Usage Over Time</h3>
+            <h3 class="card-title" title="Tracks how much of the AI context window you're using over time. The context window is the maximum number of tokens the AI can consider. Higher usage means more files or code were included in your prompts. Color coding: Green = Normal (under 70%), Orange = Medium-High (70-90%), Red = High (over 90%)">Context Usage Over Time</h3>
             <div class="timescale-controls">
-              <button class="btn-timescale active" data-hours="24" onclick="updateContextChartTimescale(24)">24h</button>
-              <button class="btn-timescale" data-hours="72" onclick="updateContextChartTimescale(72)">3d</button>
-              <button class="btn-timescale" data-hours="168" onclick="updateContextChartTimescale(168)">7d</button>
-              <button class="btn-timescale" data-hours="720" onclick="updateContextChartTimescale(720)">30d</button>
+              <button class="btn-timescale active" data-hours="24" onclick="updateContextChartTimescale(24)" title="Show context usage for the last 24 hours">24h</button>
+              <button class="btn-timescale" data-hours="72" onclick="updateContextChartTimescale(72)" title="Show context usage for the last 3 days">3d</button>
+              <button class="btn-timescale" data-hours="168" onclick="updateContextChartTimescale(168)" title="Show context usage for the last 7 days">7d</button>
+              <button class="btn-timescale" data-hours="720" onclick="updateContextChartTimescale(720)" title="Show context usage for the last 30 days">30d</button>
             </div>
           </div>
           <p class="card-subtitle">AI context window utilization with smart scaling (auto-adjusts range for better detail). Color-coded: <span style="color: #10b981;">Green</span> = Normal, <span style="color: #f59e0b;">Orange</span> = Medium-High, <span style="color: #ef4444;">Red</span> = High</p>
@@ -110,7 +118,7 @@ function renderAnalyticsView(container) {
       <!-- Model Usage Analytics -->
       <div class="card">
         <div class="card-header">
-          <h3 class="card-title">AI Model Usage</h3>
+          <h3 class="card-title" title="Shows which AI models you've been using (e.g., GPT-4, Claude, etc.) and how frequently each model is used. Also breaks down usage by mode (chat, edit, etc.) to help you understand your AI interaction patterns">AI Model Usage</h3>
           <p class="card-subtitle">Distribution of models used across prompts and modes</p>
         </div>
         <div class="card-body">
@@ -122,7 +130,7 @@ function renderAnalyticsView(container) {
       <div class="analytics-grid">
         <div class="card">
           <div class="card-header">
-            <h3 class="card-title">File Changes by Type</h3>
+            <h3 class="card-title" title="Breakdown of file modifications by file extension. Helps identify which file types you work with most frequently (e.g., .js, .ts, .py, .md, etc.)">File Changes by Type</h3>
             <p class="card-subtitle">Extension breakdown</p>
           </div>
           <div class="card-body">
@@ -132,7 +140,7 @@ function renderAnalyticsView(container) {
 
         <div class="card">
           <div class="card-header">
-            <h3 class="card-title">Recent Activity (15-min intervals)</h3>
+            <h3 class="card-title" title="Activity timeline showing development events aggregated into 15-minute intervals. Useful for identifying peak activity periods and understanding your daily coding patterns">Recent Activity (15-min intervals)</h3>
             <p class="card-subtitle">Last 12 hours of activity</p>
           </div>
           <div class="card-body">
@@ -144,7 +152,7 @@ function renderAnalyticsView(container) {
       <!-- Context File Analytics -->
       <div class="card">
         <div class="card-header">
-          <h3 class="card-title">Context File Analytics</h3>
+          <h3 class="card-title" title="Analyzes which files you reference most often in your prompts using @ mentions. Shows patterns in how you use context files and which files are most frequently included in your AI interactions">Context File Analytics</h3>
           <p class="card-subtitle">@ referenced files and context patterns</p>
         </div>
         <div class="card-body">
@@ -155,7 +163,7 @@ function renderAnalyticsView(container) {
       <!-- Enhanced Context Window Analytics -->
       <div class="card">
         <div class="card-header">
-          <h3 class="card-title">Context Window Analytics</h3>
+          <h3 class="card-title" title="Detailed analysis of context window usage including: number of files referenced, estimated token counts, how often you use context files (adoption rate), and which files are mentioned most frequently. Based on actual data from your Cursor database">Context Window Analytics</h3>
           <p class="card-subtitle">Real metrics: file references, estimated tokens, context adoption rate, and most-mentioned files from your actual prompt data</p>
         </div>
         <div class="card-body">
@@ -166,7 +174,7 @@ function renderAnalyticsView(container) {
       <!-- Productivity Insights -->
       <div class="card">
         <div class="card-header">
-          <h3 class="card-title">Productivity Insights</h3>
+          <h3 class="card-title" title="Comprehensive productivity metrics including: estimated active coding time, patterns in how you iterate on prompts, total line changes, areas of high code churn (frequent modifications), and daily productivity trends">Productivity Insights</h3>
           <p class="card-subtitle">Coding velocity: active time estimation, prompt iteration patterns, line changes, code churn hotspots, and daily metrics</p>
         </div>
         <div class="card-body">
@@ -177,7 +185,7 @@ function renderAnalyticsView(container) {
       <!-- Prompt Effectiveness -->
       <div class="card">
         <div class="card-header">
-          <h3 class="card-title">Prompt Effectiveness</h3>
+          <h3 class="card-title" title="Measures how effective your prompts are by tracking: time between sending a prompt and seeing code changes, success rate of prompts leading to modifications, iteration patterns (how many times you refine prompts), and overall workflow efficiency">Prompt Effectiveness</h3>
           <p class="card-subtitle">Time from prompt to code change, success rate, iteration patterns, and workflow efficiency</p>
         </div>
         <div class="card-body">
@@ -225,7 +233,41 @@ function renderAnalyticsView(container) {
     
     if (window.renderAIActivityChart) {
       try {
-        window.renderAIActivityChart();
+        // Auto-detect and set initial time scale button
+        const allEvents = state.data?.events || [];
+        const allPrompts = state.data?.prompts || [];
+        const now = Date.now();
+        const oldestEvent = allEvents.length > 0 ? Math.min(...allEvents.map(e => new Date(e.timestamp).getTime())) : now;
+        const oldestPrompt = allPrompts.length > 0 ? Math.min(...allPrompts.map(p => new Date(p.timestamp).getTime())) : now;
+        const oldestData = Math.min(oldestEvent, oldestPrompt);
+        const daysSpan = (now - oldestData) / (24 * 60 * 60 * 1000);
+        
+        // Set initial active button based on data span
+        let initialScale = 'daily';
+        if (daysSpan < 1) {
+          initialScale = 'hourly';
+        } else if (daysSpan <= 7) {
+          initialScale = 'daily';
+        } else if (daysSpan <= 90) {
+          initialScale = 'daily';
+        } else {
+          initialScale = 'weekly';
+        }
+        
+        // Update button state
+        const controls = document.getElementById('aiActivityTimescaleControls');
+        if (controls) {
+          controls.querySelectorAll('.btn-timescale').forEach(btn => {
+            if (btn.dataset.scale === initialScale) {
+              btn.classList.add('active');
+            } else {
+              btn.classList.remove('active');
+            }
+          });
+        }
+        
+        // Render with auto-detected scale (pass null to use auto-detect logic)
+        window.renderAIActivityChart(null);
       } catch (err) {
         console.error('[CHART] Error rendering AI Activity Chart:', err);
       }

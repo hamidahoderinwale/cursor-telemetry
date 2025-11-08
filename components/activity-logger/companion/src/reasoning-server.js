@@ -503,7 +503,7 @@ Provide a clear, insightful answer with specific numbers and actionable insights
     
     start() {
         this.app.listen(this.port, () => {
-            console.log(`🧠 Reasoning Server running on port ${this.port}`);
+            console.log(`Reasoning Server running on port ${this.port}`);
             console.log(`[DATA] Model type: ${this.modelType}`);
             console.log(`[LINK] API: http://localhost:${this.port}`);
         });

@@ -40,10 +40,10 @@ function initializePrescriptionSystem(db, app = null) {
   // Auto-mount routes if app provided
   if (app) {
     app.use('/api/prescriptions', apiRouter);
-    console.log('✓ Prescription API mounted at /api/prescriptions');
+    console.log('Prescription API mounted at /api/prescriptions');
   }
 
-  console.log('✓ Prescription system initialized');
+  console.log('Prescription system initialized');
 
   return {
     manager,

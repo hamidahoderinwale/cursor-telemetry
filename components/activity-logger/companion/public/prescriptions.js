@@ -131,15 +131,15 @@ function groupByCategory(items) {
 
 function renderCategory(category, items) {
   const icons = {
-    formatting: '✨',
-    behavior: '🎯',
-    domain: '🏗️',
-    workflow: '⚙️',
-    security: '🔒',
-    communication: '💬',
-    allowlist: '✅',
-    blocklist: '🚫',
-    constraints: '⚠️'
+    formatting: '[SPARKLE]',
+    behavior: '[TARGET]',
+    domain: '[BUILD]',
+    workflow: '[CONFIG]',
+    security: '[SECURITY]',
+    communication: '[CHAT]',
+    allowlist: '[OK]',
+    blocklist: '[BLOCK]',
+    constraints: '[WARN]'
   };
 
   const icon = icons[category] || '•';
@@ -170,10 +170,10 @@ function renderPrescriptionCard(prescription) {
             <span class="toggle-slider"></span>
           </label>
           <button onclick="editPrescription('${prescription.id}')" class="btn-icon" title="Edit">
-            ✏️
+            [Edit]
           </button>
           <button onclick="deletePrescription('${prescription.id}')" class="btn-icon" title="Delete">
-            🗑️
+            [Delete]
           </button>
         </div>
       </div>

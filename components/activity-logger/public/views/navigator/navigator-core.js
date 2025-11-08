@@ -171,7 +171,7 @@ async function initializeNavigator() {
     
     navigatorState.isInitialized = true;
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-    console.log(`[NAVIGATOR] ✅ Initialization complete in ${elapsed}s`);
+    console.log(`[NAVIGATOR] Initialization complete in ${elapsed}s`);
     
   } catch (error) {
     // Suppress CORS/network errors (expected when companion service is offline)

@@ -18,9 +18,9 @@ class AuthMiddleware {
     if (this.apiKeys.size === 0 && process.env.PUBLIC_API !== 'true') {
       const generatedKey = crypto.randomBytes(32).toString('hex');
       this.apiKeys.add(generatedKey);
-      console.log('\n⚠️  No API keys configured!');
-      console.log('🔑 Generated temporary API key:', generatedKey);
-      console.log('💡 Add to .env file: API_KEYS=' + generatedKey);
+      console.log('\nWARNING: No API keys configured!');
+      console.log('Generated temporary API key:', generatedKey);
+      console.log('Add to .env file: API_KEYS=' + generatedKey);
       console.log('');
     }
     
@@ -28,9 +28,9 @@ class AuthMiddleware {
     this.requireAuth = process.env.REQUIRE_AUTH === 'true' || process.env.API_KEYS;
     
     if (!this.requireAuth) {
-      console.log('🔓 API authentication is DISABLED (set REQUIRE_AUTH=true to enable)');
+      console.log('API authentication is DISABLED (set REQUIRE_AUTH=true to enable)');
     } else {
-      console.log(`🔒 API authentication ENABLED (${this.apiKeys.size} keys configured)`);
+      console.log(`API authentication ENABLED (${this.apiKeys.size} keys configured)`);
     }
   }
   

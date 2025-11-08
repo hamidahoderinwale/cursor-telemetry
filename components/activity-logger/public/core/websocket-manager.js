@@ -16,32 +16,32 @@ class WebSocketManager {
   }
 
   restoreConnectionState() {
-    try {
-      const saved = localStorage.getItem('ws_connection_state');
-      if (saved) {
-        const state = JSON.parse(saved);
-        this.subscriptions = new Set(state.subscriptions || []);
-        this.lastMessageId = state.lastMessageId || 0;
-        console.log('[SYNC] Restored WebSocket state:', {
-          subscriptions: this.subscriptions.size,
-          lastMessageId: this.lastMessageId
-        });
-      }
-    } catch (error) {
-      console.warn('[WARNING] Failed to restore WebSocket state:', error);
+    const state = window.LocalStorageHelper?.get('ws_connection_state') || null;
+    if (state) {
+      this.subscriptions = new Set(state.subscriptions || []);
+      this.lastMessageId = state.lastMessageId || 0;
+      console.log('[SYNC] Restored WebSocket state:', {
+        subscriptions: this.subscriptions.size,
+        lastMessageId: this.lastMessageId
+      });
     }
   }
 
   saveConnectionState() {
-    try {
-      const state = {
-        subscriptions: Array.from(this.subscriptions),
-        lastMessageId: this.lastMessageId,
-        timestamp: Date.now()
-      };
-      localStorage.setItem('ws_connection_state', JSON.stringify(state));
-    } catch (error) {
-      console.warn('[WARNING] Failed to save WebSocket state:', error);
+    const state = {
+      subscriptions: Array.from(this.subscriptions),
+      lastMessageId: this.lastMessageId,
+      timestamp: Date.now()
+    };
+    if (window.LocalStorageHelper) {
+      window.LocalStorageHelper.set('ws_connection_state', state);
+    } else {
+      // Fallback
+      try {
+        localStorage.setItem('ws_connection_state', JSON.stringify(state));
+      } catch (error) {
+        console.warn('[WARNING] Failed to save WebSocket state:', error);
+      }
     }
   }
 

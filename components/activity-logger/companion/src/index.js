@@ -50,6 +50,8 @@ const PersistentDB = require('./persistent-db.js');
 
 // Import new analytics modules
 const ContextAnalyzer = require('./context-analyzer.js');
+const ContextChangeTracker = require('./context-change-tracker.js');
+const StatusMessageTracker = require('./status-message-tracker.js');
 const ErrorTracker = require('./error-tracker.js');
 const ProductivityTracker = require('./productivity-tracker.js');
 const TerminalMonitor = require('./terminal-monitor.js');
@@ -60,6 +62,8 @@ const persistentDB = new PersistentDB();
 
 // Initialize analytics trackers
 const contextAnalyzer = new ContextAnalyzer(persistentDB);
+const contextChangeTracker = new ContextChangeTracker(persistentDB);
+const statusMessageTracker = new StatusMessageTracker(persistentDB);
 const errorTracker = new ErrorTracker();
 const productivityTracker = new ProductivityTracker();
 const terminalMonitor = new TerminalMonitor({
@@ -710,7 +714,7 @@ async function captureCursorDatabase() {
 }
 
 /**
- * ✨ NEW: Sync prompts from Cursor's database to persistent storage
+ * NEW: Sync prompts from Cursor's database to persistent storage
  * Extracts prompts from aiService.prompts and aiService.generations
  * and saves them to the companion.db for persistence and linking
  */
@@ -826,16 +830,16 @@ async function syncPromptsFromCursorDB() {
       }
     }
     
-    console.log(`[SYNC] ✅ Sync complete: ${newPrompts} new, ${skippedPrompts} skipped, ${syncedPromptIds.size} total tracked (${prompts.length} available in Cursor DB)`);
+    console.log(`[SYNC] Sync complete: ${newPrompts} new, ${skippedPrompts} skipped, ${syncedPromptIds.size} total tracked (${prompts.length} available in Cursor DB)`);
     
     // Mark initial sync as complete
     if (!initialSyncComplete && syncedPromptIds.size > 0) {
       initialSyncComplete = true;
-      console.log('[SYNC] 📌 Initial sync complete - future syncs disabled (prompts available via API)');
+      console.log('[SYNC] Initial sync complete - future syncs disabled (prompts available via API)');
     }
     
   } catch (error) {
-    console.error('[SYNC] ❌ Error syncing prompts from Cursor database:', error.message);
+    console.error('[SYNC] Error syncing prompts from Cursor database:', error.message);
     if (error.stack) console.error(error.stack);
   } finally {
     syncInProgress = false; // Release lock
@@ -876,7 +880,7 @@ async function captureLogData() {
           rawData.logs.cursor = rawData.logs.cursor.slice(-100);
         }
         
-        console.log(`📄 Captured log data: ${logFiles.length} files`);
+        console.log(`Captured log data: ${logFiles.length} files`);
         break;
       }
     }
@@ -917,6 +921,31 @@ function startRawDataCapture() {
   // Initialize prompt capture system
   promptCaptureSystem = new PromptCaptureSystem();
   
+  // Start status message tracking
+  statusMessageTracker.start(2000); // Check every 2 seconds
+  
+  // Link status messages to context changes
+  statusMessageTracker.on('fileRead', async (data) => {
+    // Try to find recent context changes that might be related
+    try {
+      const recentChanges = await persistentDB.getContextChanges({
+        startTime: data.timestamp - 5000, // 5 seconds before
+        endTime: data.timestamp + 5000,   // 5 seconds after
+        limit: 10
+      });
+      
+      // Link to context changes that added this file
+      for (const change of recentChanges) {
+        if (change.addedFiles && change.addedFiles.includes(data.filePath)) {
+          await persistentDB.linkStatusToContextChange(data.statusId, change.id);
+          console.log(`[STATUS] Linked "Read ${data.filePath}" to context change ${change.id}`);
+        }
+      }
+    } catch (error) {
+      console.warn('Error linking status to context change:', error);
+    }
+  });
+  
   // System resources every 5 seconds
   captureIntervals.systemResources = setInterval(captureSystemResources, 5000);
   
@@ -932,7 +961,7 @@ function startRawDataCapture() {
   // Logs every 60 seconds
   captureIntervals.logs = setInterval(captureLogData, 60000);
   
-  // ✨ NEW: Sync prompts from Cursor database every 30 seconds
+  // NEW: Sync prompts from Cursor database every 30 seconds
   captureIntervals.promptSync = setInterval(syncPromptsFromCursorDB, 30000);
   
   // Initial capture
@@ -1523,7 +1552,7 @@ app.get('/api/activity', async (req, res) => {
         }),
         title: entry.title || `File Change: ${entry.file_path ? entry.file_path.split('/').pop() : 'Unknown'}`,
         description: entry.description || entry.notes || 'File change detected',
-        // ✅ Include metadata fields for modal display
+        // Include metadata fields for modal display
         modelInfo: entry.modelInfo,  // Model information (parsed from JSON)
         tags: entry.tags || [],  // Tags array
         prompt_id: entry.prompt_id,  // Linked prompt ID
@@ -2057,6 +2086,240 @@ app.get('/api/analytics/context/file-relationships', (req, res) => {
     });
   } catch (error) {
     console.error('Error getting file relationships:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Context Changes Endpoints - Track files added/removed from context
+app.get('/api/analytics/context/changes', async (req, res) => {
+  try {
+    const {
+      promptId = null,
+      eventId = null,
+      taskId = null,
+      sessionId = null,
+      startTime = null,
+      endTime = null,
+      limit = parseInt(req.query.limit) || 100
+    } = req.query;
+
+    const options = {
+      promptId: promptId || null,
+      eventId: eventId || null,
+      taskId: taskId || null,
+      sessionId: sessionId || null,
+      startTime: startTime ? parseInt(startTime) : null,
+      endTime: endTime ? parseInt(endTime) : null,
+      limit: parseInt(limit)
+    };
+
+    const changes = await persistentDB.getContextChanges(options);
+    
+    res.json({
+      success: true,
+      data: changes,
+      count: changes.length,
+      filters: options
+    });
+  } catch (error) {
+    console.error('Error getting context changes:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get context changes for a specific prompt
+app.get('/api/prompts/:id/context-changes', async (req, res) => {
+  try {
+    const promptId = req.params.id;
+    const changes = await contextChangeTracker.getContextChangesForPrompt(promptId);
+    
+    res.json({
+      success: true,
+      data: changes,
+      count: changes.length,
+      promptId
+    });
+  } catch (error) {
+    console.error('Error getting context changes for prompt:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get context changes for a specific event
+app.get('/api/events/:id/context-changes', async (req, res) => {
+  try {
+    const eventId = req.params.id;
+    const changes = await contextChangeTracker.getContextChangesForEvent(eventId);
+    
+    res.json({
+      success: true,
+      data: changes,
+      count: changes.length,
+      eventId
+    });
+  } catch (error) {
+    console.error('Error getting context changes for event:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get context changes summary statistics
+app.get('/api/analytics/context/changes/summary', (req, res) => {
+  try {
+    const stats = contextChangeTracker.getSummaryStats();
+    res.json({
+      success: true,
+      data: stats
+    });
+  } catch (error) {
+    console.error('Error getting context changes summary:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ===================================
+// SCHEMA CONFIGURATION ENDPOINTS
+// ===================================
+
+// Get full database schema
+app.get('/api/schema', async (req, res) => {
+  try {
+    const schema = await persistentDB.getSchema();
+    res.json({
+      success: true,
+      data: schema
+    });
+  } catch (error) {
+    console.error('Error getting schema:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get schema for a specific table
+app.get('/api/schema/:tableName', async (req, res) => {
+  try {
+    const { tableName } = req.params;
+    const tableSchema = await persistentDB.getTableSchema(tableName);
+    res.json({
+      success: true,
+      data: tableSchema
+    });
+  } catch (error) {
+    console.error(`Error getting schema for table ${req.params.tableName}:`, error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Add a column to a table
+app.post('/api/schema/:tableName/columns', async (req, res) => {
+  try {
+    const { tableName } = req.params;
+    const columnDef = req.body;
+    
+    if (!columnDef.name || !columnDef.type) {
+      return res.status(400).json({
+        success: false,
+        error: 'Column name and type are required'
+      });
+    }
+    
+    const result = await persistentDB.addColumn(tableName, columnDef);
+    res.json({
+      success: true,
+      data: result
+    });
+  } catch (error) {
+    console.error(`Error adding column to ${req.params.tableName}:`, error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get custom field configurations
+app.get('/api/schema/config/fields', async (req, res) => {
+  try {
+    const { tableName } = req.query;
+    const configs = await persistentDB.getCustomFieldConfigs(tableName || null);
+    res.json({
+      success: true,
+      data: configs
+    });
+  } catch (error) {
+    console.error('Error getting custom field configs:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Save custom field configuration
+app.post('/api/schema/config/fields', async (req, res) => {
+  try {
+    const config = req.body;
+    
+    if (!config.tableName || !config.fieldName || !config.fieldType) {
+      return res.status(400).json({
+        success: false,
+        error: 'tableName, fieldName, and fieldType are required'
+      });
+    }
+    
+    const result = await persistentDB.saveCustomFieldConfig(config);
+    res.json({
+      success: true,
+      data: result
+    });
+  } catch (error) {
+    console.error('Error saving custom field config:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Delete custom field configuration
+app.delete('/api/schema/config/fields/:tableName/:fieldName', async (req, res) => {
+  try {
+    const { tableName, fieldName } = req.params;
+    const result = await persistentDB.deleteCustomFieldConfig(tableName, fieldName);
+    res.json({
+      success: true,
+      data: result
+    });
+  } catch (error) {
+    console.error('Error deleting custom field config:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ===================================
+// STATUS MESSAGE ENDPOINTS
+// ===================================
+
+// Get status messages
+app.get('/api/status-messages', async (req, res) => {
+  try {
+    const {
+      startTime = null,
+      endTime = null,
+      type = null,
+      action = null,
+      limit = parseInt(req.query.limit) || 100
+    } = req.query;
+
+    const options = {
+      startTime: startTime ? parseInt(startTime) : null,
+      endTime: endTime ? parseInt(endTime) : null,
+      type: type || null,
+      action: action || null,
+      limit: parseInt(limit)
+    };
+
+    const messages = await persistentDB.getStatusMessages(options);
+    
+    res.json({
+      success: true,
+      data: messages,
+      count: messages.length,
+      filters: options
+    });
+  } catch (error) {
+    console.error('Error getting status messages:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -3505,7 +3768,7 @@ async function handleStreamingExport(req, res, options) {
 // Database import/redeploy endpoint - restore exported data
 app.post('/api/import/database', async (req, res) => {
   try {
-    console.log('📥 Import request received');
+    console.log('Import request received');
     
     const importData = req.body;
     
@@ -4443,7 +4706,7 @@ async function processFileChange(filePath) {
             entry.prompt_id = lastPrompt.id;
             
             const promptText = lastPrompt.text || lastPrompt.prompt || lastPrompt.content || '';
-            console.log(`✓ Linked prompt ${lastPrompt.id} ("${promptText.substring(0, 50)}...") to entry ${entry.id}`);
+            console.log(`Linked prompt ${lastPrompt.id} ("${promptText.substring(0, 50)}...") to entry ${entry.id}`);
           }
         } catch (error) {
           console.error('Error linking prompt to entry:', error);
@@ -4707,21 +4970,21 @@ async function loadPersistedData() {
     console.log('[SAVE] Initializing database (lazy loading mode)...');
     await persistentDB.init();
     
-    // ✅ DON'T load all data - just get stats and setup
+    // DON'T load all data - just get stats and setup
     const stats = await persistentDB.getStats();
     
     // Set nextId from database max ID (without loading all records)
     const maxIds = await persistentDB.getMaxIds();
     db.nextId = Math.max(maxIds.entryId || 0, maxIds.promptId || 0) + 1;
     
-    // ✅ Keep in-memory arrays empty - query database on demand
+    // Keep in-memory arrays empty - query database on demand
     db._entries = [];  // Don't load - use database queries
     db._prompts = [];  // Don't load - use database queries
     
     console.log(`[SUCCESS] Database ready with ${stats.entries} entries and ${stats.prompts} prompts (lazy loading)`);
     console.log(`[MEMORY] In-memory cache disabled - using on-demand queries`);
   } catch (error) {
-    console.error('⚠️  Error loading persisted data:', error.message);
+    console.error('Error loading persisted data:', error.message);
     console.log('   Starting with empty database');
   }
 }
@@ -4863,7 +5126,7 @@ loadPersistedData().then(() => {
     console.log(' Clipboard monitor disabled in config');
   }
   
-  // ✨ Automatic prompt sync DISABLED (causes OOM - use /api/cursor-database instead)
+  // Automatic prompt sync DISABLED (causes OOM - use /api/cursor-database instead)
   // The dashboard should query /api/cursor-database for real-time data
   // Historical data already in database from previous syncs
   console.log('[SYNC] Automatic prompt sync DISABLED (use /api/cursor-database for fresh data)');
@@ -4954,6 +5217,19 @@ loadPersistedData().then(() => {
             const contextAnalysis = await contextAnalyzer.analyzePromptContext(prompt);
             if (contextAnalysis) {
               enhancedPrompt.contextAnalysis = contextAnalysis;
+              
+              // Track context changes (files added/removed)
+              const contextChange = await contextChangeTracker.trackContextChange(
+                contextAnalysis,
+                {
+                  promptId: enhancedPrompt.id,
+                  timestamp: Date.now(),
+                  sessionId: activeSession
+                }
+              );
+              if (contextChange) {
+                enhancedPrompt.contextChange = contextChange;
+              }
             }
             
             // Track prompt creation for productivity metrics
@@ -4979,7 +5255,7 @@ loadPersistedData().then(() => {
   });
   }); // Close app.listen callback
 }).catch(error => {
-  console.error('❌ Failed to load persisted data:', error);
+  console.error('Failed to load persisted data:', error);
   // Start anyway with empty database
   // Use server.listen() instead of app.listen() to ensure Socket.IO works properly
   server.listen(PORT, HOST, () => {

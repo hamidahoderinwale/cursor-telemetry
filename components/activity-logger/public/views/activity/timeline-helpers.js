@@ -114,6 +114,9 @@ function renderUnifiedTimeline(items) {
         // This is a standalone prompt, not part of a conversation
         standalonePrompts.push(item);
       }
+    } else if (item.itemType === 'status') {
+      // Status messages go on the left side
+      nonPromptItems.push(item);
     } else {
       nonPromptItems.push(item);
     }
@@ -171,6 +174,9 @@ function renderUnifiedTimeline(items) {
             return window.renderConversationThread(item.conversation, 'right');
           } else if (item.itemType === 'prompt') {
             return window.renderPromptTimelineItem(item, 'right', allItems);
+          } else if (item.itemType === 'status') {
+            return window.renderStatusMessageTimelineItem ? 
+              window.renderStatusMessageTimelineItem(item, 'left') : '';
           }
           return '';
         }
@@ -446,7 +452,7 @@ function renderConversationThread(conversation, side = 'right') {
             });
             if (filePaths.size > 0) {
               const files = Array.from(filePaths).slice(0, 2);
-              return `<span class="badge" style="background: var(--color-accent); color: white;" title="${Array.from(filePaths).join(', ')}">📄 ${files.join(', ')}${filePaths.size > 2 ? '...' : ''}</span>`;
+              return `<span class="badge" style="background: var(--color-accent); color: white;" title="${Array.from(filePaths).join(', ')}">[File] ${files.join(', ')}${filePaths.size > 2 ? '...' : ''}</span>`;
             }
             return '';
           })() : ''}
@@ -606,7 +612,7 @@ function renderPromptTimelineItem(prompt, side = 'right', timelineItems = null, 
             <span class="badge" style="background: var(--color-success); color: white; cursor: pointer;" 
                   title="View linked code change (${linesAdded > 0 ? '+' + linesAdded : ''}${linesAdded > 0 && linesRemoved > 0 ? '/' : ''}${linesRemoved > 0 ? '-' + linesRemoved : ''} lines)"
                   onclick="event.stopPropagation(); showEventModal('${linkedEntryId}')">
-              💻 Code
+              Code
             </span>
           `;
         }
@@ -616,6 +622,28 @@ function renderPromptTimelineItem(prompt, side = 'right', timelineItems = null, 
     // Ignore errors
   }
   
+  // Add context change indicator if available
+  let contextChangeIndicator = '';
+  if (prompt.contextChange && window.renderContextChangeIndicator) {
+    contextChangeIndicator = window.renderContextChangeIndicator(prompt.contextChange, true);
+  } else if (prompt.contextChange) {
+    // Fallback if function not loaded yet
+    const change = prompt.contextChange;
+    if (change.addedFiles?.length > 0 || change.removedFiles?.length > 0) {
+      const netChange = change.netChange || 0;
+      const changeText = netChange > 0 ? `+${netChange}` : netChange < 0 ? `${netChange}` : '±0';
+      contextChangeIndicator = `<span class="context-change-badge" title="${change.addedFiles.length} added, ${change.removedFiles.length} removed">📁 ${changeText}</span>`;
+    }
+  }
+  
+  // Add context file count if available
+  let contextFileCountBadge = '';
+  if (prompt.contextAnalysis?.fileCount) {
+    contextFileCountBadge = `<span class="badge" style="background: rgba(139, 92, 246, 0.1); color: var(--color-primary);">${prompt.contextAnalysis.fileCount} files</span>`;
+  } else if (prompt.contextChange?.currentFileCount) {
+    contextFileCountBadge = `<span class="badge" style="background: rgba(139, 92, 246, 0.1); color: var(--color-primary);">${prompt.contextChange.currentFileCount} files</span>`;
+  }
+  
   return `
     <div class="timeline-item timeline-item-${side} prompt-timeline-item" onclick="showEventModal('${prompt.id}')">
       <div class="timeline-content prompt-content">
@@ -623,6 +651,7 @@ function renderPromptTimelineItem(prompt, side = 'right', timelineItems = null, 
           <div class="timeline-title">
             <span>${icon}</span>
             <span>${window.escapeHtml(displayText)}</span>
+            ${contextChangeIndicator}
           </div>
           <div class="timeline-meta">${time}</div>
         </div>
@@ -631,6 +660,7 @@ function renderPromptTimelineItem(prompt, side = 'right', timelineItems = null, 
           ${prompt.workspaceName ? `<span class="badge">${window.escapeHtml(prompt.workspaceName)}</span>` : prompt.workspaceId ? `<span class="badge">${window.escapeHtml(prompt.workspaceId.substring(0, 8))}</span>` : ''}
           ${prompt.composerId ? `<span class="badge">Composer</span>` : ''}
           ${prompt.contextUsage > 0 ? `<span class="badge" style="background: var(--color-warning); color: white;">${prompt.contextUsage.toFixed(1)}% context</span>` : ''}
+          ${contextFileCountBadge}
           ${linkedCodeIndicator}
         </div>
         ${relatedEventsIndicator}
@@ -825,7 +855,7 @@ function renderTemporalThread(thread, timelineItems = null) {
     metadataBadges.push(`<span class="badge" style="background: var(--color-success); color: white;">+${sessionMetadata.totalLinesAdded}${sessionMetadata.totalLinesRemoved > 0 ? `/-${sessionMetadata.totalLinesRemoved}` : ''} lines</span>`);
   }
   if (sessionMetadata.linkedPairs > 0) {
-    metadataBadges.push(`<span class="badge" style="background: var(--color-warning); color: white;" title="Prompts linked to code changes">✨ ${sessionMetadata.linkedPairs} linked</span>`);
+    metadataBadges.push(`<span class="badge" style="background: var(--color-warning); color: white;" title="Prompts linked to code changes">${sessionMetadata.linkedPairs} linked</span>`);
   }
   
   const summary = summaryParts.join(', ');
@@ -937,7 +967,7 @@ function renderTemporalThread(thread, timelineItems = null) {
             ` : ''}
             ${sessionMetadata.linkedPairs > 0 ? `
               <span class="badge" style="background: var(--color-warning); color: white;" title="Prompts linked to code changes">
-                ✨ ${sessionMetadata.linkedPairs} linked
+                ${sessionMetadata.linkedPairs} linked
               </span>
             ` : ''}
           </div>
@@ -969,7 +999,7 @@ function renderTemporalThread(thread, timelineItems = null) {
                 const linkedEntry = sortedItems.find(i => i.itemType === 'event' && (i.id === item.linked_entry_id || i.id === item.linkedEntryId || i.id === parseInt(item.linked_entry_id || item.linkedEntryId)));
                 if (linkedEntry && Math.abs(item.sortTime - linkedEntry.sortTime) < 300000) {
                   relationshipIndicator = `<div class="timeline-relationship-indicator" style="padding: var(--space-xs) var(--space-sm); margin-bottom: var(--space-xs); background: rgba(34, 197, 94, 0.1); border-left: 3px solid var(--color-success); border-radius: var(--radius-sm); font-size: var(--text-xs); color: var(--color-text-muted);">
-                    <span style="color: var(--color-success);">💻</span> Generated code change below (${Math.round(Math.abs(item.sortTime - linkedEntry.sortTime) / 1000)}s gap)
+                    <span style="color: var(--color-success);">[Code]</span> Generated code change below (${Math.round(Math.abs(item.sortTime - linkedEntry.sortTime) / 1000)}s gap)
                   </div>`;
                 }
               }
@@ -1017,7 +1047,7 @@ function renderTerminalTimelineItem(cmd, side = 'left', timelineItems = null) {
   const commandText = cmd.command || 'Unknown command';
   const displayText = commandText.length > 100 ? commandText.substring(0, 100) + '...' : commandText;
   const isError = (cmd.exit_code !== null && cmd.exit_code !== undefined && cmd.exit_code !== 0);
-  const icon = isError ? '⚠️' : '💻';
+  const icon = isError ? '[Error]' : '[Code]';
   const source = cmd.source || 'terminal';
   
   // Get workspace badge if available
@@ -1041,14 +1071,14 @@ function renderTerminalTimelineItem(cmd, side = 'left', timelineItems = null) {
   if (cmd.duration) {
     const duration = cmd.duration;
     const durationText = duration > 1000 ? `${(duration / 1000).toFixed(1)}s` : `${duration}ms`;
-    durationBadge = `<span class="badge" style="background: rgba(59, 130, 246, 0.2); color: var(--color-info);">⏱ ${durationText}</span>`;
+    durationBadge = `<span class="badge" style="background: rgba(59, 130, 246, 0.2); color: var(--color-info);">[Duration] ${durationText}</span>`;
   }
   
   // Exit code badge
   let exitCodeBadge = '';
   if (cmd.exit_code !== null && cmd.exit_code !== undefined) {
     exitCodeBadge = `<span class="badge" style="background: ${isError ? 'rgba(239, 68, 68, 0.2)' : 'rgba(16, 185, 129, 0.2)'}; color: ${isError ? 'var(--color-error)' : 'var(--color-success)'};">
-      ${isError ? '❌' : '✅'} Exit ${cmd.exit_code}
+      ${isError ? '[Error]' : '[OK]'} Exit ${cmd.exit_code}
     </span>`;
   }
   
@@ -1123,7 +1153,7 @@ function renderTimelineItem(event, side = 'left', timelineItems = null) {
                 style="cursor: pointer;" 
                 title="From prompt: ${window.escapeHtml(shortPrompt)}"
                 onclick="event.stopPropagation(); showEventModal('${linkedPrompt.id}')">
-            ✨ Linked Prompt
+            Linked Prompt
           </span>
         `;
       }

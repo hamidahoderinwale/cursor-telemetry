@@ -84,7 +84,7 @@ async function initializeDashboard() {
     const cacheStale = serverHealth ? await persistentStorage.isCacheStale(serverHealth.sequence || 0) : false;
     
     if (cacheStale && isConnected) {
-      console.log('📥 Cache stale, fetching updates...');
+      console.log('Cache stale, fetching updates...');
       initProgress.update('data', 0);
       try {
         await fetchRecentData();
@@ -125,7 +125,7 @@ async function initializeDashboard() {
     }
     
     // Step 5: Heavy analytics will be loaded on-demand via analyticsManager
-    console.log('⏳ Heavy analytics deferred until idle/tab focus');
+    console.log('Heavy analytics deferred until idle/tab focus');
     
   } catch (error) {
     console.error('Initialization error:', error);
@@ -167,7 +167,7 @@ async function loadFromCache() {
  * Fetch only recent data (last 24 hours by default)
  */
 async function fetchRecentData() {
-  // ✅ FIX: Check if APIClient is available before using it
+  // FIX: Check if APIClient is available before using it
   if (!APIClient || typeof APIClient.get !== 'function') {
     console.error('[ERROR] APIClient is not available. Ensure core/api-client.js is loaded before new-dashboard.js');
     // Fallback to using cached data only
@@ -184,7 +184,7 @@ async function fetchRecentData() {
     return;
   }
   
-  // ✅ FIX: Ensure state.data exists
+  // FIX: Ensure state.data exists
   if (!state) {
     console.error('[ERROR] state is not defined');
     return;
@@ -298,11 +298,11 @@ async function fetchRecentData() {
       state.data.workspaces = workspaces;
     }
     
-    // ✅ Calculate stats after fetching data
+    // Calculate stats after fetching data
     console.log(`[SYNC] Fetch complete. Events: ${state.data.events.length}, Prompts: ${state.data.prompts.length}`);
     calculateStats();
     
-    // 🔧 FIX: Re-render current view to update charts with fresh data
+    // FIX: Re-render current view to update charts with fresh data
     if (state.currentView === 'analytics') {
       console.log('[CHART] Re-rendering charts with fresh data...');
       setTimeout(() => renderCurrentView(), 200);
@@ -634,7 +634,7 @@ const initProgress = {
         progressContainer.classList.remove('active');
       }
     }, 500);
-    console.log('[PROGRESS] ✅ Initialization complete');
+    console.log('[PROGRESS] Initialization complete');
   }
 };
 
@@ -1839,7 +1839,7 @@ function _legacy_renderAnalyticsView(container) {
     // renderFileRelationshipVisualization() - REMOVED: Handled in File Graph view
   }, 300); // Increased from 100ms to 300ms to allow data to settle
 }
-// ✅ REMOVED: Continuous Activity Timeline (per user request)
+// REMOVED: Continuous Activity Timeline (per user request)
 // function renderActivityChart() {
 //   Commented out to remove Continuous Activity Timeline from dashboard
 // }
@@ -4349,7 +4349,7 @@ async function initializeNavigator() {
     generateSemanticInsights();
     
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-    console.log(`[NAVIGATOR] ✅ Initialization complete in ${elapsed}s`);
+    console.log(`[NAVIGATOR] Initialization complete in ${elapsed}s`);
     
   } catch (error) {
     console.error('Error initializing navigator:', error);
@@ -6744,7 +6744,7 @@ async function exportDatabase(limit = 1000, includeAllFields = false) {
       console.log(`[SUCCESS] Exported ${result.data.metadata.totalEntries} entries, ${result.data.metadata.totalPrompts} prompts, ${result.data.metadata.totalEvents} events`);
       
       // Show success feedback
-      exportBtn.innerHTML = '<span>✓ Exported!</span>';
+      exportBtn.innerHTML = '<span>Exported!</span>';
       exportBtn.style.color = '#10b981';
       setTimeout(() => {
         exportBtn.innerHTML = originalHTML;
@@ -6918,7 +6918,7 @@ async function exportDatabaseWithFilters({ dateFrom, dateTo, limit = 1000, types
     
     // Show success feedback
     if (exportBtn) {
-      exportBtn.innerHTML = '<span>✓ Exported!</span>';
+      exportBtn.innerHTML = '<span>Exported!</span>';
       exportBtn.style.color = '#10b981';
       setTimeout(() => {
         exportBtn.innerHTML = originalHTML;

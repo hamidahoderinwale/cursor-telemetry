@@ -45,7 +45,7 @@ class TerminalMonitor extends EventEmitter {
    */
   async start() {
     if (this.isMonitoring) {
-      console.log('⚠️  Terminal monitor already running');
+      console.log('Terminal monitor already running');
       return;
     }
 
@@ -92,7 +92,7 @@ class TerminalMonitor extends EventEmitter {
       this.processTimer = null;
     }
     
-    console.log('🛑 Terminal monitor stopped');
+    console.log('Terminal monitor stopped');
   }
 
   /**

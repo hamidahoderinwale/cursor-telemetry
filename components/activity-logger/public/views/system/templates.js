@@ -9,7 +9,7 @@ function renderSystemViewTemplate(data) {
       <!-- System Resources Over Time Chart -->
       <div class="card">
         <div class="card-header">
-          <h3 class="card-title">System Resources Over Time</h3>
+          <h3 class="card-title" title="Historical tracking of system resource usage including memory consumption (RSS, heap) and CPU load average. Data is collected every 5 seconds by the companion service. Useful for monitoring performance and identifying resource-intensive periods">System Resources Over Time</h3>
           <p class="card-subtitle">Memory usage and CPU load tracking</p>
         </div>
         <div class="card-body">

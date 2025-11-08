@@ -1,0 +1,409 @@
+/* Context Change Visualization Styles */
+
+.context-change-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  background: rgba(139, 92, 246, 0.1);
+  color: var(--color-primary, #8B5CF6);
+  border: 1px solid rgba(139, 92, 246, 0.2);
+  cursor: help;
+}
+
+.context-change-badge.context-added {
+  background: rgba(16, 185, 129, 0.1);
+  color: var(--color-success, #10B981);
+  border-color: rgba(16, 185, 129, 0.2);
+}
+
+.context-change-badge.context-removed {
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--color-error, #EF4444);
+  border-color: rgba(239, 68, 68, 0.2);
+}
+
+.context-change-badge.context-unchanged {
+  background: rgba(107, 114, 128, 0.1);
+  color: var(--color-text-muted, #6B7280);
+  border-color: rgba(107, 114, 128, 0.2);
+}
+
+.context-change-details {
+  margin-top: 12px;
+  padding: 12px;
+  background: var(--bg-secondary, #f9fafb);
+  border-radius: 6px;
+  border-left: 3px solid var(--color-primary, #8B5CF6);
+}
+
+.context-change-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.context-change-header h4 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary, #1a1a1a);
+}
+
+.context-file-count {
+  font-size: 12px;
+  color: var(--text-secondary, #666);
+  font-weight: 500;
+}
+
+.context-change-section {
+  margin-bottom: 12px;
+  padding: 8px;
+  border-radius: 4px;
+}
+
+.context-change-section.context-added {
+  background: rgba(16, 185, 129, 0.05);
+  border-left: 2px solid var(--color-success, #10B981);
+}
+
+.context-change-section.context-removed {
+  background: rgba(239, 68, 68, 0.05);
+  border-left: 2px solid var(--color-error, #EF4444);
+}
+
+.context-change-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.context-change-icon {
+  font-size: 14px;
+}
+
+.context-file-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 150px;
+  overflow-y: auto;
+}
+
+.context-file-item {
+  padding: 4px 8px;
+  background: white;
+  border-radius: 3px;
+  font-size: 11px;
+}
+
+.context-file-item code {
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 11px;
+  color: var(--text-primary, #1a1a1a);
+}
+
+.context-change-summary {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-color, #e5e5e5);
+  text-align: center;
+}
+
+.net-change {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.net-change.positive {
+  background: rgba(16, 185, 129, 0.1);
+  color: var(--color-success, #10B981);
+}
+
+.net-change.negative {
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--color-error, #EF4444);
+}
+
+/* Context Structure Styles */
+
+.context-structure {
+  margin-top: 12px;
+  padding: 12px;
+  background: var(--bg-secondary, #f9fafb);
+  border-radius: 6px;
+}
+
+.context-structure-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.context-structure-header h5 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary, #1a1a1a);
+}
+
+.context-total-files {
+  font-size: 12px;
+  color: var(--text-secondary, #666);
+  font-weight: 500;
+}
+
+.context-structure-breakdown {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.context-source-group {
+  display: flex;
+  align-items: center;
+}
+
+.context-source-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.context-source-label.explicit {
+  background: rgba(139, 92, 246, 0.1);
+  color: var(--color-primary, #8B5CF6);
+}
+
+.context-source-label.implicit {
+  background: rgba(59, 130, 246, 0.1);
+  color: var(--color-info, #3b82f6);
+}
+
+.context-source-label.response {
+  background: rgba(236, 72, 153, 0.1);
+  color: var(--color-accent, #EC4899);
+}
+
+.context-source-icon {
+  font-size: 12px;
+}
+
+/* Context Evolution Timeline */
+
+.context-evolution-timeline {
+  margin-top: 16px;
+  padding: 12px;
+  background: var(--bg-secondary, #f9fafb);
+  border-radius: 6px;
+}
+
+.context-evolution-timeline h4 {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary, #1a1a1a);
+}
+
+.evolution-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.evolution-step {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px;
+  background: white;
+  border-radius: 4px;
+  border-left: 3px solid var(--border-color, #e5e5e5);
+  transition: all 0.2s;
+}
+
+.evolution-step:hover {
+  background: var(--bg-hover, #f5f5f5);
+}
+
+.evolution-step.up {
+  border-left-color: var(--color-success, #10B981);
+}
+
+.evolution-step.down {
+  border-left-color: var(--color-error, #EF4444);
+}
+
+.evolution-step.stable {
+  border-left-color: var(--color-text-muted, #6B7280);
+}
+
+.evolution-time {
+  font-size: 11px;
+  color: var(--text-secondary, #666);
+  min-width: 80px;
+}
+
+.evolution-count {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+
+.count-badge {
+  padding: 2px 8px;
+  background: var(--bg-secondary, #f5f5f5);
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-primary, #1a1a1a);
+}
+
+.change-indicator {
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.change-indicator.positive {
+  background: rgba(16, 185, 129, 0.1);
+  color: var(--color-success, #10B981);
+}
+
+.change-indicator.negative {
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--color-error, #EF4444);
+}
+
+.evolution-details {
+  display: flex;
+  gap: 8px;
+  font-size: 10px;
+}
+
+.evolution-added {
+  color: var(--color-success, #10B981);
+  font-weight: 500;
+}
+
+.evolution-removed {
+  color: var(--color-error, #EF4444);
+  font-weight: 500;
+}
+
+/* Integration with timeline items */
+
+.timeline-item .context-change-badge {
+  margin-left: 6px;
+}
+
+.prompt-timeline-item .context-change-badge {
+  margin-top: 4px;
+}
+
+/* Context indicators in event items */
+
+.context-indicator {
+  display: inline-block;
+  padding: 2px 6px;
+  margin-left: 4px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 500;
+  background: rgba(139, 92, 246, 0.1);
+  color: var(--color-primary, #8B5CF6);
+}
+
+.context-indicator.files {
+  background: rgba(59, 130, 246, 0.1);
+  color: var(--color-info, #3b82f6);
+}
+
+.context-indicator.context-files {
+  background: rgba(16, 185, 129, 0.1);
+  color: var(--color-success, #10B981);
+}
+
+.context-indicator.system {
+  background: rgba(245, 158, 11, 0.1);
+  color: var(--color-warning, #F59E0B);
+}
+
+/* Context Files Preview */
+.context-files-preview {
+  margin-top: 12px;
+  padding: 12px;
+  background: white;
+  border-radius: 4px;
+  border: 1px solid var(--border-color, #e5e5e5);
+}
+
+.context-files-preview h6 {
+  margin: 0 0 8px 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary, #1a1a1a);
+}
+
+.context-files-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.context-file-preview {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 8px;
+  background: var(--bg-secondary, #f9fafb);
+  border-radius: 3px;
+  font-size: 11px;
+}
+
+.context-file-preview code {
+  font-family: var(--font-mono, 'Monaco', 'Menlo', monospace);
+  font-size: 10px;
+  color: var(--text-primary, #1a1a1a);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.context-file-source {
+  font-size: 9px;
+  color: var(--text-secondary, #666);
+  padding: 2px 6px;
+  background: rgba(139, 92, 246, 0.1);
+  border-radius: 10px;
+  margin-left: 8px;
+}
+
+.context-files-more {
+  text-align: center;
+  font-size: 10px;
+  color: var(--text-secondary, #666);
+  padding: 4px;
+  font-style: italic;
+}
+

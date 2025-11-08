@@ -43,7 +43,7 @@ class IDEStateCapture {
     if (this.captureInterval) {
       clearInterval(this.captureInterval);
       this.captureInterval = null;
-      console.log('🛑 IDE state capture stopped');
+      console.log('IDE state capture stopped');
     }
   }
 

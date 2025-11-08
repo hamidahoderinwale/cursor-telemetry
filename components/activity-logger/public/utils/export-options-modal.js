@@ -90,7 +90,7 @@ function showExportOptionsModal() {
         <div class="abstraction-level-section">
           <h3 class="card-title">
             Privacy-Expressiveness Level
-            <span class="tooltip-icon" title="Controls how much detail is preserved vs. abstracted for privacy">ℹ️</span>
+            <span class="tooltip-icon" title="Controls how much detail is preserved vs. abstracted for privacy">[Info]</span>
           </h3>
           
           <div class="abstraction-level-selector">

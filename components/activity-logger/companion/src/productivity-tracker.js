@@ -31,7 +31,7 @@ class ProductivityTracker {
       promptText: prompt.text || prompt.content
     });
 
-    console.log(`⏱️  Started timer for prompt ${prompt.id}`);
+    console.log(`Started timer for prompt ${prompt.id}`);
   }
 
   /**
@@ -310,7 +310,7 @@ class ProductivityTracker {
         debugActivities.push(activity);
         this.debugActivity.push(activity);
 
-        console.log(`🐛 Debug activity detected: ${indicator.type} (${matches.length}x)`);
+        console.log(`Debug activity detected: ${indicator.type} (${matches.length}x)`);
       }
     });
 

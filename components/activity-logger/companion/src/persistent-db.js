@@ -28,7 +28,7 @@ class PersistentDB {
 
       this.db = new sqlite3.Database(this.dbPath, (err) => {
         if (err) {
-          console.error('❌ Failed to open database:', err);
+          console.error('Failed to open database:', err);
           reject(err);
           return;
         }
@@ -191,6 +191,40 @@ class PersistentDB {
                 console.error('Error creating context_snapshots table:', err);
                 rej(err);
               } else {
+                res();
+              }
+            });
+          }));
+
+          // Context changes table for tracking file additions/removals
+          tables.push(new Promise((res, rej) => {
+            this.db.run(`
+              CREATE TABLE IF NOT EXISTS context_changes (
+                id TEXT PRIMARY KEY,
+                prompt_id TEXT,
+                event_id TEXT,
+                task_id TEXT,
+                session_id TEXT,
+                timestamp INTEGER NOT NULL,
+                previous_file_count INTEGER DEFAULT 0,
+                current_file_count INTEGER DEFAULT 0,
+                added_files TEXT,
+                removed_files TEXT,
+                unchanged_files TEXT,
+                net_change INTEGER DEFAULT 0,
+                metadata TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+              )
+            `, (err) => {
+              if (err) {
+                console.error('Error creating context_changes table:', err);
+                rej(err);
+              } else {
+                // Create indexes for faster queries
+                this.db.run(`CREATE INDEX IF NOT EXISTS idx_context_changes_prompt ON context_changes(prompt_id)`, () => {});
+                this.db.run(`CREATE INDEX IF NOT EXISTS idx_context_changes_event ON context_changes(event_id)`, () => {});
+                this.db.run(`CREATE INDEX IF NOT EXISTS idx_context_changes_task ON context_changes(task_id)`, () => {});
+                this.db.run(`CREATE INDEX IF NOT EXISTS idx_context_changes_timestamp ON context_changes(timestamp)`, () => {});
                 res();
               }
             });
@@ -660,7 +694,7 @@ class PersistentDB {
         `;
         params = [entryId];
       } else {
-        // ✅ Exclude large fields (before_code, after_code) for performance
+        // Exclude large fields (before_code, after_code) for performance
         // Only include metadata needed for activity list view
         query = `
           SELECT 
@@ -1361,6 +1395,370 @@ class PersistentDB {
             uniqueAtFiles: atFileSet.size,
             totalSnapshots: rows.length
           });
+        }
+      );
+    });
+  }
+
+  /**
+   * Save a context change record to the database
+   */
+  async saveContextChange(changeRecord) {
+    await this.init();
+    
+    return new Promise((resolve, reject) => {
+      const stmt = this.db.prepare(`
+        INSERT OR REPLACE INTO context_changes 
+        (id, prompt_id, event_id, task_id, session_id, timestamp, 
+         previous_file_count, current_file_count, added_files, removed_files, 
+         unchanged_files, net_change, metadata)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      
+      stmt.run(
+        changeRecord.id,
+        changeRecord.promptId || null,
+        changeRecord.eventId || null,
+        changeRecord.taskId || null,
+        changeRecord.sessionId || null,
+        changeRecord.timestamp,
+        changeRecord.previousFileCount || 0,
+        changeRecord.currentFileCount || 0,
+        JSON.stringify(changeRecord.addedFiles || []),
+        JSON.stringify(changeRecord.removedFiles || []),
+        JSON.stringify(changeRecord.unchangedFiles || []),
+        changeRecord.netChange || 0,
+        JSON.stringify(changeRecord.metadata || {})
+      );
+      
+      stmt.finalize((err) => {
+        if (err) {
+          console.error('Error saving context change:', err);
+          reject(err);
+        } else {
+          resolve(changeRecord);
+        }
+      });
+    });
+  }
+
+  /**
+   * Get context changes with optional filtering
+   */
+  async getContextChanges(options = {}) {
+    await this.init();
+    
+    const {
+      promptId = null,
+      eventId = null,
+      taskId = null,
+      sessionId = null,
+      startTime = null,
+      endTime = null,
+      limit = 100
+    } = options;
+    
+    return new Promise((resolve, reject) => {
+      let query = 'SELECT * FROM context_changes WHERE 1=1';
+      const params = [];
+      
+      if (promptId) {
+        query += ' AND prompt_id = ?';
+        params.push(promptId);
+      }
+      
+      if (eventId) {
+        query += ' AND event_id = ?';
+        params.push(eventId);
+      }
+      
+      if (taskId) {
+        query += ' AND task_id = ?';
+        params.push(taskId);
+      }
+      
+      if (sessionId) {
+        query += ' AND session_id = ?';
+        params.push(sessionId);
+      }
+      
+      if (startTime) {
+        query += ' AND timestamp >= ?';
+        params.push(startTime);
+      }
+      
+      if (endTime) {
+        query += ' AND timestamp <= ?';
+        params.push(endTime);
+      }
+      
+      query += ' ORDER BY timestamp DESC LIMIT ?';
+      params.push(limit);
+      
+      this.db.all(query, params, (err, rows) => {
+        if (err) {
+          console.error('Error fetching context changes:', err);
+          reject(err);
+        } else {
+          const changes = rows.map(row => ({
+            id: row.id,
+            promptId: row.prompt_id,
+            eventId: row.event_id,
+            taskId: row.task_id,
+            sessionId: row.session_id,
+            timestamp: row.timestamp,
+            previousFileCount: row.previous_file_count,
+            currentFileCount: row.current_file_count,
+            addedFiles: JSON.parse(row.added_files || '[]'),
+            removedFiles: JSON.parse(row.removed_files || '[]'),
+            unchangedFiles: JSON.parse(row.unchanged_files || '[]'),
+            netChange: row.net_change,
+            metadata: JSON.parse(row.metadata || '{}'),
+            createdAt: row.created_at
+          }));
+          resolve(changes);
+        }
+      });
+    });
+  }
+
+  // ===================================
+  // SCHEMA MANAGEMENT METHODS
+  // ===================================
+
+  /**
+   * Get database schema information
+   */
+  async getSchema() {
+    await this.init();
+    
+    return new Promise((resolve, reject) => {
+      this.db.all(
+        `SELECT name FROM sqlite_master WHERE type='table' ORDER BY name`,
+        (err, tables) => {
+          if (err) {
+            console.error('Error fetching schema:', err);
+            reject(err);
+            return;
+          }
+          
+          const schema = {
+            tables: [],
+            version: '1.0.0',
+            timestamp: Date.now()
+          };
+          
+          // Get details for each table
+          const tablePromises = tables.map(table => {
+            return new Promise((res, rej) => {
+              this.db.all(
+                `PRAGMA table_info(${table.name})`,
+                (tableErr, columns) => {
+                  if (tableErr) {
+                    rej(tableErr);
+                  } else {
+                    res({
+                      name: table.name,
+                      columns: columns.map(col => ({
+                        name: col.name,
+                        type: col.type,
+                        notnull: col.notnull === 1,
+                        defaultValue: col.dflt_value,
+                        primaryKey: col.pk === 1
+                      }))
+                    });
+                  }
+                }
+              );
+            });
+          });
+          
+          Promise.all(tablePromises)
+            .then(tableDetails => {
+              schema.tables = tableDetails;
+              resolve(schema);
+            })
+            .catch(reject);
+        }
+      );
+    });
+  }
+
+  /**
+   * Get table schema
+   */
+  async getTableSchema(tableName) {
+    await this.init();
+    
+    return new Promise((resolve, reject) => {
+      this.db.all(
+        `PRAGMA table_info(${tableName})`,
+        (err, columns) => {
+          if (err) {
+            console.error(`Error fetching table schema for ${tableName}:`, err);
+            reject(err);
+          } else {
+            resolve({
+              name: tableName,
+              columns: columns.map(col => ({
+                name: col.name,
+                type: col.type,
+                notnull: col.notnull === 1,
+                defaultValue: col.dflt_value,
+                primaryKey: col.pk === 1
+              }))
+            });
+          }
+        }
+      );
+    });
+  }
+
+  /**
+   * Add a column to an existing table
+   */
+  async addColumn(tableName, columnDef) {
+    await this.init();
+    
+    return new Promise((resolve, reject) => {
+      const { name, type, notnull = false, defaultValue = null } = columnDef;
+      
+      let sql = `ALTER TABLE ${tableName} ADD COLUMN ${name} ${type}`;
+      
+      if (notnull) {
+        sql += ' NOT NULL';
+      }
+      
+      if (defaultValue !== null) {
+        sql += ` DEFAULT ${defaultValue}`;
+      }
+      
+      this.db.run(sql, (err) => {
+        if (err) {
+          console.error(`Error adding column ${name} to ${tableName}:`, err);
+          reject(err);
+        } else {
+          console.log(`Added column ${name} to ${tableName}`);
+          resolve({ success: true, table: tableName, column: name });
+        }
+      });
+    });
+  }
+
+  /**
+   * Create a custom field configuration
+   * This stores metadata about custom fields without modifying the schema
+   */
+  async saveCustomFieldConfig(config) {
+    await this.init();
+    
+    // Create a table to store custom field configurations if it doesn't exist
+    return new Promise((resolve, reject) => {
+      this.db.run(`
+        CREATE TABLE IF NOT EXISTS schema_config (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          table_name TEXT NOT NULL,
+          field_name TEXT NOT NULL,
+          field_type TEXT NOT NULL,
+          display_name TEXT,
+          description TEXT,
+          enabled INTEGER DEFAULT 1,
+          config_json TEXT,
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(table_name, field_name)
+        )
+      `, (err) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+        
+        // Insert or update configuration
+        const stmt = this.db.prepare(`
+          INSERT OR REPLACE INTO schema_config 
+          (table_name, field_name, field_type, display_name, description, enabled, config_json, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        `);
+        
+        stmt.run(
+          config.tableName,
+          config.fieldName,
+          config.fieldType,
+          config.displayName || config.fieldName,
+          config.description || '',
+          config.enabled !== false ? 1 : 0,
+          JSON.stringify(config.config || {})
+        );
+        
+        stmt.finalize((finalizeErr) => {
+          if (finalizeErr) {
+            reject(finalizeErr);
+          } else {
+            resolve({ success: true, config });
+          }
+        });
+      });
+    });
+  }
+
+  /**
+   * Get custom field configurations
+   */
+  async getCustomFieldConfigs(tableName = null) {
+    await this.init();
+    
+    return new Promise((resolve, reject) => {
+      let query = 'SELECT * FROM schema_config';
+      const params = [];
+      
+      if (tableName) {
+        query += ' WHERE table_name = ?';
+        params.push(tableName);
+      }
+      
+      query += ' ORDER BY table_name, field_name';
+      
+      this.db.all(query, params, (err, rows) => {
+        if (err) {
+          console.error('Error fetching custom field configs:', err);
+          reject(err);
+        } else {
+          const configs = rows.map(row => ({
+            id: row.id,
+            tableName: row.table_name,
+            fieldName: row.field_name,
+            fieldType: row.field_type,
+            displayName: row.display_name,
+            description: row.description,
+            enabled: row.enabled === 1,
+            config: JSON.parse(row.config_json || '{}'),
+            createdAt: row.created_at,
+            updatedAt: row.updated_at
+          }));
+          resolve(configs);
+        }
+      });
+    });
+  }
+
+  /**
+   * Delete a custom field configuration
+   */
+  async deleteCustomFieldConfig(tableName, fieldName) {
+    await this.init();
+    
+    return new Promise((resolve, reject) => {
+      this.db.run(
+        'DELETE FROM schema_config WHERE table_name = ? AND field_name = ?',
+        [tableName, fieldName],
+        (err) => {
+          if (err) {
+            console.error('Error deleting custom field config:', err);
+            reject(err);
+          } else {
+            resolve({ success: true });
+          }
         }
       );
     });

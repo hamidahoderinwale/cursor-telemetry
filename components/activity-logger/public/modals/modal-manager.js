@@ -482,7 +482,7 @@ export class ModalManager {
     return `
       <div style="padding: var(--space-lg); background: linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(59, 130, 246, 0.1) 100%); border-left: 4px solid var(--color-primary); border-radius: var(--radius-md);">
         <div style="display: flex; align-items: center; gap: var(--space-sm); margin-bottom: var(--space-md);">
-          <span style="font-size: var(--text-lg);">✨</span>
+          <span style="font-size: var(--text-lg);">[AI]</span>
           <h4 style="margin: 0; color: var(--color-text);">Linked Prompt</h4>
           <span style="font-size: var(--text-xs); color: var(--color-text-muted); margin-left: auto;">
             ${window.formatTimeAgo(prompt.timestamp)}
@@ -707,6 +707,14 @@ export class ModalManager {
   }
 
   async showPromptInModal(prompt, modal, title, body) {
+    // Enhance prompt with context changes if available
+    if (prompt.id && window.enhancePromptWithContext) {
+      try {
+        prompt = await window.enhancePromptWithContext(prompt);
+      } catch (error) {
+        console.warn('Error enhancing prompt with context:', error);
+      }
+    }
     const promptText = prompt.text || prompt.prompt || prompt.preview || prompt.content || 'No prompt text';
     
     title.textContent = 'AI Prompt';
@@ -787,7 +795,7 @@ export class ModalManager {
             ${linkedCodeChange ? `
               <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: rgba(34, 197, 94, 0.1); border-radius: var(--radius-md); border: 1px solid rgba(34, 197, 94, 0.3);">
                 <span style="color: var(--color-success); font-weight: 500;">Status:</span>
-                <span style="color: var(--color-success); font-weight: 500;">✓ Linked to Code Change</span>
+                <span style="color: var(--color-success); font-weight: 500;">Linked to Code Change</span>
               </div>
             ` : `
               <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: rgba(148, 163, 184, 0.1); border-radius: var(--radius-md);">
@@ -802,7 +810,7 @@ export class ModalManager {
         ${linkedCodeChange && codeDetails ? `
           <div>
             <h4 style="margin-bottom: var(--space-md); color: var(--color-text); display: flex; align-items: center; gap: var(--space-sm);">
-              <span>💻 Resulting Code Change</span>
+              <span>Resulting Code Change</span>
               <span style="font-size: var(--text-xs); color: var(--color-text-muted); font-weight: normal;">
                 (${codeDetails.lines_added || codeDetails.diff_stats?.lines_added || 0} lines added, ${codeDetails.lines_removed || codeDetails.diff_stats?.lines_removed || 0} removed)
               </span>
@@ -826,6 +834,30 @@ export class ModalManager {
             }
           </div>
         ` : ''}
+        
+        <!-- Context Information -->
+        ${prompt.contextChange || prompt.contextAnalysis || prompt.contextStructure ? `
+          <div>
+            <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">Context Information</h4>
+            
+            ${prompt.contextChange && window.renderContextChangeIndicator ? 
+              window.renderContextChangeIndicator(prompt.contextChange, false) : ''}
+            
+            ${prompt.contextStructure ? prompt.contextStructure : ''}
+            
+            ${prompt.contextAnalysis && window.renderContextStructure ? 
+              window.renderContextStructure(prompt.contextAnalysis, prompt.contextChange) : ''}
+            
+            ${prompt.contextChanges && prompt.contextChanges.length > 1 && window.renderContextEvolutionTimeline ? 
+              window.renderContextEvolutionTimeline(prompt.contextChanges) : ''}
+          </div>
+        ` : ''}
+        
+        ${prompt.context && this._buildContextHTML ? this._buildContextHTML(prompt.context) : ''}
+        
+        <!-- Related Status Messages -->
+        ${prompt.relatedStatusMessages && prompt.relatedStatusMessages.length > 0 && window.renderStatusMessagesInContext ? 
+          window.renderStatusMessagesInContext(prompt.relatedStatusMessages, prompt.contextChanges) : ''}
         
       </div>
     `;
@@ -891,7 +923,7 @@ export class ModalManager {
     
     try {
       const isError = cmd.exit_code && cmd.exit_code !== 0;
-      const icon = isError ? '❌ Error' : '> ';
+      const icon = isError ? '[Error]' : '> ';
       
       title.innerHTML = `${icon} Terminal Command`;
       

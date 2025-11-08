@@ -27,30 +27,30 @@
     <aside class="sidebar">
       <div class="sidebar-header">
         <div class="logo">
-          <span class="logo-icon">⚡</span>
+          <span class="logo-icon">[Cursor]</span>
           <span class="logo-text">Cursor Telemetry</span>
         </div>
       </div>
       
       <nav class="sidebar-nav">
         <a href="#" class="nav-link active" data-view="overview">
-          <span class="nav-icon">📊</span>
+          <span class="nav-icon">[Overview]</span>
           <span class="nav-text">Overview</span>
         </a>
         <a href="#" class="nav-link" data-view="activity">
-          <span class="nav-icon">📝</span>
+          <span class="nav-icon">[Activity]</span>
           <span class="nav-text">Activity</span>
         </a>
         <a href="#" class="nav-link" data-view="prompts">
-          <span class="nav-icon">💬</span>
+          <span class="nav-icon">[Prompts]</span>
           <span class="nav-text">Prompts</span>
         </a>
         <a href="#" class="nav-link" data-view="analytics">
-          <span class="nav-icon">📈</span>
+          <span class="nav-icon">[Analytics]</span>
           <span class="nav-text">Analytics</span>
         </a>
         <a href="#" class="nav-link" data-view="file-graph">
-          <span class="nav-icon">🕸️</span>
+          <span class="nav-icon">[Graph]</span>
           <span class="nav-text">File Graph</span>
         </a>
       </nav>
@@ -71,7 +71,7 @@
           <select id="workspaceSelect" class="workspace-selector">
             <option value="all">All Workspaces</option>
           </select>
-          <button class="btn btn-primary" id="refreshBtn">🔄 Refresh</button>
+          <button class="btn btn-primary" id="refreshBtn">Refresh</button>
         </div>
       </div>
       
@@ -121,12 +121,12 @@
     document.addEventListener('DOMContentLoaded', async () => {
       try {
         await app.initialize();
-        console.log('✅ Dashboard initialized successfully');
+        console.log('Dashboard initialized successfully');
       } catch (error) {
-        console.error('❌ Dashboard initialization failed:', error);
+        console.error('Dashboard initialization failed:', error);
         document.getElementById('content').innerHTML = `
           <div class="error-state">
-            <h2>⚠️ Initialization Failed</h2>
+            <h2>Initialization Failed</h2>
             <p>${error.message}</p>
             <button onclick="location.reload()">Retry</button>
           </div>

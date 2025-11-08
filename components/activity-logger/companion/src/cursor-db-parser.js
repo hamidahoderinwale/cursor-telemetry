@@ -430,7 +430,7 @@ class CursorDatabaseParser {
     this.isRefreshing = true;
     this.refreshPromise = (async () => {
       try {
-        // ✨ Extract AI service data (actual conversation messages with full threading!)
+        // Extract AI service data (actual conversation messages with full threading!)
         const aiServiceMessages = await this.extractAllAIServiceData();
 
         // Enrich prompts with context information
@@ -645,7 +645,7 @@ class CursorDatabaseParser {
   stopMonitoring() {
     if (this.monitoringInterval) {
       clearInterval(this.monitoringInterval);
-      console.log('⏹️  Stopped Cursor database monitoring');
+      console.log('Stopped Cursor database monitoring');
     }
   }
 }
