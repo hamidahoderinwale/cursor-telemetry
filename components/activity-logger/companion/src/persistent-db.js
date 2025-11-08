@@ -1765,6 +1765,168 @@ class PersistentDB {
   }
 
   // ===================================
+  // STATUS MESSAGE TRACKING METHODS
+  // ===================================
+
+  /**
+   * Save a status message record
+   */
+  async saveStatusMessage(statusRecord) {
+    await this.init();
+    
+    // Create status_messages table if it doesn't exist
+    return new Promise((resolve, reject) => {
+      this.db.run(`
+        CREATE TABLE IF NOT EXISTS status_messages (
+          id TEXT PRIMARY KEY,
+          timestamp INTEGER NOT NULL,
+          message TEXT NOT NULL,
+          type TEXT,
+          action TEXT,
+          file_path TEXT,
+          file_name TEXT,
+          metadata TEXT,
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+      `, (err) => {
+        if (err && !err.message.includes('already exists')) {
+          reject(err);
+          return;
+        }
+        
+        // Insert status message
+        const stmt = this.db.prepare(`
+          INSERT OR REPLACE INTO status_messages 
+          (id, timestamp, message, type, action, file_path, file_name, metadata)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `);
+        
+        stmt.run(
+          statusRecord.id,
+          statusRecord.timestamp,
+          statusRecord.message,
+          statusRecord.type || null,
+          statusRecord.action || null,
+          statusRecord.filePath || null,
+          statusRecord.fileName || null,
+          JSON.stringify(statusRecord.metadata || {})
+        );
+        
+        stmt.finalize((finalizeErr) => {
+          if (finalizeErr) {
+            reject(finalizeErr);
+          } else {
+            resolve({ success: true, statusRecord });
+          }
+        });
+      });
+    });
+  }
+
+  /**
+   * Get status messages with optional filtering
+   */
+  async getStatusMessages(options = {}) {
+    await this.init();
+    
+    const {
+      startTime = null,
+      endTime = null,
+      type = null,
+      action = null,
+      limit = 100
+    } = options;
+    
+    return new Promise((resolve, reject) => {
+      let query = 'SELECT * FROM status_messages WHERE 1=1';
+      const params = [];
+      
+      if (startTime) {
+        query += ' AND timestamp >= ?';
+        params.push(startTime);
+      }
+      
+      if (endTime) {
+        query += ' AND timestamp <= ?';
+        params.push(endTime);
+      }
+      
+      if (type) {
+        query += ' AND type = ?';
+        params.push(type);
+      }
+      
+      if (action) {
+        query += ' AND action = ?';
+        params.push(action);
+      }
+      
+      query += ' ORDER BY timestamp DESC LIMIT ?';
+      params.push(limit);
+      
+      this.db.all(query, params, (err, rows) => {
+        if (err) {
+          console.error('Error fetching status messages:', err);
+          reject(err);
+        } else {
+          const messages = rows.map(row => ({
+            id: row.id,
+            timestamp: row.timestamp,
+            message: row.message,
+            type: row.type,
+            action: row.action,
+            filePath: row.file_path,
+            fileName: row.file_name,
+            metadata: JSON.parse(row.metadata || '{}'),
+            createdAt: row.created_at
+          }));
+          resolve(messages);
+        }
+      });
+    });
+  }
+
+  /**
+   * Link status message to context change
+   */
+  async linkStatusToContextChange(statusId, contextChangeId) {
+    await this.init();
+    
+    // Create linking table if it doesn't exist
+    return new Promise((resolve, reject) => {
+      this.db.run(`
+        CREATE TABLE IF NOT EXISTS status_context_links (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          status_id TEXT NOT NULL,
+          context_change_id TEXT NOT NULL,
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(status_id, context_change_id)
+        )
+      `, (err) => {
+        if (err && !err.message.includes('already exists')) {
+          reject(err);
+          return;
+        }
+        
+        const stmt = this.db.prepare(`
+          INSERT OR IGNORE INTO status_context_links (status_id, context_change_id)
+          VALUES (?, ?)
+        `);
+        
+        stmt.run(statusId, contextChangeId, (runErr) => {
+          if (runErr) {
+            reject(runErr);
+          } else {
+            resolve({ success: true });
+          }
+        });
+        
+        stmt.finalize();
+      });
+    });
+  }
+
+  // ===================================
   // TODO TRACKING METHODS
   // ===================================
 
