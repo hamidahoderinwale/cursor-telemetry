@@ -162,6 +162,7 @@ const db = {
 };
 
 const PORT = process.env.PORT || 43917;
+const HOST = process.env.HOST || '127.0.0.1';
 const app = express();
 const { Server } = require('socket.io');
 
@@ -1797,7 +1798,7 @@ process.on('SIGTERM', () => {
 // Load data from persistent database on startup - LAZY LOADING
 // Startup is now handled by startupService
 // Start the server
-const HOST = process.env.HOST || '127.0.0.1';
+// HOST is now defined at the top with PORT
 
 // Database repair is now handled by dbRepairService
 async function repairDatabaseLinks() {
