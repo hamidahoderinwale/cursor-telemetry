@@ -52,12 +52,20 @@ export class AnalyticsRenderers {
     const modeCounts = new Map();
     
     prompts.forEach(p => {
-      // Extract model name
-      const model = p.model || p.modelName || (p.metadata?.model) || 'Unknown';
+      // Extract model name - check multiple fields
+      const modelName = p.modelName || p.model_name || p.model || 
+                        p.modelInfo?.model || p.metadata?.model || 
+                        (p.modelType && p.modelName ? `${p.modelType}/${p.modelName}` : null) ||
+                        (p.model_type && p.model_name ? `${p.model_type}/${p.model_name}` : null) ||
+                        null;
+      const model = modelName || 'Unknown';
       modelCounts.set(model, (modelCounts.get(model) || 0) + 1);
       
-      // Extract mode (composer/chat/inline)
-      const mode = p.mode || p.type || (p.metadata?.mode) || 'unknown';
+      // Extract mode (composer/chat/inline/user-prompt)
+      const mode = (p.type || p.mode || p.metadata?.mode || 'unknown')
+                   .replace('user-prompt', 'User Prompt')
+                   .replace(/_/g, ' ')
+                   .replace(/\b\w/g, l => l.toUpperCase());
       modeCounts.set(mode, (modeCounts.get(mode) || 0) + 1);
     });
 
@@ -150,15 +158,51 @@ export class AnalyticsRenderers {
     // Extract @ referenced files
     const fileReferences = new Map();
     
+    // Patterns to exclude (node_modules, build artifacts, etc.)
+    const excludePatterns = [
+      /^webpack-internal$/,
+      /^node_modules/,
+      /^\.next/,
+      /^dist/,
+      /^build/,
+      /^\.cache/,
+      /^\d+\.\d+\.\d+/,  // Version numbers
+      /^HUAWEI/,
+      /^react$/,
+      /^react-dom$/,
+      /^babel$/,
+      /^playwright$/,
+      /^sass$/,
+      /_react$/,
+      /__react$/,
+      /__react-dom$/,
+      /\.(js|ts|jsx|tsx|css|scss|json)$/  // Generic extensions without path
+    ];
+    
+    const shouldExclude = (file) => {
+      // Exclude if matches any pattern
+      if (excludePatterns.some(pattern => pattern.test(file))) {
+        return true;
+      }
+      // Exclude if it looks like a version number or package name without path
+      if (!file.includes('/') && !file.includes('\\') && (file.match(/^\d+\.\d+/) || file.length < 3)) {
+        return true;
+      }
+      return false;
+    };
+    
     prompts.forEach(p => {
       const text = p.text || p.prompt || p.content || '';
       
-      // Match @filename patterns
+      // Match @filename patterns - but be more selective
       const atMatches = text.match(/@[\w\-\.\/]+/g);
       if (atMatches) {
         atMatches.forEach(match => {
           const file = match.substring(1); // Remove @
-          fileReferences.set(file, (fileReferences.get(file) || 0) + 1);
+          // Only count if it looks like a real file reference (has path or is meaningful)
+          if (!shouldExclude(file) && (file.includes('/') || file.includes('\\') || file.length > 10)) {
+            fileReferences.set(file, (fileReferences.get(file) || 0) + 1);
+          }
         });
       }
       
@@ -166,10 +210,27 @@ export class AnalyticsRenderers {
       if (p.context?.atFiles) {
         p.context.atFiles.forEach(file => {
           const fileName = file.reference || file.fileName || file.filePath;
-          if (fileName) {
+          if (fileName && !shouldExclude(fileName)) {
             fileReferences.set(fileName, (fileReferences.get(fileName) || 0) + 1);
           }
         });
+      }
+      
+      // Check contextFilesJson if available
+      if (p.contextFilesJson && typeof p.contextFilesJson === 'string') {
+        try {
+          const contextFiles = JSON.parse(p.contextFilesJson);
+          if (Array.isArray(contextFiles)) {
+            contextFiles.forEach(file => {
+              const fileName = file.path || file.filePath || file.name || file;
+              if (fileName && !shouldExclude(fileName)) {
+                fileReferences.set(fileName, (fileReferences.get(fileName) || 0) + 1);
+              }
+            });
+          }
+        } catch (e) {
+          // Ignore parse errors
+        }
       }
     });
 
@@ -252,23 +313,62 @@ export class AnalyticsRenderers {
     }
 
     // Calculate metrics
-    const promptsWithTokens = prompts.filter(p => (p.promptTokens || p.estimatedTokens || 0) > 0);
+    // Try to get actual tokens, but fall back to estimating from context file count or text length
+    const promptsWithTokens = prompts.filter(p => {
+      const tokens = p.promptTokens || p.estimatedTokens || 0;
+      const contextFileCount = p.contextFileCount || p.context_file_count || 0;
+      const text = p.text || p.prompt || '';
+      // Estimate tokens: roughly 250 tokens per 1000 chars, or ~500 tokens per context file
+      const estimatedFromText = text.length > 0 ? Math.round(text.length / 4) : 0;
+      const estimatedFromFiles = contextFileCount * 500;
+      return tokens > 0 || estimatedFromText > 0 || estimatedFromFiles > 0;
+    });
+    
     const avgTokens = promptsWithTokens.length > 0
-      ? promptsWithTokens.reduce((sum, p) => sum + (p.promptTokens || p.estimatedTokens || 0), 0) / promptsWithTokens.length
+      ? promptsWithTokens.reduce((sum, p) => {
+          const tokens = p.promptTokens || p.estimatedTokens || 0;
+          const text = p.text || p.prompt || '';
+          const contextFileCount = p.contextFileCount || p.context_file_count || 0;
+          // Use actual tokens if available, otherwise estimate
+          if (tokens > 0) return sum + tokens;
+          // Estimate from text length (rough: 1 token = 4 chars) or file count
+          const estimated = tokens || Math.round((text.length / 4) + (contextFileCount * 500));
+          return sum + estimated;
+        }, 0) / promptsWithTokens.length
       : 0;
 
-    const promptsWithFiles = prompts.filter(p => (p.text || '').includes('@'));
+    const promptsWithFiles = prompts.filter(p => {
+      const hasAtRef = (p.text || '').includes('@');
+      const hasContextFiles = (p.contextFileCount || p.context_file_count || 0) > 0;
+      return hasAtRef || hasContextFiles;
+    });
     const adoptionRate = prompts.length > 0 ? ((promptsWithFiles.length / prompts.length) * 100).toFixed(1) : 0;
 
-    // Find most mentioned files
+    // Find most mentioned files (using same filtering as context file analytics)
     const fileMentions = new Map();
+    const excludePatterns = [
+      /^webpack-internal$/,
+      /^node_modules/,
+      /^\.next/,
+      /^dist/,
+      /^build/,
+      /^\d+\.\d+\.\d+/,
+    ];
+    const shouldExclude = (file) => {
+      if (excludePatterns.some(pattern => pattern.test(file))) return true;
+      if (!file.includes('/') && !file.includes('\\') && (file.match(/^\d+\.\d+/) || file.length < 3)) return true;
+      return false;
+    };
+    
     prompts.forEach(p => {
       const text = p.text || '';
       const matches = text.match(/@[\w\-\.\/]+/g);
       if (matches) {
         matches.forEach(match => {
           const file = match.substring(1);
-          fileMentions.set(file, (fileMentions.get(file) || 0) + 1);
+          if (!shouldExclude(file) && (file.includes('/') || file.includes('\\') || file.length > 10)) {
+            fileMentions.set(file, (fileMentions.get(file) || 0) + 1);
+          }
         });
       }
     });

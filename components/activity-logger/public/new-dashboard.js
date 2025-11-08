@@ -1701,7 +1701,6 @@ function _legacy_renderAnalyticsView(container) {
         <div class="data-status-info">
           <div class="data-status-info-content">
             <div class="data-status-info-left">
-              <span class="data-status-info-icon">📊</span>
               <div class="data-status-info-text">
                 <h4>Telemetry Active</h4>
                 <p>Tracking ${totalPrompts.toLocaleString()} prompts and ${totalEvents.toLocaleString()} events</p>
@@ -2625,7 +2624,14 @@ async function initializeD3FileGraph() {
     
     // Render prompt embeddings visualization for the "Prompts Embedding Analysis" section
     // This analyzes prompts themselves, not files (file analysis is in Navigator view)
-    renderEmbeddingsVisualization();
+    // Use async to prevent blocking
+    renderEmbeddingsVisualization().catch(err => {
+      console.error('[ERROR] Failed to render embeddings:', err);
+      const container = document.getElementById('embeddingsVisualization');
+      if (container) {
+        container.innerHTML = `<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--color-error); font-size: 13px;">Error rendering embeddings: ${err.message}</div>`;
+      }
+    });
     
     // Update TF-IDF analysis (with null checks)
     const tfidfTotalTermsEl = document.getElementById('tfidfTotalTerms');
@@ -2670,7 +2676,7 @@ async function initializeD3FileGraph() {
 /**
  * Render embeddings visualization with dimensionality reduction (for prompts)
  */
-function renderEmbeddingsVisualization() {
+async function renderEmbeddingsVisualization() {
   const container = document.getElementById('embeddingsVisualization');
   if (!container) return;
   
@@ -2689,11 +2695,14 @@ function renderEmbeddingsVisualization() {
   const dimensions = parseInt(document.getElementById('embeddingsDimensions')?.value || '2');
   const numComponents = parseInt(document.getElementById('embeddingsPCAComponents')?.value || '10');
   
+  // Show loading state
+  container.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--color-text-muted);">Processing embeddings... (this may take a moment)</div>';
+  
   try {
     console.log(`[EMBEDDINGS] Starting analysis: method=${method}, dims=${dimensions}, components=${numComponents}`);
     
     // Filter out JSON metadata, composer conversations (which are just names), and prepare actual prompt texts
-    const validPrompts = prompts.filter(p => {
+    let validPrompts = prompts.filter(p => {
       const text = p.text || p.prompt || p.preview || p.content || '';
       const isJsonLike = text.startsWith('{') || text.startsWith('[');
       // Exclude composer conversations as they only contain conversation names, not actual prompt content
@@ -2701,7 +2710,17 @@ function renderEmbeddingsVisualization() {
       return !isJsonLike && !isComposerConversation && text.length > 10;
     });
     
-    console.log(`[EMBEDDINGS] Filtered to ${validPrompts.length} valid prompts`);
+    // LIMIT: Process max 1000 prompts to prevent timeout (O(n²) similarity calculations)
+    const MAX_PROMPTS = 1000;
+    if (validPrompts.length > MAX_PROMPTS) {
+      console.warn(`[EMBEDDINGS] Limiting to ${MAX_PROMPTS} most recent prompts (of ${validPrompts.length} total) to prevent timeout`);
+      // Sort by timestamp and take most recent
+      validPrompts = validPrompts
+        .sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0))
+        .slice(0, MAX_PROMPTS);
+    }
+    
+    console.log(`[EMBEDDINGS] Filtered to ${validPrompts.length} valid prompts (processing ${validPrompts.length} for embeddings)`);
     
     // Update stats immediately
     const filesCountEl = document.getElementById('embeddingsFilesCount');
@@ -2714,9 +2733,22 @@ function renderEmbeddingsVisualization() {
       return;
     }
     
-    // Tokenize all prompts
+    // Process in chunks to prevent blocking
+    const chunkSize = 100;
+    const chunks = [];
+    for (let i = 0; i < validPrompts.length; i += chunkSize) {
+      chunks.push(validPrompts.slice(i, i + chunkSize));
+    }
+    
+    // Tokenize all prompts (chunked)
     const promptTexts = validPrompts.map(p => p.text || p.prompt || p.preview || p.content || '');
-    const allTokens = promptTexts.map(text => tokenizeCode(text));
+    const allTokens = [];
+    
+    for (const chunk of chunks) {
+      await new Promise(resolve => setTimeout(resolve, 0)); // Yield to browser
+      const chunkTexts = chunk.map(p => p.text || p.prompt || p.preview || p.content || '');
+      allTokens.push(...chunkTexts.map(text => tokenizeCode(text)));
+    }
     
     // Build vocabulary from all prompts - use top terms based on frequency
     const vocab = new Map();
@@ -2735,12 +2767,17 @@ function renderEmbeddingsVisualization() {
     
     console.log(`[EMBEDDINGS] Using vocabulary size: ${topVocab.length}`);
     
-    // Create TF-IDF vectors
+    // Create TF-IDF vectors (chunked)
     const vectors = [];
     const promptLabels = [];
     const promptMetadata = [];
     
-    validPrompts.forEach((prompt, i) => {
+    for (let i = 0; i < validPrompts.length; i++) {
+      if (i % 100 === 0) {
+        await new Promise(resolve => setTimeout(resolve, 0)); // Yield every 100 prompts
+      }
+      
+      const prompt = validPrompts[i];
       const tokens = allTokens[i];
       const vector = [];
       
@@ -2768,19 +2805,49 @@ function renderEmbeddingsVisualization() {
         workspaceName: prompt.workspaceName || 'Unknown',
         source: prompt.source || 'cursor'
       });
-    });
+    }
     
     console.log(`[EMBEDDINGS] Built ${vectors.length} TF-IDF vectors with ${vectors[0]?.length} dimensions`);
     
-    // Apply dimensionality reduction
+    // Apply dimensionality reduction (with timeout protection)
     let reducedVectors;
     if (method === 'pca') {
+      // PCA is fast, can run synchronously
       reducedVectors = applyPCA(vectors, dimensions, numComponents);
       console.log(`[EMBEDDINGS] PCA complete: ${reducedVectors.length} vectors -> ${reducedVectors[0]?.length} dims`);
     } else if (method === 'tsne') {
+      // t-SNE is slow, limit to smaller dataset
+      if (vectors.length > 500) {
+        console.warn(`[EMBEDDINGS] t-SNE is slow with ${vectors.length} prompts, limiting to 500`);
+        const limitedVectors = vectors.slice(0, 500);
+        const limitedLabels = promptLabels.slice(0, 500);
+        const limitedMetadata = promptMetadata.slice(0, 500);
+        reducedVectors = applyTSNE(limitedVectors, dimensions, numComponents);
+        // Re-render with limited data
+        if (dimensions === 2) {
+          renderEmbeddings2D(container, reducedVectors, limitedLabels, limitedMetadata);
+        } else {
+          renderEmbeddings3D(container, reducedVectors, limitedLabels, limitedMetadata);
+        }
+        return;
+      }
       reducedVectors = applyTSNE(vectors, dimensions, numComponents);
       console.log(`[EMBEDDINGS] t-SNE complete`);
     } else {
+      // MDS is also slow, limit if needed
+      if (vectors.length > 500) {
+        console.warn(`[EMBEDDINGS] MDS is slow with ${vectors.length} prompts, limiting to 500`);
+        const limitedVectors = vectors.slice(0, 500);
+        const limitedLabels = promptLabels.slice(0, 500);
+        const limitedMetadata = promptMetadata.slice(0, 500);
+        reducedVectors = applyMDS(limitedVectors, dimensions);
+        if (dimensions === 2) {
+          renderEmbeddings2D(container, reducedVectors, limitedLabels, limitedMetadata);
+        } else {
+          renderEmbeddings3D(container, reducedVectors, limitedLabels, limitedMetadata);
+        }
+        return;
+      }
       reducedVectors = applyMDS(vectors, dimensions);
       console.log(`[EMBEDDINGS] MDS complete`);
     }
@@ -6365,7 +6432,7 @@ function createChart(canvasId, config) {
  * @param {Number} timeWindowMinutes - Time window in minutes to search (default 5)
  * @returns {Array} Array of related prompts, sorted by relevance
  */
-function findRelatedPrompts(event, timeWindowMinutes = 5) {
+function findRelatedPrompts(event, timeWindowMinutes = 15) {
   if (!event || !state.data.prompts || state.data.prompts.length === 0) {
     return [];
   }
@@ -6373,43 +6440,60 @@ function findRelatedPrompts(event, timeWindowMinutes = 5) {
   const eventTime = new Date(event.timestamp).getTime();
   const timeWindowMs = timeWindowMinutes * 60 * 1000;
   
-  // Extract workspace from event
-  const eventWorkspace = event.workspace_path || event.details?.workspace_path || '';
+  // Extract workspace from event - normalize path
+  const eventWorkspace = (event.workspace_path || event.details?.workspace_path || '').toLowerCase();
+  const eventFile = event.details?.file_path || '';
   
-  // Filter prompts by workspace and time proximity
+  // Filter prompts by workspace and time proximity (more lenient matching)
   const related = state.data.prompts
-    .filter(prompt => {
-      // Check workspace match
-      const promptWorkspace = prompt.workspacePath || prompt.workspaceId || '';
-      const workspaceMatch = !eventWorkspace || !promptWorkspace || 
-                            eventWorkspace.includes(promptWorkspace) || 
-                            promptWorkspace.includes(eventWorkspace);
-      
-      if (!workspaceMatch) return false;
-      
-      // Check temporal proximity (prompts should be BEFORE the event)
-      const promptTime = new Date(prompt.timestamp).getTime();
-      const timeDiff = eventTime - promptTime;
-      
-      // Prompt should be within the time window BEFORE the event
-      return timeDiff >= 0 && timeDiff <= timeWindowMs;
-    })
     .map(prompt => {
       const promptTime = new Date(prompt.timestamp).getTime();
       const timeDiff = eventTime - promptTime;
       
-      // Calculate relevance score (closer in time = higher score)
-      const temporalScore = 1 - (timeDiff / timeWindowMs);
-      const workspaceScore = eventWorkspace && prompt.workspacePath && 
-                            eventWorkspace === prompt.workspacePath ? 1.0 : 0.5;
+      // More lenient: allow prompts within window before OR after (but prefer before)
+      const isWithinWindow = Math.abs(timeDiff) <= timeWindowMs;
+      const isBefore = timeDiff >= 0;
+      
+      // Check workspace match - more lenient
+      const promptWorkspace = (prompt.workspacePath || prompt.workspaceId || prompt.workspace_name || '').toLowerCase();
+      
+      // Match if:
+      // 1. No workspace specified (match all)
+      // 2. Workspace paths overlap
+      // 3. File path matches workspace
+      let workspaceMatch = !eventWorkspace || !promptWorkspace;
+      if (!workspaceMatch && eventWorkspace && promptWorkspace) {
+        // Check if paths share common segments
+        const eventParts = eventWorkspace.split('/').filter(p => p);
+        const promptParts = promptWorkspace.split('/').filter(p => p);
+        const commonParts = eventParts.filter(p => promptParts.includes(p));
+        workspaceMatch = commonParts.length >= 2 || // At least 2 common path segments
+                        eventWorkspace.includes(promptWorkspace) || 
+                        promptWorkspace.includes(eventWorkspace);
+      }
+      
+      // Only include if within time window and workspace matches
+      if (!isWithinWindow || !workspaceMatch) {
+        return null;
+      }
+      
+      // Calculate relevance score
+      const temporalScore = isBefore 
+        ? 1 - (timeDiff / timeWindowMs)  // Before is better
+        : 0.5 - ((timeDiff) / timeWindowMs) * 0.5; // After is less relevant
+      const workspaceScore = workspaceMatch ? 
+        (eventWorkspace && promptWorkspace && eventWorkspace === promptWorkspace ? 1.0 : 0.7) : 0.3;
       
       return {
         ...prompt,
         relevanceScore: (temporalScore * 0.7) + (workspaceScore * 0.3),
-        timeDiffSeconds: Math.floor(timeDiff / 1000)
+        timeDiffSeconds: Math.floor(Math.abs(timeDiff) / 1000),
+        isBefore: isBefore
       };
     })
-    .sort((a, b) => b.relevanceScore - a.relevanceScore);
+    .filter(p => p !== null) // Remove null entries
+    .sort((a, b) => b.relevanceScore - a.relevanceScore)
+    .slice(0, 10); // Limit to top 10
   
   return related;
 }
@@ -6570,63 +6654,298 @@ function closeStatusPopup() {
 }
 
 /**
- * Export database as JSON
+ * Export database as JSON (with size limits to prevent browser crashes)
  */
-async function exportDatabase() {
+async function exportDatabase(limit = 1000, includeAllFields = false) {
   try {
-    console.log('📤 Exporting database...');
+    console.log('📤 Exporting database...', { limit, includeAllFields });
     
     // Show loading state
     const exportBtn = document.querySelector('.export-btn');
-    const originalHTML = exportBtn.innerHTML;
-    exportBtn.innerHTML = '<span>Exporting...</span>';
-    exportBtn.disabled = true;
+    if (exportBtn) {
+      const originalHTML = exportBtn.innerHTML;
+      exportBtn.innerHTML = '<span>Exporting...</span>';
+      exportBtn.disabled = true;
+      
+      // Confirm for large exports
+      if (limit > 5000) {
+        const confirmed = confirm(`This will export ${limit} items. Large exports may take time and use significant memory. Continue?`);
+        if (!confirmed) {
+          exportBtn.innerHTML = originalHTML;
+          exportBtn.disabled = false;
+          return;
+        }
+      }
+      
+      // Fetch data from API with limit
+      const url = new URL(`${CONFIG.API_BASE}/api/export/database`);
+      url.searchParams.set('limit', limit.toString());
+      if (includeAllFields) {
+        url.searchParams.set('full', 'true');
+      }
+      
+      console.log('[EXPORT] Fetching from:', url.toString());
+      
+      const response = await fetch(url.toString());
+      
+      if (!response.ok) {
+        throw new Error(`Export failed: ${response.status} ${response.statusText}`);
+      }
+      
+      // Check response size before parsing
+      const contentLength = response.headers.get('content-length');
+      if (contentLength && parseInt(contentLength) > 50 * 1024 * 1024) { // 50MB
+        const proceed = confirm(`Export file is large (${(parseInt(contentLength) / 1024 / 1024).toFixed(1)}MB). This may take time to download. Continue?`);
+        if (!proceed) {
+          exportBtn.innerHTML = originalHTML;
+          exportBtn.disabled = false;
+          return;
+        }
+      }
+      
+      const result = await response.json();
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Export failed');
+      }
+      
+      // Create filename with timestamp and limit info
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+      const limitSuffix = limit < 10000 ? `-${limit}items` : '';
+      const filename = `cursor-telemetry-export-${timestamp}${limitSuffix}.json`;
+      
+      // Convert to JSON string with pretty formatting (use smaller indentation for large files)
+      const indentSize = limit > 5000 ? 0 : 2; // No formatting for very large exports
+      const jsonString = JSON.stringify(result.data, null, indentSize);
+      
+      // Check size before creating blob
+      const sizeMB = new Blob([jsonString]).size / 1024 / 1024;
+      console.log(`[EXPORT] File size: ${sizeMB.toFixed(2)}MB`);
+      
+      if (sizeMB > 100) {
+        throw new Error(`Export file too large (${sizeMB.toFixed(1)}MB). Please reduce the limit.`);
+      }
+      
+      // Create blob and download using streaming for large files
+      const blob = new Blob([jsonString], { type: 'application/json' });
+      const url_obj = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url_obj;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      
+      // Clean up after a delay
+      setTimeout(() => {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url_obj);
+      }, 100);
+      
+      console.log(`[SUCCESS] Exported ${result.data.metadata.totalEntries} entries, ${result.data.metadata.totalPrompts} prompts, ${result.data.metadata.totalEvents} events`);
+      
+      // Show success feedback
+      exportBtn.innerHTML = '<span>✓ Exported!</span>';
+      exportBtn.style.color = '#10b981';
+      setTimeout(() => {
+        exportBtn.innerHTML = originalHTML;
+        exportBtn.disabled = false;
+        exportBtn.style.color = '';
+      }, 2000);
+    } else {
+      // No button found, just log
+      console.log('[EXPORT] Button not found, export completed');
+    }
     
-    // Fetch data from API
-    const response = await fetch(`${CONFIG.API_BASE}/api/export/database`);
+  } catch (error) {
+    console.error('Export error:', error);
+    const exportBtn = document.querySelector('.export-btn');
+    if (exportBtn) {
+      const originalHTML = exportBtn.innerHTML;
+      exportBtn.innerHTML = '<span>✗ Failed</span>';
+      exportBtn.style.color = '#ef4444';
+      setTimeout(() => {
+        exportBtn.innerHTML = originalHTML;
+        exportBtn.disabled = false;
+        exportBtn.style.color = '';
+      }, 3000);
+    }
+    alert(`Export failed: ${error.message}\n\nTry exporting with a smaller limit (e.g., exportDatabase(500))`);
+  }
+}
+
+// Export with options dialog
+async function exportDatabaseWithOptions() {
+  const limit = prompt('How many items to export?\n\nRecommended: 1000 (default)\nMax safe: 5000\nEnter number or leave blank for 1000:', '1000');
+  if (limit === null) return; // User cancelled
+  
+  const numLimit = parseInt(limit) || 1000;
+  if (numLimit > 10000) {
+    alert('Limit too high. Maximum recommended is 10,000 items.');
+    return;
+  }
+  
+  const includeAllFields = confirm('Include all fields?\n\nYes = Full export with all metadata\nNo = Simplified export (recommended)');
+  
+  await exportDatabase(numLimit, includeAllFields);
+}
+
+// Export with filters (for export options modal)
+async function exportDatabaseWithFilters({ dateFrom, dateTo, limit = 1000, types = {}, options = {} }) {
+  try {
+    console.log('📤 Exporting database with filters...', { dateFrom, dateTo, limit, types, options });
+    
+    // Show loading state
+    const exportBtn = document.querySelector('.export-btn');
+    if (exportBtn) {
+      const originalHTML = exportBtn.innerHTML;
+      exportBtn.innerHTML = '<span>Exporting...</span>';
+      exportBtn.disabled = true;
+    }
+    
+    // Confirm for large exports
+    if (limit > 5000) {
+      const confirmed = confirm(`This will export ${limit} items. Large exports may take time and use significant memory. Continue?`);
+      if (!confirmed) {
+        if (exportBtn) {
+          exportBtn.innerHTML = originalHTML;
+          exportBtn.disabled = false;
+        }
+        return;
+      }
+    }
+    
+    // Build URL with all parameters
+    const url = new URL(`${CONFIG.API_BASE}/api/export/database`);
+    url.searchParams.set('limit', limit.toString());
+    
+    // Date range
+    if (dateFrom) {
+      url.searchParams.set('since', dateFrom);
+    }
+    if (dateTo) {
+      url.searchParams.set('until', dateTo);
+    }
+    
+    // Type filters (invert logic - exclude_* means "don't include")
+    if (!types.events) {
+      url.searchParams.set('exclude_events', 'true');
+    }
+    if (!types.prompts) {
+      url.searchParams.set('exclude_prompts', 'true');
+    }
+    if (!types.terminal) {
+      url.searchParams.set('exclude_terminal', 'true');
+    }
+    if (!types.context) {
+      url.searchParams.set('exclude_context', 'true');
+    }
+    
+    // Options
+    if (!options.includeCodeDiffs) {
+      url.searchParams.set('no_code_diffs', 'true');
+    }
+    if (!options.includeLinkedData) {
+      url.searchParams.set('no_linked_data', 'true');
+    }
+    if (!options.includeTemporalChunks) {
+      url.searchParams.set('no_temporal_chunks', 'true');
+    }
+    if (options.fullMetadata) {
+      url.searchParams.set('full', 'true');
+    }
+    
+    console.log('[EXPORT] Fetching from:', url.toString());
+    
+    const response = await fetch(url.toString());
+    
+    if (!response.ok) {
+      throw new Error(`Export failed: ${response.status} ${response.statusText}`);
+    }
+    
+    // Check response size before parsing
+    const contentLength = response.headers.get('content-length');
+    if (contentLength && parseInt(contentLength) > 50 * 1024 * 1024) { // 50MB
+      const proceed = confirm(`Export file is large (${(parseInt(contentLength) / 1024 / 1024).toFixed(1)}MB). This may take time to download. Continue?`);
+      if (!proceed) {
+        if (exportBtn) {
+          exportBtn.innerHTML = originalHTML;
+          exportBtn.disabled = false;
+        }
+        return;
+      }
+    }
+    
     const result = await response.json();
     
     if (!result.success) {
       throw new Error(result.error || 'Export failed');
     }
     
-    // Create filename with timestamp
+    // Create filename with timestamp and filters
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
-    const filename = `cursor-telemetry-export-${timestamp}.json`;
+    const dateSuffix = dateFrom ? `-${dateFrom}` : '';
+    const limitSuffix = limit < 10000 ? `-${limit}items` : '';
+    const filename = `cursor-telemetry-export-${timestamp}${dateSuffix}${limitSuffix}.json`;
     
     // Convert to JSON string with pretty formatting
-    const jsonString = JSON.stringify(result.data, null, 2);
+    const indentSize = limit > 5000 ? 0 : 2;
+    const jsonString = JSON.stringify(result.data, null, indentSize);
+    
+    // Check size before creating blob
+    const sizeMB = new Blob([jsonString]).size / 1024 / 1024;
+    console.log(`[EXPORT] File size: ${sizeMB.toFixed(2)}MB`);
+    
+    if (sizeMB > 100) {
+      throw new Error(`Export file too large (${sizeMB.toFixed(1)}MB). Please reduce the limit.`);
+    }
     
     // Create blob and download
     const blob = new Blob([jsonString], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
+    const url_obj = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url;
+    a.href = url_obj;
     a.download = filename;
     document.body.appendChild(a);
     a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
     
-    console.log(`[SUCCESS] Exported ${result.data.metadata.totalEntries} entries, ${result.data.metadata.totalPrompts} prompts, ${result.data.metadata.totalEvents} events, ${result.data.metadata.totalTerminalCommands || 0} terminal commands, ${result.data.metadata.totalContextSnapshots || 0} context snapshots`);
+    // Clean up after a delay
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url_obj);
+    }, 100);
+    
+    console.log(`[SUCCESS] Exported ${result.data.metadata.totalEntries || 0} entries, ${result.data.metadata.totalPrompts || 0} prompts, ${result.data.metadata.totalEvents || 0} events`);
     
     // Show success feedback
-    exportBtn.innerHTML = '<span>Exported!</span>';
-    setTimeout(() => {
-      exportBtn.innerHTML = originalHTML;
-      exportBtn.disabled = false;
-    }, 2000);
+    if (exportBtn) {
+      exportBtn.innerHTML = '<span>✓ Exported!</span>';
+      exportBtn.style.color = '#10b981';
+      setTimeout(() => {
+        exportBtn.innerHTML = originalHTML;
+        exportBtn.disabled = false;
+        exportBtn.style.color = '';
+      }, 2000);
+    }
     
   } catch (error) {
     console.error('Export error:', error);
     const exportBtn = document.querySelector('.export-btn');
-    exportBtn.innerHTML = '<span>✗ Failed</span>';
-    setTimeout(() => {
-      exportBtn.innerHTML = originalHTML;
-      exportBtn.disabled = false;
-    }, 2000);
+    if (exportBtn) {
+      const originalHTML = exportBtn.innerHTML;
+      exportBtn.innerHTML = '<span>✗ Failed</span>';
+      exportBtn.style.color = '#ef4444';
+      setTimeout(() => {
+        exportBtn.innerHTML = originalHTML;
+        exportBtn.disabled = false;
+        exportBtn.style.color = '';
+      }, 3000);
+    }
+    alert(`Export failed: ${error.message}\n\nTry exporting with a smaller limit or different date range.`);
   }
 }
+
+// Export to window for global access
+window.exportDatabaseWithFilters = exportDatabaseWithFilters;
 
 // Add fadeOut animation to CSS (dynamically)
 const fadeOutStyle = document.createElement('style');
@@ -6877,6 +7196,210 @@ document.addEventListener('DOMContentLoaded', () => {
   
   console.log('Dashboard initialized');
 });
+
+// ===================================
+// Search Engine Initialization
+// ===================================
+
+let searchEngine = null;
+let searchSelectedIndex = -1;
+let searchResults = [];
+
+/**
+ * Initialize the semantic search engine with current data
+ */
+async function initializeSearch() {
+  if (!window.SearchEngine) {
+    console.warn('[SEARCH] SearchEngine class not available');
+    return;
+  }
+  
+  try {
+    console.log('[SEARCH] Initializing search engine...');
+    searchEngine = new window.SearchEngine();
+    
+    // Get current data from state
+    const events = state.data.events || [];
+    const prompts = state.data.prompts || [];
+    const conversations = state.data.conversations || [];
+    
+    // Prepare data for search engine
+    const searchData = {
+      events,
+      prompts,
+      conversations,
+      workspaces: state.data.workspaces || []
+    };
+    
+    await searchEngine.initialize(searchData);
+    console.log('[SUCCESS] Search engine initialized');
+  } catch (error) {
+    console.error('[ERROR] Failed to initialize search engine:', error);
+  }
+}
+
+/**
+ * Open the search palette
+ */
+function openSearchPalette() {
+  const palette = document.getElementById('searchPalette');
+  if (palette) {
+    palette.classList.add('active');
+    const input = document.getElementById('searchInput');
+    if (input) {
+      input.focus();
+      input.select();
+    }
+    searchSelectedIndex = -1;
+    searchResults = [];
+  }
+}
+
+/**
+ * Close the search palette
+ */
+function closeSearchPalette() {
+  const palette = document.getElementById('searchPalette');
+  if (palette) {
+    palette.classList.remove('active');
+  }
+  searchSelectedIndex = -1;
+  searchResults = [];
+}
+
+/**
+ * Perform search query
+ */
+async function performSearch(query) {
+  if (!searchEngine || !searchEngine.initialized) {
+    // Show message that search is not ready
+    const resultsEl = document.getElementById('searchResults');
+    if (resultsEl) {
+      resultsEl.innerHTML = '<div class="search-empty">Search engine initializing...</div>';
+    }
+    return;
+  }
+  
+  if (!query || query.trim().length === 0) {
+    const resultsEl = document.getElementById('searchResults');
+    if (resultsEl) {
+      resultsEl.innerHTML = '<div class="search-empty">Type to search events, prompts, and files...</div>';
+    }
+    searchResults = [];
+    searchSelectedIndex = -1;
+    return;
+  }
+  
+  try {
+    const results = searchEngine.search(query, { limit: 20 });
+    searchResults = results;
+    searchSelectedIndex = -1;
+    renderSearchResults(results);
+  } catch (error) {
+    console.error('[ERROR] Search failed:', error);
+    const resultsEl = document.getElementById('searchResults');
+    if (resultsEl) {
+      resultsEl.innerHTML = '<div class="search-error">Search error: ' + error.message + '</div>';
+    }
+  }
+}
+
+/**
+ * Render search results
+ */
+function renderSearchResults(results) {
+  const resultsEl = document.getElementById('searchResults');
+  if (!resultsEl) return;
+  
+  if (results.length === 0) {
+    resultsEl.innerHTML = '<div class="search-empty">No results found</div>';
+    return;
+  }
+  
+  const html = results.map((result, index) => {
+    const type = result.type || 'unknown';
+    const title = result.title || result.content?.substring(0, 80) || 'Untitled';
+    const snippet = result.snippet || result.content?.substring(0, 150) || '';
+    const time = result.timestamp ? window.formatTimeAgo?.(result.timestamp) || new Date(result.timestamp).toLocaleString() : '';
+    
+    return `
+      <div class="search-result-item ${index === searchSelectedIndex ? 'selected' : ''}" 
+           data-index="${index}" 
+           onclick="selectSearchResult(${index})"
+           onmouseenter="searchSelectedIndex = ${index}; renderSearchResults(searchResults)">
+        <div class="search-result-header">
+          <span class="search-result-type badge badge-${type}">${type}</span>
+          <span class="search-result-title">${window.escapeHtml?.(title) || title}</span>
+          ${time ? `<span class="search-result-time">${time}</span>` : ''}
+        </div>
+        ${snippet ? `<div class="search-result-snippet">${window.escapeHtml?.(snippet) || snippet}</div>` : ''}
+      </div>
+    `;
+  }).join('');
+  
+  resultsEl.innerHTML = html;
+}
+
+/**
+ * Navigate search results with arrow keys
+ */
+function navigateSearchResults(direction) {
+  if (searchResults.length === 0) return;
+  
+  if (direction === 'down') {
+    searchSelectedIndex = Math.min(searchSelectedIndex + 1, searchResults.length - 1);
+  } else if (direction === 'up') {
+    searchSelectedIndex = Math.max(searchSelectedIndex - 1, -1);
+  }
+  
+  renderSearchResults(searchResults);
+  
+  // Scroll to selected item
+  const selectedEl = document.querySelector(`.search-result-item[data-index="${searchSelectedIndex}"]`);
+  if (selectedEl) {
+    selectedEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
+}
+
+/**
+ * Select a search result
+ */
+function selectSearchResult(index) {
+  if (index < 0 || index >= searchResults.length) return;
+  
+  const result = searchResults[index];
+  
+  // Close search palette
+  closeSearchPalette();
+  
+  // Navigate to the result based on type
+  if (result.type === 'event' && result.id) {
+    if (window.showEventModal) {
+      window.showEventModal(result.id);
+    }
+  } else if (result.type === 'prompt' && result.id) {
+    if (window.showPromptInModal) {
+      window.showPromptInModal(result.id);
+    }
+  } else if (result.type === 'conversation' && result.id) {
+    // Switch to activity view and highlight conversation
+    if (window.switchView) {
+      window.switchView('activity');
+      // Could scroll to conversation in timeline
+    }
+  } else if (result.file_path) {
+    // Could open file in editor or show file graph
+    console.log('[SEARCH] Selected file:', result.file_path);
+  }
+}
+
+// Export search functions to window
+window.initializeSearch = initializeSearch;
+window.openSearchPalette = openSearchPalette;
+window.closeSearchPalette = closeSearchPalette;
+window.performSearch = performSearch;
+window.navigateSearchResults = navigateSearchResults;
+window.selectSearchResult = selectSearchResult;
 
 // ===================================
 // Prompt Management Functions

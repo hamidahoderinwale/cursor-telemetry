@@ -1,0 +1,328 @@
+/**
+ * File Graph Component
+ * Main file graph initialization and orchestration
+ * Part of views/file-graph/ - keeps all file graph code together
+ */
+
+// Dependencies: window.CONFIG, window.state, window.computeTFIDFAnalysis, window.renderD3FileGraph, 
+// window.renderSimilarFilePairs, window.renderEmbeddingsVisualization, window.escapeHtml
+
+/**
+ * Initialize D3 file graph visualization
+ */
+async function initializeD3FileGraph() {
+  try {
+    const container = document.getElementById('fileGraphContainer');
+    if (!container) return;
+    
+    // Show loading state
+    container.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%;"><div class="loading-spinner"></div><span style="margin-left: 12px;">Loading file contents from database...</span></div>';
+    
+    // Fetch file contents from persistent database
+    console.log('[FILE] Fetching file contents from SQLite for TF-IDF analysis...');
+    const response = await fetch(`${window.CONFIG.API_BASE}/api/file-contents?limit=100000`);
+    const data = await response.json();
+    
+    if (!data.files || data.files.length === 0) {
+      container.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--color-text-muted);">No file data available for analysis</div>';
+      return;
+    }
+    
+    console.log(`[DATA] Loaded ${data.files.length} files (${(data.totalSize / 1024 / 1024).toFixed(2)} MB) from database`);
+    
+    // Get unique file extensions from the data, grouping Git files
+    const allExts = [...new Set(data.files.map(f => {
+      const ext = f.ext;
+      // Group all Git-related files as just "Git"
+      if (ext && (ext.startsWith('Git') || ext === 'COMMIT_EDITMSG' || ext === 'HEAD' || ext === 'index' || ext === 'FETCH_HEAD' || ext === 'ORIG_HEAD')) {
+        return 'Git';
+      }
+      return ext;
+    }).filter(Boolean))].sort();
+    
+    // Populate file type dropdown
+    const fileTypeFilter = document.getElementById('fileTypeFilter');
+    if (fileTypeFilter && fileTypeFilter.options.length === 0) {
+      allExts.forEach(ext => {
+        const option = document.createElement('option');
+        option.value = ext;
+        option.text = ext.toUpperCase();
+        option.selected = true; // Select all by default
+        fileTypeFilter.add(option);
+      });
+    }
+    
+    // Get selected file types from dropdown
+    const selectedTypes = Array.from(fileTypeFilter?.selectedOptions || []).map(o => o.value);
+    const allowedExts = selectedTypes.length > 0 ? selectedTypes : allExts;
+    
+    // Helper function to check if a string is a Git object hash (40-char hex)
+    const isGitObjectHash = (str) => /^[0-9a-f]{40}$/i.test(str);
+    
+    // Helper function to get a meaningful file name
+    const getMeaningfulName = (file) => {
+      // If the name itself is a Git hash, try to extract from path
+      if (isGitObjectHash(file.name)) {
+        const pathParts = file.path.split('/');
+        // Find a non-hash part of the path
+        for (let i = pathParts.length - 1; i >= 0; i--) {
+          if (!isGitObjectHash(pathParts[i]) && pathParts[i].length > 0) {
+            return pathParts[i];
+          }
+        }
+        return 'Git object';
+      }
+      return file.name;
+    };
+    
+    // Filter files by selected extensions (with Git grouping support)
+    const files = data.files
+      .filter(f => {
+        // Filter out Git object hashes (40-character hex strings in .git/objects/)
+        if (f.path && f.path.includes('.git/objects/') && isGitObjectHash(f.name)) {
+          return false;
+        }
+        
+        const ext = f.ext;
+        // Check if this is a Git file and "Git" is selected
+        if (ext && (ext.startsWith('Git') || ext === 'COMMIT_EDITMSG' || ext === 'HEAD' || ext === 'index' || ext === 'FETCH_HEAD' || ext === 'ORIG_HEAD')) {
+          return allowedExts.includes('Git');
+        }
+        return allowedExts.includes(ext);
+      })
+      .map(f => {
+        // Find all events related to this file
+        const relatedEvents = (window.state.data.events || []).filter(event => {
+          try {
+            const details = typeof event.details === 'string' ? JSON.parse(event.details) : event.details;
+            const filePath = details?.file_path || event.file_path || '';
+            return filePath.includes(f.name) || f.path.includes(filePath);
+          } catch (e) {
+            return false;
+          }
+        });
+        
+        // Get meaningful display name
+        const displayName = getMeaningfulName(f);
+        
+        // Extract workspace and directory for hierarchical grouping
+        const pathParts = f.path.split('/');
+        const workspace = pathParts[0] || 'Unknown';
+        const directory = pathParts.length > 2 ? pathParts.slice(0, -1).join('/') : workspace;
+        
+        return {
+          id: f.path,
+          path: f.path,
+          name: displayName,  // Use meaningful name instead of hash
+          originalName: f.name,  // Keep original for reference
+          ext: f.ext,
+          content: f.content,
+          changes: f.changes || 0,
+          lastModified: f.lastModified,
+          size: f.size,
+          events: relatedEvents || [],
+          workspace: workspace,
+          directory: directory
+        };
+      });
+
+    console.log(`[DATA] Filtered to ${files.length} files with allowed extensions`);
+
+    if (files.length === 0) {
+      container.innerHTML = `
+        <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--color-text-muted);">
+          <div style="text-align: center;">
+            <div style="font-size: 48px; margin-bottom: 16px;">[FILE]</div>
+            <div style="font-size: 18px; margin-bottom: 8px;">No file data available</div>
+            <div style="font-size: 14px;">Make some code changes to see file relationships</div>
+          </div>
+        </div>
+      `;
+      return;
+    }
+    
+    // Compute similarity based on context files from prompts (more accurate than session-based)
+    const links = [];
+    const threshold = parseFloat(document.getElementById('similarityThreshold')?.value || '0.2');
+    
+    // Build file-to-prompts mapping from context files
+    const filePromptMap = new Map();
+    const prompts = window.state.data.prompts || [];
+    
+    prompts.forEach(prompt => {
+      if (prompt.contextFiles && Array.isArray(prompt.contextFiles)) {
+        prompt.contextFiles.forEach(cf => {
+          const filePath = cf.path || cf.filePath || cf.file;
+          if (filePath) {
+            if (!filePromptMap.has(filePath)) {
+              filePromptMap.set(filePath, new Set());
+            }
+            filePromptMap.get(filePath).add(prompt.id || prompt.timestamp);
+          }
+        });
+      }
+      
+      // Also check for file changes in the prompt
+      if (prompt.file_path || prompt.filePath) {
+        const filePath = prompt.file_path || prompt.filePath;
+        if (!filePromptMap.has(filePath)) {
+          filePromptMap.set(filePath, new Set());
+        }
+        filePromptMap.get(filePath).add(prompt.id || prompt.timestamp);
+      }
+    });
+    
+    console.log(`[GRAPH] Built file-to-prompt map with ${filePromptMap.size} files`);
+    
+    // Compute co-occurrence between files
+    for (let i = 0; i < files.length; i++) {
+      for (let j = i + 1; j < files.length; j++) {
+        const file1 = files[i];
+        const file2 = files[j];
+        
+        // Get prompts that reference each file
+        const prompts1 = filePromptMap.get(file1.id) || new Set();
+        const prompts2 = filePromptMap.get(file2.id) || new Set();
+        
+        // Fallback: check if files were modified in same sessions
+        const sessions1 = new Set((file1.events || []).map(e => e.session_id).filter(Boolean));
+        const sessions2 = new Set((file2.events || []).map(e => e.session_id).filter(Boolean));
+        
+        // Combine both prompt co-occurrence and session co-occurrence
+        const promptIntersection = new Set([...prompts1].filter(x => prompts2.has(x)));
+        const sessionIntersection = new Set([...sessions1].filter(x => sessions2.has(x)));
+        
+        const promptUnion = new Set([...prompts1, ...prompts2]);
+        const sessionUnion = new Set([...sessions1, ...sessions2]);
+        
+        // Calculate similarity with weighted average (prompts are more important)
+        const promptSim = promptUnion.size > 0 ? promptIntersection.size / promptUnion.size : 0;
+        const sessionSim = sessionUnion.size > 0 ? sessionIntersection.size / sessionUnion.size : 0;
+        
+        // Weighted average: 70% prompts, 30% sessions
+        const similarity = (promptSim * 0.7) + (sessionSim * 0.3);
+        
+        if (similarity > threshold) {
+          links.push({
+            source: file1.id,
+            target: file2.id,
+            similarity: similarity,
+            sharedPrompts: promptIntersection.size,
+            sharedSessions: sessionIntersection.size
+          });
+        }
+      }
+    }
+    
+    console.log(`[GRAPH] Created ${links.length} connections between files (threshold: ${threshold})`);
+    
+    // Compute TF-IDF for semantic analysis
+    const {tfidfStats, similarities} = window.computeTFIDFAnalysis(files);
+    
+    // Store for updateFileGraph
+    window.fileGraphData = { nodes: files, links: links, tfidfStats, similarities };
+    
+    // Render with D3
+    if (window.renderD3FileGraph) {
+      window.renderD3FileGraph(container, files, links);
+    }
+    
+    // Update basic stats (with null checks)
+    const nodeCountEl = document.getElementById('graphNodeCount');
+    const linkCountEl = document.getElementById('graphLinkCount');
+    const promptCountEl = document.getElementById('graphPromptCount');
+    const avgSimEl = document.getElementById('graphAvgSimilarity');
+    
+    if (nodeCountEl) nodeCountEl.textContent = files.length;
+    if (linkCountEl) linkCountEl.textContent = links.length;
+    if (promptCountEl) promptCountEl.textContent = prompts.length;
+    
+    if (links.length > 0 && avgSimEl) {
+      const avgSim = links.reduce((sum, l) => sum + l.similarity, 0) / links.length;
+      avgSimEl.textContent = avgSim.toFixed(3);
+    } else if (avgSimEl) {
+      avgSimEl.textContent = '0.000';
+    }
+    
+    // Render most similar file pairs
+    if (window.renderSimilarFilePairs) {
+      window.renderSimilarFilePairs(links, files);
+    }
+    
+    // Render prompt embeddings visualization for the "Prompts Embedding Analysis" section
+    // This analyzes prompts themselves, not files (file analysis is in Navigator view)
+    // Use async to prevent blocking
+    if (window.renderEmbeddingsVisualization) {
+      window.renderEmbeddingsVisualization().catch(err => {
+        console.error('[ERROR] Failed to render embeddings:', err);
+        const container = document.getElementById('embeddingsVisualization');
+        if (container) {
+          container.innerHTML = `<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--color-error); font-size: 13px;">Error rendering embeddings: ${err.message}</div>`;
+        }
+      });
+    }
+    
+    // Update TF-IDF analysis (with null checks)
+    const tfidfTotalTermsEl = document.getElementById('tfidfTotalTerms');
+    const tfidfUniqueTermsEl = document.getElementById('tfidfUniqueTerms');
+    const tfidfAvgFreqEl = document.getElementById('tfidfAvgFreq');
+    if (tfidfTotalTermsEl) tfidfTotalTermsEl.textContent = tfidfStats.totalTerms.toLocaleString();
+    if (tfidfUniqueTermsEl) tfidfUniqueTermsEl.textContent = tfidfStats.uniqueTerms;
+    if (tfidfAvgFreqEl) tfidfAvgFreqEl.textContent = tfidfStats.avgFrequency.toFixed(2);
+    
+    // Show ALL top terms (not just 10) with scrolling
+    const termsHtml = tfidfStats.topTerms.map((term, index) => `
+      <div style="display: flex; justify-content: space-between; align-items: center; padding: var(--space-xs); background: var(--color-bg); border-radius: var(--radius-sm); font-size: 12px;" title="TF-IDF Score: ${term.tfidf.toFixed(6)} | Frequency: ${term.freq}">
+        <span style="display: flex; align-items: center; gap: var(--space-xs);">
+          <span style="color: var(--color-text-muted); font-size: 10px; min-width: 25px;">#${index + 1}</span>
+          <span style="font-family: var(--font-mono); color: var(--color-text);">${window.escapeHtml ? window.escapeHtml(term.term) : term.term}</span>
+        </span>
+        <span style="font-weight: 600; color: var(--color-accent);">${term.tfidf.toFixed(4)}</span>
+      </div>
+    `).join('');
+    const topTermsEl = document.getElementById('topTerms');
+    if (topTermsEl) {
+      topTermsEl.innerHTML = termsHtml || '<div style="color: var(--color-text-muted); font-size: 13px;">No terms found</div>';
+    }
+    
+  } catch (error) {
+    // Suppress CORS/network errors (expected when companion service is offline)
+    const errorMessage = error.message || error.toString();
+    const isNetworkError = errorMessage.includes('CORS') || 
+                           errorMessage.includes('NetworkError') || 
+                           errorMessage.includes('Failed to fetch') ||
+                           error.name === 'NetworkError' ||
+                           error.name === 'TypeError';
+    
+    // Only log if it's not a network error
+    if (!isNetworkError) {
+      console.error('Failed to initialize file graph:', error);
+    }
+    
+    const container = document.getElementById('fileGraphContainer');
+    if (container) {
+      container.innerHTML = `
+        <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--color-text-muted);">
+          <div style="text-align: center;">
+            <div style="font-size: 48px; margin-bottom: 16px;">!</div>
+            <div style="font-size: 18px; margin-bottom: 8px;">File Graph Unavailable</div>
+            <div style="font-size: 14px;">${window.escapeHtml ? window.escapeHtml(error.message || 'Error initializing visualization') : (error.message || 'Error initializing visualization')}</div>
+          </div>
+        </div>
+      `;
+    }
+  }
+}
+
+/**
+ * Update file graph (re-initialize with current filters)
+ */
+function updateFileGraph() {
+  // Re-initialize the graph with updated filters
+  initializeD3FileGraph();
+}
+
+// Export to window for global access
+window.initializeD3FileGraph = initializeD3FileGraph;
+window.updateFileGraph = updateFileGraph;
+

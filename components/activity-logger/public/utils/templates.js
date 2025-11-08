@@ -4,9 +4,19 @@
  */
 
 /**
+ * Helper for escaping HTML
+ */
+function escapeHtml(text) {
+  if (typeof text !== 'string') return text;
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+/**
  * Create an empty state element
  */
-export function emptyState(text, hint = '') {
+function emptyState(text, hint = '') {
   return `
     <div class="empty-state">
       <div class="empty-state-text">${escapeHtml(text)}</div>
@@ -18,7 +28,7 @@ export function emptyState(text, hint = '') {
 /**
  * Create a card element
  */
-export function card(header, body, options = {}) {
+function card(header, body, options = {}) {
   const headerContent = typeof header === 'string' 
     ? `<h3 class="card-title">${escapeHtml(header)}</h3>`
     : header;
@@ -43,20 +53,13 @@ export function card(header, body, options = {}) {
 /**
  * Create a badge element
  */
-export function badge(text, variant = 'default') {
+function badge(text, variant = 'default') {
   return `<span class="badge badge-${variant}">${escapeHtml(text)}</span>`;
 }
 
-/**
- * Helper for escaping HTML
- */
-function escapeHtml(text) {
-  if (typeof text !== 'string') return text;
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
-}
-
-// Export escapeHtml for use in other modules
+// Export functions to window for global access
 window.escapeHtml = escapeHtml;
+window.emptyState = emptyState;
+window.card = card;
+window.badge = badge;
 

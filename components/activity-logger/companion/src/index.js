@@ -54,6 +54,7 @@ const ContextAnalyzer = require('./context-analyzer.js');
 const ErrorTracker = require('./error-tracker.js');
 const ProductivityTracker = require('./productivity-tracker.js');
 const TerminalMonitor = require('./terminal-monitor.js');
+const AbstractionEngine = require('./abstraction-engine.js');
 
 // Initialize persistent database
 const persistentDB = new PersistentDB();
@@ -66,6 +67,7 @@ const terminalMonitor = new TerminalMonitor({
   captureOutput: false, // Don't execute commands, just monitor
   debug: false
 });
+const abstractionEngine = new AbstractionEngine();
 
 // Simple in-memory database for companion service (with persistent backup)
 const db = {
@@ -154,7 +156,17 @@ app.use(compression({
   threshold: 1024, // Only compress responses > 1KB
   level: 6 // Balance between compression ratio and speed
 }));
-app.use(cors({ origin: '*' })); // Explicitly allow all origins
+// CORS configuration - explicitly allow all origins and methods
+app.use(cors({ 
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  credentials: false // No credentials needed for local API
+}));
+
+// Handle preflight requests
+app.options('*', cors());
+
 app.use(express.json({ limit: '10mb' })); // Increase JSON payload limit
 
 // Serve static files from public directory with explicit MIME types
@@ -1781,6 +1793,95 @@ app.get('/api/screenshots', (req, res) => {
   }
 });
 
+// API endpoint to serve images (proxy for file:// URLs)
+app.get('/api/image', async (req, res) => {
+  try {
+    let filePath = req.query.path;
+    if (!filePath) {
+      return res.status(400).json({ error: 'Missing path parameter' });
+    }
+    
+    // Decode URL-encoded path (handles spaces, special characters)
+    // The path might be double-encoded or have plus signs instead of spaces
+    try {
+      filePath = decodeURIComponent(filePath);
+      // Replace + with spaces if needed (some browsers encode spaces as +)
+      filePath = filePath.replace(/\+/g, ' ');
+    } catch (decodeError) {
+      console.warn('[IMAGE] Path decode warning:', decodeError.message);
+      // If decoding fails, try using the path as-is
+    }
+    
+    // Resolve the file path
+    let resolvedPath = filePath;
+    
+    // Handle relative paths (e.g., "Desktop/file.png")
+    if (!path.isAbsolute(filePath)) {
+      // Try resolving from user's home directory
+      const homeDir = os.homedir();
+      resolvedPath = path.join(homeDir, filePath);
+    }
+    
+    // Normalize the path (resolves . and .., handles duplicate slashes)
+    resolvedPath = path.normalize(resolvedPath);
+    
+    // Security: Only allow files within user's home directory
+    const homeDir = os.homedir();
+    const homeDirNormalized = path.normalize(homeDir);
+    if (!resolvedPath.startsWith(homeDirNormalized)) {
+      console.warn('[IMAGE] Security check failed:', { resolvedPath, homeDir: homeDirNormalized });
+      return res.status(403).json({ error: 'Access denied: File outside home directory' });
+    }
+    
+    // Check if file exists
+    if (!fs.existsSync(resolvedPath)) {
+      console.warn('[IMAGE] File not found:', resolvedPath);
+      return res.status(404).json({ error: 'File not found', path: resolvedPath });
+    }
+    
+    // Check if it's actually a file (not a directory)
+    const stats = fs.statSync(resolvedPath);
+    if (!stats.isFile()) {
+      return res.status(400).json({ error: 'Path is not a file' });
+    }
+    
+    // Check if it's an image file
+    const ext = path.extname(resolvedPath).toLowerCase();
+    const imageExts = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.bmp'];
+    if (!imageExts.includes(ext)) {
+      return res.status(400).json({ error: 'Not an image file', ext });
+    }
+    
+    // Read and serve the file (use async to avoid blocking)
+    const fileBuffer = await fs.promises.readFile(resolvedPath);
+    
+    const mimeTypes = {
+      '.png': 'image/png',
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.gif': 'image/gif',
+      '.webp': 'image/webp',
+      '.svg': 'image/svg+xml',
+      '.bmp': 'image/bmp'
+    };
+    
+    res.setHeader('Content-Type', mimeTypes[ext] || 'application/octet-stream');
+    res.setHeader('Cache-Control', 'public, max-age=3600'); // Cache for 1 hour
+    res.setHeader('Content-Length', fileBuffer.length);
+    
+    // Send the file buffer
+    res.send(fileBuffer);
+    
+    console.log(`[IMAGE] Served: ${resolvedPath} (${(fileBuffer.length / 1024).toFixed(2)}KB)`);
+    
+  } catch (error) {
+    console.error('[IMAGE] Error serving image:', error);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Failed to serve image', details: error.message });
+    }
+  }
+});
+
 // API endpoint to get screenshots near a specific time
 app.get('/api/screenshots/near/:timestamp', (req, res) => {
   try {
@@ -2517,64 +2618,571 @@ app.post('/api/prompts/manual', async (req, res) => {
   }
 });
 
-// Database export with pagination
+// API endpoint to repair database links
+app.post('/api/repair/links', async (req, res) => {
+  try {
+    console.log('[API] Repair links request received');
+    const result = await repairDatabaseLinks();
+    res.json({
+      success: true,
+      ...result
+    });
+  } catch (error) {
+    console.error('[API] Error in repair links:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Database export with streaming support
 app.get('/api/export/database', async (req, res) => {
   try {
     console.log('📤 Export request received');
     
-    // Support limiting export size for large datasets
-    const limit = parseInt(req.query.limit) || 1000;  // Default: last 1000 items
-    const includeAllFields = req.query.full === 'true';  // Include all fields or just key ones
+    // Check if streaming is requested
+    const useStreaming = req.query.stream === 'true' || req.query.streaming === 'true';
+    const streamThreshold = parseInt(req.query.stream_threshold) || 5000; // Stream if > 5000 items
     
-    console.log(`[EXPORT] Limit: ${limit}, Full fields: ${includeAllFields}`);
+    // Parse query parameters
+    const limit = parseInt(req.query.limit) || 1000;
+    const includeAllFields = req.query.full === 'true';
     
-    // Gather data from database with limits
-    // For export, use getEntriesWithCode to include structural edits (before_code/after_code)
-    const [entries, prompts, events, terminalCommands, contextSnapshots, contextAnalytics] = await Promise.all([
-      persistentDB.getEntriesWithCode(Math.min(limit, 1000)),  // ✅ Includes before_code and after_code for structural edits
-      persistentDB.getRecentPrompts(Math.min(limit, 1000)),  // Cap at 1000
-      persistentDB.getAllEvents(),  // Usually smaller
-      persistentDB.getAllTerminalCommands(Math.min(limit, 1000)),  // Cap at 1000
-      persistentDB.getContextSnapshots({ since: 0, limit: Math.min(limit, 1000) }),
-      persistentDB.getContextAnalytics()
-    ]);
+    // Parse date strings - handle both ISO date strings (YYYY-MM-DD) and timestamps
+    let since = null;
+    let until = null;
+    if (req.query.since) {
+      // If it's a number, treat as timestamp; otherwise parse as date string
+      if (!isNaN(req.query.since) && req.query.since.length > 10) {
+        since = parseInt(req.query.since);
+      } else {
+        // ISO date string (YYYY-MM-DD) - convert to timestamp
+        const date = new Date(req.query.since);
+        since = date.getTime();
+      }
+    }
+    if (req.query.until) {
+      // If it's a number, treat as timestamp; otherwise parse as date string
+      if (!isNaN(req.query.until) && req.query.until.length > 10) {
+        until = parseInt(req.query.until);
+      } else {
+        // ISO date string (YYYY-MM-DD) - add end of day
+        const date = new Date(req.query.until + 'T23:59:59.999Z');
+        until = date.getTime();
+      }
+    }
     
-    // Get in-memory data
+    // Type filters
+    const excludeEvents = req.query.exclude_events === 'true';
+    const excludePrompts = req.query.exclude_prompts === 'true';
+    const excludeTerminal = req.query.exclude_terminal === 'true';
+    const excludeContext = req.query.exclude_context === 'true';
+    
+    // Options
+    const noCodeDiffs = req.query.no_code_diffs === 'true';
+    const noLinkedData = req.query.no_linked_data === 'true';
+    const noTemporalChunks = req.query.no_temporal_chunks === 'true';
+    
+    // Abstraction level (new)
+    const abstractionLevel = parseInt(req.query.abstraction_level || req.query.abstractionLevel || '0');
+    const abstractPrompts = req.query.abstract_prompts === 'true' || req.query.abstractPrompts === 'true';
+    const extractPatterns = req.query.extract_patterns === 'true' || req.query.extractPatterns === 'true';
+    
+    console.log(`[EXPORT] Limit: ${limit}, Since: ${since ? new Date(since).toISOString() : 'all'}, Until: ${until ? new Date(until).toISOString() : 'all'}`);
+    console.log(`[EXPORT] Exclude: events=${excludeEvents}, prompts=${excludePrompts}, terminal=${excludeTerminal}, context=${excludeContext}`);
+    console.log(`[EXPORT] Abstraction Level: ${abstractionLevel}, Abstract Prompts: ${abstractPrompts}, Extract Patterns: ${extractPatterns}`);
+    console.log(`[EXPORT] Streaming: ${useStreaming || limit > streamThreshold} (threshold: ${streamThreshold})`);
+    
+    // Use streaming for large exports or if explicitly requested
+    if (useStreaming || limit > streamThreshold) {
+      return handleStreamingExport(req, res, {
+        limit, includeAllFields, since, until,
+        excludeEvents, excludePrompts, excludeTerminal, excludeContext,
+        noCodeDiffs, noLinkedData, noTemporalChunks,
+        abstractionLevel, abstractPrompts, extractPatterns
+      });
+    }
+    
+    // Helper function to filter by date range
+    const filterByDateRange = (items) => {
+      if (!since && !until) return items;
+      return items.filter(item => {
+        const itemTime = new Date(item.timestamp).getTime();
+        if (since && itemTime < since) return false;
+        if (until && itemTime > until) return false;
+        return true;
+      });
+    };
+    
+    // Gather data from database with limits and filters
+    const promises = [];
+    
+    if (!excludeEvents) {
+      // Use time range filtering if dates are provided, otherwise get entries with code
+      if (since || until) {
+        promises.push(persistentDB.getEntriesInTimeRange(since || 0, until || Date.now(), null, Math.min(limit, 10000)));
+      } else {
+        promises.push(persistentDB.getEntriesWithCode(Math.min(limit, 10000)));
+      }
+    } else {
+      promises.push(Promise.resolve([]));
+    }
+    
+    if (!excludePrompts) {
+      // Use time range filtering if dates are provided, otherwise get recent prompts
+      if (since || until) {
+        promises.push(persistentDB.getPromptsInTimeRange(since || 0, until || Date.now(), Math.min(limit, 10000)));
+      } else {
+        promises.push(persistentDB.getRecentPrompts(Math.min(limit, 10000)));
+      }
+    } else {
+      promises.push(Promise.resolve([]));
+    }
+    
+    if (!excludeEvents) {
+      promises.push(persistentDB.getAllEvents());
+    } else {
+      promises.push(Promise.resolve([]));
+    }
+    
+    if (!excludeTerminal) {
+      promises.push(persistentDB.getAllTerminalCommands(Math.min(limit, 10000)));
+    } else {
+      promises.push(Promise.resolve([]));
+    }
+    
+    if (!excludeContext) {
+      promises.push(persistentDB.getContextSnapshots({ since: since || 0, limit: Math.min(limit, 10000) }));
+    } else {
+      promises.push(Promise.resolve([]));
+    }
+    
+    promises.push(persistentDB.getContextAnalytics());
+    
+    const [entries, prompts, events, terminalCommands, contextSnapshots, contextAnalytics] = await Promise.all(promises);
+    
+    // Apply date range filtering
+    const filteredEntries = filterByDateRange(entries);
+    const filteredPrompts = filterByDateRange(prompts);
+    const filteredEvents = filterByDateRange(events);
+    const filteredTerminalCommands = filterByDateRange(terminalCommands);
+    const filteredContextSnapshots = filterByDateRange(contextSnapshots);
+    
+    // Calculate diff stats for entries with code
+    const calculateDiff = (before, after) => {
+      if (!before && !after) return { linesAdded: 0, linesRemoved: 0, charsAdded: 0, charsDeleted: 0 };
+      const beforeLines = (before || '').split('\n');
+      const afterLines = (after || '').split('\n');
+      const charsAdded = (after || '').length;
+      const charsDeleted = (before || '').length;
+      // Simple diff: compare line counts
+      const linesAdded = Math.max(0, afterLines.length - beforeLines.length);
+      const linesRemoved = Math.max(0, beforeLines.length - afterLines.length);
+      return { linesAdded, linesRemoved, charsAdded, charsDeleted };
+    };
+    
+    // Enrich entries with diff stats and ensure code diffs are included
+    const enrichedEntries = filteredEntries.map(entry => {
+      const diff = calculateDiff(entry.before_code || entry.before_content, entry.after_code || entry.after_content);
+      const enriched = {
+        ...entry,
+        // Add computed diff stats
+        diff_stats: {
+          lines_added: diff.linesAdded,
+          lines_removed: diff.linesRemoved,
+          chars_added: diff.charsAdded,
+          chars_deleted: diff.charsDeleted,
+          has_diff: !!(entry.before_code || entry.after_code)
+        }
+      };
+      
+      // Only include code diffs if requested
+      if (!noCodeDiffs) {
+        enriched.before_code = entry.before_code || entry.before_content || '';
+        enriched.after_code = entry.after_code || entry.after_content || '';
+        enriched.before_content = entry.before_code || entry.before_content || '';
+        enriched.after_content = entry.after_code || entry.after_content || '';
+      } else {
+        // Remove code content but keep metadata
+        enriched.before_code = '';
+        enriched.after_code = '';
+        enriched.before_content = '';
+        enriched.after_content = '';
+      }
+      
+      return enriched;
+    });
+    
+    // Create linked data structure: group prompts with their code changes
+    const linkedData = [];
+    const unlinkedEntries = [];
+    const unlinkedPrompts = [];
+    
+    // Build lookup maps for fast access
+    const promptMap = new Map(filteredPrompts.map(p => [p.id, p]));
+    const entryMap = new Map(enrichedEntries.map(e => [e.id, e]));
+    
+    // Only build linked data if requested
+    if (!noLinkedData) {
+      // Group linked prompts and entries
+      enrichedEntries.forEach(entry => {
+        if (entry.prompt_id) {
+          const prompt = promptMap.get(entry.prompt_id);
+          if (prompt) {
+            linkedData.push({
+              type: 'prompt_with_code_change',
+              prompt: prompt,
+              code_change: entry,
+              linked_at: entry.timestamp,
+              relationship: {
+                prompt_id: prompt.id,
+                entry_id: entry.id,
+                link_type: 'entry_to_prompt'
+              }
+            });
+          } else {
+            unlinkedEntries.push(entry);
+          }
+        } else {
+          unlinkedEntries.push(entry);
+        }
+      });
+      
+      // Add prompts that link to entries (reverse direction)
+      filteredPrompts.forEach(prompt => {
+        if (prompt.linked_entry_id || prompt.linkedEntryId) {
+          const entryId = prompt.linked_entry_id || prompt.linkedEntryId;
+          const entry = entryMap.get(entryId);
+          // Only add if not already in linkedData
+          const alreadyLinked = linkedData.some(link => 
+            link.prompt.id === prompt.id && link.code_change.id === entryId
+          );
+          if (entry && !alreadyLinked) {
+            linkedData.push({
+              type: 'prompt_with_code_change',
+              prompt: prompt,
+              code_change: entry,
+              linked_at: prompt.timestamp,
+              relationship: {
+                prompt_id: prompt.id,
+                entry_id: entry.id,
+                link_type: 'prompt_to_entry'
+              }
+            });
+          }
+        } else if (!linkedData.some(link => link.prompt.id === prompt.id)) {
+          unlinkedPrompts.push(prompt);
+        }
+      });
+    } else {
+      // If no linked data requested, mark all as unlinked
+      enrichedEntries.forEach(entry => {
+        if (!entry.prompt_id) {
+          unlinkedEntries.push(entry);
+        }
+      });
+      filteredPrompts.forEach(prompt => {
+        if (!prompt.linked_entry_id && !prompt.linkedEntryId) {
+          unlinkedPrompts.push(prompt);
+        }
+      });
+    }
+    
+    // Sort linked data by timestamp
+    linkedData.sort((a, b) => new Date(b.linked_at) - new Date(a.linked_at));
+    
+    // ============================================
+    // NEW: Create temporal chunks/sessions
+    // Groups prompts, code changes, and metadata by time proximity
+    // ============================================
+    const temporalChunks = [];
+    const timeWindowMs = 5 * 60 * 1000; // 5 minutes
+    
+    // Combine all items with timestamps for temporal grouping
+    const allTemporalItems = [
+      ...enrichedEntries.map(e => ({
+        type: 'code_change',
+        item: e,
+        timestamp: new Date(e.timestamp).getTime(),
+        file_path: e.file_path,
+        workspace_path: e.workspace_path,
+        model_info: e.modelInfo || null,
+        diff_stats: e.diff_stats,
+        before_code: e.before_code,
+        after_code: e.after_code,
+        prompt_id: e.prompt_id,
+        metadata: {
+          source: e.source,
+          session_id: e.session_id,
+          tags: e.tags || [],
+          notes: e.notes,
+          type: e.type
+        }
+      })),
+      ...filteredPrompts.map(p => ({
+        type: 'prompt',
+        item: p,
+        timestamp: new Date(p.timestamp).getTime(),
+        file_path: null, // Prompts don't have file_path directly
+        workspace_path: p.workspace_path,
+        model_info: {
+          model_type: p.model_type || p.modelType,
+          model_name: p.model_name || p.modelName
+        },
+        diff_stats: null,
+        before_code: null,
+        after_code: null,
+        prompt_id: p.id,
+        metadata: {
+          source: p.source,
+          mode: p.mode,
+          workspace_id: p.workspace_id,
+          workspace_name: p.workspace_name,
+          composer_id: p.composer_id,
+          context_usage: p.context_usage || p.contextUsage,
+          context_file_count: p.context_file_count || p.contextFileCount,
+          lines_added: p.lines_added || p.linesAdded,
+          lines_removed: p.lines_removed || p.linesRemoved,
+          conversation_title: p.conversation_title || p.conversationTitle,
+          message_role: p.message_role || p.messageRole,
+          thinking_time: p.thinking_time || p.thinkingTime
+        }
+      })),
+      ...filteredTerminalCommands.map(cmd => ({
+        type: 'terminal_command',
+        item: cmd,
+        timestamp: new Date(cmd.timestamp).getTime(),
+        file_path: null,
+        workspace_path: cmd.workspace,
+        model_info: null,
+        diff_stats: null,
+        before_code: null,
+        after_code: null,
+        prompt_id: null,
+        metadata: {
+          command: cmd.command,
+          exit_code: cmd.exit_code,
+          shell: cmd.shell,
+          source: cmd.source,
+          duration: cmd.duration,
+          linked_entry_id: cmd.linked_entry_id,
+          linked_prompt_id: cmd.linked_prompt_id
+        }
+      }))
+    ].filter(item => item.timestamp > 0); // Filter invalid timestamps
+    
+    // Sort by timestamp
+    allTemporalItems.sort((a, b) => a.timestamp - b.timestamp);
+    
+    // Group into temporal chunks
+    let currentChunk = null;
+    allTemporalItems.forEach(item => {
+      if (!currentChunk || (item.timestamp - currentChunk.end_time) > timeWindowMs) {
+        // Start new chunk
+        if (currentChunk) {
+          temporalChunks.push(currentChunk);
+        }
+        currentChunk = {
+          id: `chunk-${item.timestamp}-${Math.random().toString(36).substr(2, 9)}`,
+          start_time: item.timestamp,
+          end_time: item.timestamp,
+          duration_seconds: 0,
+          workspace_paths: new Set(),
+          files_changed: new Set(),
+          models_used: new Set(),
+          items: [],
+          summary: {
+            prompts: 0,
+            code_changes: 0,
+            terminal_commands: 0,
+            total_lines_added: 0,
+            total_lines_removed: 0,
+            total_chars_added: 0,
+            total_chars_deleted: 0
+          }
+        };
+      }
+      
+      // Add item to current chunk
+      currentChunk.items.push(item);
+      currentChunk.end_time = Math.max(currentChunk.end_time, item.timestamp);
+      currentChunk.duration_seconds = Math.round((currentChunk.end_time - currentChunk.start_time) / 1000);
+      
+      // Track workspace
+      if (item.workspace_path) {
+        currentChunk.workspace_paths.add(item.workspace_path);
+      }
+      
+      // Track files
+      if (item.file_path) {
+        currentChunk.files_changed.add(item.file_path);
+      }
+      
+      // Track models
+      if (item.model_info) {
+        const modelName = item.model_info.model_name || item.model_info.modelName;
+        const modelType = item.model_info.model_type || item.model_info.modelType;
+        if (modelName || modelType) {
+          currentChunk.models_used.add(modelType && modelName ? `${modelType}/${modelName}` : (modelName || modelType || 'Unknown'));
+        }
+      }
+      
+      // Update summary
+      if (item.type === 'prompt') currentChunk.summary.prompts++;
+      if (item.type === 'code_change') {
+        currentChunk.summary.code_changes++;
+        if (item.diff_stats) {
+          currentChunk.summary.total_lines_added += item.diff_stats.lines_added || 0;
+          currentChunk.summary.total_lines_removed += item.diff_stats.lines_removed || 0;
+          currentChunk.summary.total_chars_added += item.diff_stats.chars_added || 0;
+          currentChunk.summary.total_chars_deleted += item.diff_stats.chars_deleted || 0;
+        }
+      }
+      if (item.type === 'terminal_command') currentChunk.summary.terminal_commands++;
+    });
+    
+    // Add final chunk
+    if (currentChunk) {
+      temporalChunks.push(currentChunk);
+    }
+    
+    // Convert Sets to Arrays for JSON serialization and add linked relationships
+    const enrichedChunks = temporalChunks.map(chunk => {
+      // Find linked relationships within this chunk
+      const relationships = [];
+      chunk.items.forEach(item => {
+        if (item.type === 'code_change' && item.prompt_id) {
+          const linkedPrompt = chunk.items.find(i => i.type === 'prompt' && i.prompt_id === item.prompt_id);
+          if (linkedPrompt) {
+            relationships.push({
+              type: 'prompt_to_code',
+              prompt_id: item.prompt_id,
+              code_change_id: item.item.id,
+              time_gap_seconds: Math.abs((item.timestamp - linkedPrompt.timestamp) / 1000)
+            });
+          }
+        }
+      });
+      
+      return {
+        ...chunk,
+        start_time: new Date(chunk.start_time).toISOString(),
+        end_time: new Date(chunk.end_time).toISOString(),
+        workspace_paths: Array.from(chunk.workspace_paths),
+        files_changed: Array.from(chunk.files_changed),
+        models_used: Array.from(chunk.models_used),
+        relationships: relationships,
+        // Include full items with all metadata
+        items: chunk.items.map(i => ({
+          type: i.type,
+          id: i.item.id,
+          timestamp: new Date(i.timestamp).toISOString(),
+          // Code change metadata
+          ...(i.type === 'code_change' ? {
+            file_path: i.file_path,
+            before_code: i.before_code,
+            after_code: i.after_code,
+            diff_stats: i.diff_stats,
+            model_info: i.model_info,
+            prompt_id: i.prompt_id,
+            metadata: i.metadata
+          } : {}),
+          // Prompt metadata
+          ...(i.type === 'prompt' ? {
+            text: i.item.text || i.item.prompt || i.item.content,
+            workspace_path: i.workspace_path,
+            model_info: i.model_info,
+            metadata: i.metadata
+          } : {}),
+          // Terminal command metadata
+          ...(i.type === 'terminal_command' ? {
+            command: i.metadata.command,
+            workspace_path: i.workspace_path,
+            exit_code: i.metadata.exit_code,
+            metadata: i.metadata
+          } : {})
+        }))
+      };
+    });
+    
+    // Get in-memory data with improved structure
     const exportData = {
       metadata: {
         exportedAt: new Date().toISOString(),
-        version: '2.1',  // Bumped for threading + export pagination
+        version: '2.4',  // Bumped for export filters
         exportLimit: limit,
         fullExport: includeAllFields,
-        totalEntries: entries.length,
-        totalPrompts: prompts.length,
-        totalEvents: events.length,
-        totalTerminalCommands: terminalCommands.length,
-        totalContextSnapshots: contextSnapshots.length,
+        dateRange: {
+          since: since ? new Date(since).toISOString() : null,
+          until: until ? new Date(until).toISOString() : null
+        },
+        filters: {
+          excludeEvents,
+          excludePrompts,
+          excludeTerminal,
+          excludeContext,
+          noCodeDiffs,
+          noLinkedData,
+          noTemporalChunks
+        },
+        totalEntries: enrichedEntries.length,
+        totalPrompts: filteredPrompts.length,
+        totalEvents: filteredEvents.length,
+        totalTerminalCommands: filteredTerminalCommands.length,
+        totalContextSnapshots: filteredContextSnapshots.length,
+        totalLinked: linkedData.length,
+        totalTemporalChunks: noTemporalChunks ? 0 : enrichedChunks.length,
         note: limit < 10000 ? 'Limited export - use ?limit=10000 for more data' : 'Full export'
       },
-      entries: entries,
-      prompts: prompts,
-      events: events,
-      terminal_commands: terminalCommands,  // NEW: Full command history
-      context_snapshots: contextSnapshots,  // NEW: Context usage over time
-      context_analytics: contextAnalytics,  // NEW: Aggregated context stats
+      // NEW: Temporal chunks (groups by time proximity with all metadata) - only if requested
+      ...(noTemporalChunks ? {} : { temporal_chunks: enrichedChunks }),
+      // NEW: Linked data structure (prompts with their code changes - explicit links) - only if requested
+      ...(noLinkedData ? {} : { linked_data: linkedData }),
+      // Original flat arrays (for backward compatibility and direct access)
+      entries: enrichedEntries,
+      prompts: filteredPrompts,
+      events: filteredEvents,
+      terminal_commands: filteredTerminalCommands,
+      context_snapshots: filteredContextSnapshots,
+      context_analytics: contextAnalytics,
       workspaces: db.workspaces || [],
+      // Unlinked items (for analysis)
+      unlinked: {
+        entries: unlinkedEntries.filter(e => !e.prompt_id),
+        prompts: unlinkedPrompts,
+        note: 'Items without explicit links (may be linked by timestamp proximity in temporal_chunks)'
+      },
       stats: {
-        sessions: db.entries.length,
-        fileChanges: entries.length,
-        aiInteractions: prompts.length,
-        totalActivities: events.length,
-        terminalCommands: terminalCommands.length,
-        avgContextUsage: contextAnalytics.avgContextUtilization || 0
+        sessions: enrichedEntries.length,
+        fileChanges: enrichedEntries.length,
+        aiInteractions: filteredPrompts.length,
+        totalActivities: filteredEvents.length,
+        terminalCommands: filteredTerminalCommands.length,
+        avgContextUsage: contextAnalytics.avgContextUtilization || 0,
+        linkedPairs: linkedData.length,
+        linkingRate: enrichedEntries.length > 0 
+          ? ((linkedData.length / enrichedEntries.length) * 100).toFixed(1) + '%'
+          : '0%'
       }
     };
     
-    console.log(`[SUCCESS] Exported ${entries.length} entries, ${prompts.length} prompts, ${events.length} events, ${terminalCommands.length} terminal commands, ${contextSnapshots.length} context snapshots`);
+    // Apply abstraction if level > 0
+    let finalExportData = exportData;
+    if (abstractionLevel > 0) {
+      console.log(`[ABSTRACTION] Applying level ${abstractionLevel} abstraction...`);
+      finalExportData = abstractionEngine.abstractExportData(exportData, abstractionLevel, {
+        abstractPrompts: abstractPrompts || abstractionLevel >= 2,
+        extractPatterns: extractPatterns || abstractionLevel >= 3
+      });
+      console.log(`[ABSTRACTION] Abstraction applied successfully`);
+    }
+    
+    console.log(`[SUCCESS] Exported ${enrichedEntries.length} entries (${linkedData.length} linked to prompts), ${filteredPrompts.length} prompts, ${filteredEvents.length} events, ${filteredTerminalCommands.length} terminal commands, ${filteredContextSnapshots.length} context snapshots`);
     
     res.json({
       success: true,
-      data: exportData
+      data: finalExportData
     });
     
   } catch (error) {
@@ -2585,6 +3193,279 @@ app.get('/api/export/database', async (req, res) => {
     });
   }
 });
+
+// Streaming export handler for large datasets
+async function handleStreamingExport(req, res, options) {
+  const {
+    limit, includeAllFields, since, until,
+    excludeEvents, excludePrompts, excludeTerminal, excludeContext,
+    noCodeDiffs, noLinkedData, noTemporalChunks,
+    abstractionLevel, abstractPrompts, extractPatterns
+  } = options;
+  
+  try {
+    // Set headers for streaming
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Transfer-Encoding', 'chunked');
+    
+    // Helper function to filter by date range
+    const filterByDateRange = (items) => {
+      if (!since && !until) return items;
+      return items.filter(item => {
+        const itemTime = new Date(item.timestamp).getTime();
+        if (since && itemTime < since) return false;
+        if (until && itemTime > until) return false;
+        return true;
+      });
+    };
+    
+    // Helper to write JSON chunk
+    const writeChunk = (chunk) => {
+      res.write(chunk);
+    };
+    
+    // Helper to abstract entry if needed
+    const processEntry = (entry) => {
+      if (abstractionLevel > 0 && abstractionEngine) {
+        return abstractionEngine.abstractEntry(entry, abstractionLevel);
+      }
+      return entry;
+    };
+    
+    // Helper to abstract prompt if needed
+    const processPrompt = (prompt) => {
+      if (abstractionLevel > 0 && abstractionEngine) {
+        return abstractionEngine.abstractPrompt(prompt, abstractionLevel);
+      }
+      return prompt;
+    };
+    
+    // Calculate diff stats
+    const calculateDiff = (before, after) => {
+      if (!before && !after) return { linesAdded: 0, linesRemoved: 0, charsAdded: 0, charsDeleted: 0 };
+      const beforeLines = (before || '').split('\n');
+      const afterLines = (after || '').split('\n');
+      const charsAdded = (after || '').length;
+      const charsDeleted = (before || '').length;
+      const linesAdded = Math.max(0, afterLines.length - beforeLines.length);
+      const linesRemoved = Math.max(0, beforeLines.length - afterLines.length);
+      return { linesAdded, linesRemoved, charsAdded, charsDeleted };
+    };
+    
+    // Start writing JSON structure
+    writeChunk('{\n  "success": true,\n  "data": {\n');
+    
+    // Write metadata first (small, can load all at once)
+    const metadata = {
+      exportedAt: new Date().toISOString(),
+      version: '2.4',
+      exportLimit: limit,
+      fullExport: includeAllFields,
+      dateRange: {
+        since: since ? new Date(since).toISOString() : null,
+        until: until ? new Date(until).toISOString() : null
+      },
+      filters: {
+        excludeEvents, excludePrompts, excludeTerminal, excludeContext,
+        noCodeDiffs, noLinkedData, noTemporalChunks
+      },
+      streaming: true
+    };
+    writeChunk(`    "metadata": ${JSON.stringify(metadata, null, 2).split('\n').join('\n    ')},\n`);
+    
+    // Stream entries in batches
+    if (!excludeEvents) {
+      writeChunk('    "entries": [\n');
+      const batchSize = 100; // Process 100 entries at a time
+      let processedCount = 0;
+      let firstEntry = true;
+      
+      // Get entries - use time range filtering if dates are provided
+      let allEntries = [];
+      if (since || until) {
+        // Get all entries in time range at once (more efficient for date filtering)
+        allEntries = await persistentDB.getEntriesInTimeRange(since || 0, until || Date.now(), null, limit);
+      } else {
+        // Get entries in batches
+        for (let offset = 0; offset < limit; offset += batchSize) {
+          const batchLimit = Math.min(batchSize, limit - offset);
+          const batch = await persistentDB.getEntriesWithCode(batchLimit);
+          allEntries.push(...batch);
+          if (allEntries.length >= limit) break;
+        }
+        allEntries = allEntries.slice(0, limit);
+      }
+      
+      // Process entries
+      for (const entry of allEntries) {
+        if (processedCount >= limit) break;
+        
+        // Apply date range filter (in case database query didn't filter perfectly)
+        const itemTime = new Date(entry.timestamp).getTime();
+        if (since && itemTime < since) continue;
+        if (until && itemTime > until) continue;
+        
+        if (!firstEntry) writeChunk(',\n');
+        firstEntry = false;
+        
+        // Enrich entry
+        const diff = calculateDiff(entry.before_code || entry.before_content, entry.after_code || entry.after_content);
+        const enriched = {
+          ...entry,
+          diff_stats: {
+            lines_added: diff.linesAdded,
+            lines_removed: diff.linesRemoved,
+            chars_added: diff.charsAdded,
+            chars_deleted: diff.charsDeleted,
+            has_diff: !!(entry.before_code || entry.after_code)
+          }
+        };
+        
+        // Only include code diffs if requested
+        if (noCodeDiffs) {
+          enriched.before_code = '';
+          enriched.after_code = '';
+          enriched.before_content = '';
+          enriched.after_content = '';
+        }
+        
+        // Apply abstraction
+        const processed = processEntry(enriched);
+        writeChunk('      ' + JSON.stringify(processed).split('\n').join('\n      '));
+        processedCount++;
+        
+        // Flush periodically
+        if (processedCount % (batchSize * 10) === 0) {
+          await new Promise(resolve => setImmediate(resolve));
+        }
+      }
+      
+      writeChunk('\n    ],\n');
+    } else {
+      writeChunk('    "entries": [],\n');
+    }
+    
+    // Stream prompts in batches
+    if (!excludePrompts) {
+      writeChunk('    "prompts": [\n');
+      const batchSize = 100;
+      let processedCount = 0;
+      let firstPrompt = true;
+      
+      // Use time range filtering if dates are provided
+      let allPrompts = [];
+      if (since || until) {
+        // Get all prompts in time range at once (more efficient for date filtering)
+        allPrompts = await persistentDB.getPromptsInTimeRange(since || 0, until || Date.now(), limit);
+      } else {
+        // Get recent prompts in batches
+        for (let offset = 0; offset < limit; offset += batchSize) {
+          const batchLimit = Math.min(batchSize, limit - offset);
+          const batch = await persistentDB.getRecentPrompts(batchLimit);
+          allPrompts.push(...batch);
+          if (allPrompts.length >= limit) break;
+        }
+        allPrompts = allPrompts.slice(0, limit);
+      }
+      
+      // Process prompts
+      for (const prompt of allPrompts) {
+        if (processedCount >= limit) break;
+        
+        // Apply date range filter (in case database query didn't filter perfectly)
+        const itemTime = new Date(prompt.timestamp).getTime();
+        if (since && itemTime < since) continue;
+        if (until && itemTime > until) continue;
+        
+        if (!firstPrompt) writeChunk(',\n');
+        firstPrompt = false;
+        
+        const processed = processPrompt(prompt);
+        writeChunk('      ' + JSON.stringify(processed).split('\n').join('\n      '));
+        processedCount++;
+        
+        // Flush periodically
+        if (processedCount % (batchSize * 10) === 0) {
+          await new Promise(resolve => setImmediate(resolve));
+        }
+      }
+      
+      writeChunk('\n    ],\n');
+    } else {
+      writeChunk('    "prompts": [],\n');
+    }
+    
+    // Stream terminal commands (smaller, can batch)
+    if (!excludeTerminal) {
+      writeChunk('    "terminal_commands": [\n');
+      const commands = await persistentDB.getAllTerminalCommands(Math.min(limit, 10000));
+      const filteredCommands = filterByDateRange(commands);
+      let firstCmd = true;
+      
+      for (const cmd of filteredCommands.slice(0, limit)) {
+        if (!firstCmd) writeChunk(',\n');
+        firstCmd = false;
+        writeChunk('      ' + JSON.stringify(cmd).split('\n').join('\n      '));
+      }
+      
+      writeChunk('\n    ],\n');
+    } else {
+      writeChunk('    "terminal_commands": [],\n');
+    }
+    
+    // Context snapshots (smaller dataset)
+    if (!excludeContext) {
+      writeChunk('    "context_snapshots": [\n');
+      const snapshots = await persistentDB.getContextSnapshots({ since: since || 0, limit: Math.min(limit, 10000) });
+      const filteredSnapshots = filterByDateRange(snapshots);
+      let firstSnapshot = true;
+      
+      for (const snapshot of filteredSnapshots.slice(0, limit)) {
+        if (!firstSnapshot) writeChunk(',\n');
+        firstSnapshot = false;
+        writeChunk('      ' + JSON.stringify(snapshot).split('\n').join('\n      '));
+      }
+      
+      writeChunk('\n    ],\n');
+    } else {
+      writeChunk('    "context_snapshots": [],\n');
+    }
+    
+    // Context analytics (small, can load all)
+    const contextAnalytics = await persistentDB.getContextAnalytics();
+    writeChunk(`    "context_analytics": ${JSON.stringify(contextAnalytics).split('\n').join('\n    ')},\n`);
+    
+    // Workspaces (small)
+    writeChunk(`    "workspaces": ${JSON.stringify(db.workspaces || []).split('\n').join('\n    ')},\n`);
+    
+    // Stats (computed)
+    const stats = {
+      sessions: 0, // Would need to compute
+      fileChanges: 0,
+      aiInteractions: 0,
+      totalActivities: 0,
+      terminalCommands: 0,
+      avgContextUsage: contextAnalytics.avgContextUtilization || 0
+    };
+    writeChunk(`    "stats": ${JSON.stringify(stats).split('\n').join('\n    ')}\n`);
+    
+    // Close JSON
+    writeChunk('\n  }\n}');
+    
+    res.end();
+    console.log(`[STREAM] Streaming export completed`);
+    
+  } catch (error) {
+    console.error('Error in streaming export:', error);
+    // Try to close JSON properly on error
+    if (!res.headersSent) {
+      res.status(500).json({ success: false, error: error.message });
+    } else {
+      res.write(`\n  "error": "${error.message.replace(/"/g, '\\"')}"\n}`);
+      res.end();
+    }
+  }
+}
 
 // Cache for file contents (refresh every 5 minutes)
 let fileContentsCache = null;
@@ -3217,26 +4098,26 @@ async function processFileChange(filePath) {
           const entryTime = new Date(entry.timestamp).getTime();
           const fiveMinutesAgo = entryTime - (5 * 60 * 1000);
           
-          // Find recent prompts (pending or captured status, within time window)
-          const recentPrompts = db.prompts
-            .filter(p => {
-              const promptTime = new Date(p.timestamp).getTime();
-              return (p.status === 'pending' || p.status === 'captured') && 
-                     promptTime >= fiveMinutesAgo &&
-                     promptTime <= entryTime &&
-                     !p.linked_entry_id; // Not already linked
-            })
-            .sort((a, b) => b.timestamp - a.timestamp);
+          // Query database for recent prompts (more reliable than in-memory array)
+          const recentPrompts = await persistentDB.getPromptsInTimeRange(
+            new Date(fiveMinutesAgo).toISOString(),
+            new Date(entryTime).toISOString(),
+            50 // Limit to 50 most recent
+          );
           
-          const lastPrompt = recentPrompts[0];
+          // Filter for unlinked prompts with pending/captured status
+          const candidatePrompts = recentPrompts
+            .filter(p => {
+              const status = p.status || 'captured';
+              const linkedEntryId = p.linked_entry_id || p.linkedEntryId;
+              return (status === 'pending' || status === 'captured') && !linkedEntryId;
+            })
+            .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+          
+          const lastPrompt = candidatePrompts[0];
           
           if (lastPrompt) {
-            // Update in-memory
-            lastPrompt.status = 'linked';
-            lastPrompt.linked_entry_id = entry.id;
-            entry.prompt_id = lastPrompt.id;
-            
-            // Persist to database
+            // Persist to database (bidirectional linking)
             await persistentDB.updatePrompt(lastPrompt.id, {
               status: 'linked',
               linked_entry_id: entry.id
@@ -3246,7 +4127,16 @@ async function processFileChange(filePath) {
               prompt_id: lastPrompt.id 
             });
             
-            console.log(`✓ Linked prompt ${lastPrompt.id} ("${lastPrompt.text?.substring(0, 50)}...") to entry ${entry.id}`);
+            // Update in-memory if present
+            const inMemoryPrompt = db.prompts.find(p => p.id === lastPrompt.id);
+            if (inMemoryPrompt) {
+              inMemoryPrompt.status = 'linked';
+              inMemoryPrompt.linked_entry_id = entry.id;
+            }
+            entry.prompt_id = lastPrompt.id;
+            
+            const promptText = lastPrompt.text || lastPrompt.prompt || lastPrompt.content || '';
+            console.log(`✓ Linked prompt ${lastPrompt.id} ("${promptText.substring(0, 50)}...") to entry ${entry.id}`);
           }
         } catch (error) {
           console.error('Error linking prompt to entry:', error);
@@ -3532,8 +4422,112 @@ async function loadPersistedData() {
 // Start the server
 const HOST = process.env.HOST || '127.0.0.1';
 
+// Repair function to fix existing unlinked data
+async function repairDatabaseLinks() {
+  try {
+    console.log('[REPAIR] Starting database link repair...');
+    
+    // Get all prompts that have linked_entry_id
+    const promptsWithLinks = await persistentDB.getPromptsWithLinkedEntries();
+    let repairedCount = 0;
+    let skippedCount = 0;
+    let notFoundCount = 0;
+    
+    for (const prompt of promptsWithLinks) {
+      const linkedEntryId = prompt.linked_entry_id || prompt.linkedEntryId;
+      if (!linkedEntryId) {
+        skippedCount++;
+        continue;
+      }
+      
+      // Try to find entry by the linked_entry_id (could be UUID or numeric)
+      let entry = await persistentDB.getEntryById(linkedEntryId);
+      
+      // If not found by ID, try to find by timestamp proximity (within 5 minutes)
+      if (!entry) {
+        // Handle both ISO string and numeric timestamps
+        let promptTime;
+        if (typeof prompt.timestamp === 'number') {
+          promptTime = prompt.timestamp;
+        } else if (typeof prompt.timestamp === 'string') {
+          promptTime = new Date(prompt.timestamp).getTime();
+        } else {
+          notFoundCount++;
+          continue;
+        }
+        
+        if (isNaN(promptTime) || !isFinite(promptTime)) {
+          notFoundCount++;
+          continue;
+        }
+        
+        const fiveMinutesAgo = promptTime - (5 * 60 * 1000);
+        const fiveMinutesAfter = promptTime + (5 * 60 * 1000);
+        
+        // Find entries in the same workspace within time window
+        const nearbyEntries = await persistentDB.getEntriesInTimeRange(
+          new Date(fiveMinutesAgo).toISOString(),
+          new Date(fiveMinutesAfter).toISOString(),
+          prompt.workspace_path || prompt.workspacePath
+        );
+        
+        // Find the closest entry without a prompt_id
+        entry = nearbyEntries
+          .filter(e => !e.prompt_id)
+          .sort((a, b) => {
+            const aTime = new Date(a.timestamp).getTime();
+            const bTime = new Date(b.timestamp).getTime();
+            return Math.abs(aTime - promptTime) - Math.abs(bTime - promptTime);
+          })[0];
+      }
+      
+      if (!entry) {
+        notFoundCount++;
+        continue;
+      }
+      
+      if (entry.prompt_id) {
+        skippedCount++;
+        continue;
+      }
+      
+      // Fix: Set prompt_id on entry
+      try {
+        await persistentDB.updateEntry(entry.id, {
+          prompt_id: prompt.id
+        });
+        repairedCount++;
+        console.log(`[REPAIR] Fixed entry ${entry.id} -> prompt ${prompt.id}`);
+      } catch (updateError) {
+        console.error(`[REPAIR] Error updating entry ${entry.id}:`, updateError.message);
+      }
+    }
+    
+    console.log(`[REPAIR] Completed: Fixed ${repairedCount} entries, skipped ${skippedCount}, not found ${notFoundCount}`);
+    return { 
+      repaired: repairedCount, 
+      total: promptsWithLinks.length,
+      skipped: skippedCount,
+      notFound: notFoundCount
+    };
+  } catch (error) {
+    console.error('[REPAIR] Error repairing links:', error);
+    return { repaired: 0, error: error.message };
+  }
+}
+
 loadPersistedData().then(() => {
-  app.listen(PORT, HOST, () => {
+  // Repair existing links on startup
+  repairDatabaseLinks().then(result => {
+    if (result.repaired > 0) {
+      console.log(`[REPAIR] Repaired ${result.repaired} database links on startup`);
+    }
+  }).catch(err => {
+    console.warn('[REPAIR] Link repair failed (non-critical):', err.message);
+  });
+  
+  // Use server.listen() instead of app.listen() to ensure Socket.IO works properly
+  server.listen(PORT, HOST, () => {
     console.log(`[LAUNCH] Companion service running on http://${HOST}:${PORT}`);
     console.log(`[DATA] Health endpoint: http://${HOST}:${PORT}/health`);
     console.log(`[UP] Activity endpoint: http://${HOST}:${PORT}/api/activity`);
@@ -3680,7 +4674,8 @@ loadPersistedData().then(() => {
 }).catch(error => {
   console.error('❌ Failed to load persisted data:', error);
   // Start anyway with empty database
-  app.listen(PORT, HOST, () => {
+  // Use server.listen() instead of app.listen() to ensure Socket.IO works properly
+  server.listen(PORT, HOST, () => {
     console.log(`[LAUNCH] Companion service running on http://${HOST}:${PORT} (without persisted data)`);
   });
 });

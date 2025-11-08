@@ -691,6 +691,56 @@ class PersistentDB {
   }
   
   /**
+   * Get entries within a time range (optionally filtered by workspace)
+   */
+  async getEntriesInTimeRange(since, until, workspacePath = null, limit = 100) {
+    await this.init();
+    
+    return new Promise((resolve, reject) => {
+      // Convert timestamps to ISO strings for TEXT column comparison
+      const sinceISO = since ? new Date(since).toISOString() : null;
+      const untilISO = until ? new Date(until).toISOString() : null;
+      
+      let query = `
+        SELECT * FROM entries 
+        WHERE 1=1
+      `;
+      const params = [];
+      
+      if (sinceISO) {
+        query += ` AND timestamp >= ?`;
+        params.push(sinceISO);
+      }
+      if (untilISO) {
+        query += ` AND timestamp <= ?`;
+        params.push(untilISO);
+      }
+      
+      if (workspacePath) {
+        query += ` AND workspace_path = ?`;
+        params.push(workspacePath);
+      }
+      
+      query += ` ORDER BY timestamp DESC LIMIT ?`;
+      params.push(limit);
+      
+      this.db.all(query, params, (err, rows) => {
+        if (err) {
+          console.error('Error loading entries in time range:', err);
+          reject(err);
+        } else {
+          const entries = rows.map(row => ({
+            ...row,
+            tags: row.tags ? JSON.parse(row.tags) : [],
+            modelInfo: row.modelInfo ? JSON.parse(row.modelInfo) : null
+          }));
+          resolve(entries);
+        }
+      });
+    });
+  }
+
+  /**
    * Get entries with full code content (includes before_code and after_code)
    * Used for exports where structural edits are needed
    */
@@ -833,6 +883,47 @@ class PersistentDB {
           reject(err);
         } else {
           resolve(row || { entryId: 0, promptId: 0 });
+        }
+      });
+    });
+  }
+
+  /**
+   * Get prompts within a time range (for linking)
+   */
+  async getPromptsInTimeRange(since, until, limit = 100) {
+    await this.init();
+    
+    return new Promise((resolve, reject) => {
+      // Convert timestamps to ISO strings for TEXT column comparison
+      const sinceISO = since ? new Date(since).toISOString() : null;
+      const untilISO = until ? new Date(until).toISOString() : null;
+      
+      let query = `
+        SELECT * FROM prompts 
+        WHERE 1=1
+      `;
+      const params = [];
+      
+      if (sinceISO) {
+        query += ` AND timestamp >= ?`;
+        params.push(sinceISO);
+      }
+      if (untilISO) {
+        query += ` AND timestamp <= ?`;
+        params.push(untilISO);
+      }
+      
+      query += ` ORDER BY timestamp DESC LIMIT ?`;
+      params.push(limit);
+      
+      this.db.all(query, params, (err, rows) => {
+        if (err) {
+          console.error('Error loading prompts in time range:', err);
+          reject(err);
+        } else {
+          const mapped = rows.map(row => this._mapPromptRow(row));
+          resolve(mapped);
         }
       });
     });
@@ -1006,6 +1097,65 @@ class PersistentDB {
           reject(err);
         } else {
           resolve(rows);
+        }
+      });
+    });
+  }
+
+  /**
+   * Get prompts that have linked_entry_id (for repair function)
+   */
+  async getPromptsWithLinkedEntries() {
+    await this.init();
+    
+    return new Promise((resolve, reject) => {
+      this.db.all(`
+        SELECT * FROM prompts 
+        WHERE linked_entry_id IS NOT NULL
+        ORDER BY timestamp DESC
+      `, (err, rows) => {
+        if (err) {
+          console.error('Error loading prompts with linked entries:', err);
+          reject(err);
+        } else {
+          const mapped = rows.map(row => this._mapPromptRow(row));
+          resolve(mapped);
+        }
+      });
+    });
+  }
+
+  /**
+   * Get entry by ID (handles both numeric and UUID string IDs)
+   */
+  async getEntryById(entryId) {
+    await this.init();
+    
+    return new Promise((resolve, reject) => {
+      // Try both numeric ID and string ID (UUID)
+      const query = typeof entryId === 'number' 
+        ? `SELECT * FROM entries WHERE id = ?`
+        : `SELECT * FROM entries WHERE id = ? OR CAST(id AS TEXT) = ?`;
+      const params = typeof entryId === 'number' 
+        ? [entryId]
+        : [entryId, entryId];
+      
+      this.db.get(query, params, (err, row) => {
+        if (err) {
+          console.error('Error loading entry by ID:', err);
+          reject(err);
+        } else {
+          if (!row) {
+            resolve(null);
+            return;
+          }
+          // Parse JSON fields
+          const entry = {
+            ...row,
+            tags: row.tags ? JSON.parse(row.tags) : [],
+            modelInfo: row.modelInfo ? JSON.parse(row.modelInfo) : null
+          };
+          resolve(entry);
         }
       });
     });

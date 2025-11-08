@@ -62,7 +62,6 @@ function renderAnalyticsView(container) {
         <div class="data-status-info">
           <div class="data-status-info-content">
             <div class="data-status-info-left">
-              <span class="data-status-info-icon">📊</span>
               <div class="data-status-info-text">
                 <h4>Telemetry Active</h4>
                 <p>Tracking ${totalPrompts.toLocaleString()} prompts and ${totalEvents.toLocaleString()} events</p>
@@ -82,7 +81,7 @@ function renderAnalyticsView(container) {
       <div class="card">
         <div class="card-header">
           <h3 class="card-title">AI Activity & Code Output</h3>
-          <p class="card-subtitle">Prompt frequency and code changes correlation</p>
+          <p class="card-subtitle">Daily prompt frequency and code changes correlation. Shows available history (may be limited).</p>
         </div>
         <div class="card-body">
           <canvas id="aiActivityChart" class="chart-container"></canvas>
@@ -175,10 +174,21 @@ function renderAnalyticsView(container) {
         </div>
       </div>
 
+      <!-- Prompt Effectiveness -->
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">Prompt Effectiveness</h3>
+          <p class="card-subtitle">Time from prompt to code change, success rate, iteration patterns, and workflow efficiency</p>
+        </div>
+        <div class="card-body">
+          <div id="promptEffectiveness" style="min-height: 200px;"></div>
+        </div>
+      </div>
+
     </div>
   `;
 
-  // Render charts after DOM is ready
+  // Render charts after DOM is ready (300ms delay to ensure all modules loaded)
   setTimeout(() => {
     const state = window.state || {};
     const events = state.data?.events || [];
@@ -272,6 +282,16 @@ function renderAnalyticsView(container) {
       window.renderProductivityInsights().catch(err => console.warn('[INFO] Productivity insights not available:', err.message));
     } else {
       console.warn('[CHART] renderProductivityInsights not available');
+    }
+    
+    if (window.renderPromptEffectiveness) {
+      try {
+        window.renderPromptEffectiveness();
+      } catch (err) {
+        console.error('[CHART] Error rendering Prompt Effectiveness:', err);
+      }
+    } else {
+      console.warn('[CHART] renderPromptEffectiveness not available');
     }
   }, 300);
 }

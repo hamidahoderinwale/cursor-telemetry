@@ -53,11 +53,16 @@ class DataSynchronizer {
    */
   async syncCursorDatabases() {
     const startTime = Date.now();
-    console.log('[ARCHIVE] Syncing from Cursor databases (background)...');
+    const isOffline = window.state?.companionServiceOnline === false;
     
-    // Update UI with progress indicator
-    if (window.updateConnectionStatus) {
-      window.updateConnectionStatus(false, 'Syncing history (background)...');
+    // Only log if not in offline mode
+    if (!isOffline) {
+      console.log('[ARCHIVE] Syncing from Cursor databases (background)...');
+      
+      // Update UI with progress indicator
+      if (window.updateConnectionStatus) {
+        window.updateConnectionStatus(false, 'Syncing history (background)...');
+      }
     }
     
     try {
@@ -77,26 +82,52 @@ class DataSynchronizer {
       // Store conversations
       if (data.data && data.data.conversations) {
         await this.storage.storePrompts(data.data.conversations);
-        console.log(`  ✓ Stored ${data.data.conversations.length} conversations`);
+        if (!isOffline) {
+          console.log(`  ✓ Stored ${data.data.conversations.length} conversations`);
+        }
       }
       
       // Store prompts
       if (data.data && data.data.prompts) {
         const stored = await this.storage.storePrompts(data.data.prompts);
-        console.log(`  ✓ Stored ${stored} new prompts from Cursor DB`);
+        if (!isOffline) {
+          console.log(`  ✓ Stored ${stored} new prompts from Cursor DB`);
+        }
       }
       
       this.lastSync.cursorDb = Date.now();
       
+      // Mark as online if we got a response
+      if (window.state) window.state.companionServiceOnline = true;
+      
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-      console.log(`[ARCHIVE] ✅ Background sync complete in ${elapsed}s`);
+      if (!isOffline) {
+        console.log(`[ARCHIVE] ✅ Background sync complete in ${elapsed}s`);
+      }
       
       // Restore connection status if still connected
       if (window.updateConnectionStatus && window.state && window.state.connected) {
         window.updateConnectionStatus(true, 'Connected');
       }
     } catch (error) {
-      console.warn('Could not sync Cursor databases:', error.message);
+      const errorMessage = error.message || error.toString();
+      const isNetworkError = errorMessage.includes('CORS') || 
+                             errorMessage.includes('NetworkError') || 
+                             errorMessage.includes('Failed to fetch') ||
+                             error.name === 'NetworkError' ||
+                             error.name === 'TypeError';
+      
+      // Mark as offline on network errors
+      if (isNetworkError && window.state) {
+        window.state.companionServiceOnline = false;
+      }
+      
+      // Only log if not a network error (expected when offline) or if we haven't detected offline yet
+      if (!isNetworkError || !isOffline) {
+        if (!isNetworkError) {
+          console.warn('Could not sync Cursor databases:', error.message);
+        }
+      }
       
       // Restore connection status on error if still connected
       if (window.updateConnectionStatus && window.state && window.state.connected) {
@@ -109,7 +140,12 @@ class DataSynchronizer {
    * Sync from companion service (live data)
    */
   async syncCompanionService() {
-    console.log('[ERROR] Syncing from companion service...');
+    // Only log if we haven't detected offline mode yet, or if we're coming back online
+    const isOffline = window.state?.companionServiceOnline === false;
+    if (!isOffline) {
+      // Don't log this - it's too verbose when working normally
+      // console.log('[SYNC] Syncing from companion service...');
+    }
     
     try {
       // Get events
@@ -119,9 +155,14 @@ class DataSynchronizer {
         
         if (eventsData.events && eventsData.events.length > 0) {
           const stored = await this.storage.storeEvents(eventsData.events);
-          console.log(`  ✓ Stored ${stored} new events`);
+          if (!isOffline) {
+            console.log(`  ✓ Stored ${stored} new events`);
+          }
           this.lastSync.events = eventsData.cursor || this.lastSync.events;
         }
+        
+        // Mark as online if we got a response
+        if (window.state) window.state.companionServiceOnline = true;
       }
       
       // Get entries (prompts from companion)
@@ -131,12 +172,35 @@ class DataSynchronizer {
         
         if (entriesData.entries && entriesData.entries.length > 0) {
           const stored = await this.storage.storePrompts(entriesData.entries);
-          console.log(`  ✓ Stored ${stored} new entries`);
+          if (!isOffline) {
+            console.log(`  ✓ Stored ${stored} new entries`);
+          }
         }
+        
+        // Mark as online if we got a response
+        if (window.state) window.state.companionServiceOnline = true;
       }
       
     } catch (error) {
-      console.warn('Could not sync companion service:', error.message);
+      const errorMessage = error.message || error.toString();
+      const isNetworkError = errorMessage.includes('CORS') || 
+                             errorMessage.includes('NetworkError') || 
+                             errorMessage.includes('Failed to fetch') ||
+                             error.name === 'NetworkError' ||
+                             error.name === 'TypeError';
+      
+      // Mark as offline on network errors
+      if (isNetworkError && window.state) {
+        window.state.companionServiceOnline = false;
+      }
+      
+      // Only log if we haven't already detected offline mode, or if it's a different error
+      if (!isNetworkError || !isOffline) {
+        // Suppress CORS/network errors - they're expected when service is offline
+        if (!isNetworkError) {
+          console.warn('[SYNC] Could not sync companion service:', error.message);
+        }
+      }
     }
   }
 
@@ -147,7 +211,12 @@ class DataSynchronizer {
     console.log('[TIME] Starting periodic sync (every 2min)...');
     
     this.syncInterval = setInterval(async () => {
-      console.log('[SYNC] Periodic sync...');
+      // Only log periodic sync if not in offline mode (to reduce spam)
+      const isOffline = window.state?.companionServiceOnline === false;
+      if (!isOffline) {
+        // Don't log every periodic sync - too verbose
+        // console.log('[SYNC] Periodic sync...');
+      }
       
       // Sync from companion service only (live updates)
       await this.syncCompanionService();
@@ -155,7 +224,9 @@ class DataSynchronizer {
       // Aggregate new data every 5 minutes
       const timeSinceLastAggregation = Date.now() - this.aggregator.lastAggregation;
       if (timeSinceLastAggregation > 5 * 60 * 1000) {
-        console.log('[DATA] Running periodic aggregation...');
+        if (!isOffline) {
+          console.log('[DATA] Running periodic aggregation...');
+        }
         await this.aggregator.aggregateAll();
       }
       

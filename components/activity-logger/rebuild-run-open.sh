@@ -17,8 +17,8 @@ echo "Checking required files..."
 
 REQUIRED_FILES=(
     "public/dashboard.html"
-    "public/new-dashboard.js"
-    "public/new-dashboard.css"
+    "public/dashboard.js"
+    "public/dashboard.css"
 )
 
 ALL_FILES_OK=true
@@ -97,3 +97,6 @@ echo "   pkill -f 'python3 -m http.server.*8080'"
 echo ""
 echo "Server logs: /tmp/dashboard-server.log"
 echo ""
+
+
+

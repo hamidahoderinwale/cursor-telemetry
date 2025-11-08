@@ -400,82 +400,202 @@ export class ChartRenderers {
    */
   renderPromptTokensChart(hoursParam = 24) {
     const canvas = document.getElementById('promptTokensChart');
-    if (!canvas) return;
+    if (!canvas) {
+      console.warn('[CHART] promptTokensChart canvas not found');
+      return;
+    }
 
     const prompts = this.state.data.prompts || [];
     
-    // Filter prompts with token data
-    const promptsWithTokens = prompts.filter(p => {
+    // Check if we have any prompts at all
+    if (prompts.length === 0) {
+      console.warn('[CHART] No prompts found in state');
+      canvas.style.display = 'none';
+      const container = canvas.parentElement;
+      if (container) {
+        container.innerHTML = `
+          <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 250px; text-align: center; padding: var(--space-xl);">
+            <div style="font-size: var(--text-lg); font-weight: 500; color: var(--color-text); margin-bottom: var(--space-sm);">No Prompt Data</div>
+            <div style="font-size: var(--text-sm); color: var(--color-text-muted);">No prompts have been recorded yet. Start using Cursor AI to see context usage data here.</div>
+          </div>
+        `;
+      }
+      return;
+    }
+    
+    // Filter prompts with token data OR context usage data OR context file count
+    // Also check context_file_count as a fallback indicator
+    const promptsWithData = prompts.filter(p => {
       const tokens = p.promptTokens || p.estimatedTokens || p.totalTokens || 0;
-      return tokens > 0;
+      const contextUsage = p.contextUsage || p.context_usage || 0;
+      const contextFileCount = p.contextFileCount || p.context_file_count || 0;
+      // Include if has tokens, context usage > 0, or has context files referenced
+      return tokens > 0 || contextUsage > 0 || contextFileCount > 0;
     });
 
-    if (promptsWithTokens.length === 0) {
-      console.warn('[CHART] No prompts with token data found');
+    if (promptsWithData.length === 0) {
+      console.warn('[CHART] No prompts with token or context usage data found');
+      canvas.style.display = 'none';
+      const container = canvas.parentElement;
+      if (container) {
+        container.innerHTML = `
+          <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 250px; text-align: center; padding: var(--space-xl);">
+            <div style="font-size: var(--text-lg); font-weight: 500; color: var(--color-text); margin-bottom: var(--space-sm);">No Context Data Available</div>
+            <div style="font-size: var(--text-sm); color: var(--color-text-muted);">
+              Prompts exist (${prompts.length}) but none have token or context usage metrics. 
+              This data will appear as you continue using Cursor AI.
+            </div>
+          </div>
+        `;
+      }
       return;
     }
 
     // Time-based filtering
     const now = Date.now();
     const timeWindow = hoursParam * 60 * 60 * 1000;
-    const filtered = promptsWithTokens.filter(p => {
+    const filtered = promptsWithData.filter(p => {
       const timestamp = new Date(p.timestamp).getTime();
       return (now - timestamp) <= timeWindow;
     });
 
     if (filtered.length === 0) {
       console.warn(`[CHART] No prompts in the last ${hoursParam} hours`);
+      canvas.style.display = 'none';
+      const container = canvas.parentElement;
+      if (container) {
+        container.innerHTML = `
+          <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 250px; text-align: center; padding: var(--space-xl);">
+            <div style="font-size: var(--text-lg); font-weight: 500; color: var(--color-text); margin-bottom: var(--space-sm);">No Recent Data</div>
+            <div style="font-size: var(--text-sm); color: var(--color-text-muted);">
+              No prompts with context data in the last ${hoursParam} hours. 
+              Try selecting a longer time range (3d, 7d, or 30d) or wait for new activity.
+            </div>
+          </div>
+        `;
+      }
       return;
     }
 
     // Sort by timestamp
     filtered.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
 
-    // Extract token values
-    const tokenData = filtered.map(p => p.promptTokens || p.estimatedTokens || p.totalTokens || 0);
-    
-    // Smart y-axis scaling
-    const maxTokens = Math.max(...tokenData);
-    const minTokens = Math.min(...tokenData);
-    const range = maxTokens - minTokens;
-    const suggestedMin = Math.max(0, minTokens - range * 0.1);
-    const suggestedMax = maxTokens + range * 0.1;
-
-    // Dynamic coloring based on context usage
-    const backgroundColors = tokenData.map(tokens => {
-      if (tokens < 10000) return '#10b981'; // Green
-      if (tokens < 50000) return '#f59e0b'; // Orange
-      return '#ef4444'; // Red
+    // Create time buckets (hourly)
+    const buckets = Array.from({ length: hoursParam }, (_, i) => {
+      const time = now - (hoursParam - i) * 60 * 60 * 1000;
+      return {
+        timestamp: time,
+        charCount: 0,
+        contextUsage: 0,
+        contextCount: 0,
+        count: 0
+      };
     });
 
-    // Format labels (show every Nth prompt to avoid overcrowding)
-    const showEvery = Math.ceil(filtered.length / 20);
-    const labels = filtered.map((p, i) => {
-      if (i % showEvery === 0) {
-        return new Date(p.timestamp).toLocaleString([], { 
-          month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' 
-        });
+    // Fill buckets with prompt data
+    filtered.forEach(prompt => {
+      const promptTime = new Date(prompt.timestamp).getTime();
+      const bucketIndex = Math.floor((promptTime - (now - hoursParam * 60 * 60 * 1000)) / (60 * 60 * 1000));
+      
+      if (bucketIndex >= 0 && bucketIndex < hoursParam) {
+        const text = prompt.text || prompt.prompt || prompt.preview || '';
+        const charCount = text.length;
+        // Check both camelCase and snake_case
+        const contextUsage = prompt.contextUsage || prompt.context_usage || 0;
+        const contextFileCount = prompt.contextFileCount || prompt.context_file_count || 0;
+        
+        buckets[bucketIndex].charCount += charCount;
+        
+        // If contextUsage is available, use it; otherwise estimate from file count
+        if (contextUsage > 0) {
+          buckets[bucketIndex].contextUsage += contextUsage;
+          buckets[bucketIndex].contextCount += 1;
+        } else if (contextFileCount > 0) {
+          // Estimate context usage: roughly 2-5% per file referenced
+          const estimatedUsage = Math.min(100, contextFileCount * 3);
+          buckets[bucketIndex].contextUsage += estimatedUsage;
+          buckets[bucketIndex].contextCount += 1;
+        }
+        buckets[bucketIndex].count += 1;
       }
-      return '';
     });
+
+    // Calculate average context usage per bucket
+    const avgContextUsage = buckets.map(b => 
+      b.contextCount > 0 ? b.contextUsage / b.contextCount : 0
+    );
+
+    // Smart scaling for context usage axis
+    const maxContextUsage = Math.max(...avgContextUsage.filter(v => v > 0));
+    let contextAxisMax = 100;
+    let contextStepSize = 20;
+    
+    if (maxContextUsage > 0) {
+      if (maxContextUsage <= 30) {
+        contextAxisMax = 40;
+        contextStepSize = 10;
+      } else if (maxContextUsage <= 50) {
+        contextAxisMax = 60;
+        contextStepSize = 10;
+      } else if (maxContextUsage <= 70) {
+        contextAxisMax = 80;
+        contextStepSize = 10;
+      }
+    }
+
+    // Format labels
+    const labels = buckets.map(b => {
+      const date = new Date(b.timestamp);
+      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    });
+
+    // Ensure canvas is visible
+    canvas.style.display = 'block';
+    
+    // Destroy existing chart if it exists
+    if (this.chartInstances && this.chartInstances['promptTokensChart']) {
+      this.chartInstances['promptTokensChart'].destroy();
+      delete this.chartInstances['promptTokensChart'];
+    }
 
     this.createChart('promptTokensChart', {
       type: 'line',
       data: {
         labels: labels,
-        datasets: [{
-          label: 'Context Usage (tokens)',
-          data: tokenData,
-          borderColor: '#6366f1',
-          backgroundColor: backgroundColors.map(c => c + '40'),
-          pointBackgroundColor: backgroundColors,
-          pointBorderColor: backgroundColors,
-          tension: 0.2,
-          fill: true,
-          borderWidth: 2,
-          pointRadius: 3,
-          pointHoverRadius: 6
-        }]
+        datasets: [
+          {
+            label: 'Prompt Length (chars)',
+            data: buckets.map(b => b.charCount),
+            borderColor: '#94a3b8',
+            backgroundColor: 'rgba(148, 163, 184, 0.1)',
+            tension: 0.4,
+            fill: true,
+            borderWidth: 2,
+            pointRadius: 2,
+            pointHoverRadius: 4,
+            yAxisID: 'y'
+          },
+          {
+            label: 'Context Usage %',
+            data: avgContextUsage,
+            borderColor: '#f59e0b',
+            backgroundColor: 'rgba(245, 158, 11, 0.1)',
+            tension: 0.4,
+            fill: true,
+            borderWidth: 2,
+            pointRadius: 2,
+            pointHoverRadius: 4,
+            yAxisID: 'y1',
+            segment: {
+              borderColor: ctx => {
+                const value = ctx.p1.parsed.y;
+                if (value >= 80) return '#ef4444'; // Red
+                if (value >= 60) return '#f59e0b'; // Orange
+                return '#10b981'; // Green
+              }
+            }
+          }
+        ]
       },
       options: {
         responsive: true,
@@ -488,7 +608,7 @@ export class ChartRenderers {
           legend: {
             display: true,
             position: 'top',
-            align: 'center',
+            align: 'end',
             labels: {
               usePointStyle: true,
               padding: 10,
@@ -500,12 +620,24 @@ export class ChartRenderers {
             padding: 10,
             callbacks: {
               label: function(context) {
-                return `${context.parsed.y.toLocaleString()} tokens`;
+                const label = context.dataset.label || '';
+                const value = context.parsed.y;
+                if (label === 'Prompt Length (chars)') {
+                  return `${label}: ${value.toLocaleString()} characters`;
+                } else if (label === 'Context Usage %') {
+                  let status = '';
+                  if (value >= 80) status = ' (High!)';
+                  else if (value >= 60) status = ' (Medium-High)';
+                  else if (value >= 40) status = ' (Medium)';
+                  else status = ' (Normal)';
+                  return `${label}: ${value.toFixed(1)}%${status}`;
+                }
+                return `${label}: ${value.toLocaleString()}`;
               },
-              afterLabel: function(context) {
-                const idx = context.dataIndex;
-                const prompt = filtered[idx];
-                return `Time: ${new Date(prompt.timestamp).toLocaleString()}`;
+              afterBody: function(context) {
+                const index = context[0].dataIndex;
+                const count = buckets[index].count;
+                return count > 0 ? `\n${count} prompt${count !== 1 ? 's' : ''}` : '';
               }
             }
           }
@@ -516,24 +648,52 @@ export class ChartRenderers {
             ticks: {
               maxRotation: 45,
               minRotation: 0,
-              autoSkip: true,
               font: { size: 9 }
             }
           },
           y: {
-            beginAtZero: false,
-            suggestedMin: suggestedMin,
-            suggestedMax: suggestedMax,
+            type: 'linear',
+            display: true,
+            position: 'left',
+            beginAtZero: true,
+            title: {
+              display: true,
+              text: 'Characters',
+              font: { size: 11 }
+            },
             ticks: {
               callback: function(value) {
-                return value.toLocaleString();
+                return value >= 1000 ? (value/1000).toFixed(1) + 'k' : value;
+              },
+              font: { size: 10 }
+            }
+          },
+          y1: {
+            type: 'linear',
+            display: true,
+            position: 'right',
+            beginAtZero: true,
+            max: contextAxisMax,
+            title: {
+              display: true,
+              text: `Context % (0-${contextAxisMax}%)`,
+              font: { size: 11 }
+            },
+            ticks: {
+              stepSize: contextStepSize,
+              callback: function(value) {
+                return value.toFixed(0) + '%';
               },
               font: { size: 10 }
             },
-            title: {
-              display: true,
-              text: 'Tokens',
-              font: { size: 10 }
+            grid: {
+              drawOnChartArea: false,
+              color: function(context) {
+                const value = context.tick.value;
+                if (value >= 80) return 'rgba(239, 68, 68, 0.1)';
+                if (value >= 60) return 'rgba(245, 158, 11, 0.1)';
+                return 'rgba(148, 163, 184, 0.05)';
+              }
             }
           }
         }

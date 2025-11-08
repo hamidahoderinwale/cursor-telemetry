@@ -21,10 +21,14 @@ function calculateStats() {
   // Count terminal commands
   window.state.stats.terminalCommands = terminalCommands.length;
 
-  // Count AI interactions
+  // Count AI interactions - prompts with meaningful content
+  // Uses helper function to check all possible text field names
   const aiInteractions = (window.state.data.prompts || []).filter(p => {
-    const text = p.text || p.prompt || p.preview || p.content || '';
-    return text && text.length > 5;
+    return window.hasPromptContent ? window.hasPromptContent(p, 5) : 
+           (() => {
+             const text = p.text || p.prompt || p.preview || p.content || '';
+             return text && text.length > 5;
+           })();
   }).length;
 
   console.log(`AI Interactions: ${aiInteractions} of ${window.state.data.prompts?.length || 0} prompts`);

@@ -10,6 +10,10 @@ A modern, intuitive dashboard for monitoring and visualizing all your Cursor IDE
 - **Content Display** - Full prompts, responses, and notes with syntax highlighting
 - **Auto-refresh** - Automatically polls companion service for new data
 - **Modular Architecture** - Clean separation of HTML templates, view logic, and utilities
+- **Advanced Data Export** - Export with date ranges, type filters, and customizable options
+- **Data Linking** - Automatic linking of prompts to resulting code changes
+- **Image Proxy** - Secure local image serving for screenshots and images in prompts
+- **Temporal Analysis** - Time-based grouping of related activities
 - **🐛 Debug Tools** - Built-in debugging and connection testing
 
 ## Quick Start
@@ -47,8 +51,8 @@ The dashboard uses a **modular, refactored architecture** with clear separation 
 ```
 public/
 ├── dashboard.html              # Main HTML entry point
-├── new-dashboard.js            # Main dashboard logic (legacy functions preserved)
-├── new-dashboard.css           # Main stylesheet
+├── dashboard.js                # Main dashboard logic
+├── dashboard.css               # Main stylesheet
 │
 ├── core/                       # Core application modules
 │   ├── config.js              # Configuration management
@@ -212,6 +216,9 @@ The dashboard includes multiple specialized views:
 - **Conversation Threading** - Groups AI prompts by conversation ID
 - **Real-time Updates** - WebSocket connections for live data
 - **Persistent Storage** - IndexedDB caching for fast startup
+- **Data Linking** - Prompts automatically linked to resulting code changes
+- **Temporal Chunks** - Time-based grouping with all metadata
+- **Linked Data** - Explicit prompt-code relationships in exports
 
 ## Development
 
@@ -245,6 +252,161 @@ The dashboard connects to the companion service (port 43917) and displays:
 3. **Terminal Commands** - Command history with exit codes
 4. **System Events** - Logging and status events
 5. **Context Snapshots** - Context window usage analytics
+
+## Data Export Features
+
+The dashboard provides comprehensive export functionality with fine-grained control over what data is exported.
+
+### Export Options Modal
+
+Access the export options via the "Export Data" button in the dashboard. The modal allows you to configure:
+
+- **Date Range** - Filter data by `From` and `To` dates
+  - Quick presets: Today, Last Week, Last Month, All Time
+- **Data Types** - Select which types of data to include:
+  - File Changes (code edits, file modifications)
+  - AI Prompts (captured prompts and conversations)
+  - Terminal Commands (command line activity)
+  - Context Snapshots (workspace context data)
+- **Export Options** - Toggle specific data inclusions:
+  - Include Code Diffs (before/after code content)
+  - Include Linked Data (prompt-code relationships)
+  - Include Temporal Chunks (time-based groups)
+  - Full Metadata (all available fields)
+- **Item Limit** - Control maximum number of items exported
+
+### Export API Endpoint
+
+The export functionality is available via the API:
+
+```
+GET /api/export/database
+```
+
+**Query Parameters:**
+- `limit` - Maximum items to export (default: 1000)
+- `since` - Start date (ISO format: `YYYY-MM-DD`)
+- `until` - End date (ISO format: `YYYY-MM-DD`)
+- `exclude_events` - Exclude events if `true`
+- `exclude_prompts` - Exclude prompts if `true`
+- `exclude_terminal` - Exclude terminal commands if `true`
+- `exclude_context` - Exclude context snapshots if `true`
+- `no_code_diffs` - Exclude code diffs if `true`
+- `no_linked_data` - Exclude linked data if `true`
+- `no_temporal_chunks` - Exclude temporal chunks if `true`
+- `full` - Include all metadata fields if `true`
+
+**Example:**
+```bash
+curl "http://localhost:43917/api/export/database?limit=5000&since=2025-01-01&until=2025-01-31&exclude_terminal=true"
+```
+
+### Export Structure
+
+The exported JSON file contains:
+
+- **Metadata** - Export information, counts, date ranges, filters applied
+- **Temporal Chunks** - Time-based groups of related activities with all metadata
+- **Linked Data** - Explicit prompt-code relationships (prompt → code change)
+- **Entries** - All file changes with code diffs
+- **Prompts** - All captured prompts with context
+- **Events** - Activity events
+- **Terminal Commands** - Command history
+- **Context Snapshots** - Context usage over time
+- **Context Analytics** - Aggregated context statistics
+- **Workspaces** - Workspace information
+- **Unlinked** - Items without explicit links
+- **Stats** - Summary statistics
+
+See [`EXPORT_CONTENTS.md`](./EXPORT_CONTENTS.md) for detailed export structure documentation.
+
+## Data Linking
+
+The system automatically links related data to provide context and relationships:
+
+### Prompt-Code Linking
+
+- **Automatic Linking** - When a prompt results in code changes, they are automatically linked
+- **Linked Data Array** - Exports include a `linked_data` array with explicit relationships
+- **Bidirectional Navigation** - View prompts from code changes, and code changes from prompts
+- **Event Modals** - Show linked prompts when viewing code changes
+- **Prompt Modals** - Show resulting code changes when viewing prompts
+
+### Temporal Chunks
+
+- **Time-Based Grouping** - Activities are grouped by time proximity (5-minute windows)
+- **Complete Context** - Each chunk includes all related prompts, events, and code changes
+- **Metadata Preservation** - All original metadata is preserved in chunks
+- **Workflow Analysis** - Enables analysis of multi-step development workflows
+
+### Using Linked Data
+
+Linked data is useful for:
+- Understanding which prompts led to which code changes
+- Analyzing workflow patterns
+- Tracking development sessions
+- Exporting training data (prompt-code pairs)
+
+## Image Proxy Support
+
+The dashboard can display local images (screenshots, images referenced in prompts) through a secure proxy endpoint.
+
+### How It Works
+
+- Images referenced in prompts/events are automatically proxied through `/api/image`
+- The companion service securely serves local files from your home directory
+- Supports common image formats: PNG, JPG, JPEG, GIF, WEBP, SVG, BMP
+
+### Image API Endpoint
+
+```
+GET /api/image?path=<image_path>
+```
+
+**Parameters:**
+- `path` - Relative or absolute path to image file
+  - Relative paths: Resolved from user's home directory
+  - Example: `Desktop/screenshot.png` → `~/Desktop/screenshot.png`
+
+**Security:**
+- Only files within user's home directory are accessible
+- Path validation prevents directory traversal
+- File type validation (only image files)
+
+**Example Usage:**
+```html
+<img src="http://localhost:43917/api/image?path=Desktop/screenshot.png" />
+```
+
+**In Modals:**
+Screenshots captured near events are automatically displayed using the image proxy. Images that cannot be accessed will show a fallback message.
+
+## API Endpoints
+
+### Companion Service API (port 43917)
+
+#### Data Export
+- `GET /api/export/database` - Export database with filters (see [Data Export Features](#data-export-features))
+
+#### Image Serving
+- `GET /api/image?path=<path>` - Serve local images securely (see [Image Proxy Support](#image-proxy-support))
+
+#### Health & Status
+- `GET /health` - Service health check
+- `GET /api/stats` - Dashboard statistics
+
+#### Data Retrieval
+- `GET /api/entries` - Get file changes
+- `GET /api/prompts` - Get prompts
+- `GET /api/events` - Get events
+- `GET /api/terminal` - Get terminal commands
+- `GET /api/context` - Get context snapshots
+- `GET /api/activity` - Get activity data with filters
+
+#### Context Analytics
+- `GET /api/context/analytics` - Get context usage analytics
+
+All endpoints support CORS and are accessible from the dashboard running on any port.
 
 ## 🔄 Auto-refresh
 
@@ -286,6 +448,11 @@ The dashboard automatically:
 - **WebSocket** - Real-time updates
 - **Service Worker** - Caching and offline support
 
+## Additional Documentation
+
+- **[Export Contents](./EXPORT_CONTENTS.md)** - Detailed documentation of export JSON structure
+- **[Dashboard Status](./DASHBOARD_STATUS.md)** - Feature completeness and recommendations
+
 ## Next Steps
 
 The dashboard is now ready to use! It will automatically display all your Cursor activity data in a beautiful, modern interface. The modular architecture makes it easy to extend and maintain.
@@ -298,9 +465,13 @@ The dashboard is now ready to use! It will automatically display all your Cursor
 - Utility functions organized into dedicated modules
 - Proper module loading order established
 - All functions exported and accessible
+- Advanced export system with filters and options
+- Data linking (prompt-code relationships)
+- Image proxy support
+- Temporal chunks and analytics
 
 🔄 **In Progress:**
-- Legacy functions in `new-dashboard.js` preserved for compatibility
+- Modular architecture with functions in `app/`, `views/`, `services/`, and `components/` directories
 - Gradually migrating remaining inline HTML to templates
 
 Enjoy monitoring your Cursor activity!

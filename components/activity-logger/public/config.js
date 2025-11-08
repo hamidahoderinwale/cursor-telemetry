@@ -5,6 +5,11 @@ window.CONFIG = {
   // API Configuration
   // When deployed to Netlify, users will connect to their local companion service
   // When running locally, it uses localhost
+  API_BASE: window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+    ? 'http://127.0.0.1:43917'
+    : (localStorage.getItem('COMPANION_API_URL') || 'http://127.0.0.1:43917'),
+  
+  // Legacy alias for backward compatibility
   API_BASE_URL: window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
     ? 'http://127.0.0.1:43917'
     : (localStorage.getItem('COMPANION_API_URL') || 'http://127.0.0.1:43917'),
@@ -31,13 +36,14 @@ window.CONFIG = {
 window.configureCompanionURL = function(apiUrl, wsUrl) {
   if (apiUrl) {
     localStorage.setItem('COMPANION_API_URL', apiUrl);
-    window.CONFIG.API_BASE_URL = apiUrl;
+    window.CONFIG.API_BASE = apiUrl;
+    window.CONFIG.API_BASE_URL = apiUrl; // Legacy alias
   }
   if (wsUrl) {
     localStorage.setItem('COMPANION_WS_URL', wsUrl);
     window.CONFIG.WS_URL = wsUrl;
   }
-  console.log('✅ Companion URLs configured:', { api: window.CONFIG.API_BASE_URL, ws: window.CONFIG.WS_URL });
+  console.log('✅ Companion URLs configured:', { api: window.CONFIG.API_BASE, ws: window.CONFIG.WS_URL });
   console.log('🔄 Reload the page to apply changes');
 };
 

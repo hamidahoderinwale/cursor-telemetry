@@ -1,6 +1,14 @@
 /**
  * File Graph View - D3 file relationship visualization
- * HTML templates moved to views/file-graph/templates.js
+ * 
+ * Structure:
+ * - index.js (this file) - View entry point
+ * - templates.js - HTML templates
+ * - styles.css - View-specific styles
+ * - file-graph.js - Main file graph component
+ * - tfidf-analyzer.js - TF-IDF analysis utilities
+ * - d3-renderer.js - D3.js rendering functions
+ * - helpers.js - Helper functions (getFileTypeColor, etc.)
  */
 
 function renderFileGraphView(container) {

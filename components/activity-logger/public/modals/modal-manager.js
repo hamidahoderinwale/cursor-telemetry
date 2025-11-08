@@ -25,38 +25,135 @@ export class ModalManager {
   }
 
   async showEventModal(eventId) {
-    // Check if it's an event or a prompt
-    let event = this.state.data.events.find(e => e.id === eventId || e.timestamp === eventId);
-    let prompt = this.state.data.prompts.find(p => p.id === eventId || p.timestamp === eventId);
-    
-    // If not in cache, try fetching from API
-    if (!event && !prompt) {
-      console.log(`[MODAL] Event/prompt ${eventId} not found in cache`);
-      
-      const modal = document.getElementById('eventModal');
-      const title = document.getElementById('modalTitle');
-      const body = document.getElementById('modalBody');
-      
-      if (modal && title && body) {
-        title.textContent = 'Not Found';
-        body.innerHTML = `
-          <div style="text-align: center; padding: var(--space-xl); color: var(--color-text-muted);">
-            <p>Event/Prompt #${eventId} could not be found.</p>
-            <p style="font-size: var(--text-sm); margin-top: var(--space-md);">It may not be loaded yet. Try refreshing the data or checking the Activity view.</p>
-          </div>
-        `;
-        modal.classList.add('active');
-      }
-      return;
-    }
-
     const modal = document.getElementById('eventModal');
     const title = document.getElementById('modalTitle');
     const body = document.getElementById('modalBody');
     
+    if (!modal || !title || !body) {
+      console.error('[MODAL] Modal elements not found');
+      return;
+    }
+    
+    // Show loading state
+    title.textContent = 'Loading...';
+    body.innerHTML = `
+      <div style="text-align: center; padding: var(--space-xl); color: var(--color-text-muted);">
+        <div style="margin-bottom: var(--space-md);">Loading event/prompt details...</div>
+        <div style="font-size: var(--text-sm);">ID: ${eventId}</div>
+      </div>
+    `;
+    modal.classList.add('active');
+    
+    // Check if it's an event or a prompt in cache
+    let event = this.state?.data?.events?.find(e => 
+      e.id === eventId || 
+      e.id === parseInt(eventId) || 
+      String(e.id) === String(eventId) ||
+      e.timestamp === eventId
+    );
+    let prompt = this.state?.data?.prompts?.find(p => 
+      p.id === eventId || 
+      p.id === parseInt(eventId) || 
+      String(p.id) === String(eventId) ||
+      p.timestamp === eventId
+    );
+    
+    // If not in cache, try fetching from API
+    if (!event && !prompt) {
+      console.log(`[MODAL] Event/prompt ${eventId} not found in cache, fetching from API...`);
+      
+      try {
+        // Try fetching from events API first
+        const eventResponse = await fetch(`${window.CONFIG?.API_BASE || 'http://localhost:43917'}/api/activity?id=${eventId}`);
+        if (eventResponse.ok) {
+          const eventData = await eventResponse.json();
+          if (eventData.data && Array.isArray(eventData.data) && eventData.data.length > 0) {
+            event = eventData.data.find(e => 
+              e.id === eventId || 
+              e.id === parseInt(eventId) || 
+              String(e.id) === String(eventId)
+            );
+          }
+        }
+        
+        // If still not found, try entries/prompts API with larger limit
+        if (!event && !prompt) {
+          // Try with larger limit to find older items
+          const entriesResponse = await fetch(`${window.CONFIG?.API_BASE || 'http://localhost:43917'}/entries?limit=1000`);
+          if (entriesResponse.ok) {
+            const entriesData = await entriesResponse.json();
+            const allEntries = entriesData.entries || [];
+            prompt = allEntries.find(p => 
+              p.id === eventId || 
+              p.id === parseInt(eventId) || 
+              String(p.id) === String(eventId) ||
+              p.id === Number(eventId)
+            );
+          }
+          
+          // Also try direct database query via API if available
+          // Check if it's in the activity endpoint with larger limit
+          if (!prompt && !event) {
+            const largerActivityResponse = await fetch(`${window.CONFIG?.API_BASE || 'http://localhost:43917'}/api/activity?limit=1000`);
+            if (largerActivityResponse.ok) {
+              const activityData = await largerActivityResponse.json();
+              const allActivity = activityData.data || [];
+              event = allActivity.find(e => 
+                e.id === eventId || 
+                e.id === parseInt(eventId) || 
+                String(e.id) === String(eventId) ||
+                e.id === Number(eventId)
+              );
+              
+              // Check if it's actually a prompt in the activity data
+              if (!event) {
+                prompt = allActivity.find(p => 
+                  (p.id === eventId || p.id === parseInt(eventId) || String(p.id) === String(eventId)) &&
+                  (p.type === 'prompt' || p.text || p.prompt)
+                );
+              }
+            }
+          }
+        }
+      } catch (apiError) {
+        console.warn('[MODAL] API fetch failed:', apiError);
+      }
+      
+      // If still not found after API fetch, show error
+      if (!event && !prompt) {
+        console.warn(`[MODAL] Event/prompt ${eventId} not found in API either`);
+        title.textContent = 'Not Found';
+        body.innerHTML = `
+          <div style="text-align: center; padding: var(--space-xl); color: var(--color-text-muted);">
+            <p style="font-size: var(--text-lg); margin-bottom: var(--space-md);">Event/Prompt #${eventId} could not be found.</p>
+            <p style="font-size: var(--text-sm); margin-bottom: var(--space-md);">
+              This item may not exist or may have been removed from the database.
+            </p>
+            <div style="margin-top: var(--space-lg);">
+              <button onclick="window.switchView('activity')" style="
+                padding: var(--space-sm) var(--space-md);
+                background: var(--color-primary);
+                color: white;
+                border: none;
+                border-radius: var(--radius-md);
+                cursor: pointer;
+                font-size: var(--text-sm);
+              ">Go to Activity View</button>
+            </div>
+          </div>
+        `;
+        return;
+      }
+    }
+    
     // Handle prompt display
     if (prompt && !event) {
       await this.showPromptInModal(prompt, modal, title, body);
+      return;
+    }
+    
+    // If we still don't have an event at this point, we already showed the error above
+    if (!event) {
       return;
     }
 
@@ -73,15 +170,44 @@ export class ModalManager {
         }
       }
     } catch (error) {
-      console.warn('Could not fetch screenshots:', error);
+      // Suppress CORS/network errors (expected when companion service is offline)
+      const errorMessage = error.message || error.toString();
+      const isNetworkError = errorMessage.includes('CORS') || 
+                             errorMessage.includes('NetworkError') || 
+                             errorMessage.includes('Failed to fetch') ||
+                             error.name === 'NetworkError' ||
+                             error.name === 'TypeError';
+      
+      // Only log if it's not a network error
+      if (!isNetworkError) {
+        console.warn('Could not fetch screenshots:', error);
+      }
     }
 
     try {
       const details = typeof event.details === 'string' ? JSON.parse(event.details) : event.details;
       
+      // Check for directly linked prompt (entry.prompt_id)
+      let linkedPrompt = null;
+      if (event.prompt_id && this.state.data.prompts) {
+        linkedPrompt = this.state.data.prompts.find(p => 
+          p.id === event.prompt_id || p.id === parseInt(event.prompt_id)
+        );
+      }
+      
       // Find related prompts by temporal proximity and workspace
-      const relatedPrompts = this.findRelatedPrompts(event);
+      const relatedPrompts = this.findRelatedPrompts ? this.findRelatedPrompts(event) : [];
       const eventTime = new Date(event.timestamp).getTime();
+      
+      // Debug: Log prompt search results
+      console.log('[MODAL] Prompt search:', {
+        hasFindFunction: !!this.findRelatedPrompts,
+        hasPrompts: !!(this.state.data.prompts && this.state.data.prompts.length > 0),
+        promptsCount: this.state.data.prompts?.length || 0,
+        relatedCount: relatedPrompts.length,
+        eventTime: new Date(event.timestamp).toISOString(),
+        eventWorkspace: event.workspace_path || event.details?.workspace_path
+      });
       
       // Find related conversations (filter out unhelpful background composer state)
       const conversationsArray = Array.isArray(this.state.data.cursorConversations) ? this.state.data.cursorConversations : [];
@@ -102,7 +228,7 @@ export class ModalManager {
         return diff < 10 * 60 * 1000; // 10 minutes
       });
       
-      body.innerHTML = this._buildEventModalHTML(event, details, relatedScreenshots, relatedPrompts, relatedConversations);
+      body.innerHTML = this._buildEventModalHTML(event, details, relatedScreenshots, relatedPrompts, relatedConversations, linkedPrompt);
     } catch (error) {
       body.innerHTML = `<div class="empty-state-text">Error loading event details: ${error.message}</div>`;
     }
@@ -110,11 +236,13 @@ export class ModalManager {
     modal.classList.add('active');
   }
 
-  _buildEventModalHTML(event, details, relatedScreenshots, relatedPrompts, relatedConversations) {
+  _buildEventModalHTML(event, details, relatedScreenshots, relatedPrompts, relatedConversations, linkedPrompt = null) {
     const { escapeHtml, truncate, isImageFile } = this;
     
     return `
       <div style="display: flex; flex-direction: column; gap: var(--space-xl);">
+        
+        ${linkedPrompt ? this._buildLinkedPromptSection(linkedPrompt, event) : ''}
         
         <!-- Event Details -->
         <div>
@@ -128,27 +256,44 @@ export class ModalManager {
               <span style="color: var(--color-text-muted);">Time:</span>
               <span style="color: var(--color-text);">${new Date(event.timestamp).toLocaleString()}</span>
             </div>
-            <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-              <span style="color: var(--color-text-muted);">Workspace:</span>
-              <span style="color: var(--color-text); font-family: var(--font-mono); font-size: var(--text-xs);">${truncate(event.workspace_path || 'Unknown', 40)}</span>
-            </div>
+            ${event.workspace_path ? `
+              <div style="padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
+                <div style="display: flex; align-items: center; gap: var(--space-sm); flex-wrap: wrap;">
+                  <span style="color: var(--color-text-muted); font-size: var(--text-xs);">Workspace:</span>
+                  ${window.createWorkspaceBadge ? window.createWorkspaceBadge(event.workspace_path, 'md') : `<span style="color: var(--color-text); font-family: var(--font-mono); font-size: var(--text-xs);">${truncate(event.workspace_path, 40)}</span>`}
+                </div>
+              </div>
+            ` : ''}
             ${details?.file_path ? `
-              <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-                <span style="color: var(--color-text-muted);">File:</span>
-                <span style="color: var(--color-text); font-family: var(--font-mono); font-size: var(--text-sm);">${details.file_path}</span>
+              <div style="padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
+                <div style="display: flex; flex-direction: column; gap: var(--space-xs);">
+                  <span style="color: var(--color-text-muted); font-size: var(--text-xs); margin-bottom: var(--space-xs);">File:</span>
+                  ${window.createFilePathBadge ? window.createFilePathBadge(details.file_path, event.workspace_path) : `
+                    <div style="display: flex; flex-direction: column; gap: var(--space-xs);">
+                      <span style="color: var(--color-text); font-family: var(--font-mono); font-size: var(--text-sm); font-weight: 500;">${details.file_path.split('/').pop()}</span>
+                      ${window.formatFilePathWithDirectory ? `
+                        <span style="color: var(--color-text-muted); font-family: var(--font-mono); font-size: var(--text-xs);">${window.formatFilePathWithDirectory(details.file_path, 3)}</span>
+                      ` : ''}
+                    </div>
+                  `}
+                </div>
               </div>
             ` : ''}
             ${details?.file_path && isImageFile(details.file_path) ? `
               <div style="padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md);">
                 <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-bottom: var(--space-sm);">Screenshot Preview:</div>
                 <div style="border-radius: var(--radius-md); overflow: hidden; background: #000; display: flex; align-items: center; justify-content: center; max-height: 400px;">
-                  <img src="file://${details.file_path}" 
+                  <img src="${window.CONFIG?.API_BASE_URL || 'http://127.0.0.1:43917'}/api/image?path=${encodeURIComponent(details.file_path)}" 
                        alt="Screenshot" 
                        style="max-width: 100%; max-height: 400px; object-fit: contain;"
-                       onerror="this.parentElement.innerHTML = '<div style=\\'padding: var(--space-lg); color: var(--color-text-muted); text-align: center;\\'>Image not accessible<br><span style=\\'font-size: 0.85em; font-family: var(--font-mono);\\'>Path: ${details.file_path}</span></div>'">
+                       onerror="this.parentElement.innerHTML = '<div style=\\'padding: var(--space-lg); color: var(--color-text-muted); text-align: center;\\'>Image not accessible<br><span style=\\'font-size: 0.85em; font-family: var(--font-mono);\\'>Path: ${details.file_path}</span><br><span style=\\'font-size: 0.75em; margin-top: 8px; display: block;\\'>Workaround: The file may have been moved or deleted. Try opening it manually from Finder.</span></div>'">
                 </div>
-                <div style="margin-top: var(--space-sm); text-align: center;">
-                  <a href="file://${details.file_path}" target="_blank" style="color: var(--color-accent); font-size: var(--text-sm); text-decoration: none;">
+                <div style="margin-top: var(--space-sm); text-align: center; display: flex; gap: var(--space-sm); justify-content: center;">
+                  <a href="${window.CONFIG?.API_BASE_URL || 'http://127.0.0.1:43917'}/api/image?path=${encodeURIComponent(details.file_path)}" target="_blank" style="color: var(--color-accent); font-size: var(--text-sm); text-decoration: none;">
+                    View Full Size
+                  </a>
+                  <span style="color: var(--color-text-muted);">|</span>
+                  <a href="file://${details.file_path}" target="_blank" style="color: var(--color-accent); font-size: var(--text-sm); text-decoration: none;" onclick="return false;" title="Note: file:// links only work in some browsers. Use 'View Full Size' instead.">
                     Open in Finder
                   </a>
                 </div>
@@ -186,9 +331,20 @@ export class ModalManager {
         ${relatedScreenshots.length > 0 ? this._buildScreenshotsHTML(event, relatedScreenshots) : ''}
 
         ${details?.before_content !== undefined && details?.after_content !== undefined && (details.before_content || details.after_content) ? 
-          this._buildCodeDiffHTML(details) : ''}
+          this._buildCodeDiffHTML(details, linkedPrompt ? 'Generated from linked prompt above' : null) : ''}
+        
+        ${details?.before_code !== undefined && details?.after_code !== undefined && (details.before_code || details.after_code) && 
+          (!details.before_content || !details.after_content) ? 
+          this._buildCodeDiffHTML({ 
+            before_content: details.before_code, 
+            after_content: details.after_code,
+            ...details 
+          }, linkedPrompt ? 'Generated from linked prompt above' : null) : ''}
 
-        ${relatedPrompts.length > 0 ? this._buildRelatedPromptsHTML(relatedPrompts) : ''}
+        ${relatedPrompts.length > 0 ? this._buildRelatedPromptsHTML(relatedPrompts) : 
+          (this.state && this.state.data && this.state.data.prompts && this.state.data.prompts.length > 0) ? 
+            this._buildNoRelatedPromptsDebugHTML(event, this.state.data.prompts) : 
+            '<div style="padding: var(--space-md); background: rgba(148, 163, 184, 0.1); border-radius: var(--radius-md); border: 1px dashed var(--color-border);"><div style="font-size: var(--text-sm); color: var(--color-text-muted);">No prompts available in state</div></div>'}
 
         ${relatedConversations.length > 0 ? this._buildRelatedConversationsHTML(relatedConversations) : ''}
 
@@ -294,11 +450,11 @@ export class ModalManager {
                    onmouseover="this.style.transform='scale(1.02)'; this.style.boxShadow='0 8px 16px rgba(0,0,0,0.15)';" 
                    onmouseout="this.style.transform=''; this.style.boxShadow='';">
                 <div style="position: relative; background: #000; aspect-ratio: 16/9; overflow: hidden;">
-                  <img src="file://${screenshot.path}" 
+                  <img src="${window.CONFIG?.API_BASE_URL || 'http://127.0.0.1:43917'}/api/image?path=${encodeURIComponent(screenshot.path)}" 
                        alt="${screenshot.fileName}" 
                        style="width: 100%; height: 100%; object-fit: contain; cursor: pointer;"
-                       onclick="window.open('file://${screenshot.path}', '_blank')"
-                       onerror="this.parentElement.innerHTML = '<div style=\\'display: flex; align-items: center; justify-content: center; height: 100%; color: var(--color-text-muted); padding: var(--space-md); text-align: center; flex-direction: column;\\'>Image<div style=\\'font-size: 0.75em; margin-top: 8px;\\'>Screenshot not accessible</div></div>'">
+                       onclick="window.open('${window.CONFIG?.API_BASE_URL || 'http://127.0.0.1:43917'}/api/image?path=${encodeURIComponent(screenshot.path)}', '_blank')"
+                       onerror="this.parentElement.innerHTML = '<div style=\\'display: flex; align-items: center; justify-content: center; height: 100%; color: var(--color-text-muted); padding: var(--space-md); text-align: center; flex-direction: column;\\'>Image<div style=\\'font-size: 0.75em; margin-top: 8px;\\'>Screenshot not accessible</div><div style=\\'font-size: 0.65em; margin-top: 4px; color: var(--color-text-muted);\\'>File may have been moved</div></div>'">
                   <div style="position: absolute; top: 8px; right: 8px; background: rgba(0,0,0,0.7); color: white; padding: 4px 8px; border-radius: 4px; font-size: 10px; font-weight: 600;">
                     ${timingText} ${isBefore ? 'before' : 'after'}
                   </div>
@@ -319,11 +475,50 @@ export class ModalManager {
     `;
   }
 
-  _buildCodeDiffHTML(details) {
+  _buildLinkedPromptSection(prompt, event) {
+    const promptText = prompt.text || prompt.prompt || prompt.preview || prompt.content || 'No prompt text';
+    const displayText = promptText.length > 200 ? promptText.substring(0, 200) + '...' : promptText;
+    
+    return `
+      <div style="padding: var(--space-lg); background: linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(59, 130, 246, 0.1) 100%); border-left: 4px solid var(--color-primary); border-radius: var(--radius-md);">
+        <div style="display: flex; align-items: center; gap: var(--space-sm); margin-bottom: var(--space-md);">
+          <span style="font-size: var(--text-lg);">✨</span>
+          <h4 style="margin: 0; color: var(--color-text);">Linked Prompt</h4>
+          <span style="font-size: var(--text-xs); color: var(--color-text-muted); margin-left: auto;">
+            ${window.formatTimeAgo(prompt.timestamp)}
+          </span>
+        </div>
+        <div style="padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-sm); margin-bottom: var(--space-sm);">
+          <div style="font-size: var(--text-sm); color: var(--color-text); line-height: 1.6;">
+            ${window.escapeHtml(displayText)}
+          </div>
+        </div>
+        <div style="display: flex; gap: var(--space-xs); flex-wrap: wrap; font-size: var(--text-xs);">
+          <span class="badge badge-prompt">${prompt.source || 'cursor'}</span>
+          ${prompt.contextUsage > 0 ? `<span class="badge" style="background: var(--color-warning); color: white;">${prompt.contextUsage.toFixed(1)}% context</span>` : ''}
+          <span style="color: var(--color-text-muted);">→ This code change resulted from this prompt</span>
+        </div>
+      </div>
+    `;
+  }
+
+  _buildCodeDiffHTML(details, subtitle = null) {
     const { escapeHtml } = this;
     return `
       <div>
-        <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">Code Diff</h4>
+        <h4 style="margin-bottom: var(--space-md); color: var(--color-text); display: flex; align-items: center; gap: var(--space-sm);">
+          <span>Code Diff</span>
+          ${details.diff_stats?.has_diff ? `
+            <span style="font-size: var(--text-xs); color: var(--color-text-muted); font-weight: normal;">
+              (${details.diff_stats.lines_added > 0 ? `+${details.diff_stats.lines_added}` : ''}${details.diff_stats.lines_added > 0 && details.diff_stats.lines_removed > 0 ? '/' : ''}${details.diff_stats.lines_removed > 0 ? `-${details.diff_stats.lines_removed}` : ''} lines)
+            </span>
+          ` : ''}
+        </h4>
+        ${subtitle ? `
+          <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-bottom: var(--space-md); padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-sm);">
+            ${subtitle}
+          </div>
+        ` : ''}
         <div style="display: grid; gap: var(--space-md);">
           ${details.before_content ? `
             <div>
@@ -365,9 +560,11 @@ export class ModalManager {
           ${prompts.slice(0, 5).map((prompt, idx) => {
             const promptText = prompt.text || prompt.prompt || prompt.preview || prompt.content || 'No prompt text';
             const displayText = promptText.length > 150 ? promptText.substring(0, 150) + '...' : promptText;
+            const minutes = Math.floor(prompt.timeDiffSeconds / 60);
+            const seconds = prompt.timeDiffSeconds % 60;
             const timeDiffText = prompt.timeDiffSeconds < 60 ? 
-              `${prompt.timeDiffSeconds}s before` : 
-              `${Math.floor(prompt.timeDiffSeconds / 60)}m ${prompt.timeDiffSeconds % 60}s before`;
+              `${prompt.timeDiffSeconds}s ${prompt.isBefore ? 'before' : 'after'}` : 
+              `${minutes}m ${seconds}s ${prompt.isBefore ? 'before' : 'after'}`;
             const relevancePercent = Math.round(prompt.relevanceScore * 100);
             
             return `
@@ -427,6 +624,51 @@ export class ModalManager {
     `;
   }
 
+  _buildNoRelatedPromptsDebugHTML(event, allPrompts) {
+    const eventTime = new Date(event.timestamp).getTime();
+    const eventWorkspace = (event.workspace_path || event.details?.workspace_path || '').toLowerCase();
+    
+    // Show info about nearby prompts
+    const nearbyPrompts = allPrompts.filter(p => {
+      const promptTime = new Date(p.timestamp).getTime();
+      const timeDiff = Math.abs(eventTime - promptTime);
+      return timeDiff < 15 * 60 * 1000; // 15 minutes
+    });
+    
+    return `
+      <div>
+        <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">Related AI Prompts</h4>
+        <div style="padding: var(--space-md); background: rgba(148, 163, 184, 0.1); border-radius: var(--radius-md); border: 1px dashed var(--color-border);">
+          <div style="font-size: var(--text-sm); color: var(--color-text-muted); margin-bottom: var(--space-xs);">
+            <strong>No prompts found within 15 minutes of this event</strong>
+          </div>
+          <div style="font-size: var(--text-xs); color: var(--color-text-muted);">
+            <div>Total prompts available: ${allPrompts.length}</div>
+            <div>Prompts within 15 minutes: ${nearbyPrompts.length}</div>
+            ${nearbyPrompts.length > 0 ? `
+              <div style="margin-top: var(--space-sm); padding-top: var(--space-sm); border-top: 1px solid var(--color-border);">
+                <div style="font-weight: 500; margin-bottom: var(--space-xs);">Nearby prompts (may not match workspace):</div>
+                ${nearbyPrompts.slice(0, 3).map(p => {
+                  const promptText = (p.text || p.prompt || p.preview || '').substring(0, 80);
+                  const timeDiff = Math.abs(eventTime - new Date(p.timestamp).getTime());
+                  const minutes = Math.floor(timeDiff / 60000);
+                  const isBefore = new Date(p.timestamp).getTime() < eventTime;
+                  const escapedText = window.escapeHtml ? window.escapeHtml(promptText) : promptText.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                  return `
+                    <div style="margin-top: var(--space-xs); padding: var(--space-xs); background: var(--color-bg); border-radius: var(--radius-sm); font-size: 10px;">
+                      <div style="color: var(--color-text);">${escapedText}${promptText.length >= 80 ? '...' : ''}</div>
+                      <div style="color: var(--color-text-muted); margin-top: 2px;">${minutes}m ${isBefore ? 'before' : 'after'}</div>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            ` : ''}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
   _buildRelatedConversationsHTML(conversations) {
     return `
       <div>
@@ -465,12 +707,128 @@ export class ModalManager {
   }
 
   async showPromptInModal(prompt, modal, title, body) {
-    // This method is very long (350+ lines), keeping full implementation
-    // [Would include full implementation here - truncated for brevity]
-    // For now, call the global function if it exists
-    if (window.showPromptInModal_Original) {
-      return window.showPromptInModal_Original(prompt, modal, title, body);
+    const promptText = prompt.text || prompt.prompt || prompt.preview || prompt.content || 'No prompt text';
+    
+    title.textContent = 'AI Prompt';
+    
+    // Check for linked code change
+    let linkedCodeChange = null;
+    try {
+      const linkedEntryId = prompt.linked_entry_id || prompt.linkedEntryId;
+      if (linkedEntryId && this.state.data.events) {
+        linkedCodeChange = this.state.data.events.find(e => 
+          e.id === linkedEntryId || e.id === parseInt(linkedEntryId)
+        );
+      }
+    } catch (e) {
+      console.warn('Error finding linked code change:', e);
     }
+    
+    const details = linkedCodeChange ? 
+      (typeof linkedCodeChange.details === 'string' ? JSON.parse(linkedCodeChange.details) : linkedCodeChange.details) :
+      null;
+    
+    body.innerHTML = this._buildPromptModalHTML(prompt, promptText, linkedCodeChange, details);
+    modal.classList.add('active');
+  }
+  
+  _buildPromptModalHTML(prompt, promptText, linkedCodeChange, codeDetails) {
+    const { escapeHtml } = this;
+    const displayText = promptText.length > 500 ? promptText.substring(0, 500) + '...' : promptText;
+    
+    return `
+      <div style="display: flex; flex-direction: column; gap: var(--space-xl);">
+        
+        <!-- Prompt Content -->
+        <div>
+          <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">Prompt</h4>
+          <div style="padding: var(--space-lg); background: var(--color-bg); border-radius: var(--radius-md); border-left: 4px solid var(--color-primary);">
+            <div style="font-size: var(--text-sm); color: var(--color-text); line-height: 1.6; white-space: pre-wrap;">
+              ${escapeHtml(displayText)}
+            </div>
+            ${promptText.length > 500 ? `
+              <div style="margin-top: var(--space-sm); font-size: var(--text-xs); color: var(--color-text-muted);">
+                (Truncated - ${promptText.length} total characters)
+              </div>
+            ` : ''}
+          </div>
+        </div>
+        
+        <!-- Prompt Metadata -->
+        <div>
+          <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">Details</h4>
+          <div style="display: grid; gap: var(--space-sm);">
+            <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
+              <span style="color: var(--color-text-muted);">Time:</span>
+              <span style="color: var(--color-text);">${new Date(prompt.timestamp).toLocaleString()}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
+              <span style="color: var(--color-text-muted);">Source:</span>
+              <span class="badge badge-prompt">${prompt.source || 'cursor'}</span>
+            </div>
+            ${prompt.workspaceName ? `
+              <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
+                <span style="color: var(--color-text-muted);">Workspace:</span>
+                <span style="color: var(--color-text); font-family: var(--font-mono); font-size: var(--text-xs);">${prompt.workspaceName}</span>
+              </div>
+            ` : ''}
+            ${prompt.contextUsage > 0 ? `
+              <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
+                <span style="color: var(--color-text-muted);">Context Usage:</span>
+                <span class="badge" style="background: var(--color-warning); color: white;">${prompt.contextUsage.toFixed(1)}%</span>
+              </div>
+            ` : ''}
+            ${prompt.contextFileCount > 0 ? `
+              <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
+                <span style="color: var(--color-text-muted);">Context Files:</span>
+                <span style="color: var(--color-text);">${prompt.contextFileCount}</span>
+              </div>
+            ` : ''}
+            ${linkedCodeChange ? `
+              <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: rgba(34, 197, 94, 0.1); border-radius: var(--radius-md); border: 1px solid rgba(34, 197, 94, 0.3);">
+                <span style="color: var(--color-success); font-weight: 500;">Status:</span>
+                <span style="color: var(--color-success); font-weight: 500;">✓ Linked to Code Change</span>
+              </div>
+            ` : `
+              <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: rgba(148, 163, 184, 0.1); border-radius: var(--radius-md);">
+                <span style="color: var(--color-text-muted);">Status:</span>
+                <span style="color: var(--color-text-muted);">Pending (no code change yet)</span>
+              </div>
+            `}
+          </div>
+        </div>
+        
+        <!-- Linked Code Change -->
+        ${linkedCodeChange && codeDetails ? `
+          <div>
+            <h4 style="margin-bottom: var(--space-md); color: var(--color-text); display: flex; align-items: center; gap: var(--space-sm);">
+              <span>💻 Resulting Code Change</span>
+              <span style="font-size: var(--text-xs); color: var(--color-text-muted); font-weight: normal;">
+                (${codeDetails.lines_added || codeDetails.diff_stats?.lines_added || 0} lines added, ${codeDetails.lines_removed || codeDetails.diff_stats?.lines_removed || 0} removed)
+              </span>
+            </h4>
+            <div style="padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md); border-left: 3px solid var(--color-success); margin-bottom: var(--space-md);">
+              <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-bottom: var(--space-sm);">
+                File: <code style="font-family: var(--font-mono);">${codeDetails.file_path || linkedCodeChange.file_path || 'Unknown'}</code>
+              </div>
+              <div style="font-size: var(--text-xs); color: var(--color-text-muted);">
+                Time: ${new Date(linkedCodeChange.timestamp).toLocaleString()}
+              </div>
+            </div>
+            ${(codeDetails.before_content || codeDetails.after_content || codeDetails.before_code || codeDetails.after_code) ? 
+              this._buildCodeDiffHTML({
+                before_content: codeDetails.before_content || codeDetails.before_code,
+                after_content: codeDetails.after_content || codeDetails.after_code,
+                diff_stats: codeDetails.diff_stats,
+                ...codeDetails
+              }, 'Code generated from this prompt') : 
+              '<div style="padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md); color: var(--color-text-muted); text-align: center;">Code diff details not available</div>'
+            }
+          </div>
+        ` : ''}
+        
+      </div>
+    `;
   }
 
   showThreadModal(threadId) {
@@ -555,13 +913,18 @@ export class ModalManager {
         <div>
           <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">Command Details</h4>
           <div style="display: grid; gap: var(--space-sm);">
-            <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-              <span style="color: var(--color-text-muted);">Command:</span>
-              <code style="color: var(--color-text); font-family: var(--font-mono); font-size: var(--text-sm); max-width: 500px; overflow-x: auto;">${escapeHtml(cmd.command)}</code>
+            <div style="padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
+              <div style="display: flex; flex-direction: column; gap: var(--space-xs);">
+                <span style="color: var(--color-text-muted); font-size: var(--text-xs); margin-bottom: var(--space-xs);">Command:</span>
+                <code style="color: var(--color-text); font-family: var(--font-mono); font-size: var(--text-sm); padding: var(--space-sm); background: rgba(99, 102, 241, 0.1); border-radius: var(--radius-sm); display: block; overflow-x: auto; word-break: break-all;">${escapeHtml(cmd.command)}</code>
+              </div>
             </div>
-            <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-              <span style="color: var(--color-text-muted);">Source:</span>
-              <span class="badge" style="background: #6366f1; color: white;">${cmd.source || 'unknown'}</span>
+            <div style="padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
+              <div style="display: flex; align-items: center; gap: var(--space-sm); flex-wrap: wrap;">
+                <span style="color: var(--color-text-muted); font-size: var(--text-xs);">Source:</span>
+                <span class="badge" style="background: #6366f1; color: white;">${cmd.source || 'unknown'}</span>
+                ${cmd.shell ? `<span class="badge" style="background: rgba(139, 92, 246, 0.2); color: var(--color-primary);">${cmd.shell}</span>` : ''}
+              </div>
             </div>
             <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
               <span style="color: var(--color-text-muted);">Timestamp:</span>
@@ -574,9 +937,11 @@ export class ModalManager {
               </div>
             ` : ''}
             ${cmd.workspace ? `
-              <div style="display: flex; justify-content: space-between; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
-                <span style="color: var(--color-text-muted);">Workspace:</span>
-                <code style="color: var(--color-text); font-family: var(--font-mono); font-size: var(--text-xs);">${escapeHtml(cmd.workspace)}</code>
+              <div style="padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md);">
+                <div style="display: flex; align-items: center; gap: var(--space-sm); flex-wrap: wrap;">
+                  <span style="color: var(--color-text-muted); font-size: var(--text-xs);">Workspace:</span>
+                  ${window.createWorkspaceBadge ? window.createWorkspaceBadge(cmd.workspace, 'md') : `<code style="color: var(--color-text); font-family: var(--font-mono); font-size: var(--text-xs);">${escapeHtml(cmd.workspace)}</code>`}
+                </div>
               </div>
             ` : ''}
             ${cmd.exit_code !== null && cmd.exit_code !== undefined ? `
