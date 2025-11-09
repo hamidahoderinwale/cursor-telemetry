@@ -340,26 +340,59 @@ function renderPerformanceTrends() {
     return;
   }
 
-  // Group events by time windows (5-minute intervals)
-  const timeWindow = 5 * 60 * 1000;
-  const activityWindows = new Map();
-
-  events.forEach(e => {
-    const timestamp = new Date(e.timestamp).getTime();
-    const windowKey = Math.floor(timestamp / timeWindow) * timeWindow;
-    activityWindows.set(windowKey, (activityWindows.get(windowKey) || 0) + 1);
-  });
-
-  // Match system data to activity windows
+  // Use a time window to match events to system measurements
+  // Check for events within 2.5 minutes before/after each system measurement
+  const activityWindowMs = 2.5 * 60 * 1000; // 2.5 minutes before/after
+  
+  // Pre-process events for faster lookup (sort once)
+  const eventTimestamps = events.map(e => new Date(e.timestamp).getTime()).sort((a, b) => a - b);
+  
+  // Match system data to nearby events
   const correlations = [];
   systemData.forEach(d => {
-    const timestamp = d.timestamp;
-    const windowKey = Math.floor(timestamp / timeWindow) * timeWindow;
-    const activity = activityWindows.get(windowKey) || 0;
+    const timestamp = typeof d.timestamp === 'number' ? d.timestamp : new Date(d.timestamp).getTime();
     
-    const memBytes = d.memory?.rss || d.memory?.heapUsed || d.memory || 0;
+    // Count events within the activity window using binary search
+    const windowStart = timestamp - activityWindowMs;
+    const windowEnd = timestamp + activityWindowMs;
+    
+    // Binary search for start index
+    let left = 0;
+    let right = eventTimestamps.length;
+    while (left < right) {
+      const mid = Math.floor((left + right) / 2);
+      if (eventTimestamps[mid] < windowStart) {
+        left = mid + 1;
+      } else {
+        right = mid;
+      }
+    }
+    const startIdx = left;
+    
+    // Count events in range
+    let activityCount = 0;
+    for (let i = startIdx; i < eventTimestamps.length && eventTimestamps[i] <= windowEnd; i++) {
+      activityCount++;
+    }
+    
+    const activity = activityCount;
+    
+    // Extract memory value (handle different data structures)
+    let memBytes = 0;
+    if (d.memory) {
+      if (typeof d.memory === 'number') {
+        memBytes = d.memory;
+      } else {
+        memBytes = d.memory.rss || d.memory.heapUsed || d.memory.heapTotal || 0;
+      }
+    }
     const memoryMB = memBytes / 1024 / 1024;
-    const cpuLoad = d.system?.loadAverage?.[0] || d.loadAverage?.[0] || 0;
+    
+    // Extract CPU load (handle different data structures)
+    const cpuLoad = d.system?.loadAverage?.[0] || 
+                     d.loadAverage?.[0] || 
+                     d.cpu?.load || 
+                     d.cpu || 0;
 
     correlations.push({
       timestamp,
@@ -370,8 +403,10 @@ function renderPerformanceTrends() {
   });
 
   // Calculate correlation statistics
-  const activePeriods = correlations.filter(c => c.activity > 0);
-  const idlePeriods = correlations.filter(c => c.activity === 0);
+  // Use a threshold for "active" - at least 2 events in the window
+  const ACTIVE_THRESHOLD = 2;
+  const activePeriods = correlations.filter(c => c.activity >= ACTIVE_THRESHOLD);
+  const idlePeriods = correlations.filter(c => c.activity < ACTIVE_THRESHOLD);
 
   const avgMemoryActive = activePeriods.length > 0
     ? activePeriods.reduce((sum, c) => sum + c.memory, 0) / activePeriods.length
@@ -400,35 +435,204 @@ function renderPerformanceTrends() {
         </div>
         <div class="stat-card">
           <div class="stat-label">Memory (Idle)</div>
-          <div class="stat-value">${avgMemoryIdle.toFixed(1)} MB</div>
+          <div class="stat-value">${idlePeriods.length > 0 ? `${avgMemoryIdle.toFixed(1)} MB` : 'N/A'}</div>
           <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">
-            ${idlePeriods.length} periods
+            ${idlePeriods.length > 0 ? `${idlePeriods.length} periods` : 'No idle periods detected'}
           </div>
         </div>
         <div class="stat-card">
           <div class="stat-label">CPU Load (Active)</div>
           <div class="stat-value">${avgCpuActive.toFixed(2)}</div>
           <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">
-            During coding activity
+            ${activePeriods.length} periods with activity
           </div>
         </div>
         <div class="stat-card">
           <div class="stat-label">CPU Load (Idle)</div>
-          <div class="stat-value">${avgCpuIdle.toFixed(2)}</div>
+          <div class="stat-value">${idlePeriods.length > 0 ? avgCpuIdle.toFixed(2) : 'N/A'}</div>
           <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">
-            No activity
+            ${idlePeriods.length > 0 ? `${idlePeriods.length} periods` : 'No idle periods detected'}
           </div>
         </div>
       </div>
     </div>
-    ${avgMemoryActive > avgMemoryIdle ? `
-      <div style="padding: var(--space-sm); background: #10b98115; border-radius: var(--radius-md); border-left: 3px solid #10b981;">
-        <div style="font-size: var(--text-sm); color: var(--color-text);">
-          <strong>Insight:</strong> Memory usage is ${((avgMemoryActive - avgMemoryIdle) / avgMemoryIdle * 100).toFixed(1)}% higher during active coding periods
-        </div>
+    
+    ${correlations.length > 0 ? `
+      <div style="margin-bottom: var(--space-md);">
+        <h4 style="margin-bottom: var(--space-sm); color: var(--color-text); font-size: var(--text-md);">Resource Usage Over Time</h4>
+        <canvas id="performanceTrendsChart" style="max-height: 300px;"></canvas>
       </div>
     ` : ''}
+    
+    ${generateInsight(avgMemoryActive, avgMemoryIdle, avgCpuActive, avgCpuIdle, activePeriods.length, idlePeriods.length)}
   `;
+  
+  // Render chart if data available
+  if (correlations.length > 0 && window.Chart) {
+    setTimeout(() => {
+      renderPerformanceTrendsChart(correlations);
+    }, 100);
+  }
+}
+
+/**
+ * Generate insight message with proper handling of edge cases
+ */
+function generateInsight(avgMemoryActive, avgMemoryIdle, avgCpuActive, avgCpuIdle, activeCount, idleCount) {
+  const insights = [];
+  
+  // Memory insight
+  if (avgMemoryIdle > 0 && avgMemoryActive > avgMemoryIdle) {
+    const memoryIncrease = ((avgMemoryActive - avgMemoryIdle) / avgMemoryIdle * 100).toFixed(1);
+    insights.push(`Memory usage is ${memoryIncrease}% higher during active coding periods`);
+  } else if (avgMemoryIdle === 0 && avgMemoryActive > 0) {
+    insights.push(`Memory usage: ${avgMemoryActive.toFixed(1)} MB during active periods (no idle data for comparison)`);
+  } else if (avgMemoryActive < avgMemoryIdle && avgMemoryIdle > 0) {
+    const memoryDecrease = ((avgMemoryIdle - avgMemoryActive) / avgMemoryIdle * 100).toFixed(1);
+    insights.push(`Memory usage is ${memoryDecrease}% lower during active periods (unusual pattern)`);
+  }
+  
+  // CPU insight
+  if (avgCpuIdle > 0 && avgCpuActive > avgCpuIdle) {
+    const cpuIncrease = ((avgCpuActive - avgCpuIdle) / avgCpuIdle * 100).toFixed(1);
+    insights.push(`CPU load is ${cpuIncrease}% higher during active coding periods`);
+  } else if (avgCpuIdle === 0 && avgCpuActive > 0) {
+    insights.push(`CPU load: ${avgCpuActive.toFixed(2)} during active periods (no idle data for comparison)`);
+  }
+  
+  // Activity insight
+  if (idleCount === 0 && activeCount > 0) {
+    insights.push(`All recorded periods show coding activity - system was active throughout`);
+  } else if (activeCount === 0 && idleCount > 0) {
+    insights.push(`No active coding periods detected in system resource data`);
+  }
+  
+  if (insights.length === 0) {
+    return '';
+  }
+  
+  return `
+    <div style="padding: var(--space-sm); background: #10b98115; border-radius: var(--radius-md); border-left: 3px solid #10b981;">
+      <div style="font-size: var(--text-sm); color: var(--color-text);">
+        <strong>Insight:</strong> ${insights.join('. ')}
+      </div>
+    </div>
+  `;
+}
+
+/**
+ * Render performance trends chart
+ */
+function renderPerformanceTrendsChart(correlations) {
+  const canvas = document.getElementById('performanceTrendsChart');
+  if (!canvas || !window.Chart) return;
+
+  // Destroy existing chart
+  if (canvas.chart) {
+    canvas.chart.destroy();
+  }
+
+  // Sort by timestamp
+  const sorted = [...correlations].sort((a, b) => a.timestamp - b.timestamp);
+  
+  // Downsample if too many points
+  const maxPoints = 100;
+  const step = Math.max(1, Math.floor(sorted.length / maxPoints));
+  const sampled = sorted.filter((_, i) => i % step === 0 || i === sorted.length - 1);
+
+  const labels = sampled.map(d => {
+    const date = new Date(d.timestamp);
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  });
+
+  canvas.chart = new Chart(canvas.getContext('2d'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Memory (MB)',
+          data: sampled.map(d => d.memory),
+          borderColor: '#3b82f6',
+          backgroundColor: '#3b82f615',
+          tension: 0.4,
+          fill: true,
+          yAxisID: 'y-memory'
+        },
+        {
+          label: 'CPU Load',
+          data: sampled.map(d => d.cpu),
+          borderColor: '#10b981',
+          backgroundColor: '#10b98115',
+          tension: 0.4,
+          fill: false,
+          yAxisID: 'y-cpu',
+          borderDash: [5, 5]
+        },
+        {
+          label: 'Activity Level',
+          data: sampled.map(d => d.activity),
+          borderColor: '#f59e0b',
+          backgroundColor: '#f59e0b15',
+          tension: 0.4,
+          fill: false,
+          yAxisID: 'y-activity',
+          pointRadius: 2
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      interaction: {
+        mode: 'index',
+        intersect: false
+      },
+      plugins: {
+        legend: {
+          display: true,
+          position: 'top'
+        },
+        tooltip: {
+          mode: 'index',
+          intersect: false
+        }
+      },
+      scales: {
+        'y-memory': {
+          type: 'linear',
+          position: 'left',
+          title: {
+            display: true,
+            text: 'Memory (MB)'
+          },
+          beginAtZero: true
+        },
+        'y-cpu': {
+          type: 'linear',
+          position: 'right',
+          title: {
+            display: true,
+            text: 'CPU Load'
+          },
+          beginAtZero: true,
+          grid: {
+            drawOnChartArea: false
+          }
+        },
+        'y-activity': {
+          type: 'linear',
+          position: 'right',
+          title: {
+            display: true,
+            text: 'Activity'
+          },
+          beginAtZero: true,
+          display: false // Hide this axis but keep the data visible
+        }
+      }
+    }
+  });
 }
 
 // Export to window for global access
@@ -438,3 +642,4 @@ window.fetchSystemResources = fetchSystemResources;
 window.renderSystemResourceStats = renderSystemResourceStats;
 window.renderResourceDistributionChart = renderResourceDistributionChart;
 window.renderPerformanceTrends = renderPerformanceTrends;
+

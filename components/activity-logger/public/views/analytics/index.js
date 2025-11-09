@@ -398,37 +398,46 @@ function renderAnalyticsView(container) {
       console.warn('[CHART] renderPromptEffectiveness not available');
     }
     
-    // Advanced visualizations
-    if (window.renderContextEvolutionTimeline) {
-      window.renderContextEvolutionTimeline().catch(err => {
-        if (!err.message || !err.message.includes('not found')) {
-          console.warn('[INFO] Context evolution timeline not available:', err.message);
-        }
-      });
-    }
+    // Advanced visualizations - lazy load with intersection observer
+    const lazyLoadVisualizations = () => {
+      const containers = [
+        { id: 'contextEvolutionTimeline', render: window.renderContextEvolutionTimeline },
+        { id: 'promptToCodeCorrelation', render: window.renderPromptToCodeCorrelation },
+        { id: 'gitCommitTimeline', render: window.renderGitCommitTimeline },
+        { id: 'fileHotspots', render: window.renderFileHotspots }
+      ];
+      
+      if (window.performanceOptimizer && window.performanceOptimizer.lazyLoad) {
+        containers.forEach(({ id, render }) => {
+          if (render) {
+            window.performanceOptimizer.lazyLoad(`#${id}`, (element) => {
+              render().catch(err => {
+                if (!err.message || !err.message.includes('not found')) {
+                  console.warn(`[INFO] ${id} not available:`, err.message);
+                }
+              });
+            });
+          }
+        });
+      } else {
+        // Fallback: load all immediately
+        containers.forEach(({ render }) => {
+          if (render) {
+            render().catch(err => {
+              if (!err.message || !err.message.includes('not found')) {
+                console.warn('[INFO] Visualization not available:', err.message);
+              }
+            });
+          }
+        });
+      }
+    };
     
-    if (window.renderPromptToCodeCorrelation) {
-      window.renderPromptToCodeCorrelation().catch(err => {
-        if (!err.message || !err.message.includes('not found')) {
-          console.warn('[INFO] Prompt-to-code correlation not available:', err.message);
-        }
-      });
-    }
-    
-    if (window.renderGitCommitTimeline) {
-      window.renderGitCommitTimeline().catch(err => {
-        if (!err.message || !err.message.includes('not found')) {
-          console.warn('[INFO] Git commit timeline not available:', err.message);
-        }
-      });
-    }
-    
-    if (window.renderFileHotspots) {
-      window.renderFileHotspots().catch(err => {
-        if (!err.message || !err.message.includes('not found')) {
-          console.warn('[INFO] File hotspots not available:', err.message);
-        }
-      });
+    // Use requestIdleCallback for non-critical visualizations
+    if (typeof requestIdleCallback !== 'undefined') {
+      requestIdleCallback(lazyLoadVisualizations, { timeout: 2000 });
+    } else {
+      setTimeout(lazyLoadVisualizations, 500);
     }
   }, 300);
 }

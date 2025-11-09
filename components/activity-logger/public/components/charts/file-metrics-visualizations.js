@@ -13,6 +13,10 @@ class FileMetricsVisualizations {
       div.textContent = text;
       return div.innerHTML;
     });
+    // Cache for expensive calculations
+    this.complexityCache = null;
+    this.complexityCacheTimestamp = 0;
+    this.complexityCacheTTL = 60000; // 1 minute cache
   }
 
   /**
@@ -300,54 +304,79 @@ class FileMetricsVisualizations {
 
   /**
    * Calculate file complexity trends
+   * Optimized with caching and efficient data structures
    */
   async calculateFileComplexityTrends() {
+    // Check cache
+    const now = Date.now();
+    if (this.complexityCache && (now - this.complexityCacheTimestamp) < this.complexityCacheTTL) {
+      return this.complexityCache;
+    }
+
     const events = this.state?.data?.events || [];
+    if (events.length === 0) {
+      return [];
+    }
 
     // Group events by file and time
     const fileEvents = new Map(); // file -> [{timestamp, linesAdded, linesRemoved, ...}]
 
-    // Filter for file change events (support both underscore and hyphen variants)
+    // Pre-compile type check for better performance
+    const fileChangeTypes = new Set(['file-change', 'file_change', 'code-change', 'code_change', 'file-edit', 'file_edit']);
+
+    // Filter for file change events (optimized with Set lookup)
     const fileChangeEvents = events.filter(e => {
       const type = e.type || '';
-      return type === 'file-change' || type === 'file_change' || 
-             type === 'code-change' || type === 'code_change' || 
-             type === 'file-edit' || type === 'file_edit';
+      return fileChangeTypes.has(type);
     });
 
-    fileChangeEvents.forEach(e => {
-      const file = e.file || e.filePath || e.details?.file_path;
-      if (!file) return;
+    // Process events in batches for large datasets
+    const batchSize = 1000;
+    for (let i = 0; i < fileChangeEvents.length; i += batchSize) {
+      const batch = fileChangeEvents.slice(i, i + batchSize);
+      
+      for (const e of batch) {
+        // Parse details first (needed for file path extraction)
+        let details = {};
+        try {
+          details = typeof e.details === 'string' ? JSON.parse(e.details) : (e.details || {});
+        } catch (err) {
+          console.warn('[COMPLEXITY] Failed to parse event details:', err.message);
+          continue;
+        }
+        
+        // Try multiple locations for file path (same pattern as hotspots)
+        const file = e.file || e.filePath || details?.file_path || details?.filePath;
+        if (!file) {
+          continue;
+        }
 
-      // Parse details safely
-      let details = {};
-      try {
-        details = typeof e.details === 'string' ? JSON.parse(e.details) : (e.details || {});
-      } catch (err) {
-        console.warn('[COMPLEXITY] Failed to parse event details:', err.message);
-        return;
+        const timestamp = new Date(e.timestamp).getTime();
+        if (isNaN(timestamp)) {
+          console.warn('[COMPLEXITY] Invalid timestamp for event:', e.id);
+          continue;
+        }
+
+        const linesAdded = details?.lines_added || details?.linesAdded || 0;
+        const linesRemoved = details?.lines_removed || details?.linesRemoved || 0;
+
+        if (!fileEvents.has(file)) {
+          fileEvents.set(file, []);
+        }
+
+        fileEvents.get(file).push({
+          timestamp,
+          linesAdded,
+          linesRemoved,
+          netChange: linesAdded - linesRemoved
+        });
       }
-
-      const timestamp = new Date(e.timestamp).getTime();
-      if (isNaN(timestamp)) {
-        console.warn('[COMPLEXITY] Invalid timestamp for event:', e.id);
-        return;
+      
+      // Yield to event loop periodically for large datasets
+      if (i + batchSize < fileChangeEvents.length && fileChangeEvents.length > 5000) {
+        await new Promise(resolve => setTimeout(resolve, 0));
       }
-
-      const linesAdded = details?.lines_added || details?.linesAdded || 0;
-      const linesRemoved = details?.lines_removed || details?.linesRemoved || 0;
-
-      if (!fileEvents.has(file)) {
-        fileEvents.set(file, []);
-      }
-
-      fileEvents.get(file).push({
-        timestamp,
-        linesAdded,
-        linesRemoved,
-        netChange: linesAdded - linesRemoved
-      });
-    });
+    }
 
     // Calculate complexity metrics per file
     const complexityTrends = [];
@@ -398,6 +427,10 @@ class FileMetricsVisualizations {
     // Sort by complexity score
     complexityTrends.sort((a, b) => b.complexityScore - a.complexityScore);
 
+    // Cache results
+    this.complexityCache = complexityTrends;
+    this.complexityCacheTimestamp = now;
+
     return complexityTrends;
   }
 
@@ -425,7 +458,28 @@ class FileMetricsVisualizations {
                  type === 'code-change' || type === 'code_change' || 
                  type === 'file-edit' || type === 'file_edit';
         }).length;
-        console.log(`[COMPLEXITY] No trends calculated. Total events: ${events.length}, File change events: ${fileChangeCount}`);
+        
+        // Debug: Check why file paths aren't being extracted
+        let filesWithPaths = 0;
+        let filesWithoutPaths = 0;
+        const sampleEvents = events.slice(0, 10);
+        sampleEvents.forEach(e => {
+          let details = {};
+          try {
+            details = typeof e.details === 'string' ? JSON.parse(e.details) : (e.details || {});
+          } catch (err) {
+            filesWithoutPaths++;
+            return;
+          }
+          const file = e.file || e.filePath || details?.file_path || details?.filePath;
+          if (file) {
+            filesWithPaths++;
+          } else {
+            filesWithoutPaths++;
+          }
+        });
+        
+        console.log(`[COMPLEXITY] No trends calculated. Total events: ${events.length}, File change events: ${fileChangeCount}, Sample with paths: ${filesWithPaths}, without: ${filesWithoutPaths}`);
       }
 
       if (trends.length === 0) {
@@ -440,6 +494,36 @@ class FileMetricsVisualizations {
 
       const topComplex = trends.slice(0, 15);
       const maxComplexity = Math.max(...trends.map(t => t.complexityScore));
+      
+      // Prepare timeline data for chart (aggregate all files over time)
+      const timelineDataMap = new Map(); // timestamp -> {churn, edits, fileCount}
+      trends.forEach(trend => {
+        trend.timeline.forEach(point => {
+          if (!timelineDataMap.has(point.timestamp)) {
+            timelineDataMap.set(point.timestamp, { churn: 0, edits: 0, fileCount: 0 });
+          }
+          const data = timelineDataMap.get(point.timestamp);
+          data.churn += point.churn;
+          data.edits += 1;
+          data.fileCount += 1;
+        });
+      });
+      
+      // Convert to array and sort by timestamp
+      const timelineData = Array.from(timelineDataMap.entries())
+        .map(([timestamp, data]) => ({ timestamp, ...data }))
+        .sort((a, b) => a.timestamp - b.timestamp)
+        .slice(-100); // Last 100 data points
+
+      // Calculate statistics
+      const totalEdits = trends.reduce((sum, t) => sum + t.totalEdits, 0);
+      const totalChurn = trends.reduce((sum, t) => sum + t.churnRate, 0);
+      const avgComplexity = trends.length > 0 
+        ? trends.reduce((sum, t) => sum + t.complexityScore, 0) / trends.length 
+        : 0;
+      const avgEditFrequency = trends.length > 0
+        ? trends.reduce((sum, t) => sum + parseFloat(t.editFrequency), 0) / trends.length
+        : 0;
 
       container.innerHTML = `
         <div style="margin-bottom: var(--space-lg);">
@@ -447,20 +531,40 @@ class FileMetricsVisualizations {
             <div class="stat-card">
               <div class="stat-label">Files Tracked</div>
               <div class="stat-value">${trends.length}</div>
+              <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">
+                With edit history
+              </div>
             </div>
             <div class="stat-card">
               <div class="stat-label">Avg Complexity</div>
-              <div class="stat-value">${(trends.reduce((sum, t) => sum + t.complexityScore, 0) / trends.length).toFixed(1)}</div>
+              <div class="stat-value">${avgComplexity.toFixed(1)}</div>
+              <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">
+                ${avgEditFrequency.toFixed(2)} edits/day avg
+              </div>
             </div>
             <div class="stat-card">
               <div class="stat-label">Total Churn</div>
-              <div class="stat-value">${trends.reduce((sum, t) => sum + t.churnRate, 0).toLocaleString()}</div>
+              <div class="stat-value">${totalChurn.toLocaleString()}</div>
               <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">
-                Lines touched
+                ${totalEdits} total edits
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Most Complex</div>
+              <div class="stat-value" style="font-size: var(--text-md);">${topComplex[0]?.complexityScore.toFixed(1) || '0'}</div>
+              <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${this.escapeHtml(topComplex[0]?.file || '')}">
+                ${this.escapeHtml((topComplex[0]?.file || '').split('/').pop() || 'N/A')}
               </div>
             </div>
           </div>
         </div>
+
+        ${timelineData.length > 0 ? `
+          <div style="margin-bottom: var(--space-md);">
+            <h4 style="margin-bottom: var(--space-sm); color: var(--color-text); font-size: var(--text-md);">Complexity Trends Over Time</h4>
+            <canvas id="complexityTimelineChart" style="max-height: 300px;"></canvas>
+          </div>
+        ` : ''}
 
         <div style="margin-bottom: var(--space-md);">
           <h4 style="margin-bottom: var(--space-sm); color: var(--color-text); font-size: var(--text-md);">Most Complex Files (by Edit Frequency & Churn)</h4>
@@ -468,26 +572,37 @@ class FileMetricsVisualizations {
             ${topComplex.map(trend => {
               const intensity = (trend.complexityScore / maxComplexity) * 100;
               const color = intensity > 70 ? '#ef4444' : intensity > 40 ? '#f59e0b' : '#10b981';
+              const fileName = trend.file.split('/').pop();
+              const fileDir = trend.file.substring(0, trend.file.length - fileName.length);
               
               return `
-                <div style="padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md); border-left: 3px solid ${color};">
+                <div style="padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md); border-left: 3px solid ${color}; transition: background 0.2s;"
+                     onmouseover="this.style.background='var(--color-bg-alt, #f5f5f5)'" 
+                     onmouseout="this.style.background='var(--color-bg)'"
+                     title="${this.escapeHtml(trend.file)}">
                   <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: var(--space-xs);">
                     <div style="flex: 1; min-width: 0;">
                       <div style="font-size: var(--text-sm); color: var(--color-text); font-weight: 500; font-family: var(--font-mono); margin-bottom: var(--space-xs); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-                        ${this.escapeHtml(trend.file)}
+                        ${this.escapeHtml(fileName)}
                       </div>
-                      <div style="display: flex; gap: var(--space-md); font-size: var(--text-xs); color: var(--color-text-muted);">
-                        <span>${trend.totalEdits} edits</span>
-                        <span>${trend.churnRate} churn</span>
-                        <span>${trend.editFrequency} edits/day</span>
+                      ${fileDir ? `
+                        <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-bottom: var(--space-xs); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                          ${this.escapeHtml(fileDir)}
+                        </div>
+                      ` : ''}
+                      <div style="display: flex; gap: var(--space-md); font-size: var(--text-xs); color: var(--color-text-muted); flex-wrap: wrap;">
+                        <span title="Total number of edits">${trend.totalEdits} edits</span>
+                        <span title="Total lines added + removed">${trend.churnRate} churn</span>
+                        <span title="Edits per day">${trend.editFrequency} edits/day</span>
+                        ${trend.daysSpan !== '0.0' ? `<span title="Time span">${trend.daysSpan} days</span>` : ''}
                       </div>
                     </div>
-                    <div style="margin-left: var(--space-sm); display: flex; flex-direction: column; align-items: end;">
+                    <div style="margin-left: var(--space-sm); display: flex; flex-direction: column; align-items: end; flex-shrink: 0;">
                       <div style="font-size: var(--text-sm); color: var(--color-text); font-weight: 600;">
                         ${trend.complexityScore.toFixed(1)}
                       </div>
                       <div style="width: 60px; height: 6px; background: var(--color-bg-alt); border-radius: 3px; overflow: hidden; margin-top: var(--space-xs);">
-                        <div style="width: ${intensity}%; height: 100%; background: ${color}; border-radius: 3px;"></div>
+                        <div style="width: ${intensity}%; height: 100%; background: ${color}; border-radius: 3px; transition: width 0.3s;"></div>
                       </div>
                     </div>
                   </div>
@@ -497,6 +612,13 @@ class FileMetricsVisualizations {
           </div>
         </div>
       `;
+      
+      // Render timeline chart if data available
+      if (timelineData.length > 0 && window.Chart) {
+        setTimeout(() => {
+          this.renderComplexityTimelineChart(timelineData);
+        }, 100);
+      }
     } catch (error) {
       console.warn('[COMPLEXITY] Could not calculate complexity:', error.message);
       container.innerHTML = `
@@ -507,6 +629,109 @@ class FileMetricsVisualizations {
       `;
     }
   }
+
+  /**
+   * Render complexity timeline chart using Chart.js
+   */
+  renderComplexityTimelineChart(data) {
+    const canvas = document.getElementById('complexityTimelineChart');
+    if (!canvas || !window.Chart) return;
+
+    // Destroy existing chart
+    if (canvas.chart) {
+      canvas.chart.destroy();
+    }
+
+    const labels = data.map(d => {
+      const date = new Date(d.timestamp);
+      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    });
+
+    canvas.chart = new Chart(canvas.getContext('2d'), {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          {
+            label: 'Code Churn (lines touched)',
+            data: data.map(d => d.churn),
+            borderColor: '#ef4444',
+            backgroundColor: '#ef444415',
+            tension: 0.4,
+            fill: true,
+            yAxisID: 'y-churn'
+          },
+          {
+            label: 'Files Edited',
+            data: data.map(d => d.fileCount),
+            borderColor: '#3b82f6',
+            backgroundColor: '#3b82f615',
+            tension: 0.4,
+            fill: false,
+            yAxisID: 'y-files',
+            borderDash: [5, 5]
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        interaction: {
+          mode: 'index',
+          intersect: false
+        },
+        plugins: {
+          legend: {
+            display: true,
+            position: 'top'
+          },
+          tooltip: {
+            mode: 'index',
+            intersect: false,
+            callbacks: {
+              label: function(context) {
+                let label = context.dataset.label || '';
+                if (label) {
+                  label += ': ';
+                }
+                if (context.parsed.y !== null) {
+                  if (context.datasetIndex === 0) {
+                    label += context.parsed.y.toLocaleString() + ' lines';
+                  } else {
+                    label += context.parsed.y + ' files';
+                  }
+                }
+                return label;
+              }
+            }
+          }
+        },
+        scales: {
+          'y-churn': {
+            type: 'linear',
+            position: 'left',
+            title: {
+              display: true,
+              text: 'Code Churn (lines)'
+            },
+            beginAtZero: true
+          },
+          'y-files': {
+            type: 'linear',
+            position: 'right',
+            title: {
+              display: true,
+              text: 'Files Edited'
+            },
+            beginAtZero: true,
+            grid: {
+              drawOnChartArea: false
+            }
+          }
+        }
+      }
+    });
+  }
 }
 
 // Create global instance
@@ -516,4 +741,5 @@ window.fileMetricsVisualizations = new FileMetricsVisualizations();
 // Export functions
 window.renderFileDependencyStrength = () => window.fileMetricsVisualizations.renderFileDependencyStrength();
 window.renderFileComplexityTrends = () => window.fileMetricsVisualizations.renderFileComplexityTrends();
+
 

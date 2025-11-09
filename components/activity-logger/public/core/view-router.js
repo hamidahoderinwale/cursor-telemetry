@@ -1,65 +1,121 @@
 /**
  * View Router - Handles view switching and rendering
+ * Optimized with caching and lazy loading
  */
+
+// Cache for view render functions
+const viewRenderCache = new Map();
+
+// View render function names (for script tag loading)
+const viewFunctionNames = {
+  'overview': 'renderOverviewView',
+  'activity': 'renderActivityView',
+  'threads': 'renderThreadsView',
+  'analytics': 'renderAnalyticsView',
+  'filegraph': 'renderFileGraphView',
+  'navigator': 'renderNavigatorView',
+  'todos': 'renderTodoView',
+  'system': 'renderSystemView',
+  'api-docs': 'renderAPIDocsView',
+  'schema-config': 'renderSchemaConfigView',
+  'workspace-comparison': 'renderWorkspaceComparisonView',
+  'whiteboard': 'renderWhiteboardView'
+};
+
+// Debounced view switching
+const debouncedRender = window.debounce ? 
+  window.debounce(renderCurrentView, 50) : 
+  renderCurrentView;
 
 function switchView(viewName) {
   window.state.currentView = viewName;
   
-  // Update nav links
-  document.querySelectorAll('.nav-link').forEach(link => {
-    link.classList.remove('active');
-    if (link.dataset.view === viewName) {
-      link.classList.add('active');
-    }
-  });
+  // Optimize nav link updates with batch DOM updates
+  if (window.batchDOMUpdates) {
+    const navLinks = Array.from(document.querySelectorAll('.nav-link'));
+    window.batchDOMUpdates(
+      navLinks.map(link => () => {
+        link.classList.remove('active');
+        if (link.dataset.view === viewName) {
+          link.classList.add('active');
+        }
+      })
+    );
+  } else {
+    // Fallback
+    document.querySelectorAll('.nav-link').forEach(link => {
+      link.classList.remove('active');
+      if (link.dataset.view === viewName) {
+        link.classList.add('active');
+      }
+    });
+  }
 
-  renderCurrentView();
+  // Use debounced render for rapid view switches
+  debouncedRender();
 }
 
-function renderCurrentView() {
+async function renderCurrentView() {
   const container = document.getElementById('viewContainer');
   if (!container) return;
 
-  switch (window.state.currentView) {
-    case 'overview':
-      if (window.renderOverviewView) window.renderOverviewView(container);
-      break;
-    case 'activity':
-      if (window.renderActivityView) window.renderActivityView(container);
-      break;
-    case 'threads':
-      if (window.renderThreadsView) window.renderThreadsView(container);
-      break;
-    case 'analytics':
-      if (window.renderAnalyticsView) window.renderAnalyticsView(container);
-      break;
-    case 'filegraph':
-      if (window.renderFileGraphView) window.renderFileGraphView(container);
-      break;
-    case 'navigator':
-      if (window.renderNavigatorView) window.renderNavigatorView(container);
-      break;
-    case 'todos':
-      if (window.renderTodoView) window.renderTodoView(container);
-      break;
-    case 'system':
-      if (window.renderSystemView) window.renderSystemView(container);
-      break;
-    case 'api-docs':
-      if (window.renderAPIDocsView) window.renderAPIDocsView(container);
-      break;
-    case 'schema-config':
-      if (window.renderSchemaConfigView) window.renderSchemaConfigView(container);
-      break;
-    case 'workspace-comparison':
-      if (window.renderWorkspaceComparisonView) window.renderWorkspaceComparisonView(container);
-      break;
-    case 'whiteboard':
-      if (window.renderWhiteboardView) window.renderWhiteboardView(container);
-      break;
-    default:
-      container.innerHTML = '<div class="empty-state">View not found</div>';
+  const viewName = window.state.currentView;
+  
+  // Check if view render function is already cached
+  let renderFn = viewRenderCache.get(viewName);
+  
+  if (!renderFn) {
+    // Get function name from mapping
+    const functionName = viewFunctionNames[viewName] || `render${viewName.charAt(0).toUpperCase() + viewName.slice(1)}View`;
+    renderFn = window[functionName];
+    
+    // Wait for view to load if not available yet (for deferred scripts)
+    if (!renderFn && viewName !== 'overview') {
+      // Wait up to 2 seconds for deferred scripts to load
+      const maxWait = 2000;
+      const startTime = Date.now();
+      while (!renderFn && (Date.now() - startTime) < maxWait) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        renderFn = window[functionName];
+      }
+    }
+    
+    if (renderFn) {
+      viewRenderCache.set(viewName, renderFn);
+    }
   }
+
+  // Render the view
+  if (renderFn) {
+    try {
+      // Use requestAnimationFrame for smooth rendering
+      if (typeof requestAnimationFrame !== 'undefined') {
+        requestAnimationFrame(() => {
+          renderFn(container);
+        });
+      } else {
+        renderFn(container);
+      }
+    } catch (error) {
+      console.error(`[VIEW] Error rendering ${viewName}:`, error);
+      container.innerHTML = `<div class="empty-state">Error loading view: ${error.message}</div>`;
+    }
+  } else {
+    container.innerHTML = '<div class="empty-state">View not found or not loaded</div>';
+  }
+}
+
+// Preload critical views on idle (check if functions are available)
+if (typeof requestIdleCallback !== 'undefined') {
+  requestIdleCallback(() => {
+    // Check if critical views are loaded
+    ['overview', 'activity'].forEach(viewName => {
+      const functionName = viewFunctionNames[viewName];
+      if (functionName && window[functionName] && !viewRenderCache.has(viewName)) {
+        viewRenderCache.set(viewName, window[functionName]);
+      }
+    });
+  });
 }
 
 // Export to window for global access

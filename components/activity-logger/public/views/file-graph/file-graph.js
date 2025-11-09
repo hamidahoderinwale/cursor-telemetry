@@ -15,20 +15,57 @@ async function initializeD3FileGraph() {
     const container = document.getElementById('fileGraphContainer');
     if (!container) return;
     
-    // Show loading state
-    container.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%;"><div class="loading-spinner"></div><span style="margin-left: 12px;">Loading file contents from database...</span></div>';
+    // Show loading state with progress
+    const updateProgress = (message, percent = null) => {
+      const percentText = percent !== null ? ` (${percent}%)` : '';
+      container.innerHTML = `<div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%;">
+        <div class="loading-spinner"></div>
+        <span style="margin-top: 12px; color: var(--color-text-muted);">${message}${percentText}</span>
+      </div>`;
+    };
+    updateProgress('Loading file contents from database...');
     
-    // Fetch file contents from persistent database
-    console.log('[FILE] Fetching file contents from SQLite for TF-IDF analysis...');
-    let response, data;
-    try {
-      response = await fetch(`${window.CONFIG.API_BASE}/api/file-contents?limit=100000`);
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    // Check cache first (optimization)
+    const cacheKey = 'fileGraphData';
+    const cacheExpiry = 5 * 60 * 1000; // 5 minutes
+    const cached = sessionStorage.getItem(cacheKey);
+    let data;
+    
+    if (cached) {
+      try {
+        const cachedData = JSON.parse(cached);
+        if (Date.now() - cachedData.timestamp < cacheExpiry) {
+          console.log('[GRAPH] Using cached file data');
+          data = cachedData.data;
+        }
+      } catch (e) {
+        // Cache invalid, fetch fresh
       }
-      data = await response.json();
-    } catch (error) {
-      console.warn('[FILE] Failed to fetch file contents:', error.message);
+    }
+    
+    // Fetch file contents from persistent database if not cached
+    if (!data) {
+      console.log('[FILE] Fetching file contents from SQLite for TF-IDF analysis...');
+      let response;
+      try {
+        // Reduced limit for faster initial load - can fetch more on demand
+        response = await fetch(`${window.CONFIG.API_BASE}/api/file-contents?limit=5000`);
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        data = await response.json();
+        
+        // Cache the data
+        try {
+          sessionStorage.setItem(cacheKey, JSON.stringify({
+            data: data,
+            timestamp: Date.now()
+          }));
+        } catch (e) {
+          // Cache storage failed, continue anyway
+        }
+      } catch (error) {
+        console.warn('[FILE] Failed to fetch file contents:', error.message);
       container.innerHTML = `
         <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: var(--color-text-muted); padding: 2rem; text-align: center;">
           <div style="font-size: 1.1rem; font-weight: 500; margin-bottom: 0.5rem; color: var(--color-text);">Companion service not available</div>
@@ -91,32 +128,119 @@ async function initializeD3FileGraph() {
       return file.name;
     };
     
+    // Build event lookup map first (O(n) instead of O(n*m)) - MAJOR OPTIMIZATION
+    const eventsByFilePath = new Map();
+    const allEvents = window.state.data.events || [];
+    
+    console.log(`[GRAPH] Building event lookup map from ${allEvents.length} events...`);
+    updateProgress(`Processing ${allEvents.length} events...`, 10);
+    
+    // Process events in batches to prevent timeout
+    const EVENT_BATCH_SIZE = 500;
+    for (let i = 0; i < allEvents.length; i += EVENT_BATCH_SIZE) {
+      const batch = allEvents.slice(i, i + EVENT_BATCH_SIZE);
+      
+      batch.forEach(event => {
+        try {
+          const details = typeof event.details === 'string' ? JSON.parse(event.details) : event.details;
+          const filePath = details?.file_path || event.file_path || '';
+          if (!filePath) return;
+          
+          // Normalize path for matching
+          const normalizedPath = filePath.toLowerCase();
+          const pathParts = normalizedPath.split('/');
+          const fileName = pathParts[pathParts.length - 1];
+          
+          // Store event by full path
+          if (!eventsByFilePath.has(normalizedPath)) {
+            eventsByFilePath.set(normalizedPath, []);
+          }
+          eventsByFilePath.get(normalizedPath).push(event);
+          
+          // Also index by filename for partial matches
+          if (fileName && fileName !== normalizedPath) {
+            const fileNameKey = `filename:${fileName}`;
+            if (!eventsByFilePath.has(fileNameKey)) {
+              eventsByFilePath.set(fileNameKey, []);
+            }
+            eventsByFilePath.get(fileNameKey).push(event);
+          }
+        } catch (e) {
+          // Skip invalid events
+        }
+      });
+      
+      // Yield to event loop periodically
+      if (i + EVENT_BATCH_SIZE < allEvents.length) {
+        await new Promise(resolve => setTimeout(resolve, 0));
+      }
+    }
+    
+    console.log(`[GRAPH] Event lookup map built with ${eventsByFilePath.size} keys`);
+    
     // Filter files by selected extensions (with Git grouping support)
-    const files = data.files
-      .filter(f => {
-        // Filter out Git object hashes (40-character hex strings in .git/objects/)
-        if (f.path && f.path.includes('.git/objects/') && isGitObjectHash(f.name)) {
-          return false;
+    // First, filter synchronously (fast)
+    const filteredFiles = data.files.filter(f => {
+      // Filter out Git object hashes (40-character hex strings in .git/objects/)
+      if (f.path && f.path.includes('.git/objects/') && isGitObjectHash(f.name)) {
+        return false;
+      }
+      
+      const ext = f.ext;
+      // Check if this is a Git file and "Git" is selected
+      if (ext && (ext.startsWith('Git') || ext === 'COMMIT_EDITMSG' || ext === 'HEAD' || ext === 'index' || ext === 'FETCH_HEAD' || ext === 'ORIG_HEAD')) {
+        return allowedExts.includes('Git');
+      }
+      return allowedExts.includes(ext);
+    });
+    
+    updateProgress(`Processing ${filteredFiles.length} files...`, 30);
+    
+    // Limit files upfront to prevent timeout
+    const MAX_FILES_TO_PROCESS = 1000; // Reduced from unlimited
+    const filesToProcess = filteredFiles.length > MAX_FILES_TO_PROCESS 
+      ? filteredFiles.slice(0, MAX_FILES_TO_PROCESS)
+      : filteredFiles;
+    
+    if (filteredFiles.length > MAX_FILES_TO_PROCESS) {
+      console.log(`[GRAPH] Limiting to ${MAX_FILES_TO_PROCESS} files (of ${filteredFiles.length}) to prevent timeout`);
+    }
+    
+    // Process files in batches with yield points (async)
+    const files = [];
+    const PROCESS_BATCH_SIZE = 100; // Process 100 files at a time
+    
+    for (let i = 0; i < filesToProcess.length; i += PROCESS_BATCH_SIZE) {
+      // Update progress
+      const progress = 30 + Math.floor((i / filesToProcess.length) * 40);
+      updateProgress(`Processing files...`, progress);
+      const batch = filesToProcess.slice(i, i + PROCESS_BATCH_SIZE);
+      
+      const batchResults = batch.map(f => {
+        // Look up events from map instead of filtering all events (O(1) lookup) - OPTIMIZATION
+        const relatedEvents = [];
+        const normalizedPath = f.path.toLowerCase();
+        const fileName = f.name.toLowerCase();
+        
+        // Try exact path match first
+        if (eventsByFilePath.has(normalizedPath)) {
+          relatedEvents.push(...eventsByFilePath.get(normalizedPath));
         }
         
-        const ext = f.ext;
-        // Check if this is a Git file and "Git" is selected
-        if (ext && (ext.startsWith('Git') || ext === 'COMMIT_EDITMSG' || ext === 'HEAD' || ext === 'index' || ext === 'FETCH_HEAD' || ext === 'ORIG_HEAD')) {
-          return allowedExts.includes('Git');
+        // Try filename match
+        const fileNameKey = `filename:${fileName}`;
+        if (eventsByFilePath.has(fileNameKey)) {
+          const filenameEvents = eventsByFilePath.get(fileNameKey);
+          // Avoid duplicates using Set for O(1) lookup
+          const eventIds = new Set(relatedEvents.map(e => e.id || e.timestamp));
+          filenameEvents.forEach(evt => {
+            const evtId = evt.id || evt.timestamp;
+            if (!eventIds.has(evtId)) {
+              relatedEvents.push(evt);
+              eventIds.add(evtId);
+            }
+          });
         }
-        return allowedExts.includes(ext);
-      })
-      .map(f => {
-        // Find all events related to this file
-        const relatedEvents = (window.state.data.events || []).filter(event => {
-          try {
-            const details = typeof event.details === 'string' ? JSON.parse(event.details) : event.details;
-            const filePath = details?.file_path || event.file_path || '';
-            return filePath.includes(f.name) || f.path.includes(filePath);
-          } catch (e) {
-            return false;
-          }
-        });
         
         // Get meaningful display name
         const displayName = getMeaningfulName(f);
@@ -136,11 +260,19 @@ async function initializeD3FileGraph() {
           changes: f.changes || 0,
           lastModified: f.lastModified,
           size: f.size,
-          events: relatedEvents || [],
+          events: relatedEvents,
           workspace: workspace,
           directory: directory
         };
       });
+      
+      files.push(...batchResults);
+      
+      // Yield to event loop after each batch to prevent timeout
+      if (i + PROCESS_BATCH_SIZE < filesToProcess.length) {
+        await new Promise(resolve => setTimeout(resolve, 0));
+      }
+    }
 
     console.log(`[DATA] Filtered to ${files.length} files with allowed extensions`);
 
@@ -190,19 +322,54 @@ async function initializeD3FileGraph() {
     
     console.log(`[GRAPH] Built file-to-prompt map with ${filePromptMap.size} files`);
     
-    // Compute co-occurrence between files
-    for (let i = 0; i < files.length; i++) {
-      for (let j = i + 1; j < files.length; j++) {
-        const file1 = files[i];
-        const file2 = files[j];
+    // Pre-build session sets for files (optimization to avoid repeated computation)
+    const fileSessionMap = new Map();
+    files.forEach(file => {
+      const sessions = new Set((file.events || []).map(e => e.session_id).filter(Boolean));
+      fileSessionMap.set(file.id, sessions);
+    });
+    
+    // Limit files for performance (O(n²) computation)
+    const MAX_FILES_FOR_GRAPH = 500; // Limit to prevent timeout
+    const filesToProcess = files.length > MAX_FILES_FOR_GRAPH 
+      ? files.slice(0, MAX_FILES_FOR_GRAPH) 
+      : files;
+    
+    if (files.length > MAX_FILES_FOR_GRAPH) {
+      console.log(`[GRAPH] Limiting to ${MAX_FILES_FOR_GRAPH} files (of ${files.length}) to prevent timeout`);
+    }
+    
+    // Compute co-occurrence between files (optimized with early termination)
+    const MAX_LINKS = 3000; // Reduced limit to prevent UI slowdown
+    let linkCount = 0;
+    
+    // Process in chunks with yield points
+    const CHUNK_SIZE = 50;
+    for (let chunkStart = 0; chunkStart < filesToProcess.length && linkCount < MAX_LINKS; chunkStart += CHUNK_SIZE) {
+      const chunkEnd = Math.min(chunkStart + CHUNK_SIZE, filesToProcess.length);
+      
+      for (let i = chunkStart; i < chunkEnd && linkCount < MAX_LINKS; i++) {
+        for (let j = i + 1; j < filesToProcess.length && linkCount < MAX_LINKS; j++) {
+          const file1 = filesToProcess[i];
+          const file2 = filesToProcess[j];
         
-        // Get prompts that reference each file
+        // Get prompts that reference each file (from pre-built map)
         const prompts1 = filePromptMap.get(file1.id) || new Set();
         const prompts2 = filePromptMap.get(file2.id) || new Set();
         
-        // Fallback: check if files were modified in same sessions
-        const sessions1 = new Set((file1.events || []).map(e => e.session_id).filter(Boolean));
-        const sessions2 = new Set((file2.events || []).map(e => e.session_id).filter(Boolean));
+        // Get sessions from pre-built map (optimization)
+        const sessions1 = fileSessionMap.get(file1.id) || new Set();
+        const sessions2 = fileSessionMap.get(file2.id) || new Set();
+        
+        // Quick check: skip if no overlap at all (optimization)
+        const hasPromptOverlap = prompts1.size > 0 && prompts2.size > 0 && 
+                                 [...prompts1].some(p => prompts2.has(p));
+        const hasSessionOverlap = sessions1.size > 0 && sessions2.size > 0 && 
+                                  [...sessions1].some(s => sessions2.has(s));
+        
+        if (!hasPromptOverlap && !hasSessionOverlap) {
+          continue; // Skip files with no relationship
+        }
         
         // Combine both prompt co-occurrence and session co-occurrence
         const promptIntersection = new Set([...prompts1].filter(x => prompts2.has(x)));
@@ -226,22 +393,52 @@ async function initializeD3FileGraph() {
             sharedPrompts: promptIntersection.size,
             sharedSessions: sessionIntersection.size
           });
+          linkCount++;
         }
       }
+      
+      // Yield to event loop periodically to prevent timeout
+      if (chunkStart + CHUNK_SIZE < filesToProcess.length) {
+        await new Promise(resolve => setTimeout(resolve, 0));
+      }
+    }
+    
+    if (linkCount >= MAX_LINKS) {
+      console.warn(`[GRAPH] Link limit reached (${MAX_LINKS}), some connections may be missing`);
     }
     
     console.log(`[GRAPH] Created ${links.length} connections between files (threshold: ${threshold})`);
     
-    // Compute TF-IDF for semantic analysis
-    const {tfidfStats, similarities} = window.computeTFIDFAnalysis(files);
+    // Store basic data immediately for rendering
+    window.fileGraphData = { nodes: files, links: links, tfidfStats: null, similarities: null };
     
-    // Store for updateFileGraph
-    window.fileGraphData = { nodes: files, links: links, tfidfStats, similarities };
-    
-    // Render with D3
+    // Render basic graph FIRST (progressive enhancement) - OPTIMIZATION
     if (window.renderD3FileGraph) {
       window.renderD3FileGraph(container, files, links);
+      console.log('[GRAPH] Basic graph rendered, computing TF-IDF in background...');
     }
+    
+    // Compute TF-IDF for semantic analysis ASYNCHRONOUSLY (defer heavy computation) - OPTIMIZATION
+    // This allows the graph to render immediately while TF-IDF computes in background
+    setTimeout(async () => {
+      try {
+        const {tfidfStats, similarities} = window.computeTFIDFAnalysis(files);
+        
+        // Update stored data with TF-IDF results
+        if (window.fileGraphData) {
+          window.fileGraphData.tfidfStats = tfidfStats;
+          window.fileGraphData.similarities = similarities;
+        }
+        
+        // Update TF-IDF stats in UI
+        updateTFIDFStats(tfidfStats);
+        
+        console.log('[GRAPH] TF-IDF analysis complete');
+      } catch (error) {
+        console.warn('[GRAPH] TF-IDF analysis failed:', error);
+        // Graph still works without TF-IDF
+      }
+    }, 100);
     
     // Update basic stats (with null checks)
     const nodeCountEl = document.getElementById('graphNodeCount');
@@ -278,27 +475,44 @@ async function initializeD3FileGraph() {
       });
     }
     
-    // Update TF-IDF analysis (with null checks)
+    // Update TF-IDF stats function (called asynchronously after computation)
+    function updateTFIDFStats(tfidfStats) {
+      if (!tfidfStats) return;
+      
+      const tfidfTotalTermsEl = document.getElementById('tfidfTotalTerms');
+      const tfidfUniqueTermsEl = document.getElementById('tfidfUniqueTerms');
+      const tfidfAvgFreqEl = document.getElementById('tfidfAvgFreq');
+      if (tfidfTotalTermsEl) tfidfTotalTermsEl.textContent = tfidfStats.totalTerms.toLocaleString();
+      if (tfidfUniqueTermsEl) tfidfUniqueTermsEl.textContent = tfidfStats.uniqueTerms;
+      if (tfidfAvgFreqEl) tfidfAvgFreqEl.textContent = tfidfStats.avgFrequency.toFixed(2);
+      
+      // Show ALL top terms (not just 10) with scrolling
+      const termsHtml = tfidfStats.topTerms.map((term, index) => `
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: var(--space-xs); background: var(--color-bg); border-radius: var(--radius-sm); font-size: 12px;" title="TF-IDF Score: ${term.tfidf.toFixed(6)} | Frequency: ${term.freq}">
+          <span style="display: flex; align-items: center; gap: var(--space-xs);">
+            <span style="color: var(--color-text-muted); font-size: 10px; min-width: 25px;">#${index + 1}</span>
+            <span style="font-family: var(--font-mono); color: var(--color-text);">${window.escapeHtml ? window.escapeHtml(term.term) : term.term}</span>
+          </span>
+          <span style="font-weight: 600; color: var(--color-accent);">${term.tfidf.toFixed(4)}</span>
+        </div>
+      `).join('');
+      const topTermsEl = document.getElementById('topTerms');
+      if (topTermsEl) {
+        topTermsEl.innerHTML = termsHtml || '<div style="color: var(--color-text-muted); font-size: 13px;">No terms found</div>';
+      }
+    }
+    
+    // Show loading state for TF-IDF stats
     const tfidfTotalTermsEl = document.getElementById('tfidfTotalTerms');
     const tfidfUniqueTermsEl = document.getElementById('tfidfUniqueTerms');
     const tfidfAvgFreqEl = document.getElementById('tfidfAvgFreq');
-    if (tfidfTotalTermsEl) tfidfTotalTermsEl.textContent = tfidfStats.totalTerms.toLocaleString();
-    if (tfidfUniqueTermsEl) tfidfUniqueTermsEl.textContent = tfidfStats.uniqueTerms;
-    if (tfidfAvgFreqEl) tfidfAvgFreqEl.textContent = tfidfStats.avgFrequency.toFixed(2);
+    if (tfidfTotalTermsEl) tfidfTotalTermsEl.textContent = 'Computing...';
+    if (tfidfUniqueTermsEl) tfidfUniqueTermsEl.textContent = '...';
+    if (tfidfAvgFreqEl) tfidfAvgFreqEl.textContent = '...';
     
-    // Show ALL top terms (not just 10) with scrolling
-    const termsHtml = tfidfStats.topTerms.map((term, index) => `
-      <div style="display: flex; justify-content: space-between; align-items: center; padding: var(--space-xs); background: var(--color-bg); border-radius: var(--radius-sm); font-size: 12px;" title="TF-IDF Score: ${term.tfidf.toFixed(6)} | Frequency: ${term.freq}">
-        <span style="display: flex; align-items: center; gap: var(--space-xs);">
-          <span style="color: var(--color-text-muted); font-size: 10px; min-width: 25px;">#${index + 1}</span>
-          <span style="font-family: var(--font-mono); color: var(--color-text);">${window.escapeHtml ? window.escapeHtml(term.term) : term.term}</span>
-        </span>
-        <span style="font-weight: 600; color: var(--color-accent);">${term.tfidf.toFixed(4)}</span>
-      </div>
-    `).join('');
     const topTermsEl = document.getElementById('topTerms');
     if (topTermsEl) {
-      topTermsEl.innerHTML = termsHtml || '<div style="color: var(--color-text-muted); font-size: 13px;">No terms found</div>';
+      topTermsEl.innerHTML = '<div style="color: var(--color-text-muted); font-size: 13px; padding: var(--space-md); text-align: center;">Computing TF-IDF analysis...</div>';
     }
     
   } catch (error) {

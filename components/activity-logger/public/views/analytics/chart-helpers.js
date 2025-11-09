@@ -344,6 +344,12 @@ function renderAIActivityChart(timeScale = null) {
     return;
   }
   
+  // Calculate dynamic stepSize based on max value to prevent too many ticks
+  const maxPromptCount = Math.max(...buckets.map(b => b.promptCount), 0);
+  const dynamicStepSize = maxPromptCount > 100 
+    ? Math.ceil(maxPromptCount / 20) // For large values, divide by maxTicksLimit
+    : (maxPromptCount > 20 ? 5 : 1); // For medium values use 5, small values use 1
+  
   window.createChart('aiActivityChart', {
     type: 'line',
     data: {
@@ -457,7 +463,8 @@ function renderAIActivityChart(timeScale = null) {
           beginAtZero: true,
           title: { display: true, text: 'AI Prompts', font: { size: 11, weight: 'bold' } },
           ticks: {
-            stepSize: 1,
+            stepSize: dynamicStepSize,
+            maxTicksLimit: 20,
             callback: function(value) { return Math.floor(value); },
             font: { size: 10 }
           },

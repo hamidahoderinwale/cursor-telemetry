@@ -19,7 +19,8 @@ class ModalManager {
     });
     this.copyToClipboard = window.copyToClipboard;
     this.formatTimeAgo = window.formatTimeAgo;
-    this.getEventTitle = window.getEventTitle;
+    // Store reference but don't assume it's a function yet
+    this.getEventTitle = null;
     this.findRelatedPrompts = window.findRelatedPrompts;
     this.groupIntoThreads = window.groupIntoThreads;
   }
@@ -157,7 +158,41 @@ class ModalManager {
       return;
     }
 
-    title.textContent = this.getEventTitle(event);
+    // Get event title with fallback
+    // Only use window.getEventTitle - never reference this.getEventTitle to avoid errors
+    let titleText = '';
+    try {
+      // Check if window.getEventTitle exists and is a function
+      if (typeof window.getEventTitle === 'function') {
+        titleText = window.getEventTitle(event);
+      } else {
+        // Fallback: generate title from event data
+        throw new Error('getEventTitle not available');
+      }
+    } catch (error) {
+      // Fallback if getEventTitle is not available or throws an error
+      try {
+        const eventType = event.type || 'Event';
+        let filePath = event.file_path || '';
+        
+        if (!filePath && event.details) {
+          try {
+            const details = typeof event.details === 'string' ? JSON.parse(event.details || '{}') : event.details;
+            filePath = details?.file_path || details?.filePath || '';
+          } catch (e) {
+            // Ignore parse errors
+          }
+        }
+        
+        const fileName = filePath ? filePath.split('/').pop() : 'Unknown';
+        titleText = `${eventType}: ${fileName}`;
+      } catch (fallbackError) {
+        // Ultimate fallback
+        titleText = event.type || 'Event';
+      }
+    }
+    
+    title.textContent = titleText;
     
     // Fetch related screenshots
     let relatedScreenshots = [];
@@ -186,6 +221,22 @@ class ModalManager {
 
     try {
       const details = typeof event.details === 'string' ? JSON.parse(event.details) : event.details;
+      
+      // Debug: Log code diff data structure
+      console.log('[MODAL] Code diff check:', {
+        eventId: event.id,
+        eventType: event.type,
+        hasDetails: !!details,
+        detailsKeys: details ? Object.keys(details) : [],
+        before_content: details?.before_content ? `${details.before_content.substring(0, 50)}... (${details.before_content.length} chars)` : details?.before_content,
+        after_content: details?.after_content ? `${details.after_content.substring(0, 50)}... (${details.after_content.length} chars)` : details?.after_content,
+        before_code: details?.before_code ? `${details.before_code.substring(0, 50)}... (${details.before_code.length} chars)` : details?.before_code,
+        after_code: details?.after_code ? `${details.after_code.substring(0, 50)}... (${details.after_code.length} chars)` : details?.after_code,
+        before_content_defined: details?.before_content !== undefined,
+        after_content_defined: details?.after_content !== undefined,
+        before_code_defined: details?.before_code !== undefined,
+        after_code_defined: details?.after_code !== undefined
+      });
       
       // Check for directly linked prompt (entry.prompt_id)
       let linkedPrompt = null;
@@ -330,16 +381,31 @@ class ModalManager {
 
         ${relatedScreenshots.length > 0 ? this._buildScreenshotsHTML(event, relatedScreenshots) : ''}
 
-        ${details?.before_content !== undefined && details?.after_content !== undefined && (details.before_content || details.after_content) ? 
-          this._buildCodeDiffHTML(details, linkedPrompt ? 'Generated from linked prompt above' : null) : ''}
-        
-        ${details?.before_code !== undefined && details?.after_code !== undefined && (details.before_code || details.after_code) && 
-          (!details.before_content || !details.after_content) ? 
-          this._buildCodeDiffHTML({ 
-            before_content: details.before_code, 
-            after_content: details.after_code,
-            ...details 
-          }, linkedPrompt ? 'Generated from linked prompt above' : null) : ''}
+        ${(() => {
+          // Normalize code diff data - handle multiple field name variations
+          let beforeContent = details?.before_content || details?.before_code || details?.beforeContent || null;
+          let afterContent = details?.after_content || details?.after_code || details?.afterContent || null;
+          
+          // Check if we have valid content (not just empty strings or null)
+          const hasBefore = beforeContent && typeof beforeContent === 'string' && beforeContent.trim().length > 0;
+          const hasAfter = afterContent && typeof afterContent === 'string' && afterContent.trim().length > 0;
+          
+          if (hasBefore || hasAfter) {
+            // Normalize to before_content/after_content format
+            const normalizedDetails = {
+              ...details,
+              before_content: beforeContent || '',
+              after_content: afterContent || '',
+              diff_stats: details?.diff_stats || (details?.lines_added !== undefined || details?.lines_removed !== undefined ? {
+                lines_added: details.lines_added || 0,
+                lines_removed: details.lines_removed || 0,
+                has_diff: true
+              } : null)
+            };
+            return this._buildCodeDiffHTML(normalizedDetails, linkedPrompt ? 'Generated from linked prompt above' : null);
+          }
+          return '';
+        })()}
 
         ${relatedPrompts.length > 0 ? this._buildRelatedPromptsHTML(relatedPrompts) : 
           (this.state && this.state.data && this.state.data.prompts && this.state.data.prompts.length > 0) ? 

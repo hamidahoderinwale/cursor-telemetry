@@ -99,6 +99,45 @@ async function initializeNavigator() {
       return file.name;
     };
     
+    // Build event lookup map first (O(n) instead of O(n*m))
+    // This prevents timeout when processing large datasets
+    const eventsByFilePath = new Map();
+    const allEvents = window.state.data.events || [];
+    
+    console.log(`[NAVIGATOR] Building event lookup map from ${allEvents.length} events...`);
+    
+    allEvents.forEach(event => {
+      try {
+        const details = typeof event.details === 'string' ? JSON.parse(event.details) : event.details;
+        const filePath = details?.file_path || event.file_path || '';
+        if (!filePath) return;
+        
+        // Normalize path for matching
+        const normalizedPath = filePath.toLowerCase();
+        const pathParts = normalizedPath.split('/');
+        const fileName = pathParts[pathParts.length - 1];
+        
+        // Store event by full path and by filename for flexible matching
+        if (!eventsByFilePath.has(normalizedPath)) {
+          eventsByFilePath.set(normalizedPath, []);
+        }
+        eventsByFilePath.get(normalizedPath).push(event);
+        
+        // Also index by filename for partial matches
+        if (fileName && fileName !== normalizedPath) {
+          const fileNameKey = `filename:${fileName}`;
+          if (!eventsByFilePath.has(fileNameKey)) {
+            eventsByFilePath.set(fileNameKey, []);
+          }
+          eventsByFilePath.get(fileNameKey).push(event);
+        }
+      } catch (e) {
+        // Skip invalid events
+      }
+    });
+    
+    console.log(`[NAVIGATOR] Event lookup map built with ${eventsByFilePath.size} keys`);
+    
     // Prepare files with events - filter out Git object hashes
     let files = data.files
       .filter(f => {
@@ -109,15 +148,27 @@ async function initializeNavigator() {
         return true;
       })
       .map(f => {
-        const relatedEvents = (window.state.data.events || []).filter(event => {
-          try {
-            const details = typeof event.details === 'string' ? JSON.parse(event.details) : event.details;
-            const filePath = details?.file_path || event.file_path || '';
-            return filePath.includes(f.name) || f.path.includes(filePath);
-          } catch (e) {
-            return false;
-          }
-        });
+        // Look up events from map instead of filtering all events (O(1) lookup)
+        const relatedEvents = [];
+        const normalizedPath = f.path.toLowerCase();
+        const fileName = f.name.toLowerCase();
+        
+        // Try exact path match first
+        if (eventsByFilePath.has(normalizedPath)) {
+          relatedEvents.push(...eventsByFilePath.get(normalizedPath));
+        }
+        
+        // Try filename match
+        const fileNameKey = `filename:${fileName}`;
+        if (eventsByFilePath.has(fileNameKey)) {
+          const filenameEvents = eventsByFilePath.get(fileNameKey);
+          // Avoid duplicates
+          filenameEvents.forEach(evt => {
+            if (!relatedEvents.find(e => e.id === evt.id || e.timestamp === evt.timestamp)) {
+              relatedEvents.push(evt);
+            }
+          });
+        }
         
         // Get meaningful display name
         const displayName = getMeaningfulName(f);
@@ -132,7 +183,7 @@ async function initializeNavigator() {
           changes: f.changes || 0,
           lastModified: f.lastModified,
           size: f.size,
-          events: relatedEvents || []
+          events: relatedEvents
         };
       });
     
