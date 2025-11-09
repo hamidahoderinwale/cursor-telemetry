@@ -922,12 +922,6 @@ a:focus:not(:focus-visible) {
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  /* Hardware acceleration */
-  transform: translateZ(0);
-  will-change: auto;
-  /* Prevent any blur inheritance */
-  image-rendering: -webkit-optimize-contrast;
-  image-rendering: crisp-edges;
 }
 
 /* Custom scrollbar for modal body */
@@ -955,9 +949,12 @@ a:focus:not(:focus-visible) {
   }
   
   .modal-content {
-    max-width: 100%;
+    max-width: 95%;
     max-height: 95vh;
     margin: 0;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
   }
   
   .modal-header {
@@ -971,6 +968,7 @@ a:focus:not(:focus-visible) {
   .modal-body {
     padding: var(--space-md);
     max-height: calc(95vh - 100px);
+    overflow-y: auto !important;
   }
 }
 
@@ -980,8 +978,12 @@ a:focus:not(:focus-visible) {
   }
   
   .modal-content {
+    max-width: 98%;
     max-height: 98vh;
     border-radius: var(--radius-lg);
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
   }
   
   .modal-header {
@@ -991,6 +993,7 @@ a:focus:not(:focus-visible) {
   .modal-body {
     padding: var(--space-sm) var(--space-md);
     max-height: calc(98vh - 80px);
+    overflow-y: auto !important;
   }
 }
 
