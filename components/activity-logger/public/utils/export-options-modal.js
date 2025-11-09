@@ -238,6 +238,12 @@ function showExportOptionsModal() {
       
       <div class="export-modal-footer">
         <button class="btn btn-secondary" onclick="closeExportOptionsModal()">Cancel</button>
+        <button class="btn" onclick="shareFromExportModal()" style="margin-right: var(--space-xs);">
+          <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor">
+            <path d="M15 8a3 3 0 10-2.977-2.63l-4.94 2.47a3 3 0 100 4.319l4.94 2.47a3 3 0 10.895-1.789l-4.94-2.47a3.027 3.027 0 000-.74l4.94-2.47C13.456 7.68 14.19 8 15 8z"/>
+          </svg>
+          Share
+        </button>
         <button class="btn btn-primary" onclick="executeExportWithOptions()">
           <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor">
             <path d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z"/>
@@ -463,9 +469,45 @@ async function executeExportWithOptions() {
 }
 
 // Export to window for global access
+function shareFromExportModal() {
+  // Get selected workspaces from export modal
+  const allWorkspaces = document.getElementById('exportWorkspaceAll');
+  let workspaces = [];
+  
+  if (allWorkspaces && allWorkspaces.checked) {
+    // Get all workspaces
+    const events = window.state?.data?.events || [];
+    const prompts = window.state?.data?.prompts || [];
+    const allWorkspacesSet = new Set();
+    events.forEach(e => {
+      const ws = e.workspace_path || e.workspacePath || e.workspace;
+      if (ws) allWorkspacesSet.add(ws);
+    });
+    prompts.forEach(p => {
+      const ws = p.workspace_path || p.workspacePath || p.workspaceId;
+      if (ws) allWorkspacesSet.add(ws);
+    });
+    workspaces = Array.from(allWorkspacesSet);
+  } else {
+    const workspaceCheckboxes = document.querySelectorAll('.export-workspace-checkbox:checked');
+    workspaces = Array.from(workspaceCheckboxes).map(cb => cb.value);
+  }
+  
+  // Close export modal
+  closeExportOptionsModal();
+  
+  // Open share modal
+  if (window.showShareModal) {
+    setTimeout(() => {
+      window.showShareModal(workspaces);
+    }, 100);
+  }
+}
+
 window.showExportOptionsModal = showExportOptionsModal;
 window.closeExportOptionsModal = closeExportOptionsModal;
 window.setExportDateRange = setExportDateRange;
 window.executeExportWithOptions = executeExportWithOptions;
 window.updateAbstractionLevel = updateAbstractionLevel;
 window.toggleAllWorkspaces = toggleAllWorkspaces;
+window.shareFromExportModal = shareFromExportModal;

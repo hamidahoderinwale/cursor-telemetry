@@ -885,8 +885,15 @@ function createExportImportRoutes(deps) {
         skipLinkedData = false,  // Skip linked_data and temporal_chunks if present
         dryRun = false,  // If true, validate but don't import
         workspaceFilter = null,  // If set, only import data for this workspace
-        mergeStrategy = 'skip'  // 'skip', 'overwrite', 'merge', 'append'
+        mergeStrategy = 'skip',  // 'skip', 'overwrite', 'merge', 'append'
+        workspaceMappings = {}  // Map imported workspace paths to local paths
       } = options;
+      
+      // Helper to apply workspace mappings
+      const mapWorkspace = (workspacePath) => {
+        if (!workspacePath) return workspacePath;
+        return workspaceMappings[workspacePath] || workspacePath;
+      };
 
       // Get current schema for schema version comparison
       let currentSchema = null;
@@ -1007,10 +1014,11 @@ function createExportImportRoutes(deps) {
               }
               
               // Normalize entry data
+              const originalWorkspace = entry.workspace_path || entry.workspacePath;
               const normalizedEntry = {
                 id: entry.id,
                 session_id: entry.session_id || entry.sessionId,
-                workspace_path: entry.workspace_path || entry.workspacePath,
+                workspace_path: mapWorkspace(originalWorkspace),
                 file_path: entry.file_path || entry.filePath,
                 source: entry.source || 'imported',
                 before_code: entry.before_code || entry.beforeCode || entry.before_content,
@@ -1049,11 +1057,14 @@ function createExportImportRoutes(deps) {
               }
               
               // Normalize prompt data
+              const originalPromptWorkspace = prompt.workspace_path || prompt.workspacePath || prompt.workspaceId;
               const normalizedPrompt = {
                 id: prompt.id,
                 timestamp: prompt.timestamp,
                 text: prompt.text || prompt.prompt || prompt.preview || prompt.content,
                 status: prompt.status || 'captured',
+                workspace_path: mapWorkspace(originalPromptWorkspace),
+                workspace_id: mapWorkspace(originalPromptWorkspace),
                 linked_entry_id: prompt.linked_entry_id || prompt.linkedEntryId,
                 source: prompt.source || 'imported',
                 workspaceId: prompt.workspaceId || prompt.workspace_id,

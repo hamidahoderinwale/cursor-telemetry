@@ -90,12 +90,18 @@ const createMiscRoutes = require('./routes/misc.js');
 const createFileContentsRoutes = require('./routes/file-contents.js');
 const createMCPRoutes = require('./routes/mcp.js');
 const createExportImportRoutes = require('./routes/export-import.js');
+const createSharingRoutes = require('./routes/sharing.js');
+const createWhiteboardRoutes = require('./routes/whiteboard.js');
+const SharingService = require('./services/sharing-service.js');
 
 // Initialize persistent database
 const persistentDB = new PersistentDB();
 
 // Initialize schema migrations
 const schemaMigrations = new SchemaMigrations(persistentDB);
+
+// Initialize sharing service
+const sharingService = new SharingService(persistentDB);
 
 // Initialize analytics trackers
 const contextAnalyzer = new ContextAnalyzer(persistentDB);
@@ -1074,6 +1080,11 @@ createSchemaRoutes({
   persistentDB
 });
 
+createWhiteboardRoutes({
+  app,
+  persistentDB
+});
+
 createTerminalRoutes({
   app,
   persistentDB,
@@ -1198,6 +1209,14 @@ createExportImportRoutes({
   db,
   abstractionEngine,
   schemaMigrations
+});
+
+// Sharing routes
+createSharingRoutes({
+  app,
+  sharingService,
+  persistentDB,
+  cursorDbParser
 });
 
 // Health check

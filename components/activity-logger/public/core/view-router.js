@@ -54,6 +54,9 @@ function renderCurrentView() {
     case 'workspace-comparison':
       if (window.renderWorkspaceComparisonView) window.renderWorkspaceComparisonView(container);
       break;
+    case 'whiteboard':
+      if (window.renderWhiteboardView) window.renderWhiteboardView(container);
+      break;
     default:
       container.innerHTML = '<div class="empty-state">View not found</div>';
   }

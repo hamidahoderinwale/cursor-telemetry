@@ -36,12 +36,20 @@ function renderWorkspaceComparisonView(container) {
               <h3 class="card-title">Select Workspaces to Compare</h3>
               <p class="card-subtitle">Add workspaces from the list below to compare their metrics</p>
             </div>
-            <button class="btn btn-primary" onclick="addWorkspaceFromList()" id="addWorkspaceBtn">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M12 5v14M5 12h14"/>
-              </svg>
-              Add Workspace
-            </button>
+            <div style="display: flex; gap: var(--space-xs);">
+              <button class="btn" onclick="shareSelectedWorkspaces()" id="shareWorkspacesBtn" ${selectedWorkspaces.length === 0 ? 'disabled' : ''} title="Share selected workspaces">
+                <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor">
+                  <path d="M15 8a3 3 0 10-2.977-2.63l-4.94 2.47a3 3 0 100 4.319l4.94 2.47a3 3 0 10.895-1.789l-4.94-2.47a3.027 3.027 0 000-.74l4.94-2.47C13.456 7.68 14.19 8 15 8z"/>
+                </svg>
+                Share
+              </button>
+              <button class="btn btn-primary" onclick="addWorkspaceFromList()" id="addWorkspaceBtn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M12 5v14M5 12h14"/>
+                </svg>
+                Add Workspace
+              </button>
+            </div>
           </div>
         </div>
         <div class="card-body">
@@ -251,6 +259,12 @@ function renderSelectedWorkspaces() {
   const container = document.getElementById('selectedWorkspacesList');
   if (!container) return;
 
+  // Update share button state
+  const shareBtn = document.getElementById('shareWorkspacesBtn');
+  if (shareBtn) {
+    shareBtn.disabled = selectedWorkspaces.length === 0;
+  }
+  
   if (selectedWorkspaces.length === 0) {
     container.innerHTML = `
       <div class="empty-selection">
@@ -639,9 +653,24 @@ function escapeHtml(text) {
 }
 
 // Export to window
+function shareSelectedWorkspaces() {
+  if (selectedWorkspaces.length === 0) {
+    alert('Please select at least one workspace to share');
+    return;
+  }
+  
+  const workspacePaths = selectedWorkspaces.map(ws => ws.path || ws);
+  if (window.showShareModal) {
+    window.showShareModal(workspacePaths);
+  } else {
+    alert('Sharing feature not available. Please refresh the page.');
+  }
+}
+
 window.renderWorkspaceComparisonView = renderWorkspaceComparisonView;
 window.addWorkspace = addWorkspace;
 window.removeWorkspace = removeWorkspace;
 window.addWorkspaceFromList = addWorkspaceFromList;
 window.filterWorkspaces = filterWorkspaces;
 window.updateWorkspaceComparison = updateWorkspaceComparison;
+window.shareSelectedWorkspaces = shareSelectedWorkspaces;

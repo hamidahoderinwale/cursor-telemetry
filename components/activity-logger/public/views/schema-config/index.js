@@ -57,8 +57,8 @@ class SchemaConfigView {
             and manage field configurations. Schema-aware imports validate data compatibility before importing.
           </p>
           <div class="schema-header-actions">
-            <button class="btn btn-secondary" onclick="if(window.showImportModal) window.showImportModal(); else console.warn('Import handler not loaded');" title="Import data with schema validation">
-              Import / Redeploy Data
+            <button class="btn btn-secondary" onclick="if(window.showImportModal) window.showImportModal(); else console.warn('Import handler not loaded');" title="Open a shared workspace or import workspace data">
+              Open Shared Workspace
             </button>
           </div>
         </div>
