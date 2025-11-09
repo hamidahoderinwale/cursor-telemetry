@@ -28,22 +28,18 @@ async function showImportModal() {
           <h3 class="card-title">Common Use Cases</h3>
           <div class="use-cases-grid">
             <div class="use-case-item">
-              <div class="use-case-icon">💾</div>
               <div class="use-case-title">Backup & Restore</div>
               <div class="use-case-desc">Restore your telemetry data from a backup file</div>
             </div>
             <div class="use-case-item">
-              <div class="use-case-icon">🔄</div>
               <div class="use-case-title">System Migration</div>
               <div class="use-case-desc">Move your data to a new machine or installation</div>
             </div>
             <div class="use-case-item">
-              <div class="use-case-icon">📦</div>
               <div class="use-case-title">Redeployment</div>
               <div class="use-case-desc">Restore data after resetting or reinstalling the service</div>
             </div>
             <div class="use-case-item">
-              <div class="use-case-icon">🔀</div>
               <div class="use-case-title">Data Merging</div>
               <div class="use-case-desc">Combine data from multiple sources or time periods</div>
             </div>

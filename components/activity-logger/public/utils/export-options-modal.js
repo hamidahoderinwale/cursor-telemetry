@@ -51,6 +51,36 @@ function showExportOptionsModal() {
           </div>
         </div>
         
+        <!-- Workspace Selection -->
+        <div>
+          <h3 class="card-title">Workspace</h3>
+          <div class="export-modal-field-group">
+            <label class="form-label">
+              Select workspaces to export
+              <span class="tooltip-icon" title="Export activity for selected workspaces only">i</span>
+            </label>
+            <div id="exportWorkspaceSelector" class="workspace-selector-container">
+              <div class="workspace-selector-checkbox-group">
+                <label class="export-modal-checkbox-label">
+                  <input type="checkbox" id="exportWorkspaceAll" checked onchange="toggleAllWorkspaces(this.checked)">
+                  <span>
+                    <strong>All Workspaces</strong>
+                    <div class="description">Export data from all tracked workspaces</div>
+                  </span>
+                </label>
+                <div style="margin-top: var(--space-xs);">
+                  <button type="button" class="btn btn-sm" onclick="document.getElementById('exportWorkspaceAll').checked = false; toggleAllWorkspaces(false);" style="font-size: var(--text-xs);">
+                    Select specific workspaces
+                  </button>
+                </div>
+              </div>
+              <div id="exportWorkspaceList" class="workspace-list-container" style="display: none; margin-top: var(--space-sm); max-height: 200px; overflow-y: auto; border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: var(--space-sm);">
+                <!-- Workspace checkboxes will be populated here -->
+              </div>
+            </div>
+          </div>
+        </div>
+        
         <!-- Data Types -->
         <div>
           <h3 class="card-title">Data Types</h3>
@@ -222,6 +252,81 @@ function showExportOptionsModal() {
   
   // Initialize abstraction level
   updateAbstractionLevel(0);
+  
+  // Load and populate workspaces
+  loadWorkspacesForExport();
+}
+
+function loadWorkspacesForExport() {
+  const workspaceList = document.getElementById('exportWorkspaceList');
+  const allWorkspacesCheckbox = document.getElementById('exportWorkspaceAll');
+  
+  if (!workspaceList || !allWorkspacesCheckbox) return;
+  
+  // Get workspaces from state
+  const events = window.state?.data?.events || [];
+  const prompts = window.state?.data?.prompts || [];
+  
+  // Collect unique workspaces
+  const workspaces = new Set();
+  events.forEach(e => {
+    const ws = e.workspace_path || e.workspacePath || e.workspace;
+    if (ws) workspaces.add(ws);
+  });
+  prompts.forEach(p => {
+    const ws = p.workspace_path || p.workspacePath || p.workspaceId;
+    if (ws) workspaces.add(ws);
+  });
+  
+  const workspaceArray = Array.from(workspaces).sort();
+  
+  if (workspaceArray.length === 0) {
+    workspaceList.innerHTML = '<div style="color: var(--color-text-muted); padding: var(--space-sm); text-align: center;">No workspaces found</div>';
+    allWorkspacesCheckbox.disabled = true;
+    return;
+  }
+  
+  // Check if "All Workspaces" is checked
+  const allWorkspacesChecked = allWorkspacesCheckbox.checked;
+  
+  // Populate workspace checkboxes
+  workspaceList.innerHTML = workspaceArray.map(ws => {
+    const displayName = ws.split('/').pop() || ws;
+    const escapedWs = window.escapeHtml ? window.escapeHtml(ws) : ws;
+    const escapedDisplay = window.escapeHtml ? window.escapeHtml(displayName) : displayName;
+    return `
+      <label class="export-modal-checkbox-label" style="margin-bottom: var(--space-xs);">
+        <input type="checkbox" class="export-workspace-checkbox" value="${escapedWs}" ${allWorkspacesChecked ? 'disabled' : ''}>
+        <span>
+          <strong>${escapedDisplay}</strong>
+          <div class="description" style="font-size: var(--text-xs); color: var(--color-text-muted);">${escapedWs}</div>
+        </span>
+      </label>
+    `;
+  }).join('');
+  
+  // Show/hide list based on "All Workspaces" state
+  if (workspaceList) {
+    workspaceList.style.display = allWorkspacesChecked ? 'none' : 'block';
+  }
+}
+
+function toggleAllWorkspaces(checked) {
+  const workspaceList = document.getElementById('exportWorkspaceList');
+  const checkboxes = workspaceList?.querySelectorAll('.export-workspace-checkbox');
+  
+  if (checkboxes) {
+    checkboxes.forEach(cb => {
+      cb.disabled = checked;
+      if (checked) {
+        cb.checked = false; // Uncheck when "All Workspaces" is selected
+      }
+    });
+  }
+  
+  if (workspaceList) {
+    workspaceList.style.display = checked ? 'none' : 'block';
+  }
 }
 
 function updateAbstractionLevel(level) {
@@ -313,6 +418,20 @@ async function executeExportWithOptions() {
     document.querySelector('input[name="abstractionLevel"]:checked')?.value || '0'
   );
   
+  // Get workspace selection
+  const allWorkspaces = document.getElementById('exportWorkspaceAll').checked;
+  let selectedWorkspaces = null;
+  
+  if (!allWorkspaces) {
+    const workspaceCheckboxes = document.querySelectorAll('.export-workspace-checkbox:checked');
+    selectedWorkspaces = Array.from(workspaceCheckboxes).map(cb => cb.value);
+    
+    if (selectedWorkspaces.length === 0) {
+      alert('Please select at least one workspace or choose "All Workspaces"');
+      return;
+    }
+  }
+  
   const types = {
     events: document.getElementById('exportTypeEvents').checked,
     prompts: document.getElementById('exportTypePrompts').checked,
@@ -327,7 +446,8 @@ async function executeExportWithOptions() {
     includeTemporalChunks: document.getElementById('exportIncludeTemporalChunks').checked,
     abstractPrompts: document.getElementById('exportAbstractPrompts').checked,
     extractPatterns: document.getElementById('exportExtractPatterns').checked,
-    fullMetadata: document.getElementById('exportFullMetadata').checked
+    fullMetadata: document.getElementById('exportFullMetadata').checked,
+    workspaces: selectedWorkspaces // Pass selected workspaces
   };
   
   closeExportOptionsModal();
@@ -348,3 +468,4 @@ window.closeExportOptionsModal = closeExportOptionsModal;
 window.setExportDateRange = setExportDateRange;
 window.executeExportWithOptions = executeExportWithOptions;
 window.updateAbstractionLevel = updateAbstractionLevel;
+window.toggleAllWorkspaces = toggleAllWorkspaces;

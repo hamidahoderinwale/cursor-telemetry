@@ -208,6 +208,14 @@ async function exportDatabaseWithFilters({ dateFrom, dateTo, limit = 1000, types
       url.searchParams.set('full', 'true');
     }
     
+    // Workspace filter
+    if (options.workspaces && options.workspaces.length > 0) {
+      // Pass workspaces as comma-separated list or multiple params
+      options.workspaces.forEach(ws => {
+        url.searchParams.append('workspace', ws);
+      });
+    }
+    
     // Abstraction level (new)
     if (options.abstractionLevel !== undefined) {
       url.searchParams.set('abstraction_level', options.abstractionLevel.toString());
