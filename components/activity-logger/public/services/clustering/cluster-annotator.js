@@ -89,11 +89,12 @@ class ClusterAnnotator {
       return this.cache.get(cacheKey);
     }
 
+    // Always try to initialize, but don't fail if it doesn't work
     try {
       await this.initialize();
     } catch (error) {
-      // Fallback to rule-based annotation if Transformers.js fails
-      return this._generateRuleBasedAnnotation(cluster);
+      console.debug('[CLUSTER-ANNOTATOR] Initialization failed, using rule-based annotations:', error.message);
+      // Continue with rule-based annotation
     }
 
     // Extract cluster features
@@ -463,6 +464,9 @@ Respond with ONLY the label, no explanation, no quotes, just the label.`;
               return label;
             }
           }
+        } else {
+          // If API fails, fall through to keyword-based name
+          console.debug('[CLUSTER-ANNOTATOR] API request failed, using keyword-based name');
         }
       } catch (apiError) {
         console.warn('[CLUSTER-ANNOTATOR] OpenRouter API error for name generation, using fallback:', apiError.message);

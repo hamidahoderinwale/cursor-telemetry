@@ -18,8 +18,9 @@ function createAIRoutes(deps) {
   // Use free models by default - no API key required
   // These work without authentication via OpenRouter's free tier
   const embeddingModel = process.env.OPENROUTER_EMBEDDING_MODEL || 'Xenova/all-MiniLM-L6-v2';
-  // Use a free chat model - Qwen2.5 is free and works well
-  const chatModel = process.env.OPENROUTER_CHAT_MODEL || 'qwen/qwen-2.5-0.5b-instruct:free';
+  // Use a valid OpenRouter chat model - fallback to rule-based if not available
+  // Try free models first, but they may be rate-limited - fallback handles this gracefully
+  const chatModel = process.env.OPENROUTER_CHAT_MODEL || 'google/gemini-flash-1.5:free';
 
   // Log status on startup
   if (openRouterKey && openRouterKey.length > 0) {
@@ -168,6 +169,36 @@ function createAIRoutes(deps) {
       if (!response.ok) {
         const errorText = await response.text();
         console.error(`OpenRouter chat error (${response.status}):`, errorText);
+        
+        // If model is invalid, not available, or rate-limited, fallback to rule-based
+        if (response.status === 400 || response.status === 404 || response.status === 429) {
+          const { messages } = req.body;
+          const userMessage = messages && messages.length > 0 
+            ? messages[messages.length - 1].content 
+            : '';
+          
+          // Simple rule-based fallback
+          let fallbackResponse = 'Cluster';
+          if (userMessage.toLowerCase().includes('cluster')) {
+            if (userMessage.includes('test') || userMessage.includes('spec')) {
+              fallbackResponse = 'Test Files';
+            } else if (userMessage.includes('component') || userMessage.includes('ui')) {
+              fallbackResponse = 'UI Components';
+            } else if (userMessage.includes('api') || userMessage.includes('route')) {
+              fallbackResponse = 'API Routes';
+            } else if (userMessage.includes('util') || userMessage.includes('helper')) {
+              fallbackResponse = 'Utilities';
+            }
+          }
+          
+          return res.json({
+            success: true,
+            content: fallbackResponse,
+            model: 'rule-based-fallback',
+            note: `OpenRouter model unavailable (${response.status}), using fallback`
+          });
+        }
+        
         return res.status(response.status).json({
           success: false,
           error: `OpenRouter API error: ${response.status} - ${errorText}`
