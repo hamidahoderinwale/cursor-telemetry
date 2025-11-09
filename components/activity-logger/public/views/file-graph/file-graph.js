@@ -207,9 +207,84 @@ async function initializeD3FileGraph() {
     
     console.log(`[GRAPH] Event lookup map built with ${eventsByFilePath.size} keys`);
     
+    // Helper function to check if file should be excluded
+    const shouldExcludeFile = (file) => {
+      const path = (file.path || '').toLowerCase();
+      const name = (file.name || '').toLowerCase();
+      
+      // Filter out files with no changes/events
+      if ((file.changes || 0) === 0 && (!file.events || file.events.length === 0)) {
+        return true;
+      }
+      
+      // Filter out Git object hashes (40-character hex strings in .git/objects/)
+      if (path.includes('.git/objects/') && isGitObjectHash(file.name)) {
+        return true;
+      }
+      
+      // Filter out generated/cache files
+      const generatedPatterns = [
+        /\.pyc$/i,           // Python bytecode
+        /\.pyo$/i,           // Python optimized bytecode
+        /__pycache__/i,      // Python cache directory
+        /\.class$/i,          // Java bytecode
+        /\.o$/i,              // Object files
+        /\.so$/i,             // Shared objects
+        /\.dylib$/i,          // Dynamic libraries
+        /\.dll$/i,            // Windows DLLs
+        /\.exe$/i,            // Executables
+        /\.cache$/i,          // Cache files
+        /\.tmp$/i,            // Temporary files
+        /\.swp$/i,            // Vim swap files
+        /\.swo$/i,            // Vim swap files
+        /\.DS_Store$/i,       // macOS metadata
+        /Thumbs\.db$/i        // Windows thumbnails
+      ];
+      
+      if (generatedPatterns.some(pattern => pattern.test(name) || pattern.test(path))) {
+        return true;
+      }
+      
+      // Filter out virtual environment directories
+      const venvPatterns = [
+        /\/venv\//i,
+        /\/env\//i,
+        /\/pkl_env\//i,
+        /\/\.venv\//i,
+        /\/virtualenv\//i,
+        /\/site-packages\//i,
+        /\/lib\/python[\d.]+\/site-packages\//i,
+        /\/node_modules\//i,
+        /\/\.git\//i,
+        /\/\.svn\//i,
+        /\/\.hg\//i,
+        /\/\.idea\//i,
+        /\/\.vscode\//i,
+        /\/\.vs\//i,
+        /\/build\//i,
+        /\/dist\//i,
+        /\/\.next\//i,
+        /\/\.nuxt\//i,
+        /\/\.cache\//i,
+        /\/\.parcel-cache\//i,
+        /\/\.turbo\//i
+      ];
+      
+      if (venvPatterns.some(pattern => pattern.test(path))) {
+        return true;
+      }
+      
+      return false;
+    };
+    
     // Filter files by selected extensions (with Git grouping support)
     // First, filter synchronously (fast)
     const filteredFiles = data.files.filter(f => {
+      // Exclude generated/cache files and files with no changes
+      if (shouldExcludeFile(f)) {
+        return false;
+      }
+      
       // Filter out Git object hashes (40-character hex strings in .git/objects/)
       if (f.path && f.path.includes('.git/objects/') && isGitObjectHash(f.name)) {
         return false;
@@ -279,6 +354,11 @@ async function initializeD3FileGraph() {
         const workspace = pathParts[0] || 'Unknown';
         const directory = pathParts.length > 2 ? pathParts.slice(0, -1).join('/') : workspace;
         
+        // Skip files with no events/changes after processing
+        if (relatedEvents.length === 0 && (f.changes || 0) === 0) {
+          return null;
+        }
+        
         return {
           id: f.path,
           path: f.path,
@@ -286,7 +366,7 @@ async function initializeD3FileGraph() {
           originalName: f.name,  // Keep original for reference
           ext: f.ext,
           content: f.content,
-          changes: f.changes || 0,
+          changes: f.changes || relatedEvents.length || 0,
           lastModified: f.lastModified,
           size: f.size,
           events: relatedEvents,
@@ -295,15 +375,24 @@ async function initializeD3FileGraph() {
         };
       });
       
-      files.push(...batchResults);
+      // Filter out null entries before adding to files array
+      const validBatchResults = batchResults.filter(f => f !== null && f !== undefined);
+      files.push(...validBatchResults);
       
       // Yield to event loop after each batch to prevent timeout
       if (i + PROCESS_BATCH_SIZE < filesToProcess.length) {
         await new Promise(resolve => setTimeout(resolve, 0));
       }
     }
-
-    console.log(`[DATA] Filtered to ${files.length} files with allowed extensions`);
+    
+    // Filter out null entries and files with no events/changes
+    const validFiles = files.filter(f => f !== null && f !== undefined && (f.changes > 0 || (f.events && f.events.length > 0)));
+    
+    console.log(`[DATA] Filtered to ${validFiles.length} files with allowed extensions (excluded ${files.length - validFiles.length} files with no changes)`);
+    
+    // Replace files array with filtered results
+    files.length = 0;
+    files.push(...validFiles);
 
     if (files.length === 0) {
       container.innerHTML = `
