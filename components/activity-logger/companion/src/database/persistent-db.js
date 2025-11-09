@@ -342,6 +342,33 @@ class PersistentDB {
             });
           }));
 
+          // Share links table for workspace sharing
+          tables.push(new Promise((res, rej) => {
+            this.db.run(`
+              CREATE TABLE IF NOT EXISTS share_links (
+                id TEXT PRIMARY KEY,
+                share_id TEXT UNIQUE NOT NULL,
+                workspaces TEXT,
+                abstraction_level INTEGER DEFAULT 1,
+                filters TEXT,
+                created_at INTEGER NOT NULL,
+                expires_at INTEGER NOT NULL,
+                access_count INTEGER DEFAULT 0,
+                last_accessed INTEGER,
+                metadata TEXT
+              )
+            `, (err) => {
+              if (err) {
+                console.error('Error creating share_links table:', err);
+                rej(err);
+              } else {
+                this.db.run(`CREATE INDEX IF NOT EXISTS idx_share_links_expires ON share_links(expires_at)`, () => {});
+                this.db.run(`CREATE INDEX IF NOT EXISTS idx_share_links_created ON share_links(created_at)`, () => {});
+                res();
+              }
+            });
+          }));
+
           // NEW: Attachments table (for images and files)
           tables.push(new Promise((res, rej) => {
             this.db.run(`
@@ -1745,6 +1772,7 @@ class PersistentDB {
   /**
    * Create a custom field configuration
    * This stores metadata about custom fields without modifying the schema
+   * Supports workspace scoping: workspace_id can be null for global configs
    */
   async saveCustomFieldConfig(config) {
     await this.init();
@@ -1761,9 +1789,11 @@ class PersistentDB {
           description TEXT,
           enabled INTEGER DEFAULT 1,
           config_json TEXT,
+          workspace_id TEXT,
+          workspace_path TEXT,
           created_at TEXT DEFAULT CURRENT_TIMESTAMP,
           updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-          UNIQUE(table_name, field_name)
+          UNIQUE(table_name, field_name, workspace_id)
         )
       `, (err) => {
         if (err) {
@@ -1771,29 +1801,79 @@ class PersistentDB {
           return;
         }
         
-        // Insert or update configuration
-        const stmt = this.db.prepare(`
-          INSERT OR REPLACE INTO schema_config 
-          (table_name, field_name, field_type, display_name, description, enabled, config_json, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-        `);
+        // Add workspace columns to existing table if they don't exist (migration)
+        const alterQueries = [
+          `ALTER TABLE schema_config ADD COLUMN workspace_id TEXT`,
+          `ALTER TABLE schema_config ADD COLUMN workspace_path TEXT`
+        ];
         
-        stmt.run(
-          config.tableName,
-          config.fieldName,
-          config.fieldType,
-          config.displayName || config.fieldName,
-          config.description || '',
-          config.enabled !== false ? 1 : 0,
-          JSON.stringify(config.config || {})
-        );
-        
-        stmt.finalize((finalizeErr) => {
-          if (finalizeErr) {
-            reject(finalizeErr);
+        Promise.all(alterQueries.map(query => {
+          return new Promise((resolveAlter) => {
+            this.db.run(query, (alterErr) => {
+              // Silently ignore "duplicate column" errors
+              if (alterErr && !alterErr.message.includes('duplicate column') && !alterErr.message.includes('already exists')) {
+                console.warn('Error adding workspace column:', alterErr.message);
+              }
+              resolveAlter();
+            });
+          });
+        })).then(() => {
+          // Handle uniqueness: SQLite UNIQUE constraint allows multiple NULLs,
+          // so we need to explicitly delete existing configs before inserting
+          // This ensures only one config exists per (table_name, field_name, workspace_id) combination
+          const workspaceId = config.workspaceId || null;
+          
+          // Delete existing config with same table, field, and workspace (including NULL for global)
+          let deleteQuery = 'DELETE FROM schema_config WHERE table_name = ? AND field_name = ?';
+          const deleteParams = [config.tableName, config.fieldName];
+          
+          if (workspaceId === null) {
+            // Delete global configs (workspace_id IS NULL)
+            deleteQuery += ' AND workspace_id IS NULL';
           } else {
-            resolve({ success: true, config });
+            // Delete workspace-specific config
+            deleteQuery += ' AND workspace_id = ?';
+            deleteParams.push(workspaceId);
           }
+          
+          this.db.run(deleteQuery, deleteParams, (deleteErr) => {
+            if (deleteErr) {
+              console.warn('Error deleting existing config before insert:', deleteErr);
+              // Continue anyway - INSERT OR REPLACE will handle it
+            }
+            
+            // Now insert the new configuration
+            const insertStmt = this.db.prepare(`
+              INSERT INTO schema_config 
+              (table_name, field_name, field_type, display_name, description, enabled, config_json, workspace_id, workspace_path, updated_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            `);
+            
+            insertStmt.run(
+              config.tableName,
+              config.fieldName,
+              config.fieldType,
+              config.displayName || config.fieldName,
+              config.description || '',
+              config.enabled !== false ? 1 : 0,
+              JSON.stringify(config.config || {}),
+              workspaceId,
+              config.workspacePath || null,
+              (insertErr) => {
+                if (insertErr) {
+                  reject(insertErr);
+                } else {
+                  insertStmt.finalize((finalizeErr) => {
+                    if (finalizeErr) {
+                      reject(finalizeErr);
+                    } else {
+                      resolve({ success: true, config });
+                    }
+                  });
+                }
+              }
+            );
+          });
         });
       });
     });
@@ -1801,38 +1881,79 @@ class PersistentDB {
 
   /**
    * Get custom field configurations
+   * Returns workspace-specific configs first, then falls back to global (workspace_id IS NULL) configs
+   * @param {string|null} tableName - Optional table name filter
+   * @param {string|null} workspaceId - Optional workspace ID to filter by
+   * @param {boolean} includeGlobal - Whether to include global configs when workspaceId is provided (default: true)
    */
-  async getCustomFieldConfigs(tableName = null) {
+  async getCustomFieldConfigs(tableName = null, workspaceId = null, includeGlobal = true) {
     await this.init();
     
     return new Promise((resolve, reject) => {
-      let query = 'SELECT * FROM schema_config';
+      // Build query with workspace-aware logic
+      // Priority: workspace-specific configs override global configs
+      let query = `
+        SELECT * FROM schema_config
+        WHERE 1=1
+      `;
       const params = [];
       
       if (tableName) {
-        query += ' WHERE table_name = ?';
+        query += ' AND table_name = ?';
         params.push(tableName);
       }
       
-      query += ' ORDER BY table_name, field_name';
+      if (workspaceId) {
+        if (includeGlobal) {
+          // Get workspace-specific OR global (NULL) configs
+          query += ' AND (workspace_id = ? OR workspace_id IS NULL)';
+          params.push(workspaceId);
+        } else {
+          // Only workspace-specific configs
+          query += ' AND workspace_id = ?';
+          params.push(workspaceId);
+        }
+      } else {
+        // If no workspace specified, get all configs (workspace-specific + global)
+        // This maintains backward compatibility
+      }
+      
+      query += ' ORDER BY table_name, field_name, workspace_id IS NULL, workspace_id';
+      // This ordering ensures workspace-specific configs come before global ones
       
       this.db.all(query, params, (err, rows) => {
         if (err) {
           console.error('Error fetching custom field configs:', err);
           reject(err);
         } else {
-          const configs = rows.map(row => ({
-            id: row.id,
-            tableName: row.table_name,
-            fieldName: row.field_name,
-            fieldType: row.field_type,
-            displayName: row.display_name,
-            description: row.description,
-            enabled: row.enabled === 1,
-            config: JSON.parse(row.config_json || '{}'),
-            createdAt: row.created_at,
-            updatedAt: row.updated_at
-          }));
+          // Deduplicate: if both workspace-specific and global configs exist for same table+field,
+          // prefer workspace-specific
+          const configMap = new Map();
+          
+          rows.forEach(row => {
+            const key = `${row.table_name}:${row.field_name}`;
+            const existing = configMap.get(key);
+            
+            // Prefer workspace-specific over global
+            if (!existing || (row.workspace_id && !existing.workspaceId)) {
+              configMap.set(key, {
+                id: row.id,
+                tableName: row.table_name,
+                fieldName: row.field_name,
+                fieldType: row.field_type,
+                displayName: row.display_name,
+                description: row.description,
+                enabled: row.enabled === 1,
+                config: JSON.parse(row.config_json || '{}'),
+                workspaceId: row.workspace_id || null,
+                workspacePath: row.workspace_path || null,
+                createdAt: row.created_at,
+                updatedAt: row.updated_at
+              });
+            }
+          });
+          
+          const configs = Array.from(configMap.values());
           resolve(configs);
         }
       });
@@ -1841,23 +1962,36 @@ class PersistentDB {
 
   /**
    * Delete a custom field configuration
+   * @param {string} tableName - Table name
+   * @param {string} fieldName - Field name
+   * @param {string|null} workspaceId - Optional workspace ID. If provided, only deletes workspace-specific config.
+   *                                    If null, deletes global config or all matching configs if workspaceId not specified.
    */
-  async deleteCustomFieldConfig(tableName, fieldName) {
+  async deleteCustomFieldConfig(tableName, fieldName, workspaceId = null) {
     await this.init();
     
     return new Promise((resolve, reject) => {
-      this.db.run(
-        'DELETE FROM schema_config WHERE table_name = ? AND field_name = ?',
-        [tableName, fieldName],
-        (err) => {
-          if (err) {
-            console.error('Error deleting custom field config:', err);
-            reject(err);
-          } else {
-            resolve({ success: true });
-          }
+      let query = 'DELETE FROM schema_config WHERE table_name = ? AND field_name = ?';
+      const params = [tableName, fieldName];
+      
+      if (workspaceId !== null && workspaceId !== undefined) {
+        // Delete only workspace-specific config
+        query += ' AND workspace_id = ?';
+        params.push(workspaceId);
+      } else {
+        // If workspaceId is null, delete global config (workspace_id IS NULL)
+        // This allows deleting global configs explicitly
+        query += ' AND workspace_id IS NULL';
+      }
+      
+      this.db.run(query, params, (err) => {
+        if (err) {
+          console.error('Error deleting custom field config:', err);
+          reject(err);
+        } else {
+          resolve({ success: true });
         }
-      );
+      });
     });
   }
 
@@ -2590,6 +2724,177 @@ class PersistentDB {
           })));
         }
       });
+    });
+  }
+
+  /**
+   * Save a share link
+   */
+  async saveShareLink(shareData) {
+    await this.init();
+    
+    return new Promise((resolve, reject) => {
+      const stmt = this.db.prepare(`
+        INSERT OR REPLACE INTO share_links 
+        (id, share_id, workspaces, abstraction_level, filters, created_at, expires_at, access_count, last_accessed, metadata)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      
+      stmt.run(
+        shareData.id || shareData.shareId,
+        shareData.shareId,
+        JSON.stringify(shareData.workspaces || []),
+        shareData.abstractionLevel || 1,
+        JSON.stringify(shareData.filters || {}),
+        shareData.createdAt,
+        shareData.expiresAt,
+        shareData.accessCount || 0,
+        shareData.lastAccessed || null,
+        JSON.stringify(shareData.metadata || {})
+      , (err) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(shareData);
+        }
+      });
+      
+      stmt.finalize();
+    });
+  }
+
+  /**
+   * Get a share link by ID
+   */
+  async getShareLink(shareId) {
+    await this.init();
+    
+    return new Promise((resolve, reject) => {
+      this.db.get(
+        `SELECT * FROM share_links WHERE share_id = ?`,
+        [shareId],
+        (err, row) => {
+          if (err) {
+            reject(err);
+          } else if (!row) {
+            resolve(null);
+          } else {
+            resolve({
+              id: row.id,
+              shareId: row.share_id,
+              workspaces: JSON.parse(row.workspaces || '[]'),
+              abstractionLevel: row.abstraction_level,
+              filters: JSON.parse(row.filters || '{}'),
+              createdAt: row.created_at,
+              expiresAt: row.expires_at,
+              accessCount: row.access_count,
+              lastAccessed: row.last_accessed,
+              metadata: JSON.parse(row.metadata || '{}')
+            });
+          }
+        }
+      );
+    });
+  }
+
+  /**
+   * Update a share link
+   */
+  async updateShareLink(shareId, updates) {
+    await this.init();
+    
+    return new Promise((resolve, reject) => {
+      const fields = [];
+      const values = [];
+      
+      if (updates.accessCount !== undefined) {
+        fields.push('access_count = ?');
+        values.push(updates.accessCount);
+      }
+      if (updates.lastAccessed !== undefined) {
+        fields.push('last_accessed = ?');
+        values.push(updates.lastAccessed);
+      }
+      if (updates.workspaces !== undefined) {
+        fields.push('workspaces = ?');
+        values.push(JSON.stringify(updates.workspaces));
+      }
+      if (updates.filters !== undefined) {
+        fields.push('filters = ?');
+        values.push(JSON.stringify(updates.filters));
+      }
+      
+      if (fields.length === 0) {
+        resolve();
+        return;
+      }
+      
+      values.push(shareId);
+      
+      this.db.run(
+        `UPDATE share_links SET ${fields.join(', ')} WHERE share_id = ?`,
+        values,
+        (err) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve();
+          }
+        }
+      );
+    });
+  }
+
+  /**
+   * Delete a share link
+   */
+  async deleteShareLink(shareId) {
+    await this.init();
+    
+    return new Promise((resolve, reject) => {
+      this.db.run(
+        `DELETE FROM share_links WHERE share_id = ?`,
+        [shareId],
+        (err) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve();
+          }
+        }
+      );
+    });
+  }
+
+  /**
+   * Get all share links
+   */
+  async getAllShareLinks() {
+    await this.init();
+    
+    return new Promise((resolve, reject) => {
+      this.db.all(
+        `SELECT * FROM share_links ORDER BY created_at DESC`,
+        [],
+        (err, rows) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve(rows.map(row => ({
+              id: row.id,
+              shareId: row.share_id,
+              workspaces: JSON.parse(row.workspaces || '[]'),
+              abstractionLevel: row.abstraction_level,
+              filters: JSON.parse(row.filters || '{}'),
+              createdAt: row.created_at,
+              expiresAt: row.expires_at,
+              accessCount: row.access_count,
+              lastAccessed: row.last_accessed,
+              metadata: JSON.parse(row.metadata || '{}')
+            })));
+          }
+        }
+      );
     });
   }
 }

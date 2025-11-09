@@ -230,6 +230,72 @@
   font-style: italic;
 }
 
+/* Language Statistics */
+.language-stats {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.language-stat-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.language-stat-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.language-name {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.language-count {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.language-stat-bar {
+  height: 8px;
+  background: var(--color-border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  position: relative;
+}
+
+.language-stat-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--color-primary), var(--color-primary-light));
+  border-radius: var(--radius-sm);
+  transition: width var(--transition-base);
+  min-width: 2px;
+}
+
+.language-stat-percentage {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  text-align: right;
+}
+
+.language-stat-footer {
+  margin-top: var(--space-sm);
+  padding-top: var(--space-sm);
+  border-top: 1px solid var(--color-border);
+  text-align: center;
+}
+
+.language-stat-hint {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
 /* Top Files */
 .top-files-list {
   display: flex;

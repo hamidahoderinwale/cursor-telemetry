@@ -48,8 +48,17 @@ function createSchemaRoutes(deps) {
 
   app.get('/api/schema/config/fields', async (req, res) => {
     try {
-      const { tableName } = req.query;
-      const configs = await persistentDB.getCustomFieldConfigs(tableName || null);
+      const { tableName, workspaceId, includeGlobal } = req.query;
+      // Extract workspace context from query params
+      // workspaceId can be passed explicitly, or extracted from workspace query param
+      const workspace = workspaceId || req.query.workspace || null;
+      const includeGlobalConfigs = includeGlobal !== 'false'; // Default to true
+      
+      const configs = await persistentDB.getCustomFieldConfigs(
+        tableName || null,
+        workspace || null,
+        includeGlobalConfigs
+      );
       res.json({ success: true, data: configs });
     } catch (error) {
       console.error('Error getting custom field configs:', error);
@@ -68,7 +77,26 @@ function createSchemaRoutes(deps) {
         });
       }
       
-      const result = await persistentDB.saveCustomFieldConfig(config);
+      // Extract workspace context from request
+      // Priority: body.workspaceId > body.workspace > query.workspaceId > query.workspace
+      const workspaceId = config.workspaceId || 
+                         req.body.workspaceId || 
+                         req.query.workspaceId || 
+                         req.query.workspace || 
+                         null;
+      const workspacePath = config.workspacePath || 
+                           req.body.workspacePath || 
+                           req.query.workspacePath || 
+                           null;
+      
+      // Add workspace context to config
+      const configWithWorkspace = {
+        ...config,
+        workspaceId: workspaceId || null, // null means global config
+        workspacePath: workspacePath || null
+      };
+      
+      const result = await persistentDB.saveCustomFieldConfig(configWithWorkspace);
       res.json({ success: true, data: result });
     } catch (error) {
       console.error('Error saving custom field config:', error);
@@ -79,7 +107,21 @@ function createSchemaRoutes(deps) {
   app.delete('/api/schema/config/fields/:tableName/:fieldName', async (req, res) => {
     try {
       const { tableName, fieldName } = req.params;
-      const result = await persistentDB.deleteCustomFieldConfig(tableName, fieldName);
+      
+      // Extract workspace context from request
+      // If workspaceId is provided, only delete workspace-specific config
+      // If not provided (or null), delete global config
+      const workspaceId = req.query.workspaceId || 
+                         req.query.workspace || 
+                         req.body.workspaceId || 
+                         req.body.workspace || 
+                         null;
+      
+      const result = await persistentDB.deleteCustomFieldConfig(
+        tableName, 
+        fieldName, 
+        workspaceId || null
+      );
       res.json({ success: true, data: result });
     } catch (error) {
       console.error('Error deleting custom field config:', error);

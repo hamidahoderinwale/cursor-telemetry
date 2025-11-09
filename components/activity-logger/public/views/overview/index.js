@@ -141,6 +141,88 @@ function renderOverviewView(container) {
   const currentActivity = todayEvents + todayPrompts;
   const productivityPulse = avgDailyActivity > 0 ? (currentActivity / avgDailyActivity) * 100 : 0;
   
+  // Calculate programming language distribution
+  const languageMap = {
+    '.py': 'Python',
+    '.js': 'JavaScript',
+    '.ts': 'TypeScript',
+    '.jsx': 'JavaScript',
+    '.tsx': 'TypeScript',
+    '.java': 'Java',
+    '.cpp': 'C++',
+    '.c': 'C',
+    '.h': 'C',
+    '.go': 'Go',
+    '.rs': 'Rust',
+    '.php': 'PHP',
+    '.rb': 'Ruby',
+    '.swift': 'Swift',
+    '.kt': 'Kotlin',
+    '.scala': 'Scala',
+    '.cs': 'C#',
+    '.vb': 'VB.NET',
+    '.fs': 'F#',
+    '.r': 'R',
+    '.m': 'Objective-C',
+    '.mm': 'Objective-C++',
+    '.clj': 'Clojure',
+    '.hs': 'Haskell',
+    '.ml': 'OCaml',
+    '.erl': 'Erlang',
+    '.sh': 'Shell',
+    '.bash': 'Shell',
+    '.zsh': 'Shell',
+    '.fish': 'Shell',
+    '.html': 'HTML',
+    '.css': 'CSS',
+    '.scss': 'SCSS',
+    '.sass': 'SASS',
+    '.less': 'Less',
+    '.json': 'JSON',
+    '.yaml': 'YAML',
+    '.yml': 'YAML',
+    '.xml': 'XML',
+    '.md': 'Markdown',
+    '.txt': 'Text',
+    '.csv': 'CSV',
+    '.ipynb': 'Jupyter',
+    '.sql': 'SQL',
+    '.vue': 'Vue',
+    '.svelte': 'Svelte'
+  };
+  
+  const languageStats = new Map();
+  let totalFileChanges = 0;
+  
+  events.forEach(event => {
+    try {
+      const details = typeof event.details === 'string' ? JSON.parse(event.details) : event.details;
+      const filePath = details.file_path || details.filePath || event.file || event.filePath;
+      
+      if (filePath) {
+        const ext = '.' + filePath.split('.').pop().toLowerCase();
+        const language = languageMap[ext] || 'Other';
+        const current = languageStats.get(language) || 0;
+        languageStats.set(language, current + 1);
+        totalFileChanges++;
+      }
+    } catch (e) {
+      // Ignore parse errors
+    }
+  });
+  
+  // Sort languages by frequency and get top languages
+  const topLanguages = Array.from(languageStats.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10); // Top 10 languages
+  
+  // Calculate percentages
+  const languageData = topLanguages.map(([lang, count]) => ({
+    language: lang,
+    count: count,
+    percentage: totalFileChanges > 0 ? ((count / totalFileChanges) * 100).toFixed(1) : 0
+  }));
+  
   container.innerHTML = `
     <div class="overview-view">
       
@@ -241,14 +323,39 @@ function renderOverviewView(container) {
       <!-- Two Column Layout -->
       <div class="overview-grid-2col">
         
-        <!-- Workspaces -->
+        <!-- Programming Languages -->
         <div class="card">
           <div class="card-header">
-            <h3 class="card-title">Workspaces</h3>
-            <p class="card-subtitle">Your active projects</p>
+            <h3 class="card-title">Programming Languages</h3>
+            <p class="card-subtitle">Distribution of file changes by language</p>
           </div>
           <div class="card-body">
-            ${window.renderWorkspacesVisual ? window.renderWorkspacesVisual() : (window.renderWorkspacesList ? window.renderWorkspacesList() : '<div class="empty-state"><div class="empty-state-text">Workspaces not available</div></div>')}
+            ${languageData.length > 0 ? `
+              <div class="language-stats">
+                ${languageData.map(({ language, count, percentage }) => `
+                  <div class="language-stat-item">
+                    <div class="language-stat-header">
+                      <span class="language-name">${window.escapeHtml ? window.escapeHtml(language) : language}</span>
+                      <span class="language-count">${count}</span>
+                    </div>
+                    <div class="language-stat-bar">
+                      <div class="language-stat-bar-fill" style="width: ${percentage}%"></div>
+                    </div>
+                    <div class="language-stat-percentage">${percentage}%</div>
+                  </div>
+                `).join('')}
+                ${languageStats.size > 10 ? `
+                  <div class="language-stat-footer">
+                    <span class="language-stat-hint">Showing top 10 of ${languageStats.size} languages</span>
+                  </div>
+                ` : ''}
+              </div>
+            ` : `
+              <div class="empty-state">
+                <div class="empty-state-text">No language data available</div>
+                <div class="empty-state-hint">File changes will appear here as you code</div>
+              </div>
+            `}
           </div>
         </div>
         
@@ -277,6 +384,22 @@ function renderOverviewView(container) {
                 <div class="empty-state-hint">Start coding to see your most active files</div>
               </div>
             `}
+          </div>
+        </div>
+        
+      </div>
+      
+      <!-- Two Column Layout -->
+      <div class="overview-grid-2col">
+        
+        <!-- Workspaces -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">Workspaces</h3>
+            <p class="card-subtitle">Your active projects</p>
+          </div>
+          <div class="card-body">
+            ${window.renderWorkspacesVisual ? window.renderWorkspacesVisual() : (window.renderWorkspacesList ? window.renderWorkspacesList() : '<div class="empty-state"><div class="empty-state-text">Workspaces not available</div></div>')}
           </div>
         </div>
         
@@ -367,3 +490,4 @@ function renderOverviewView(container) {
 
 // Export to window for global access
 window.renderOverviewView = renderOverviewView;
+
