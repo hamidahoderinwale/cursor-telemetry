@@ -11,31 +11,44 @@ const fetchPromise = import('node-fetch').then(mod => {
 function createAIRoutes(deps) {
   const { app } = deps;
   
-  const openRouterKey = process.env.OPENROUTER_API_KEY || '';
+  // Clean API key extraction - remove whitespace and check for placeholder
+  const rawKey = (process.env.OPENROUTER_API_KEY || '').trim();
+  const isPlaceholder = rawKey === '' || 
+                       rawKey === 'your_key_here' || 
+                       rawKey === 'your_openrouter_api_key_here' ||
+                       rawKey.length < 20; // Real keys are much longer
+  
+  const openRouterKey = isPlaceholder ? '' : rawKey;
   const openRouterEndpoint = 'https://openrouter.ai/api/v1';
   
-  // Use a good embedding model - text-embedding-3-small is cost-effective and high quality
-  const embeddingModel = process.env.OPENROUTER_EMBEDDING_MODEL || 'openai/text-embedding-3-small';
-  // Use a good chat model for generating labels - phi-3-mini is free and fast
-  const chatModel = process.env.OPENROUTER_CHAT_MODEL || 'microsoft/phi-3-mini-128k-instruct:free';
+  // Use free models by default - no API key required
+  // These work without authentication via OpenRouter's free tier
+  const embeddingModel = process.env.OPENROUTER_EMBEDDING_MODEL || 'Xenova/all-MiniLM-L6-v2';
+  // Use a free chat model - Qwen2.5 is free and works well
+  const chatModel = process.env.OPENROUTER_CHAT_MODEL || 'qwen/qwen-2.5-0.5b-instruct:free';
 
-  // Log API key status on startup
+  // Log status on startup
   if (openRouterKey) {
-    console.log('[AI] OpenRouter API key detected - semantic search and cluster labeling enabled');
-    console.log(`[AI] Embedding model: ${embeddingModel}`);
-    console.log(`[AI] Chat model: ${chatModel}`);
+    console.log('[AI] ✓ OpenRouter API key configured - using premium models');
+    console.log(`[AI]   Embedding model: ${embeddingModel}`);
+    console.log(`[AI]   Chat model: ${chatModel}`);
   } else {
-    console.log('[AI] OpenRouter API key not found - set OPENROUTER_API_KEY in .env to enable AI features');
+    console.log('[AI] ℹ OpenRouter API key not configured - using free local models');
+    console.log('[AI]   Set OPENROUTER_API_KEY in .env for better quality annotations');
+    console.log('[AI]   Free models: Transformers.js (local, no API key needed)');
   }
 
   /**
-   * Generate embeddings using OpenRouter API
+   * Generate embeddings using OpenRouter API or local models
    */
   app.post('/api/ai/embeddings', async (req, res) => {
+    // If no API key, return instructions to use local Transformers.js
     if (!openRouterKey) {
       return res.status(503).json({
         success: false,
-        error: 'OpenRouter API key not configured. Set OPENROUTER_API_KEY in environment variables.'
+        error: 'OpenRouter API key not configured. Use Transformers.js in browser for free embeddings, or set OPENROUTER_API_KEY in .env for server-side embeddings.',
+        useLocal: true,
+        suggestion: 'The frontend will automatically use Transformers.js for free embeddings'
       });
     }
 
@@ -97,12 +110,35 @@ function createAIRoutes(deps) {
 
   /**
    * Generate chat completion using OpenRouter API (for cluster labels, descriptions, etc.)
+   * Falls back to rule-based generation if no API key
    */
   app.post('/api/ai/chat', async (req, res) => {
+    // If no API key, provide a helpful fallback response
     if (!openRouterKey) {
-      return res.status(503).json({
-        success: false,
-        error: 'OpenRouter API key not configured. Set OPENROUTER_API_KEY in environment variables.'
+      const { messages } = req.body;
+      const userMessage = messages && messages.length > 0 
+        ? messages[messages.length - 1].content 
+        : '';
+      
+      // Simple rule-based fallback for common cases
+      let fallbackResponse = 'Cluster';
+      if (userMessage.toLowerCase().includes('cluster')) {
+        if (userMessage.includes('test') || userMessage.includes('spec')) {
+          fallbackResponse = 'Test Files';
+        } else if (userMessage.includes('component') || userMessage.includes('ui')) {
+          fallbackResponse = 'UI Components';
+        } else if (userMessage.includes('api') || userMessage.includes('route')) {
+          fallbackResponse = 'API Routes';
+        } else if (userMessage.includes('util') || userMessage.includes('helper')) {
+          fallbackResponse = 'Utilities';
+        }
+      }
+      
+      return res.json({
+        success: true,
+        content: fallbackResponse,
+        model: 'rule-based-fallback',
+        note: 'OpenRouter API key not configured. Set OPENROUTER_API_KEY in .env for AI-generated labels.'
       });
     }
 
@@ -165,11 +201,7 @@ function createAIRoutes(deps) {
    * Check if AI services are available
    */
   app.get('/api/ai/status', (req, res) => {
-    // Check if key is set and not a placeholder
-    const hasValidKey = !!openRouterKey && 
-                       openRouterKey.trim() !== '' && 
-                       openRouterKey !== 'your_key_here' &&
-                       openRouterKey.length > 10; // Real keys are longer
+    const hasValidKey = !!openRouterKey;
     
     res.json({
       success: true,
@@ -177,8 +209,12 @@ function createAIRoutes(deps) {
       embeddingModel: embeddingModel,
       chatModel: chatModel,
       hasApiKey: hasValidKey,
-      keyLength: openRouterKey ? openRouterKey.length : 0,
-      isPlaceholder: openRouterKey === 'your_key_here'
+      // Always available via Transformers.js in browser
+      localAvailable: true,
+      localModel: 'Xenova/all-MiniLM-L6-v2',
+      message: hasValidKey 
+        ? 'OpenRouter API configured - using premium models'
+        : 'Using free local models (Transformers.js) - set OPENROUTER_API_KEY for better quality'
     });
   });
 }

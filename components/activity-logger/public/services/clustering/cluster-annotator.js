@@ -25,7 +25,7 @@ class ClusterAnnotator {
   }
 
   async _doInitialize() {
-    // First check if OpenRouter API is available (preferred - faster and more reliable)
+    // Try OpenRouter API first if available (optional - better quality)
     try {
       const statusResponse = await fetch(`${this.apiBase}/api/ai/status`);
       if (statusResponse.ok) {
@@ -33,36 +33,38 @@ class ClusterAnnotator {
         if (status.available && status.hasApiKey) {
           this.useOpenRouter = true;
           this.isInitialized = true;
-          console.log('[CLUSTER-ANNOTATOR] Using OpenRouter API for cluster annotation');
-          console.log(`[CLUSTER-ANNOTATOR] Chat model: ${status.chatModel || 'microsoft/phi-3-mini-128k-instruct:free'}`);
+          console.log('[CLUSTER-ANNOTATOR] ✓ Using OpenRouter API (premium)');
+          console.log(`[CLUSTER-ANNOTATOR]   Model: ${status.chatModel || 'qwen/qwen-2.5-0.5b-instruct:free'}`);
           return;
         }
       }
     } catch (apiError) {
-      console.log('[CLUSTER-ANNOTATOR] OpenRouter API not available, trying Transformers.js...');
+      // Silently fall through to local models
     }
 
-    // Fallback to Transformers.js
+    // Primary option: Use Transformers.js (free, local, no API key needed)
     try {
       // Check if Transformers.js is already loaded
       if (window.transformers || (typeof window !== 'undefined' && window._transformersLoaded)) {
         const transformers = window.transformers || await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2');
         this.transformers = transformers;
         this.isInitialized = true;
-        console.log('[CLUSTER-ANNOTATOR] Using existing Transformers.js');
+        console.log('[CLUSTER-ANNOTATOR] ✓ Using Transformers.js (free, local)');
         return;
       }
 
-      // Try to load Transformers.js
-      console.log('[CLUSTER-ANNOTATOR] Loading Transformers.js...');
+      // Load Transformers.js
+      console.log('[CLUSTER-ANNOTATOR] Loading Transformers.js (free, no API key needed)...');
       const transformers = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2');
       this.transformers = transformers;
       this.isInitialized = true;
-      console.log('[CLUSTER-ANNOTATOR] Transformers.js loaded successfully');
+      console.log('[CLUSTER-ANNOTATOR] ✓ Transformers.js loaded successfully');
+      console.log('[CLUSTER-ANNOTATOR]   Using local models - no API key required');
     } catch (error) {
       console.warn('[CLUSTER-ANNOTATOR] Failed to load Transformers.js:', error.message);
+      console.warn('[CLUSTER-ANNOTATOR] Falling back to rule-based annotations');
       this.isInitialized = false;
-      throw error;
+      // Don't throw - allow fallback to rule-based annotations
     }
   }
 
