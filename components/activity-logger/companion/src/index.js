@@ -2,28 +2,37 @@
 
 const path = require('path');
 
-// Load environment variables from companion directory and workspace root
-// Try companion directory first (more specific), then workspace root
+// Load environment variables from the primary .env file location
+// Primary location: /Users/hamidaho/new_cursor/.env (workspace root)
+const primaryEnvPath = '/Users/hamidaho/new_cursor/.env';
 const companionEnvPath = path.resolve(__dirname, '../.env');
-// Calculate workspace root: from companion/src/ go up to workspace root
-// companion/src/ -> companion/ -> activity-logger/ -> components/ -> cursor-telemetry/ -> workspace root
-// Try multiple possible paths to find the .env file
-const possiblePaths = [
-  path.resolve(__dirname, '../../../../../.env'), // 5 levels up (most common)
-  path.resolve(__dirname, '../../../../../../.env'), // 6 levels up (if workspace is nested)
-  path.resolve(process.cwd(), '.env'), // Current working directory
-  path.resolve(process.env.HOME || '', 'new_cursor/.env'), // Fallback to common location
-];
 
-// Load companion .env first
-require('dotenv').config({ path: companionEnvPath });
+// Try primary location first (the correct one)
+let envLoaded = false;
+const primaryResult = require('dotenv').config({ path: primaryEnvPath });
+if (!primaryResult.error) {
+  console.log(`[ENV] ✓ Loaded .env from primary location: ${primaryEnvPath}`);
+  envLoaded = true;
+}
 
-// Try to load workspace .env from any of the possible paths
-for (const envPath of possiblePaths) {
-  const result = require('dotenv').config({ path: envPath });
-  if (!result.error) {
-    console.log(`[ENV] Loaded .env from: ${envPath}`);
-    break;
+// Fallback to companion directory if primary not found
+if (!envLoaded) {
+  const companionResult = require('dotenv').config({ path: companionEnvPath });
+  if (!companionResult.error) {
+    console.log(`[ENV] ✓ Loaded .env from companion directory: ${companionEnvPath}`);
+    envLoaded = true;
+  }
+}
+
+// Fallback to workspace root calculation if neither found
+if (!envLoaded) {
+  const workspaceEnvPath = path.resolve(__dirname, '../../../../../.env');
+  const workspaceResult = require('dotenv').config({ path: workspaceEnvPath });
+  if (!workspaceResult.error) {
+    console.log(`[ENV] ✓ Loaded .env from calculated workspace root: ${workspaceEnvPath}`);
+  } else {
+    console.warn(`[ENV] ⚠ No .env file found. Expected at: ${primaryEnvPath}`);
+    console.warn(`[ENV]   Create .env file at workspace root for configuration.`);
   }
 }
 
