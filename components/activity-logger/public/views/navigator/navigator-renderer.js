@@ -279,6 +279,18 @@ function updateTransitionSpeed(value) {
 }
 
 /**
+ * Initialize transition speed on page load
+ */
+function initializeTransitionSpeed() {
+  const speedSlider = document.getElementById('transitionSpeed');
+  const speedLabel = document.getElementById('speedLabel');
+  if (speedSlider && speedLabel && window.navigatorState) {
+    speedSlider.value = window.navigatorState.transitionSpeed;
+    speedLabel.textContent = `${window.navigatorState.transitionSpeed.toFixed(1)}x`;
+  }
+}
+
+/**
  * Render mini-map
  */
 function renderMiniMap() {
