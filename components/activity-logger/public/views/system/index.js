@@ -327,7 +327,50 @@ function renderPerformanceTrends() {
   const container = document.getElementById('performanceTrends');
   if (!container) return;
 
-  const systemData = (window.state?.data?.systemResources || []).slice(-100);
+  // Get time scale settings from UI or use defaults
+  const timeRangeSelect = document.getElementById('performanceTimeRange');
+  const periodSizeSelect = document.getElementById('performancePeriodSize');
+  
+  const timeRange = timeRangeSelect?.value || '24h'; // Default: last 24 hours
+  const periodSize = periodSizeSelect?.value || '5m'; // Default: 5 minute periods
+  
+  // Calculate time range in milliseconds
+  const timeRangeMs = {
+    '1h': 60 * 60 * 1000,
+    '6h': 6 * 60 * 60 * 1000,
+    '24h': 24 * 60 * 60 * 1000,
+    '7d': 7 * 24 * 60 * 60 * 1000,
+    '30d': 30 * 24 * 60 * 60 * 1000,
+    'all': Infinity
+  }[timeRange] || 24 * 60 * 60 * 1000;
+  
+  // Calculate period size in milliseconds
+  const periodSizeMs = {
+    '1m': 1 * 60 * 1000,
+    '5m': 5 * 60 * 1000,
+    '15m': 15 * 60 * 1000,
+    '30m': 30 * 60 * 1000,
+    '1h': 60 * 60 * 1000,
+    '6h': 6 * 60 * 60 * 1000
+  }[periodSize] || 5 * 60 * 1000;
+  
+  // Use period size as activity window
+  const activityWindowMs = periodSizeMs;
+
+  // Filter system data by time range
+  const now = Date.now();
+  const cutoffTime = now - timeRangeMs;
+  let systemData = (window.state?.data?.systemResources || []).filter(d => {
+    const timestamp = typeof d.timestamp === 'number' ? d.timestamp : new Date(d.timestamp).getTime();
+    return timestamp >= cutoffTime;
+  });
+  
+  // If too much data, sample it
+  if (systemData.length > 1000) {
+    const step = Math.ceil(systemData.length / 1000);
+    systemData = systemData.filter((_, i) => i % step === 0);
+  }
+  
   const events = window.state?.data?.events || [];
 
   if (systemData.length === 0) {
@@ -339,10 +382,6 @@ function renderPerformanceTrends() {
     `;
     return;
   }
-
-  // Use a time window to match events to system measurements
-  // Check for events within 2.5 minutes before/after each system measurement
-  const activityWindowMs = 2.5 * 60 * 1000; // 2.5 minutes before/after
   
   // Pre-process events for faster lookup (sort once)
   const eventTimestamps = events.map(e => new Date(e.timestamp).getTime()).sort((a, b) => a - b);
@@ -459,7 +498,33 @@ function renderPerformanceTrends() {
     
     ${correlations.length > 0 ? `
       <div style="margin-bottom: var(--space-md);">
-        <h4 style="margin-bottom: var(--space-sm); color: var(--color-text); font-size: var(--text-md);">Resource Usage Over Time</h4>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-sm); flex-wrap: wrap; gap: var(--space-sm);">
+          <h4 style="margin: 0; color: var(--color-text); font-size: var(--text-md);">Resource Usage Over Time</h4>
+          <div style="display: flex; gap: var(--space-sm); align-items: center; flex-wrap: wrap;">
+            <label style="font-size: var(--text-xs); color: var(--color-text-muted); display: flex; align-items: center; gap: var(--space-xs);">
+              Time Range:
+              <select id="performanceTimeRange" onchange="if(window.renderPerformanceTrends) window.renderPerformanceTrends()" style="padding: 4px 8px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-surface); color: var(--color-text); font-size: var(--text-xs);">
+                <option value="1h" ${timeRange === '1h' ? 'selected' : ''}>Last Hour</option>
+                <option value="6h" ${timeRange === '6h' ? 'selected' : ''}>Last 6 Hours</option>
+                <option value="24h" ${timeRange === '24h' ? 'selected' : ''}>Last 24 Hours</option>
+                <option value="7d" ${timeRange === '7d' ? 'selected' : ''}>Last 7 Days</option>
+                <option value="30d" ${timeRange === '30d' ? 'selected' : ''}>Last 30 Days</option>
+                <option value="all" ${timeRange === 'all' ? 'selected' : ''}>All Time</option>
+              </select>
+            </label>
+            <label style="font-size: var(--text-xs); color: var(--color-text-muted); display: flex; align-items: center; gap: var(--space-xs);">
+              Period Size:
+              <select id="performancePeriodSize" onchange="if(window.renderPerformanceTrends) window.renderPerformanceTrends()" style="padding: 4px 8px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-surface); color: var(--color-text); font-size: var(--text-xs);">
+                <option value="1m" ${periodSize === '1m' ? 'selected' : ''}>1 Minute</option>
+                <option value="5m" ${periodSize === '5m' ? 'selected' : ''}>5 Minutes</option>
+                <option value="15m" ${periodSize === '15m' ? 'selected' : ''}>15 Minutes</option>
+                <option value="30m" ${periodSize === '30m' ? 'selected' : ''}>30 Minutes</option>
+                <option value="1h" ${periodSize === '1h' ? 'selected' : ''}>1 Hour</option>
+                <option value="6h" ${periodSize === '6h' ? 'selected' : ''}>6 Hours</option>
+              </select>
+            </label>
+          </div>
+        </div>
         <canvas id="performanceTrendsChart" style="max-height: 300px;"></canvas>
       </div>
     ` : ''}
@@ -470,10 +535,13 @@ function renderPerformanceTrends() {
   // Render chart if data available
   if (correlations.length > 0 && window.Chart) {
     setTimeout(() => {
-      renderPerformanceTrendsChart(correlations);
+      renderPerformanceTrendsChart(correlations, periodSize);
     }, 100);
   }
 }
+
+// Export to window for global access
+window.renderPerformanceTrends = renderPerformanceTrends;
 
 /**
  * Generate insight message with proper handling of edge cases
@@ -523,7 +591,7 @@ function generateInsight(avgMemoryActive, avgMemoryIdle, avgCpuActive, avgCpuIdl
 /**
  * Render performance trends chart
  */
-function renderPerformanceTrendsChart(correlations) {
+function renderPerformanceTrendsChart(correlations, periodSize = '5m') {
   const canvas = document.getElementById('performanceTrendsChart');
   if (!canvas || !window.Chart) return;
 
@@ -535,15 +603,37 @@ function renderPerformanceTrendsChart(correlations) {
   // Sort by timestamp
   const sorted = [...correlations].sort((a, b) => a.timestamp - b.timestamp);
   
-  // Downsample if too many points
-  const maxPoints = 100;
+  // Downsample if too many points (adjust based on period size)
+  const periodSizeMs = {
+    '1m': 1 * 60 * 1000,
+    '5m': 5 * 60 * 1000,
+    '15m': 15 * 60 * 1000,
+    '30m': 30 * 60 * 1000,
+    '1h': 60 * 60 * 1000,
+    '6h': 6 * 60 * 60 * 1000
+  }[periodSize] || 5 * 60 * 1000;
+  
+  // Adjust max points based on period size (smaller periods = more points)
+  const maxPoints = periodSizeMs <= 5 * 60 * 1000 ? 200 : 100;
   const step = Math.max(1, Math.floor(sorted.length / maxPoints));
   const sampled = sorted.filter((_, i) => i % step === 0 || i === sorted.length - 1);
 
-  const labels = sampled.map(d => {
-    const date = new Date(d.timestamp);
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  });
+  // Format labels based on period size
+  const formatLabel = (timestamp) => {
+    const date = new Date(timestamp);
+    if (periodSizeMs >= 6 * 60 * 60 * 1000) {
+      // 6+ hour periods: show date and time
+      return date.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    } else if (periodSizeMs >= 60 * 60 * 1000) {
+      // 1+ hour periods: show date and time
+      return date.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    } else {
+      // Smaller periods: show time only
+      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+  };
+
+  const labels = sampled.map(d => formatLabel(d.timestamp));
 
   canvas.chart = new Chart(canvas.getContext('2d'), {
     type: 'line',
