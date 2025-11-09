@@ -211,7 +211,9 @@ function renderD3FileGraph(container, nodes, links) {
     .attr('font-size', '11px')
     .attr('fill', 'var(--color-text)')
     .attr('class', 'node-label')
-    .style('pointer-events', 'none');
+    .style('pointer-events', 'none')
+    .style('opacity', 1) // Ensure labels are always visible
+    .style('fill', 'var(--color-text)'); // Explicitly set fill to ensure visibility
   
   // Add change count badge
   node.append('text')
@@ -299,6 +301,16 @@ function renderD3FileGraph(container, nodes, links) {
     
     nodes.selectAll('.node-circle')
       .attr('opacity', n => n.id === d.id || connectedIds.has(n.id) ? 1 : 0.2);
+    
+    // Ensure labels remain visible during hover
+    nodes.selectAll('.node-label')
+      .style('opacity', 1)
+      .style('fill', 'var(--color-text)');
+    
+    // Ensure badges remain visible
+    nodes.selectAll('.node-badge')
+      .style('opacity', 1)
+      .style('fill', '#fff');
     
     links
       .attr('opacity', l => l.source.id === d.id || l.target.id === d.id ? 1 : 0.1)

@@ -302,8 +302,14 @@
 
 .nav-node-label {
   font-size: 10px;
-  fill: var(--color-text);
+  fill: var(--color-text) !important;
   pointer-events: none;
+  opacity: 1 !important;
+}
+
+.nav-node:hover .nav-node-label {
+  opacity: 1 !important;
+  fill: var(--color-text) !important;
 }
 
 .minimap-viewport {

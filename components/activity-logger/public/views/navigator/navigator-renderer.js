@@ -90,7 +90,9 @@ function renderNavigator(container, nodes, links) {
     .attr('font-size', '10px')
     .attr('fill', 'var(--color-text)')
     .attr('class', 'nav-node-label')
-    .style('pointer-events', 'none');
+    .style('pointer-events', 'none')
+    .style('opacity', 1) // Ensure labels are always visible
+    .style('fill', 'var(--color-text)'); // Explicitly set fill to ensure visibility
   
   navigatorState.labels = labels;
   navigatorState.nodeElements = node;

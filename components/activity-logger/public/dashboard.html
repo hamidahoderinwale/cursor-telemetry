@@ -16,8 +16,14 @@
   <link rel="preload" href="dashboard.css" as="style">
   <link rel="preload" href="core/config.js" as="script">
   <link rel="preload" href="core/state.js" as="script">
+  <link rel="preload" href="core/view-helpers.js" as="script">
   <link rel="preload" href="core/api-client.js" as="script">
   <link rel="preload" href="dashboard.js" as="script">
+  
+  <!-- Prefetch likely next resources -->
+  <link rel="prefetch" href="views/overview/index.js">
+  <link rel="prefetch" href="views/activity/index.js">
+  <link rel="prefetch" href="core/view-router.js">
   
   <!-- DNS prefetch for external resources -->
   <link rel="dns-prefetch" href="https://fonts.googleapis.com">
@@ -26,21 +32,27 @@
   <link rel="dns-prefetch" href="https://cdn.socket.io">
   <link rel="dns-prefetch" href="https://d3js.org">
   
-  <!-- Styles -->
+  <!-- Critical CSS (inline or load immediately) -->
   <link rel="stylesheet" href="dashboard.css">
   
-  <!-- View-specific Styles (co-located with JS) -->
-  <link rel="stylesheet" href="views/navigator/styles.css">
-  <link rel="stylesheet" href="views/activity/styles.css">
-  <link rel="stylesheet" href="views/analytics/styles.css">
-  <link rel="stylesheet" href="views/overview/styles.css">
-  <link rel="stylesheet" href="views/whiteboard/styles.css">
-  <link rel="stylesheet" href="views/system/styles.css">
-  <link rel="stylesheet" href="views/file-graph/styles.css">
-  <link rel="stylesheet" href="views/schema-config/styles.css">
-  <link rel="stylesheet" href="views/workspace-comparison/styles.css">
-  <link rel="stylesheet" href="views/activity/context-visualization.css">
-  <link rel="stylesheet" href="views/activity/status-message-visualization.css">
+  <!-- View-specific Styles (load asynchronously) -->
+  <link rel="preload" href="views/overview/styles.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
+  <link rel="preload" href="views/activity/styles.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
+  <noscript>
+    <link rel="stylesheet" href="views/overview/styles.css">
+    <link rel="stylesheet" href="views/activity/styles.css">
+  </noscript>
+  
+  <!-- Non-critical CSS (defer) -->
+  <link rel="stylesheet" href="views/navigator/styles.css" media="print" onload="this.media='all'">
+  <link rel="stylesheet" href="views/analytics/styles.css" media="print" onload="this.media='all'">
+  <link rel="stylesheet" href="views/whiteboard/styles.css" media="print" onload="this.media='all'">
+  <link rel="stylesheet" href="views/system/styles.css" media="print" onload="this.media='all'">
+  <link rel="stylesheet" href="views/file-graph/styles.css" media="print" onload="this.media='all'">
+  <link rel="stylesheet" href="views/schema-config/styles.css" media="print" onload="this.media='all'">
+  <link rel="stylesheet" href="views/workspace-comparison/styles.css" media="print" onload="this.media='all'">
+  <link rel="stylesheet" href="views/activity/context-visualization.css" media="print" onload="this.media='all'">
+  <link rel="stylesheet" href="views/activity/status-message-visualization.css" media="print" onload="this.media='all'">
   
   <!-- Service Worker Registration -->
   <script>

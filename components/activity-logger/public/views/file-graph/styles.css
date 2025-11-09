@@ -109,6 +109,20 @@
   position: relative;
 }
 
+/* Ensure node labels are always visible on hover */
+.node-label,
+.nav-node-label {
+  opacity: 1 !important;
+  fill: var(--color-text) !important;
+  pointer-events: none !important;
+}
+
+.node:hover .node-label,
+.nav-node:hover .nav-node-label {
+  opacity: 1 !important;
+  fill: var(--color-text) !important;
+}
+
 /* Graph Stats */
 .graph-stats {
   display: flex;
