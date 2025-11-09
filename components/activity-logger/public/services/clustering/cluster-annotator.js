@@ -107,18 +107,18 @@ class ClusterAnnotator {
       category: 'unknown'
     };
 
-    // Method 1: Use embeddings to find common themes
+    // Method 1: Use embeddings to find common themes (if enabled and available)
     if (useEmbeddings && this.isInitialized) {
       try {
         const embeddingAnnotation = await this._annotateWithEmbeddings(features, modelName);
         annotation = { ...annotation, ...embeddingAnnotation };
       } catch (error) {
-        console.warn('[CLUSTER-ANNOTATOR] Embedding annotation failed:', error.message);
+        console.debug('[CLUSTER-ANNOTATOR] Embedding annotation failed, using fallback:', error.message);
       }
     }
 
-    // Method 2: Generate name using AI if available
-    if (useLLM && this.isInitialized) {
+    // Method 2: Generate name using AI if available (always try, even if not initialized - uses keyword fallback)
+    if (useLLM) {
       try {
         const aiName = await this._generateNameFromKeywords(
           annotation.keywords || [],
@@ -129,8 +129,18 @@ class ClusterAnnotator {
           annotation.name = aiName;
         }
       } catch (error) {
-        console.warn('[CLUSTER-ANNOTATOR] AI name generation failed:', error.message);
+        console.debug('[CLUSTER-ANNOTATOR] AI name generation failed, using keyword-based name:', error.message);
       }
+    }
+    
+    // Ensure we always have a name (fallback to keyword-based if AI didn't provide one)
+    if (!annotation.name || annotation.name === `Cluster ${cluster.id}`) {
+      const keywords = this._extractKeywordsFromTexts([
+        ...features.fileNames,
+        ...features.filePaths.map(p => p.split('/').pop())
+      ]);
+      const category = this._categorizeCluster(features);
+      annotation.name = await this._generateNameFromKeywords(keywords, category, features);
     }
 
     // Method 3: Use text generation for description
