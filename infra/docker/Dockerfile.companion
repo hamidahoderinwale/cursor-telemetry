@@ -9,28 +9,33 @@ RUN apk add --no-cache \
     python3 \
     make \
     g++ \
-    sqlite
+    sqlite \
+    curl
 
 # Copy package files
-COPY cursor-activity-logger/companion/package*.json ./
-COPY packages/shared/package*.json ./packages/shared/
+COPY components/activity-logger/companion/package*.json ./
 
 # Install dependencies
-RUN npm install
+RUN npm install --production
 
 # Copy source code
-COPY cursor-activity-logger/companion/src ./src
-COPY packages/shared/src ./packages/shared/src
+COPY components/activity-logger/companion/src ./src
+COPY components/activity-logger/companion/config.json ./config.json
 
-# Create data directory
+# Create data directory for SQLite database
 RUN mkdir -p /app/data
 
+# Set environment variables
+ENV NODE_ENV=production
+ENV PORT=43917
+ENV HOST=0.0.0.0
+
 # Expose port
-EXPOSE 43918
+EXPOSE 43917
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:43918/healthz || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:43917/health || exit 1
 
 # Start command
 CMD ["node", "src/index.js"]

@@ -156,6 +156,14 @@ async function renderActivityView(container) {
             <p class="card-subtitle">${timelineItems.length} items (${events.length} file changes, ${prompts.length} AI prompts, ${terminalCommands.length} terminal commands)</p>
           </div>
           <div class="activity-header-controls" style="display: flex; gap: var(--space-sm); align-items: center; flex-wrap: wrap;">
+            ${currentWorkspaceFilter !== 'all' ? `
+              <button class="btn btn-sm" onclick="if(window.showShareModal) window.showShareModal(['${window.escapeHtml ? window.escapeHtml(currentWorkspaceFilter) : currentWorkspaceFilter}']); else alert('Sharing feature not available');" title="Share this workspace view" style="padding: 6px 12px;">
+                <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor" style="vertical-align: middle; margin-right: 4px;">
+                  <path d="M15 8a3 3 0 10-2.977-2.63l-4.94 2.47a3 3 0 100 4.319l4.94 2.47a3 3 0 10.895-1.789l-4.94-2.47a3.027 3.027 0 000-.74l4.94-2.47C13.456 7.68 14.19 8 15 8z"/>
+                </svg>
+                Share Workspace
+              </button>
+            ` : ''}
             <select class="select-input" id="workspaceFilter" onchange="filterActivityByWorkspace(this.value)" style="min-width: 180px;">
               <option value="all" ${currentWorkspaceFilter === 'all' ? 'selected' : ''}>All Workspaces</option>
               ${uniqueWorkspaces.map(([path, name]) => `

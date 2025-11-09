@@ -207,7 +207,13 @@ async function enhancePromptWithContext(prompt) {
             ? prompt.timestamp 
             : new Date(prompt.timestamp).getTime();
           
-          if (!isNaN(promptTime)) {
+          // Validate timestamp is reasonable (not from year 2000 or invalid)
+          const MIN_VALID_TIMESTAMP = 1577836800000; // 2020-01-01
+          const MAX_VALID_TIMESTAMP = Date.now() + (24 * 60 * 60 * 1000); // 1 day in future max
+          
+          if (!isNaN(promptTime) && 
+              promptTime >= MIN_VALID_TIMESTAMP && 
+              promptTime <= MAX_VALID_TIMESTAMP) {
             const statusMessages = await window.fetchStatusMessages(
               promptTime - 10000,
               promptTime + 10000

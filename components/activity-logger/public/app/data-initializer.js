@@ -92,12 +92,23 @@ async function initializeDashboard() {
       window.initProgress.update('data', 100);
     }
     
-    // Step 3: Render initial UI with cached/recent data
+    // Step 3: Render initial UI with cached/recent data (defer heavy rendering)
     window.initProgress.update('render', 0);
     if (window.calculateStats) {
-      window.calculateStats();
+      // Use requestIdleCallback for stats calculation if available
+      if (typeof requestIdleCallback !== 'undefined') {
+        requestIdleCallback(() => {
+          window.calculateStats();
+        }, { timeout: 100 });
+      } else {
+        // Yield to event loop before calculating stats
+        await new Promise(resolve => setTimeout(resolve, 0));
+        window.calculateStats();
+      }
     }
     if (window.renderCurrentView) {
+      // Yield to browser for initial render
+      await new Promise(resolve => requestAnimationFrame(resolve));
       await window.renderCurrentView();
     }
     window.initProgress.update('render', 100);
@@ -151,6 +162,7 @@ async function initializeDashboard() {
 
 /**
  * Load data from IndexedDB cache for instant startup
+ * Optimized: Loads recent data first, then older data in background
  */
 async function loadFromCache() {
   console.log('[PACKAGE] Loading from cache...');
@@ -161,25 +173,118 @@ async function loadFromCache() {
     return;
   }
   
-  const cached = await window.persistentStorage.getAll();
+  // Load recent data first (last 24 hours) for instant UI
+  const now = Date.now();
+  const oneDayAgo = now - 24 * 60 * 60 * 1000;
   
-  if (cached.events && cached.events.length > 0) {
-    window.state.data.events = cached.events;
-    console.log(`[SUCCESS] Loaded ${cached.events.length} events from cache`);
-  }
-  
-  if (cached.prompts && cached.prompts.length > 0) {
-    window.state.data.prompts = cached.prompts;
-    console.log(`[SUCCESS] Loaded ${cached.prompts.length} prompts from cache`);
-  }
-  
-  // Render with cached data immediately
-  if (window.state.data.events.length > 0 || window.state.data.prompts.length > 0) {
-    if (window.calculateStats) {
-      window.calculateStats();
+  try {
+    // Load recent events first (faster)
+    if (window.persistentStorage.getEventsSince) {
+      const recentEvents = await window.persistentStorage.getEventsSince(oneDayAgo);
+      if (recentEvents && recentEvents.length > 0) {
+        window.state.data.events = recentEvents;
+        console.log(`[SUCCESS] Loaded ${recentEvents.length} recent events from cache`);
+      }
     }
-    if (window.renderCurrentView) {
-      await window.renderCurrentView();
+    
+    // Load recent prompts first
+    if (window.persistentStorage.getPromptsSince) {
+      const recentPrompts = await window.persistentStorage.getPromptsSince(oneDayAgo);
+      if (recentPrompts && recentPrompts.length > 0) {
+        window.state.data.prompts = recentPrompts;
+        console.log(`[SUCCESS] Loaded ${recentPrompts.length} recent prompts from cache`);
+      }
+    }
+    
+    // Render with recent cached data immediately
+    if ((window.state.data.events && window.state.data.events.length > 0) || 
+        (window.state.data.prompts && window.state.data.prompts.length > 0)) {
+      if (window.calculateStats) {
+        await window.calculateStats();
+      }
+      if (window.renderCurrentView) {
+        // Use requestAnimationFrame to yield to browser for initial render
+        await new Promise(resolve => requestAnimationFrame(resolve));
+        await window.renderCurrentView();
+      }
+    }
+    
+    // Load older data in background (non-blocking)
+    if (typeof requestIdleCallback !== 'undefined') {
+      requestIdleCallback(async () => {
+        try {
+          const allEvents = await window.persistentStorage.getAllEvents();
+          const allPrompts = await window.persistentStorage.getAllPrompts();
+          
+          // Merge with recent data (avoid duplicates)
+          const existingEventIds = new Set((window.state.data.events || []).map(e => e.id));
+          const existingPromptIds = new Set((window.state.data.prompts || []).map(p => p.id || p.prompt_id));
+          
+          const olderEvents = (allEvents || []).filter(e => !existingEventIds.has(e.id));
+          const olderPrompts = (allPrompts || []).filter(p => {
+            const id = p.id || p.prompt_id;
+            return id && !existingPromptIds.has(id);
+          });
+          
+          if (olderEvents.length > 0 || olderPrompts.length > 0) {
+            window.state.data.events = [...(window.state.data.events || []), ...olderEvents];
+            window.state.data.prompts = [...(window.state.data.prompts || []), ...olderPrompts];
+            console.log(`[SUCCESS] Loaded ${olderEvents.length} older events and ${olderPrompts.length} older prompts`);
+            
+            // Recalculate stats with full dataset
+            if (window.calculateStats) {
+              window.calculateStats();
+            }
+          }
+        } catch (error) {
+          console.warn('[WARNING] Failed to load older cached data:', error.message);
+        }
+      }, { timeout: 3000 });
+    } else {
+      // Fallback: load older data after a delay
+      setTimeout(async () => {
+        try {
+          const allEvents = await window.persistentStorage.getAllEvents();
+          const allPrompts = await window.persistentStorage.getAllPrompts();
+          
+          const existingEventIds = new Set((window.state.data.events || []).map(e => e.id));
+          const existingPromptIds = new Set((window.state.data.prompts || []).map(p => p.id || p.prompt_id));
+          
+          const olderEvents = (allEvents || []).filter(e => !existingEventIds.has(e.id));
+          const olderPrompts = (allPrompts || []).filter(p => {
+            const id = p.id || p.prompt_id;
+            return id && !existingPromptIds.has(id);
+          });
+          
+          if (olderEvents.length > 0 || olderPrompts.length > 0) {
+            window.state.data.events = [...(window.state.data.events || []), ...olderEvents];
+            window.state.data.prompts = [...(window.state.data.prompts || []), ...olderPrompts];
+            console.log(`[SUCCESS] Loaded ${olderEvents.length} older events and ${olderPrompts.length} older prompts`);
+            
+            if (window.calculateStats) {
+              window.calculateStats();
+            }
+          }
+        } catch (error) {
+          console.warn('[WARNING] Failed to load older cached data:', error.message);
+        }
+      }, 2000);
+    }
+  } catch (error) {
+    console.warn('[WARNING] Cache load failed, trying fallback:', error.message);
+    // Fallback to loading all data at once
+    try {
+      const cached = await window.persistentStorage.getAll();
+      if (cached.events && cached.events.length > 0) {
+        window.state.data.events = cached.events;
+        console.log(`[SUCCESS] Loaded ${cached.events.length} events from cache (fallback)`);
+      }
+      if (cached.prompts && cached.prompts.length > 0) {
+        window.state.data.prompts = cached.prompts;
+        console.log(`[SUCCESS] Loaded ${cached.prompts.length} prompts from cache (fallback)`);
+      }
+    } catch (fallbackError) {
+      console.error('[ERROR] Cache load fallback also failed:', fallbackError);
     }
   }
 }
@@ -473,10 +578,53 @@ async function fetchAllData() {
   await fetchRecentData();
 }
 
+// Check for share link in URL
+function checkForShareLink() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const shareId = urlParams.get('share');
+  
+  // Also check if we're on a share route
+  const pathMatch = window.location.pathname.match(/\/api\/share\/([^\/]+)/);
+  const shareIdFromPath = pathMatch ? pathMatch[1] : null;
+  
+  const finalShareId = shareId || shareIdFromPath;
+  
+  if (finalShareId) {
+    console.log('[SHARING] Share link detected:', finalShareId);
+    // Wait for sharing handler to load, then import
+    const checkSharingHandler = setInterval(() => {
+      if (window.handleShareLinkImport) {
+        clearInterval(checkSharingHandler);
+        window.handleShareLinkImport(finalShareId).catch(err => {
+          console.error('[SHARING] Error importing share link:', err);
+        });
+      }
+    }, 100);
+    
+    // Timeout after 5 seconds
+    setTimeout(() => {
+      clearInterval(checkSharingHandler);
+      if (!window.handleShareLinkImport) {
+        console.warn('[SHARING] Sharing handler not loaded, cannot import share link');
+      }
+    }, 5000);
+  }
+}
+
 // Export functions to window for global access
 window.initializeDashboard = initializeDashboard;
 window.loadFromCache = loadFromCache;
 window.fetchRecentData = fetchRecentData;
 window.fetchOlderHistory = fetchOlderHistory;
 window.fetchAllData = fetchAllData;
+window.checkForShareLink = checkForShareLink;
+
+// Check for share link after a short delay to ensure sharing handler is loaded
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(checkForShareLink, 1000);
+  });
+} else {
+  setTimeout(checkForShareLink, 1000);
+}
 

@@ -20,7 +20,30 @@ function renderD3FileGraph(container, nodes, links) {
   const clusterAlgorithm = document.getElementById('clusteringAlgorithm')?.value || 'none';
   
   // Apply clustering
-  const clusters = applyClustering(nodes, links, clusterAlgorithm);
+  let clusters = applyClustering(nodes, links, clusterAlgorithm);
+  
+  // Annotate clusters with AI-generated labels if cluster annotator is available
+  if (clusters.length > 0 && window.clusterAnnotator && (clusterAlgorithm === 'similarity' || clusterAlgorithm === 'community')) {
+    try {
+      // Annotate clusters asynchronously
+      window.clusterAnnotator.annotateClusters(clusters, { useLLM: true, useEmbeddings: true })
+        .then(annotatedClusters => {
+          // Update cluster names in the visualization
+          if (window.graphG) {
+            const clusterLabels = window.graphG.selectAll('.cluster-labels text');
+            clusterLabels.data(annotatedClusters)
+              .text(d => `${d.name || d.originalName || `Cluster ${d.id}`} (${d.nodes.length})`);
+          }
+          // Update clusters array
+          clusters = annotatedClusters;
+        })
+        .catch(err => {
+          console.warn('[FILE-GRAPH] Failed to annotate clusters:', err.message);
+        });
+    } catch (error) {
+      console.warn('[FILE-GRAPH] Cluster annotation not available:', error.message);
+    }
+  }
   
   // Create SVG with zoom support
   const svg = d3.select(container)

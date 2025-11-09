@@ -230,20 +230,47 @@ async function performSearch(query) {
   if (!query || query.trim().length === 0) {
     const resultsEl = document.getElementById('searchResults');
     if (resultsEl) {
-      resultsEl.innerHTML = '<div class="search-empty">Type to search events, prompts, and files...</div>';
+      resultsEl.innerHTML = '<div class="search-empty">Type to search events, prompts, and files...<br><small>Or try: "Fork a state for trying authentication"</small></div>';
     }
     searchResults = [];
     searchSelectedIndex = -1;
     return;
   }
-  
-  try {
-    // Hide examples when searching
-    const examples = document.getElementById('searchExamples');
-    if (examples) {
-      examples.style.display = 'none';
+
+  // Hide examples when searching
+  const examples = document.getElementById('searchExamples');
+  if (examples) {
+    examples.style.display = 'none';
+  }
+
+  // Check if this looks like a state command
+  const stateCommandKeywords = ['fork', 'merge', 'switch', 'state', 'create state', 'show states', 'find states'];
+  const isStateCommand = stateCommandKeywords.some(keyword => 
+    query.toLowerCase().includes(keyword)
+  );
+
+  if (isStateCommand && window.stateService) {
+    try {
+      // Parse and execute state command
+      const result = await window.stateService.executeCommand(query, {
+        events: window.state?.data?.events || [],
+        fileChanges: (window.state?.data?.events || []).filter(e => 
+          e.type === 'file_change' || e.type === 'code_change'
+        )
+      });
+
+      if (result.success) {
+        renderStateCommandResult(result);
+        return;
+      }
+    } catch (error) {
+      console.warn('[SEARCH] State command failed, trying regular search:', error.message);
+      // Fall through to regular search
     }
-    
+  }
+  
+  // Regular search
+  try {
     // Search is now async (supports Hugging Face semantic search)
     const results = await searchEngine.search(query, { limit: 20 });
     searchResults = results;
@@ -256,6 +283,62 @@ async function performSearch(query) {
       resultsEl.innerHTML = '<div class="search-error">Search error: ' + error.message + '</div>';
     }
   }
+}
+
+/**
+ * Render state command result
+ */
+function renderStateCommandResult(result) {
+  const resultsEl = document.getElementById('searchResults');
+  if (!resultsEl) return;
+
+  const escapeHtml = window.escapeHtml || ((str) => {
+    if (!str) return '';
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  });
+
+  let html = `<div class="state-command-result" style="padding: var(--space-md);">`;
+  html += `<div class="state-command-header" style="margin-bottom: var(--space-md);">`;
+  html += `<h3 style="margin: 0 0 var(--space-xs) 0; font-size: 1.1em;">${result.action.charAt(0).toUpperCase() + result.action.slice(1)} Command</h3>`;
+  html += `<div class="state-command-message" style="color: var(--color-text-secondary); font-size: 0.9em;">${escapeHtml(result.result?.message || 'Command executed')}</div>`;
+  html += `</div>`;
+
+  if (result.result?.state) {
+    const state = result.result.state;
+    html += `<div class="state-card" style="background: var(--color-bg-alt); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: var(--space-md); margin-bottom: var(--space-sm);">`;
+    html += `<div class="state-name" style="font-weight: 600; margin-bottom: var(--space-xs);">${escapeHtml(state.name)}</div>`;
+    html += `<div class="state-description" style="color: var(--color-text-secondary); font-size: 0.9em; margin-bottom: var(--space-xs);">${escapeHtml(state.description || '')}</div>`;
+    html += `<div class="state-meta" style="display: flex; gap: var(--space-xs); flex-wrap: wrap;">`;
+    html += `<span class="state-intent badge" style="background: var(--color-primary); color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.8em;">${escapeHtml(state.metadata?.intent || 'general')}</span>`;
+    if (state.metadata?.tags && state.metadata.tags.length > 0) {
+      state.metadata.tags.forEach(tag => {
+        html += `<span class="state-tag badge" style="background: var(--color-bg); border: 1px solid var(--color-border); padding: 2px 8px; border-radius: 4px; font-size: 0.8em;">#${escapeHtml(tag)}</span>`;
+      });
+    }
+    html += `</div>`;
+    html += `</div>`;
+  }
+
+  if (result.result?.states && result.result.states.length > 0) {
+    html += `<div class="state-list">`;
+    result.result.states.forEach(state => {
+      html += `<div class="state-card" style="background: var(--color-bg-alt); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: var(--space-md); margin-bottom: var(--space-sm); cursor: pointer; transition: all 0.2s;" onclick="window.stateService && window.stateService.executeCommand('switch to ${state.name}', {}).then(r => { if(r.success) window.location.reload(); })" onmouseover="this.style.borderColor='var(--color-primary)'" onmouseout="this.style.borderColor='var(--color-border)'">`;
+      html += `<div class="state-name" style="font-weight: 600; margin-bottom: var(--space-xs);">${escapeHtml(state.name)}</div>`;
+      html += `<div class="state-description" style="color: var(--color-text-secondary); font-size: 0.9em; margin-bottom: var(--space-xs);">${escapeHtml(state.description || '')}</div>`;
+      html += `<div class="state-meta" style="display: flex; gap: var(--space-xs); flex-wrap: wrap;">`;
+      html += `<span class="state-intent badge" style="background: var(--color-primary); color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.8em;">${escapeHtml(state.metadata?.intent || 'general')}</span>`;
+      html += `</div>`;
+      html += `</div>`;
+    });
+    html += `</div>`;
+  }
+
+  html += `</div>`;
+  resultsEl.innerHTML = html;
+  searchResults = [];
+  searchSelectedIndex = -1;
 }
 
 /**
@@ -287,6 +370,11 @@ function renderSearchResults(results) {
   });
   
   const html = results.map((result, index) => {
+    // Check if result has annotation
+    const hasAnnotation = result.annotation || (result.payload && result.payload.annotation);
+    const annotation = result.annotation || (result.payload && result.payload.annotation);
+    const annotationIcon = hasAnnotation && window.renderAnnotationIcon ? 
+      window.renderAnnotationIcon(12, 'var(--color-text-secondary)') : '';
     const type = result.type || 'unknown';
     const title = result.title || result.content?.substring(0, 80) || 'Untitled';
     const snippet = result.snippet || result.content?.substring(0, 150) || '';
@@ -303,6 +391,24 @@ function renderSearchResults(results) {
           ${time ? `<span class="search-result-time">${time}</span>` : ''}
         </div>
         ${snippet ? `<div class="search-result-snippet">${escapeHtml(snippet)}</div>` : ''}
+        ${hasAnnotation && annotation ? `
+          <div class="search-result-annotation" style="
+            margin-top: var(--space-xs);
+            padding: var(--space-xs) var(--space-sm);
+            background: var(--color-bg-alt);
+            border-left: 2px solid var(--color-primary);
+            border-radius: var(--radius-sm);
+            font-size: 0.85em;
+            color: var(--color-text-secondary);
+            font-style: italic;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+          ">
+            ${annotationIcon}
+            <span>${escapeHtml(annotation)}</span>
+          </div>
+        ` : ''}
       </div>
     `;
   }).join('');
@@ -527,6 +633,7 @@ window.performSearch = performSearch;
 window.navigateSearchResults = navigateSearchResults;
 window.selectSearchResult = selectSearchResult;
 window.renderSearchResults = renderSearchResults;
+window.renderStateCommandResult = renderStateCommandResult;
 window.setSearchQuery = setSearchQuery;
 window.updateSearchExamples = updateSearchExamples;
 

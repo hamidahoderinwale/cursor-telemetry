@@ -777,15 +777,22 @@ a:focus:not(:focus-visible) {
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: 1000;
-  display: none;
+  z-index: 99999 !important; /* Higher z-index to ensure modals are on top */
+  display: none !important;
   align-items: center;
   justify-content: center;
   padding: var(--space-xl);
+  pointer-events: auto !important;
+  visibility: visible !important;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .modal.active {
-  display: flex;
+  display: flex !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
 }
 
 .modal-overlay {
@@ -794,29 +801,63 @@ a:focus:not(:focus-visible) {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.7);
-  backdrop-filter: blur(4px);
+  background: rgba(0, 0, 0, 0.4);
+  /* Removed backdrop-filter to prevent blurriness on modal content */
+  /* backdrop-filter: blur(4px); */
+  /* Explicitly disable any blur effects */
+  filter: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
   animation: fadeIn var(--transition-base);
-  z-index: 10000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--space-xl);
+  z-index: 9998;
+  /* Ensure modal overlay is clickable for closing */
+  pointer-events: auto !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  /* Ensure overlay stays in background, not covering modal content */
+  overflow: hidden;
 }
 
 .modal-content {
-  position: relative;
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-xl);
   max-height: 90vh;
-  overflow: hidden;
-  display: flex;
+  height: auto;
+  min-height: 200px;
+  overflow: visible;
+  display: flex !important;
   flex-direction: column;
   box-shadow: var(--shadow-xl);
   animation: slideUp var(--transition-slow);
   width: 100%;
-  margin: auto;
+  max-width: 900px;
+  margin: 0;
+  z-index: 9999 !important; /* Higher than overlay to ensure content is on top */
+  /* Prevent blur - ensure crisp rendering */
+  filter: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  /* Create new stacking context to isolate from backdrop */
+  isolation: isolate;
+  /* Hardware acceleration for crisp rendering */
+  transform: translateZ(0);
+  will-change: auto;
+  /* Improve text rendering */
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* Prevent any blur inheritance */
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
+  /* Ensure modal content is clickable and visible */
+  pointer-events: auto !important;
+  visibility: visible !important;
+  opacity: 1 !important;
 }
 
 .modal-large {
@@ -830,12 +871,21 @@ a:focus:not(:focus-visible) {
   align-items: center;
   padding: var(--space-xl);
   border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+  background: var(--color-surface);
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }
 
 .modal-header h2 {
   font-size: var(--text-2xl);
   font-weight: 600;
   color: var(--color-text);
+  /* Ensure crisp text rendering */
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 .modal-close {
@@ -857,6 +907,91 @@ a:focus:not(:focus-visible) {
   flex: 1;
   padding: var(--space-xl);
   overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+  max-height: calc(90vh - 120px); /* Account for header and padding */
+  /* Smooth scrolling */
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border) transparent;
+  /* Prevent blur - ensure crisp rendering */
+  filter: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  /* Ensure crisp text rendering in modal body */
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* Hardware acceleration */
+  transform: translateZ(0);
+  will-change: auto;
+  /* Prevent any blur inheritance */
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
+}
+
+/* Custom scrollbar for modal body */
+.modal-body::-webkit-scrollbar {
+  width: 8px;
+}
+
+.modal-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.modal-body::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 4px;
+}
+
+.modal-body::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-muted);
+}
+
+/* Responsive modal styles */
+@media (max-width: 768px) {
+  .modal {
+    padding: var(--space-md);
+  }
+  
+  .modal-content {
+    max-width: 100%;
+    max-height: 95vh;
+    margin: 0;
+  }
+  
+  .modal-header {
+    padding: var(--space-md);
+  }
+  
+  .modal-header h2 {
+    font-size: var(--text-lg);
+  }
+  
+  .modal-body {
+    padding: var(--space-md);
+    max-height: calc(95vh - 100px);
+  }
+}
+
+@media (max-width: 480px) {
+  .modal {
+    padding: var(--space-sm);
+  }
+  
+  .modal-content {
+    max-height: 98vh;
+    border-radius: var(--radius-lg);
+  }
+  
+  .modal-header {
+    padding: var(--space-sm) var(--space-md);
+  }
+  
+  .modal-body {
+    padding: var(--space-sm) var(--space-md);
+    max-height: calc(98vh - 80px);
+  }
 }
 
 .form-input {
@@ -1352,6 +1487,12 @@ a:focus:not(:focus-visible) {
   border-radius: var(--radius-md);
   padding: var(--space-md);
   overflow-x: auto;
+  /* Ensure crisp text rendering in code blocks */
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* Hardware acceleration */
+  transform: translateZ(0);
 }
 
 .code-block code {
@@ -1359,6 +1500,10 @@ a:focus:not(:focus-visible) {
   font-size: var(--text-sm);
   color: var(--color-text);
   line-height: 1.6;
+  /* Ensure crisp monospace font rendering */
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 /* ===================================
@@ -3020,10 +3165,19 @@ textarea:disabled {
   border-radius: var(--radius-md);
   border: 1px solid var(--color-border);
   overflow-x: auto;
+  /* Ensure crisp text rendering */
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transform: translateZ(0);
 }
 
 .api-endpoint pre code {
   font-size: var(--text-xs);
+  /* Ensure crisp monospace font rendering */
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   line-height: 1.6;
   color: var(--color-text);
 }
@@ -3192,12 +3346,48 @@ textarea:disabled {
   max-width: 800px;
   max-height: 90vh;
   overflow-y: auto;
+  /* Prevent blur - ensure crisp rendering */
+  filter: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  /* Create new stacking context to isolate from backdrop */
+  isolation: isolate;
+  /* Ensure hardware acceleration for crisp rendering */
+  transform: translateZ(0);
+  will-change: auto;
+  /* Crisp text rendering */
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* Prevent any blur inheritance */
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
 }
 
 .export-modal-section {
   display: flex;
   flex-direction: column;
   gap: var(--space-xl);
+  /* Ensure no blur on section content */
+  filter: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* Specific fix for share modal */
+#shareModal .modal-content,
+#shareModal .export-modal-content,
+#shareModal .modal-body,
+#shareModal .export-modal-section {
+  filter: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  /* Ensure crisp rendering */
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 .export-modal-field-group {

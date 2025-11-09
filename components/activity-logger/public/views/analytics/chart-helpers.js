@@ -848,24 +848,27 @@ function renderPromptEffectiveness() {
   // Method 1: Check prompts with linked_entry_id (prompt -> entry link)
   prompts.forEach(prompt => {
     const promptId = prompt.id || prompt.prompt_id;
-    if (processedPromptIds.has(promptId)) return;
+    if (!promptId || processedPromptIds.has(promptId)) return;
     
     const linkedEntryId = prompt.linked_entry_id || prompt.linkedEntryId;
     const promptTime = new Date(prompt.timestamp).getTime();
+    if (isNaN(promptTime)) return; // Skip invalid timestamps
     
     if (linkedEntryId) {
       // Find the linked event/entry
-      const linkedEvent = eventMap.get(String(linkedEntryId));
+      const linkedEvent = eventMap.get(String(linkedEntryId)) || eventMap.get(String(parseInt(linkedEntryId)));
       
       if (linkedEvent) {
         const eventTime = new Date(linkedEvent.timestamp).getTime();
+        if (isNaN(eventTime)) return;
         const timeToChange = (eventTime - promptTime) / 1000 / 60; // minutes (positive = event after prompt)
         
         // Only count if event happened after prompt (within reasonable time: 30 minutes)
-        if (timeToChange >= 0 && timeToChange <= 30) {
+        // Also allow events up to 5 minutes before prompt (in case of timing issues)
+        if (timeToChange >= -5 && timeToChange <= 30) {
           linkedPrompts.push({
             prompt,
-            timeToChange: timeToChange,
+            timeToChange: Math.max(0, timeToChange), // Don't show negative times
             eventCount: 1,
             success: true,
             linkedEvent: linkedEvent
@@ -885,27 +888,76 @@ function renderPromptEffectiveness() {
     // Find the linked prompt
     const linkedPrompt = prompts.find(p => {
       const pId = p.id || p.prompt_id;
-      return String(pId) === String(eventPromptId) || parseInt(pId) === parseInt(eventPromptId);
+      if (!pId) return false;
+      return String(pId) === String(eventPromptId) || 
+             parseInt(pId) === parseInt(eventPromptId) ||
+             String(pId) === String(parseInt(eventPromptId));
     });
     
-    if (linkedPrompt && !processedPromptIds.has(linkedPrompt.id || linkedPrompt.prompt_id)) {
+    if (linkedPrompt) {
+      const promptId = linkedPrompt.id || linkedPrompt.prompt_id;
+      if (processedPromptIds.has(promptId)) return;
+      
       const promptTime = new Date(linkedPrompt.timestamp).getTime();
       const eventTime = new Date(event.timestamp).getTime();
+      if (isNaN(promptTime) || isNaN(eventTime)) return;
+      
       const timeToChange = (eventTime - promptTime) / 1000 / 60; // minutes
       
       // Only count if event happened after prompt (within reasonable time: 30 minutes)
-      if (timeToChange >= 0 && timeToChange <= 30) {
+      // Also allow events up to 5 minutes before prompt (in case of timing issues)
+      if (timeToChange >= -5 && timeToChange <= 30) {
         linkedPrompts.push({
           prompt: linkedPrompt,
-          timeToChange: timeToChange,
+          timeToChange: Math.max(0, timeToChange), // Don't show negative times
           eventCount: 1,
           success: true,
           linkedEvent: event
         });
-        processedPromptIds.add(linkedPrompt.id || linkedPrompt.prompt_id);
+        processedPromptIds.add(promptId);
       }
     }
   });
+  
+  // Method 3: Temporal matching - find code changes within 30 minutes of prompts (fallback)
+  if (linkedPrompts.length === 0) {
+    prompts.forEach(prompt => {
+      const promptId = prompt.id || prompt.prompt_id;
+      if (!promptId || processedPromptIds.has(promptId)) return;
+      
+      const promptTime = new Date(prompt.timestamp).getTime();
+      if (isNaN(promptTime)) return;
+      
+      // Look for code changes within 30 minutes after prompt
+      const windowStart = promptTime;
+      const windowEnd = promptTime + (30 * 60 * 1000);
+      
+      const relatedEvents = events.filter(e => {
+        const eventTime = new Date(e.timestamp).getTime();
+        if (isNaN(eventTime)) return false;
+        const isCodeChange = e.type === 'file-change' || e.type === 'code-change' || e.type === 'file-edit';
+        return isCodeChange && eventTime >= windowStart && eventTime <= windowEnd;
+      });
+      
+      if (relatedEvents.length > 0) {
+        // Use the first event as the linked event
+        const firstEvent = relatedEvents.sort((a, b) => 
+          new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+        )[0];
+        const eventTime = new Date(firstEvent.timestamp).getTime();
+        const timeToChange = (eventTime - promptTime) / 1000 / 60;
+        
+        linkedPrompts.push({
+          prompt,
+          timeToChange: timeToChange,
+          eventCount: relatedEvents.length,
+          success: true,
+          linkedEvent: firstEvent
+        });
+        processedPromptIds.add(promptId);
+      }
+    });
+  }
   
   // Collect unlinked prompts (those not in processedPromptIds)
   prompts.forEach(prompt => {

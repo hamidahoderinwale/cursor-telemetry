@@ -84,8 +84,9 @@ function createExportImportRoutes(deps) {
       // Write metadata first (small, can load all at once)
       const metadata = {
         exportedAt: new Date().toISOString(),
-        version: '2.4',
+        version: '2.5',
         schema_version: schemaVersion,
+        exportFormat: 'structured',
         exportLimit: limit,
         fullExport: includeAllFields,
         dateRange: {
@@ -96,7 +97,8 @@ function createExportImportRoutes(deps) {
           excludeEvents, excludePrompts, excludeTerminal, excludeContext,
           noCodeDiffs, noLinkedData, noTemporalChunks
         },
-        streaming: true
+        streaming: true,
+        organization: 'Structured format with clear sections'
       };
       writeChunk(`    "metadata": ${JSON.stringify(metadata, null, 2).split('\n').join('\n    ')},\n`);
       
@@ -773,12 +775,19 @@ function createExportImportRoutes(deps) {
         console.warn('[EXPORT] Could not get schema version:', err.message);
       }
 
-      // Get in-memory data with improved structure
+      // Get in-memory data with improved, organized structure
       const exportData = {
+        // ============================================
+        // METADATA SECTION - Export information and configuration
+        // ============================================
         metadata: {
+          // Export identification
           exportedAt: new Date().toISOString(),
-          version: '2.4',  // Bumped for export filters
+          version: '2.5',  // Bumped for better organization
           schema_version: schemaVersion,
+          exportFormat: 'structured', // 'structured' or 'flat' (for backward compatibility)
+          
+          // Export configuration
           exportLimit: limit,
           fullExport: includeAllFields,
           dateRange: {
@@ -794,44 +803,230 @@ function createExportImportRoutes(deps) {
             noLinkedData,
             noTemporalChunks
           },
-          totalEntries: enrichedEntries.length,
-          totalPrompts: filteredPrompts.length,
-          totalEvents: filteredEvents.length,
-          totalTerminalCommands: filteredTerminalCommands.length,
-          totalContextSnapshots: filteredContextSnapshots.length,
-          totalLinked: linkedData.length,
-          totalTemporalChunks: noTemporalChunks ? 0 : enrichedChunks.length,
-          note: limit < 10000 ? 'Limited export - use ?limit=10000 for more data' : 'Full export'
+          
+          // Data counts (quick reference)
+          counts: {
+            entries: enrichedEntries.length,
+            prompts: filteredPrompts.length,
+            events: filteredEvents.length,
+            terminalCommands: filteredTerminalCommands.length,
+            contextSnapshots: filteredContextSnapshots.length,
+            linkedPairs: linkedData.length,
+            temporalChunks: noTemporalChunks ? 0 : enrichedChunks.length,
+            workspaces: (db.workspaces || []).length
+          },
+          
+          // Export notes
+          note: limit < 10000 ? 'Limited export - use ?limit=10000 for more data' : 'Full export',
+          organization: 'Structured format with clear sections for easy navigation'
         },
-        // NEW: Temporal chunks (groups by time proximity with all metadata) - only if requested
-        ...(noTemporalChunks ? {} : { temporal_chunks: enrichedChunks }),
-        // NEW: Linked data structure (prompts with their code changes - explicit links) - only if requested
-        ...(noLinkedData ? {} : { linked_data: linkedData }),
-        // Original flat arrays (for backward compatibility and direct access)
-        entries: enrichedEntries,
-        prompts: filteredPrompts,
-        events: filteredEvents,
-        terminal_commands: filteredTerminalCommands,
-        context_snapshots: filteredContextSnapshots,
-        context_analytics: contextAnalytics,
-        workspaces: db.workspaces || [],
-        // Unlinked items (for analysis)
-        unlinked: {
-          entries: unlinkedEntries.filter(e => !e.prompt_id),
-          prompts: unlinkedPrompts,
-          note: 'Items without explicit links (may be linked by timestamp proximity in temporal_chunks)'
+        
+        // ============================================
+        // CORE DATA SECTION - Primary data arrays
+        // Organized by data type for easy access
+        // ============================================
+        data: {
+          // File/Code changes (entries)
+          codeChanges: enrichedEntries.map(e => ({
+            id: e.id,
+            timestamp: e.timestamp,
+            file_path: e.file_path || e.filePath,
+            workspace_path: e.workspace_path || e.workspacePath,
+            type: e.type || 'file_change',
+            source: e.source,
+            session_id: e.session_id || e.sessionId,
+            prompt_id: e.prompt_id || e.promptId, // Link to prompt if available
+            diff_stats: e.diff_stats,
+            // Code content (only if not excluded)
+            ...(noCodeDiffs ? {} : {
+              before_code: e.before_code || e.before_content || '',
+              after_code: e.after_code || e.after_content || ''
+            }),
+            // Additional metadata
+            tags: e.tags || [],
+            notes: e.notes,
+            modelInfo: e.modelInfo || e.model_info
+          })),
+          
+          // AI Prompts
+          prompts: filteredPrompts.map(p => ({
+            id: p.id,
+            timestamp: p.timestamp,
+            text: p.text || p.prompt || p.content || p.preview || '',
+            workspace_path: p.workspace_path || p.workspacePath,
+            workspace_id: p.workspace_id || p.workspaceId,
+            source: p.source || 'cursor',
+            mode: p.mode,
+            linked_entry_id: p.linked_entry_id || p.linkedEntryId, // Link to code change if available
+            // Model information
+            model_type: p.model_type || p.modelType,
+            model_name: p.model_name || p.modelName,
+            // Context information
+            context_usage: p.context_usage || p.contextUsage || 0,
+            context_file_count: p.context_file_count || p.contextFileCount || 0,
+            // Conversation metadata
+            conversation_id: p.conversation_id || p.conversationId,
+            conversation_title: p.conversation_title || p.conversationTitle,
+            message_role: p.message_role || p.messageRole,
+            // Additional metadata
+            lines_added: p.lines_added || p.linesAdded || 0,
+            lines_removed: p.lines_removed || p.linesRemoved || 0,
+            thinking_time: p.thinking_time || p.thinkingTime,
+            composer_id: p.composer_id || p.composerId
+          })),
+          
+          // Activity Events (general activity tracking)
+          events: filteredEvents.map(e => ({
+            id: e.id,
+            timestamp: e.timestamp,
+            type: e.type || 'activity',
+            workspace_path: e.workspace_path || e.workspacePath,
+            session_id: e.session_id || e.sessionId,
+            details: e.details || {}
+          })),
+          
+          // Terminal Commands
+          terminalCommands: filteredTerminalCommands.map(cmd => ({
+            id: cmd.id,
+            timestamp: cmd.timestamp,
+            command: cmd.command,
+            workspace: cmd.workspace || cmd.workspace_path,
+            shell: cmd.shell,
+            source: cmd.source,
+            exit_code: cmd.exit_code || cmd.exitCode,
+            duration: cmd.duration,
+            output: cmd.output,
+            error: cmd.error,
+            linked_entry_id: cmd.linked_entry_id || cmd.linkedEntryId,
+            linked_prompt_id: cmd.linked_prompt_id || cmd.linkedPromptId
+          })),
+          
+          // Context Snapshots
+          contextSnapshots: filteredContextSnapshots.map(snapshot => ({
+            id: snapshot.id,
+            timestamp: snapshot.timestamp,
+            prompt_id: snapshot.prompt_id || snapshot.promptId,
+            file_count: snapshot.current_file_count || snapshot.currentFileCount || 0,
+            added_files: snapshot.addedFiles || [],
+            removed_files: snapshot.removedFiles || [],
+            net_change: snapshot.netChange || 0
+          }))
         },
-        stats: {
-          sessions: enrichedEntries.length,
-          fileChanges: enrichedEntries.length,
-          aiInteractions: filteredPrompts.length,
-          totalActivities: filteredEvents.length,
-          terminalCommands: filteredTerminalCommands.length,
-          avgContextUsage: contextAnalytics.avgContextUtilization || 0,
-          linkedPairs: linkedData.length,
-          linkingRate: enrichedEntries.length > 0 
-            ? ((linkedData.length / enrichedEntries.length) * 100).toFixed(1) + '%'
-            : '0%'
+        
+        // ============================================
+        // RELATIONSHIPS SECTION - How data connects
+        // ============================================
+        relationships: {
+          // Explicit prompt-to-code links (when prompt_id is set)
+          linkedPairs: noLinkedData ? [] : linkedData.map(link => ({
+            prompt_id: link.prompt.id,
+            code_change_id: link.code_change.id,
+            linked_at: link.linked_at,
+            relationship_type: link.relationship.link_type,
+            // Quick reference (not full objects to avoid duplication)
+            prompt_timestamp: link.prompt.timestamp,
+            code_change_timestamp: link.code_change.timestamp,
+            time_gap_seconds: Math.abs(
+              (new Date(link.code_change.timestamp).getTime() - 
+               new Date(link.prompt.timestamp).getTime()) / 1000
+            )
+          })),
+          
+          // Items without explicit links (for analysis)
+          unlinked: {
+            codeChanges: unlinkedEntries.filter(e => !e.prompt_id).map(e => e.id),
+            prompts: unlinkedPrompts.map(p => p.id),
+            note: 'These items have no explicit prompt_id/linked_entry_id links. They may be related by timestamp proximity in temporal_chunks.'
+          }
+        },
+        
+        // ============================================
+        // TEMPORAL ORGANIZATION - Time-grouped activity
+        // Groups related activity by time windows
+        // ============================================
+        ...(noTemporalChunks ? {} : {
+          temporalChunks: enrichedChunks.map(chunk => ({
+            id: chunk.id,
+            start_time: chunk.start_time,
+            end_time: chunk.end_time,
+            duration_seconds: chunk.duration_seconds,
+            // Summary statistics
+            summary: chunk.summary,
+            // Workspaces involved
+            workspaces: chunk.workspace_paths,
+            // Files changed
+            files_changed: chunk.files_changed,
+            // Models used
+            models_used: chunk.models_used,
+            // Relationships within chunk
+            relationships: chunk.relationships,
+            // Item references (IDs only to avoid duplication)
+            item_ids: chunk.items.map(i => ({
+              type: i.type,
+              id: i.id,
+              timestamp: i.timestamp
+            }))
+          }))
+        }),
+        
+        // ============================================
+        // ANALYTICS & STATISTICS SECTION
+        // ============================================
+        analytics: {
+          // Context analytics
+          context: contextAnalytics,
+          
+          // Overall statistics
+          statistics: {
+            totalSessions: enrichedEntries.length,
+            totalFileChanges: enrichedEntries.length,
+            totalAIPrompts: filteredPrompts.length,
+            totalEvents: filteredEvents.length,
+            totalTerminalCommands: filteredTerminalCommands.length,
+            avgContextUsage: contextAnalytics.avgContextUtilization || 0,
+            linkingRate: enrichedEntries.length > 0 
+              ? ((linkedData.length / enrichedEntries.length) * 100).toFixed(1) + '%'
+              : '0%',
+            linkedPairs: linkedData.length
+          },
+          
+          // Workspace information
+          workspaces: (db.workspaces || []).map(ws => ({
+            path: ws,
+            name: ws.split('/').pop() || ws
+          }))
+        },
+        
+        // ============================================
+        // BACKWARD COMPATIBILITY SECTION
+        // Flat arrays for legacy code that expects them
+        // ============================================
+        _legacy: {
+          entries: enrichedEntries,
+          prompts: filteredPrompts,
+          events: filteredEvents,
+          terminal_commands: filteredTerminalCommands,
+          context_snapshots: filteredContextSnapshots,
+          linked_data: noLinkedData ? [] : linkedData,
+          temporal_chunks: noTemporalChunks ? [] : enrichedChunks,
+          workspaces: db.workspaces || [],
+          context_analytics: contextAnalytics,
+          unlinked: {
+            entries: unlinkedEntries.filter(e => !e.prompt_id),
+            prompts: unlinkedPrompts
+          },
+          stats: {
+            sessions: enrichedEntries.length,
+            fileChanges: enrichedEntries.length,
+            aiInteractions: filteredPrompts.length,
+            totalActivities: filteredEvents.length,
+            terminalCommands: filteredTerminalCommands.length,
+            avgContextUsage: contextAnalytics.avgContextUtilization || 0,
+            linkedPairs: linkedData.length,
+            linkingRate: enrichedEntries.length > 0 
+              ? ((linkedData.length / enrichedEntries.length) * 100).toFixed(1) + '%'
+              : '0%'
+          }
         }
       };
       
@@ -888,6 +1083,30 @@ function createExportImportRoutes(deps) {
         mergeStrategy = 'skip',  // 'skip', 'overwrite', 'merge', 'append'
         workspaceMappings = {}  // Map imported workspace paths to local paths
       } = options;
+      
+      // Normalize data structure - handle both new structured format and legacy format
+      let normalizedData = data;
+      if (data.data && data.metadata) {
+        // New structured format (v2.5+)
+        console.log('[IMPORT] Detected structured export format');
+        normalizedData = {
+          // Use structured data section
+          entries: data.data.codeChanges || [],
+          prompts: data.data.prompts || [],
+          events: data.data.events || [],
+          terminal_commands: data.data.terminalCommands || [],
+          context_snapshots: data.data.contextSnapshots || [],
+          // Fall back to legacy if structured is empty
+          ...(data._legacy || {}),
+          // Preserve other sections
+          workspaces: data.analytics?.workspaces?.map(w => w.path) || data.workspaces || [],
+          context_analytics: data.analytics?.context || data.context_analytics
+        };
+      } else if (data.entries || data.prompts) {
+        // Legacy format (v2.4 and earlier) - use as-is
+        console.log('[IMPORT] Detected legacy export format');
+        normalizedData = data;
+      }
       
       // Helper to apply workspace mappings
       const mapWorkspace = (workspacePath) => {

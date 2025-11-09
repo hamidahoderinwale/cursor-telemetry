@@ -203,37 +203,42 @@ export class AnalyticsRenderers {
     };
     
     prompts.forEach(p => {
-      const text = p.text || p.prompt || p.content || '';
+      // Try multiple field names for prompt text
+      const text = p.text || p.prompt || p.content || p.preview || p.message || '';
       
-      // Match @filename patterns - but be more selective
-      const atMatches = text.match(/@[\w\-\.\/]+/g);
+      // Match @filename patterns - be more lenient to catch more references
+      // Match @ followed by word characters, dots, slashes, hyphens, underscores
+      const atMatches = text.match(/@[\w\-\.\/\\_]+/g);
       if (atMatches) {
         atMatches.forEach(match => {
           const file = match.substring(1); // Remove @
-          // Only count if it looks like a real file reference (has path or is meaningful)
-          if (!shouldExclude(file) && (file.includes('/') || file.includes('\\') || file.length > 10)) {
+          // Be more lenient: count if it's not excluded and has at least 3 characters
+          // (reduced from 10 to catch shorter file names like @app.js, @config, etc.)
+          if (!shouldExclude(file) && (file.includes('/') || file.includes('\\') || file.length >= 3)) {
             fileReferences.set(file, (fileReferences.get(file) || 0) + 1);
           }
         });
       }
       
-      // Also check context metadata
-      if (p.context?.atFiles) {
-        p.context.atFiles.forEach(file => {
-          const fileName = file.reference || file.fileName || file.filePath;
+      // Also check context metadata - try multiple field name variations
+      const context = p.context || p.composerData || p.metadata || {};
+      if (context.atFiles && Array.isArray(context.atFiles)) {
+        context.atFiles.forEach(file => {
+          const fileName = typeof file === 'string' ? file : (file.reference || file.fileName || file.filePath || file.path || file.name);
           if (fileName && !shouldExclude(fileName)) {
             fileReferences.set(fileName, (fileReferences.get(fileName) || 0) + 1);
           }
         });
       }
       
-      // Check contextFilesJson if available
-      if (p.contextFilesJson && typeof p.contextFilesJson === 'string') {
+      // Check contextFilesJson if available (try multiple field names)
+      const contextFilesJson = p.contextFilesJson || p.context_files_json || p.contextFiles || p.context_files;
+      if (contextFilesJson) {
         try {
-          const contextFiles = JSON.parse(p.contextFilesJson);
+          const contextFiles = typeof contextFilesJson === 'string' ? JSON.parse(contextFilesJson) : contextFilesJson;
           if (Array.isArray(contextFiles)) {
             contextFiles.forEach(file => {
-              const fileName = file.path || file.filePath || file.name || file;
+              const fileName = typeof file === 'string' ? file : (file.path || file.filePath || file.name || file.fileName);
               if (fileName && !shouldExclude(fileName)) {
                 fileReferences.set(fileName, (fileReferences.get(fileName) || 0) + 1);
               }
@@ -243,13 +248,38 @@ export class AnalyticsRenderers {
           // Ignore parse errors
         }
       }
+      
+      // Check for context file count to determine if context was used
+      const contextFileCount = p.contextFileCount || p.context_file_count || p.contextFilesCount || 
+                               (contextFilesJson ? (Array.isArray(contextFilesJson) ? contextFilesJson.length : 0) : 0);
+      if (contextFileCount > 0 && !fileReferences.has('_hasContext')) {
+        // Mark that we found context data
+        fileReferences.set('_hasContext', 1);
+      }
     });
 
+    // Remove the internal marker if it exists
+    fileReferences.delete('_hasContext');
+    
     if (fileReferences.size === 0) {
+      // Debug: Show what we found
+      const totalPrompts = prompts.length;
+      const promptsWithText = prompts.filter(p => {
+        const text = p.text || p.prompt || p.content || p.preview || p.message || '';
+        return text.length > 0;
+      }).length;
+      const promptsWithAt = prompts.filter(p => {
+        const text = p.text || p.prompt || p.content || p.preview || p.message || '';
+        return text.includes('@');
+      }).length;
+      
       container.innerHTML = `
         <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 200px; padding: var(--space-xl); text-align: center;">
           <div style="font-size: var(--text-lg); color: var(--color-text); margin-bottom: var(--space-xs); font-weight: 500;">No @ References Found</div>
-          <div style="font-size: var(--text-sm); color: var(--color-text-muted);">Reference files in prompts with @ to see analytics</div>
+          <div style="font-size: var(--text-sm); color: var(--color-text-muted); margin-bottom: var(--space-sm);">Reference files in prompts with @ to see analytics</div>
+          <div style="font-size: var(--text-xs); color: var(--color-text-muted); opacity: 0.7;">
+            Debug: ${totalPrompts} prompts, ${promptsWithText} with text, ${promptsWithAt} with @ symbol
+          </div>
         </div>
       `;
       return;
@@ -349,8 +379,20 @@ export class AnalyticsRenderers {
       : 0;
 
     const promptsWithFiles = prompts.filter(p => {
-      const hasAtRef = (p.text || '').includes('@');
-      const hasContextFiles = (p.contextFileCount || p.context_file_count || 0) > 0;
+      // Try multiple field names for prompt text
+      const text = p.text || p.prompt || p.content || p.preview || p.message || '';
+      const hasAtRef = text.includes('@');
+      
+      // Try multiple field names for context file count
+      const contextFileCount = p.contextFileCount || p.context_file_count || p.contextFilesCount || 0;
+      
+      // Also check if context data exists in other formats
+      const context = p.context || p.composerData || p.metadata || {};
+      const hasContextFiles = contextFileCount > 0 || 
+                             (context.atFiles && Array.isArray(context.atFiles) && context.atFiles.length > 0) ||
+                             (p.contextFilesJson && p.contextFilesJson.length > 0) ||
+                             (p.contextFiles && Array.isArray(p.contextFiles) && p.contextFiles.length > 0);
+      
       return hasAtRef || hasContextFiles;
     });
     const adoptionRate = prompts.length > 0 ? ((promptsWithFiles.length / prompts.length) * 100).toFixed(1) : 0;
@@ -372,13 +414,25 @@ export class AnalyticsRenderers {
     };
     
     prompts.forEach(p => {
-      const text = p.text || '';
-      const matches = text.match(/@[\w\-\.\/]+/g);
+      // Try multiple field names for prompt text
+      const text = p.text || p.prompt || p.content || p.preview || p.message || '';
+      const matches = text.match(/@[\w\-\.\/\\]+/g);
       if (matches) {
         matches.forEach(match => {
           const file = match.substring(1);
           if (!shouldExclude(file) && (file.includes('/') || file.includes('\\') || file.length > 10)) {
             fileMentions.set(file, (fileMentions.get(file) || 0) + 1);
+          }
+        });
+      }
+      
+      // Also check context metadata
+      const context = p.context || p.composerData || p.metadata || {};
+      if (context.atFiles && Array.isArray(context.atFiles)) {
+        context.atFiles.forEach(file => {
+          const fileName = typeof file === 'string' ? file : (file.reference || file.fileName || file.filePath || file.path || file.name);
+          if (fileName && !shouldExclude(fileName)) {
+            fileMentions.set(fileName, (fileMentions.get(fileName) || 0) + 1);
           }
         });
       }
@@ -462,27 +516,64 @@ export class AnalyticsRenderers {
       }
     }
     
-    // Prompt metrics
-    const userPrompts = prompts.filter(p => p.messageRole === 'user' || !p.messageRole);
-    const aiResponses = prompts.filter(p => p.messageRole === 'assistant');
-    const recentPrompts = userPrompts.filter(p => new Date(p.timestamp).getTime() >= last24h);
-    const weekPrompts = userPrompts.filter(p => new Date(p.timestamp).getTime() >= last7days);
+    // Prompt metrics - try multiple field names
+    const userPrompts = prompts.filter(p => {
+      const role = p.messageRole || p.role || p.type || '';
+      return role === 'user' || role === '' || !role;
+    });
+    const aiResponses = prompts.filter(p => {
+      const role = p.messageRole || p.role || p.type || '';
+      return role === 'assistant' || role === 'ai';
+    });
+    const recentPrompts = userPrompts.filter(p => {
+      const time = new Date(p.timestamp).getTime();
+      return !isNaN(time) && time >= last24h;
+    });
+    const weekPrompts = userPrompts.filter(p => {
+      const time = new Date(p.timestamp).getTime();
+      return !isNaN(time) && time >= last7days;
+    });
     
-    // Calculate thinking time for AI responses
-    const aiResponsesWithTime = aiResponses.filter(p => p.thinkingTimeSeconds && p.thinkingTimeSeconds > 0);
+    // Calculate thinking time for AI responses - try multiple field names
+    const aiResponsesWithTime = aiResponses.filter(p => {
+      const thinkingTime = p.thinkingTimeSeconds || p.thinking_time_seconds || p.thinkingTime || 0;
+      return thinkingTime > 0;
+    });
     const avgThinkingTime = aiResponsesWithTime.length > 0 
-      ? aiResponsesWithTime.reduce((sum, p) => sum + parseFloat(p.thinkingTimeSeconds), 0) / aiResponsesWithTime.length 
+      ? aiResponsesWithTime.reduce((sum, p) => {
+          const thinkingTime = p.thinkingTimeSeconds || p.thinking_time_seconds || p.thinkingTime || 0;
+          return sum + parseFloat(thinkingTime);
+        }, 0) / aiResponsesWithTime.length 
       : 0;
     
-    // Lines changed analysis
-    const totalLinesAdded = prompts.reduce((sum, p) => sum + (p.linesAdded || 0), 0);
-    const totalLinesRemoved = prompts.reduce((sum, p) => sum + (p.linesRemoved || 0), 0);
+    // Lines changed analysis - try multiple field names
+    const totalLinesAdded = prompts.reduce((sum, p) => {
+      return sum + (p.linesAdded || p.lines_added || p.linesAdded || 0);
+    }, 0);
+    const totalLinesRemoved = prompts.reduce((sum, p) => {
+      return sum + (p.linesRemoved || p.lines_removed || p.linesRemoved || 0);
+    }, 0);
     const netLinesChanged = totalLinesAdded - totalLinesRemoved;
     
     // Code churn (high churn = editing same files repeatedly)
     const fileEditCounts = new Map();
-    events.filter(e => e.file).forEach(e => {
-      fileEditCounts.set(e.file, (fileEditCounts.get(e.file) || 0) + 1);
+    events.forEach(e => {
+      // Try multiple field names for file path
+      let filePath = e.file || e.file_path || e.filePath || '';
+      
+      // If no file path found, check details
+      if (!filePath && e.details) {
+        try {
+          const details = typeof e.details === 'string' ? JSON.parse(e.details || '{}') : (e.details || {});
+          filePath = details.file_path || details.filePath || '';
+        } catch (err) {
+          // Ignore parse errors
+        }
+      }
+      
+      if (filePath) {
+        fileEditCounts.set(filePath, (fileEditCounts.get(filePath) || 0) + 1);
+      }
     });
     const highChurnFiles = Array.from(fileEditCounts.entries())
       .filter(([_, count]) => count >= 5)

@@ -419,12 +419,42 @@ function updateNavigatorStats() {
       return div.innerHTML;
     });
     legend.innerHTML = navigatorState.clusters.map(cluster => `
-      <div class="cluster-legend-item">
+      <div class="cluster-legend-item" title="${escapeHtml(cluster.description || '')}">
         <div class="cluster-legend-color" style="background: ${cluster.color};"></div>
         <span class="cluster-legend-label">${escapeHtml(cluster.name)} (${cluster.nodes.length})</span>
+        ${cluster.category && cluster.category !== 'unknown' ? 
+          `<span class="cluster-category-badge" style="font-size: 10px; opacity: 0.7; margin-left: 4px;">[${cluster.category}]</span>` : ''}
       </div>
     `).join('');
   }
+}
+
+// Listen for cluster annotation updates
+if (typeof window !== 'undefined') {
+  window.addEventListener('clusters-annotated', (event) => {
+    // Update cluster legend when annotations are ready
+    if (window.navigatorState && event.detail && event.detail.clusters) {
+      window.navigatorState.clusters = event.detail.clusters;
+      // Re-render cluster legend
+      const legend = document.getElementById('clusterLegend');
+      if (legend && window.navigatorState) {
+        const navigatorState = window.navigatorState;
+        const escapeHtml = window.escapeHtml || ((str) => {
+          const div = document.createElement('div');
+          div.textContent = str;
+          return div.innerHTML;
+        });
+        legend.innerHTML = navigatorState.clusters.map(cluster => `
+          <div class="cluster-legend-item" title="${escapeHtml(cluster.description || '')}">
+            <div class="cluster-legend-color" style="background: ${cluster.color};"></div>
+            <span class="cluster-legend-label">${escapeHtml(cluster.name)} (${cluster.nodes.length})</span>
+            ${cluster.category && cluster.category !== 'unknown' ? 
+              `<span class="cluster-category-badge" style="font-size: 10px; opacity: 0.7; margin-left: 4px;">[${cluster.category}]</span>` : ''}
+          </div>
+        `).join('');
+      }
+    }
+  });
 }
 
 /**

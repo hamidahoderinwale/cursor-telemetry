@@ -32,7 +32,7 @@ window.CONFIG = {
   },
   
   // Search Configuration
-  ENABLE_SEMANTIC_SEARCH: false, // Disable Hugging Face semantic search by default (heavy computation)
+  ENABLE_SEMANTIC_SEARCH: true, // Enable semantic search by default (uses OpenRouter API if available, falls back to Transformers.js)
   ENABLE_TF_IDF: false // Disable TF-IDF by default to save memory
 };
 

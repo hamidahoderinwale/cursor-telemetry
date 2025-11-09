@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  companion:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.companion
+    container_name: cursor-companion
+    ports:
+      - "43917:43917"
+    environment:
+      - NODE_ENV=production
+      - PORT=43917
+      - HOST=0.0.0.0
+      - REQUIRE_AUTH=false
+    volumes:
+      # Mount data directory for persistent storage
+      - ./components/activity-logger/companion/data:/app/data
+      # Mount config file (optional - can be overridden via environment)
+      - ./components/activity-logger/companion/config.json:/app/config.json:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:43917/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+

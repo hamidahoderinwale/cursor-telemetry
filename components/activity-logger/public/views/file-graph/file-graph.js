@@ -10,6 +10,34 @@
 /**
  * Initialize D3 file graph visualization
  */
+
+// Update TF-IDF stats function (defined outside try block to avoid scope issues)
+function updateTFIDFStats(tfidfStats) {
+  if (!tfidfStats) return;
+  
+  const tfidfTotalTermsEl = document.getElementById('tfidfTotalTerms');
+  const tfidfUniqueTermsEl = document.getElementById('tfidfUniqueTerms');
+  const tfidfAvgFreqEl = document.getElementById('tfidfAvgFreq');
+  if (tfidfTotalTermsEl) tfidfTotalTermsEl.textContent = tfidfStats.totalTerms.toLocaleString();
+  if (tfidfUniqueTermsEl) tfidfUniqueTermsEl.textContent = tfidfStats.uniqueTerms;
+  if (tfidfAvgFreqEl) tfidfAvgFreqEl.textContent = tfidfStats.avgFrequency.toFixed(2);
+  
+  // Show ALL top terms (not just 10) with scrolling
+  const termsHtml = tfidfStats.topTerms.map((term, index) => `
+    <div style="display: flex; justify-content: space-between; align-items: center; padding: var(--space-xs); background: var(--color-bg); border-radius: var(--radius-sm); font-size: 12px;" title="TF-IDF Score: ${term.tfidf.toFixed(6)} | Frequency: ${term.freq}">
+      <span style="display: flex; align-items: center; gap: var(--space-xs);">
+        <span style="color: var(--color-text-muted); font-size: 10px; min-width: 25px;">#${index + 1}</span>
+        <span style="font-family: var(--font-mono); color: var(--color-text);">${window.escapeHtml ? window.escapeHtml(term.term) : term.term}</span>
+      </span>
+      <span style="font-weight: 600; color: var(--color-accent);">${term.tfidf.toFixed(4)}</span>
+    </div>
+  `).join('');
+  const topTermsEl = document.getElementById('topTerms');
+  if (topTermsEl) {
+    topTermsEl.innerHTML = termsHtml || '<div style="color: var(--color-text-muted); font-size: 13px;">No terms found</div>';
+  }
+}
+
 async function initializeD3FileGraph() {
   try {
     const container = document.getElementById('fileGraphContainer');
@@ -66,14 +94,15 @@ async function initializeD3FileGraph() {
         }
       } catch (error) {
         console.warn('[FILE] Failed to fetch file contents:', error.message);
-      container.innerHTML = `
-        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: var(--color-text-muted); padding: 2rem; text-align: center;">
-          <div style="font-size: 1.1rem; font-weight: 500; margin-bottom: 0.5rem; color: var(--color-text);">Companion service not available</div>
-          <div style="font-size: 0.9rem; margin-bottom: 1rem;">File contents cannot be loaded. Make sure the companion service is running on port 43917.</div>
-          <div style="font-size: 0.85rem; opacity: 0.8;">Error: ${error.message}</div>
-        </div>
-      `;
-      return;
+        container.innerHTML = `
+          <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: var(--color-text-muted); padding: 2rem; text-align: center;">
+            <div style="font-size: 1.1rem; font-weight: 500; margin-bottom: 0.5rem; color: var(--color-text);">Companion service not available</div>
+            <div style="font-size: 0.9rem; margin-bottom: 1rem;">File contents cannot be loaded. Make sure the companion service is running on port 43917.</div>
+            <div style="font-size: 0.85rem; opacity: 0.8;">Error: ${error.message}</div>
+          </div>
+        `;
+        return;
+      }
     }
     
     if (!data.files || data.files.length === 0) {
@@ -331,7 +360,7 @@ async function initializeD3FileGraph() {
     
     // Limit files for performance (O(n²) computation)
     const MAX_FILES_FOR_GRAPH = 500; // Limit to prevent timeout
-    const filesToProcess = files.length > MAX_FILES_FOR_GRAPH 
+    const filesForGraph = files.length > MAX_FILES_FOR_GRAPH 
       ? files.slice(0, MAX_FILES_FOR_GRAPH) 
       : files;
     
@@ -345,60 +374,79 @@ async function initializeD3FileGraph() {
     
     // Process in chunks with yield points
     const CHUNK_SIZE = 50;
-    for (let chunkStart = 0; chunkStart < filesToProcess.length && linkCount < MAX_LINKS; chunkStart += CHUNK_SIZE) {
-      const chunkEnd = Math.min(chunkStart + CHUNK_SIZE, filesToProcess.length);
+    for (let chunkStart = 0; chunkStart < filesForGraph.length && linkCount < MAX_LINKS; chunkStart += CHUNK_SIZE) {
+      const chunkEnd = Math.min(chunkStart + CHUNK_SIZE, filesForGraph.length);
       
       for (let i = chunkStart; i < chunkEnd && linkCount < MAX_LINKS; i++) {
-        for (let j = i + 1; j < filesToProcess.length && linkCount < MAX_LINKS; j++) {
-          const file1 = filesToProcess[i];
-          const file2 = filesToProcess[j];
-        
-        // Get prompts that reference each file (from pre-built map)
-        const prompts1 = filePromptMap.get(file1.id) || new Set();
-        const prompts2 = filePromptMap.get(file2.id) || new Set();
-        
-        // Get sessions from pre-built map (optimization)
-        const sessions1 = fileSessionMap.get(file1.id) || new Set();
-        const sessions2 = fileSessionMap.get(file2.id) || new Set();
-        
-        // Quick check: skip if no overlap at all (optimization)
-        const hasPromptOverlap = prompts1.size > 0 && prompts2.size > 0 && 
-                                 [...prompts1].some(p => prompts2.has(p));
-        const hasSessionOverlap = sessions1.size > 0 && sessions2.size > 0 && 
-                                  [...sessions1].some(s => sessions2.has(s));
-        
-        if (!hasPromptOverlap && !hasSessionOverlap) {
-          continue; // Skip files with no relationship
-        }
-        
-        // Combine both prompt co-occurrence and session co-occurrence
-        const promptIntersection = new Set([...prompts1].filter(x => prompts2.has(x)));
-        const sessionIntersection = new Set([...sessions1].filter(x => sessions2.has(x)));
-        
-        const promptUnion = new Set([...prompts1, ...prompts2]);
-        const sessionUnion = new Set([...sessions1, ...sessions2]);
-        
-        // Calculate similarity with weighted average (prompts are more important)
-        const promptSim = promptUnion.size > 0 ? promptIntersection.size / promptUnion.size : 0;
-        const sessionSim = sessionUnion.size > 0 ? sessionIntersection.size / sessionUnion.size : 0;
-        
-        // Weighted average: 70% prompts, 30% sessions
-        const similarity = (promptSim * 0.7) + (sessionSim * 0.3);
-        
-        if (similarity > threshold) {
-          links.push({
-            source: file1.id,
-            target: file2.id,
-            similarity: similarity,
-            sharedPrompts: promptIntersection.size,
-            sharedSessions: sessionIntersection.size
-          });
-          linkCount++;
+        for (let j = i + 1; j < filesForGraph.length && linkCount < MAX_LINKS; j++) {
+          const file1 = filesForGraph[i];
+          const file2 = filesForGraph[j];
+          
+            // Get prompts that reference each file (from pre-built map)
+          const prompts1 = filePromptMap.get(file1.id) || new Set();
+          const prompts2 = filePromptMap.get(file2.id) || new Set();
+          
+          // Get sessions from pre-built map (optimization)
+          const sessions1 = fileSessionMap.get(file1.id) || new Set();
+          const sessions2 = fileSessionMap.get(file2.id) || new Set();
+          
+          // Quick check: skip if no overlap at all (optimization)
+          const hasPromptOverlap = prompts1.size > 0 && prompts2.size > 0 && 
+                                   [...prompts1].some(p => prompts2.has(p));
+          const hasSessionOverlap = sessions1.size > 0 && sessions2.size > 0 && 
+                                    [...sessions1].some(s => sessions2.has(s));
+          
+          if (!hasPromptOverlap && !hasSessionOverlap) {
+            continue; // Skip files with no relationship
+          }
+          
+          // Combine both prompt co-occurrence and session co-occurrence
+          const promptIntersection = new Set([...prompts1].filter(x => prompts2.has(x)));
+          const sessionIntersection = new Set([...sessions1].filter(x => sessions2.has(x)));
+          
+          const promptUnion = new Set([...prompts1, ...prompts2]);
+          const sessionUnion = new Set([...sessions1, ...sessions2]);
+          
+          // Calculate multiple similarity metrics
+          // 1. Jaccard similarity for prompts (intersection / union)
+          const promptSim = promptUnion.size > 0 ? promptIntersection.size / promptUnion.size : 0;
+          
+          // 2. Jaccard similarity for sessions
+          const sessionSim = sessionUnion.size > 0 ? sessionIntersection.size / sessionUnion.size : 0;
+          
+          // 3. File path similarity (common directory structure)
+          const path1 = file1.path || file1.name || '';
+          const path2 = file2.path || file2.name || '';
+          const pathSim = calculatePathSimilarity(path1, path2);
+          
+          // 4. Temporal proximity (files modified close in time)
+          const timeSim = calculateTemporalSimilarity(file1, file2);
+          
+          // 5. Change frequency similarity (files with similar change patterns)
+          const changeSim = calculateChangeSimilarity(file1, file2);
+          
+          // Weighted combination: prompts (40%), sessions (25%), path (15%), temporal (10%), changes (10%)
+          const similarity = (promptSim * 0.4) + 
+                            (sessionSim * 0.25) + 
+                            (pathSim * 0.15) + 
+                            (timeSim * 0.1) + 
+                            (changeSim * 0.1);
+          
+          if (similarity > threshold) {
+            links.push({
+              source: file1.id,
+              target: file2.id,
+              similarity: similarity,
+              sharedPrompts: promptIntersection.size,
+              sharedSessions: sessionIntersection.size
+            });
+            linkCount++;
+          }
         }
       }
       
       // Yield to event loop periodically to prevent timeout
-      if (chunkStart + CHUNK_SIZE < filesToProcess.length) {
+      if (chunkStart + CHUNK_SIZE < filesForGraph.length) {
         await new Promise(resolve => setTimeout(resolve, 0));
       }
     }
@@ -475,33 +523,6 @@ async function initializeD3FileGraph() {
       });
     }
     
-    // Update TF-IDF stats function (called asynchronously after computation)
-    function updateTFIDFStats(tfidfStats) {
-      if (!tfidfStats) return;
-      
-      const tfidfTotalTermsEl = document.getElementById('tfidfTotalTerms');
-      const tfidfUniqueTermsEl = document.getElementById('tfidfUniqueTerms');
-      const tfidfAvgFreqEl = document.getElementById('tfidfAvgFreq');
-      if (tfidfTotalTermsEl) tfidfTotalTermsEl.textContent = tfidfStats.totalTerms.toLocaleString();
-      if (tfidfUniqueTermsEl) tfidfUniqueTermsEl.textContent = tfidfStats.uniqueTerms;
-      if (tfidfAvgFreqEl) tfidfAvgFreqEl.textContent = tfidfStats.avgFrequency.toFixed(2);
-      
-      // Show ALL top terms (not just 10) with scrolling
-      const termsHtml = tfidfStats.topTerms.map((term, index) => `
-        <div style="display: flex; justify-content: space-between; align-items: center; padding: var(--space-xs); background: var(--color-bg); border-radius: var(--radius-sm); font-size: 12px;" title="TF-IDF Score: ${term.tfidf.toFixed(6)} | Frequency: ${term.freq}">
-          <span style="display: flex; align-items: center; gap: var(--space-xs);">
-            <span style="color: var(--color-text-muted); font-size: 10px; min-width: 25px;">#${index + 1}</span>
-            <span style="font-family: var(--font-mono); color: var(--color-text);">${window.escapeHtml ? window.escapeHtml(term.term) : term.term}</span>
-          </span>
-          <span style="font-weight: 600; color: var(--color-accent);">${term.tfidf.toFixed(4)}</span>
-        </div>
-      `).join('');
-      const topTermsEl = document.getElementById('topTerms');
-      if (topTermsEl) {
-        topTermsEl.innerHTML = termsHtml || '<div style="color: var(--color-text-muted); font-size: 13px;">No terms found</div>';
-      }
-    }
-    
     // Show loading state for TF-IDF stats
     const tfidfTotalTermsEl = document.getElementById('tfidfTotalTerms');
     const tfidfUniqueTermsEl = document.getElementById('tfidfUniqueTerms');
@@ -515,7 +536,7 @@ async function initializeD3FileGraph() {
       topTermsEl.innerHTML = '<div style="color: var(--color-text-muted); font-size: 13px; padding: var(--space-md); text-align: center;">Computing TF-IDF analysis...</div>';
     }
     
-  } catch (error) {
+  } catch (error) {  // This catch matches the try at line 14
     // Suppress CORS/network errors (expected when companion service is offline)
     const errorMessage = error.message || error.toString();
     const isNetworkError = errorMessage.includes('CORS') || 
@@ -547,6 +568,91 @@ async function initializeD3FileGraph() {
 /**
  * Update file graph (re-initialize with current filters)
  */
+/**
+ * Calculate path similarity between two file paths
+ * Returns similarity based on common directory structure
+ */
+function calculatePathSimilarity(path1, path2) {
+  if (!path1 || !path2) return 0;
+  
+  // Normalize paths
+  const p1 = path1.replace(/\\/g, '/').toLowerCase();
+  const p2 = path2.replace(/\\/g, '/').toLowerCase();
+  
+  // If paths are identical
+  if (p1 === p2) return 1.0;
+  
+  // Split into directory components
+  const parts1 = p1.split('/').filter(p => p.length > 0);
+  const parts2 = p2.split('/').filter(p => p.length > 0);
+  
+  if (parts1.length === 0 || parts2.length === 0) return 0;
+  
+  // Find common prefix
+  let commonLength = 0;
+  const minLength = Math.min(parts1.length, parts2.length);
+  for (let i = 0; i < minLength; i++) {
+    if (parts1[i] === parts2[i]) {
+      commonLength++;
+    } else {
+      break;
+    }
+  }
+  
+  // Calculate similarity: common path depth / max depth
+  const maxDepth = Math.max(parts1.length, parts2.length);
+  return commonLength / maxDepth;
+}
+
+/**
+ * Calculate temporal similarity (files modified close in time)
+ */
+function calculateTemporalSimilarity(file1, file2) {
+  if (!file1.events || !file2.events || file1.events.length === 0 || file2.events.length === 0) {
+    return 0;
+  }
+  
+  // Get timestamps from events
+  const times1 = file1.events.map(e => new Date(e.timestamp).getTime()).sort((a, b) => a - b);
+  const times2 = file2.events.map(e => new Date(e.timestamp).getTime()).sort((a, b) => a - b);
+  
+  // Find minimum time difference between any two events
+  let minDiff = Infinity;
+  for (const t1 of times1) {
+    for (const t2 of times2) {
+      const diff = Math.abs(t1 - t2);
+      if (diff < minDiff) {
+        minDiff = diff;
+      }
+    }
+  }
+  
+  if (minDiff === Infinity) return 0;
+  
+  // Convert to similarity: closer in time = higher similarity
+  // Use exponential decay: similarity = e^(-diff / 1 hour)
+  const oneHour = 60 * 60 * 1000;
+  return Math.exp(-minDiff / oneHour);
+}
+
+/**
+ * Calculate change frequency similarity
+ */
+function calculateChangeSimilarity(file1, file2) {
+  const changes1 = file1.changes || file1.events?.length || 0;
+  const changes2 = file2.changes || file2.events?.length || 0;
+  
+  if (changes1 === 0 && changes2 === 0) return 1.0; // Both unchanged
+  if (changes1 === 0 || changes2 === 0) return 0; // One changed, one didn't
+  
+  // Similarity based on how close their change counts are
+  const maxChanges = Math.max(changes1, changes2);
+  const minChanges = Math.min(changes1, changes2);
+  
+  // Ratio of min to max (closer to 1 = more similar)
+  return minChanges / maxChanges;
+}
+
 function updateFileGraph() {
   // Re-initialize the graph with updated filters
   initializeD3FileGraph();

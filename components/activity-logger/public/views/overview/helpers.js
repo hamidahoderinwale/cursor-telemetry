@@ -108,7 +108,9 @@ function renderWorkspacesList() {
     // Use extracted workspaces
     return `
       <div class="workspaces-list">
-        ${extractedWorkspaces.map(ws => `
+        ${extractedWorkspaces.map(ws => {
+          const escapedPath = window.escapeHtml ? window.escapeHtml(ws.path) : ws.path;
+          return `
           <div class="workspace-item">
             <div class="workspace-item-title">
               <span class="workspace-item-title-text">${window.escapeHtml ? window.escapeHtml(ws.name) : ws.name}</span>
@@ -117,9 +119,16 @@ function renderWorkspacesList() {
             <div class="workspace-item-meta">
               <span>${ws.events || 0} events</span>
               ${ws.promptCount > 0 ? `<span>${ws.promptCount} prompts</span>` : ''}
+              <button class="btn btn-sm" onclick="if(window.showShareModal) window.showShareModal(['${escapedPath}']); else alert('Sharing feature not available');" title="Share this workspace" style="margin-left: auto; padding: 4px 8px; font-size: 0.75rem;">
+                <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor" style="vertical-align: middle;">
+                  <path d="M15 8a3 3 0 10-2.977-2.63l-4.94 2.47a3 3 0 100 4.319l4.94 2.47a3 3 0 10.895-1.789l-4.94-2.47a3.027 3.027 0 000-.74l4.94-2.47C13.456 7.68 14.19 8 15 8z"/>
+                </svg>
+                Share
+              </button>
             </div>
           </div>
-        `).join('')}
+        `;
+        }).join('')}
       </div>
     `;
   }
@@ -131,6 +140,8 @@ function renderWorkspacesList() {
         const eventCount = ws.events || ws.eventCount || 0;
         const entryCount = ws.entries || ws.entryCount || 0;
         const promptCount = ws.promptCount || 0;
+        const wsPath = ws.path || ws.id || '';
+        const escapedPath = window.escapeHtml ? window.escapeHtml(wsPath) : wsPath;
         
         return `
           <div class="workspace-item">
@@ -138,11 +149,19 @@ function renderWorkspacesList() {
               <span class="workspace-item-title-text">${window.escapeHtml ? window.escapeHtml(name) : name}</span>
               <div class="workspace-item-title-fade"></div>
             </div>
-            <div class="workspace-item-meta">
-              ${eventCount > 0 ? `<span>${eventCount} events</span>` : ''}
-              ${entryCount > 0 ? `<span>${entryCount} entries</span>` : ''}
-              ${promptCount > 0 ? `<span>${promptCount} prompts</span>` : ''}
-              ${eventCount === 0 && entryCount === 0 && promptCount === 0 ? '<span>No activity</span>' : ''}
+            <div class="workspace-item-meta" style="display: flex; align-items: center; gap: var(--space-xs); flex-wrap: wrap;">
+              <div style="display: flex; gap: var(--space-xs); flex-wrap: wrap;">
+                ${eventCount > 0 ? `<span>${eventCount} events</span>` : ''}
+                ${entryCount > 0 ? `<span>${entryCount} entries</span>` : ''}
+                ${promptCount > 0 ? `<span>${promptCount} prompts</span>` : ''}
+                ${eventCount === 0 && entryCount === 0 && promptCount === 0 ? '<span>No activity</span>' : ''}
+              </div>
+              ${wsPath ? `<button class="btn btn-sm" onclick="if(window.showShareModal) window.showShareModal(['${escapedPath}']); else alert('Sharing feature not available');" title="Share this workspace" style="margin-left: auto; padding: 4px 8px; font-size: 0.75rem;">
+                <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor" style="vertical-align: middle;">
+                  <path d="M15 8a3 3 0 10-2.977-2.63l-4.94 2.47a3 3 0 100 4.319l4.94 2.47a3 3 0 10.895-1.789l-4.94-2.47a3.027 3.027 0 000-.74l4.94-2.47C13.456 7.68 14.19 8 15 8z"/>
+                </svg>
+                Share
+              </button>` : ''}
             </div>
           </div>
         `;

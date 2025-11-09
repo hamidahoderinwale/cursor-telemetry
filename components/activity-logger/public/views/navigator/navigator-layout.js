@@ -272,12 +272,42 @@ function detectLatentClusters(nodes, links) {
       clusterNodes.forEach(n => n.cluster = `latent-${i}`);
       clusters.push({
         id: `latent-${i}`,
-        name: `Cluster ${i + 1}`,
+        name: `Cluster ${i + 1}`, // Will be updated by annotator
         nodes: clusterNodes,
         color: clusterColors[i % clusterColors.length],
-        centroid: centroids[i]
+        centroid: centroids[i],
+        description: '', // Will be populated by annotator
+        keywords: [],
+        category: 'unknown'
       });
     }
+  }
+  
+  // Annotate clusters asynchronously (non-blocking)
+  if (window.clusterAnnotator && clusters.length > 0) {
+    window.clusterAnnotator.annotateClusters(clusters, {
+      useLLM: window.CONFIG?.ENABLE_SEMANTIC_SEARCH === true,
+      useEmbeddings: window.CONFIG?.ENABLE_SEMANTIC_SEARCH === true
+    }).then(annotatedClusters => {
+      // Update clusters with annotations
+      annotatedClusters.forEach((annotated, idx) => {
+        if (clusters[idx]) {
+          clusters[idx].name = annotated.name;
+          clusters[idx].description = annotated.description;
+          clusters[idx].keywords = annotated.keywords;
+          clusters[idx].category = annotated.category;
+        }
+      });
+      
+      // Trigger re-render if navigator is active
+      if (window.navigatorState && window.navigatorState.clusters) {
+        window.navigatorState.clusters = clusters;
+        // Dispatch event to update UI
+        window.dispatchEvent(new CustomEvent('clusters-annotated', { detail: { clusters } }));
+      }
+    }).catch(err => {
+      console.warn('[CLUSTER-ANNOTATOR] Annotation failed, using default names:', err.message);
+    });
   }
   
   return clusters;

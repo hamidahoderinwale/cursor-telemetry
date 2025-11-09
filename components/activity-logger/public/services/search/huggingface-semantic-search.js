@@ -1,12 +1,13 @@
 /**
  * Hugging Face Semantic Search Module
- * Uses Transformers.js to run embedding models in the browser for semantic code search
+ * Uses Transformers.js to run embedding models in the browser, or OpenRouter API as fallback
  * 
  * Features:
  * - Natural language query understanding
  * - Semantic code search using embeddings
  * - Time-aware search (query about codebase over time)
- * - Works entirely in browser (no API calls needed)
+ * - Works in browser (Transformers.js) or via OpenRouter API
+ * - Automatic fallback from local model to API if local model fails
  */
 
 class HuggingFaceSemanticSearch {
@@ -15,6 +16,7 @@ class HuggingFaceSemanticSearch {
     this.tokenizer = null;
     this.embeddings = new Map(); // documentId -> embedding vector
     this.isInitialized = false;
+    this.useOpenRouter = false; // Whether to use OpenRouter API as fallback
     this.modelName = 'Xenova/all-MiniLM-L6-v2'; // Lightweight, fast model (384 dimensions)
     // Alternative models to try:
     // 'Xenova/multilingual-e5-base' - Multilingual support
@@ -23,6 +25,9 @@ class HuggingFaceSemanticSearch {
     
     this.embeddingCache = new Map(); // Cache embeddings in IndexedDB
     this.maxCacheSize = 10000; // Max cached embeddings
+    
+    // API base URL (from config)
+    this.apiBase = window.CONFIG?.API_BASE || 'http://localhost:43917';
   }
 
   /**
@@ -54,8 +59,26 @@ class HuggingFaceSemanticSearch {
       return false;
     }
 
+    // First check if OpenRouter API is available (faster than loading Transformers.js)
     try {
-      console.log('[HF-SEARCH] Initializing Hugging Face semantic search...');
+      const statusResponse = await fetch(`${this.apiBase}/api/ai/status`);
+      if (statusResponse.ok) {
+        const status = await statusResponse.json();
+        if (status.available && status.hasApiKey) {
+          this.useOpenRouter = true;
+          this.isInitialized = true;
+          console.log('[HF-SEARCH] Using OpenRouter API for embeddings (skipping local model load)');
+          console.log(`[HF-SEARCH] Embedding model: ${status.embeddingModel || 'openai/text-embedding-3-small'}`);
+          return true;
+        }
+      }
+    } catch (apiError) {
+      console.log('[HF-SEARCH] OpenRouter API check failed, trying local Transformers.js model...');
+    }
+
+    // Fallback to Transformers.js if OpenRouter not available
+    try {
+      console.log('[HF-SEARCH] Initializing local Transformers.js model...');
       console.log('[HF-SEARCH] Loading model:', this.modelName);
       
       // Load Transformers.js dynamically
@@ -109,16 +132,35 @@ class HuggingFaceSemanticSearch {
       this.model = await Promise.race([modelLoadPromise, modelTimeoutPromise]);
 
       this.isInitialized = true;
-      console.log('[HF-SEARCH] Model loaded successfully');
+      console.log('[HF-SEARCH] Local Transformers.js model loaded successfully');
       return true;
     } catch (error) {
-      console.warn('[HF-SEARCH] Failed to initialize model:', error.message);
+      console.warn('[HF-SEARCH] Failed to initialize Transformers.js model:', error.message);
+      console.log('[HF-SEARCH] Attempting to use OpenRouter API as fallback...');
+      
+      // Try to check if OpenRouter API is available as fallback
+      try {
+        const statusResponse = await fetch(`${this.apiBase}/api/ai/status`);
+        if (statusResponse.ok) {
+          const status = await statusResponse.json();
+          if (status.available && status.hasApiKey) {
+            this.useOpenRouter = true;
+            this.isInitialized = true;
+            console.log('[HF-SEARCH] Using OpenRouter API for embeddings (fallback)');
+            return true;
+          }
+        }
+      } catch (apiError) {
+        console.warn('[HF-SEARCH] OpenRouter API not available:', apiError.message);
+      }
+      
+      console.warn('[HF-SEARCH] Both local model and OpenRouter API unavailable');
       console.warn('[HF-SEARCH] Common issues:');
       console.warn('  - Network/CORS: Transformers.js CDN may be blocked');
       console.warn('  - Timeout: Model download may be too slow');
       console.warn('  - Memory: Browser may not have enough memory');
+      console.warn('  - API Key: Set OPENROUTER_API_KEY in .env to use API fallback');
       console.warn('[HF-SEARCH] Falling back to TF-IDF/BM25 semantic search');
-      console.warn('[HF-SEARCH] To enable: Set ENABLE_SEMANTIC_SEARCH: true in config.js');
       this.isInitialized = false;
       return false;
     }
@@ -223,28 +265,63 @@ class HuggingFaceSemanticSearch {
         return this.embeddingCache.get(cacheKey);
       }
 
-      // Generate embedding
-      // The model returns a tensor, we need to extract the data
-      const output = await this.model(text, {
-        pooling: 'mean',
-        normalize: true
-      });
-
-      // Convert tensor to array (handle different output formats)
       let embedding;
-      if (output.data) {
-        embedding = Array.from(output.data);
-      } else if (Array.isArray(output)) {
-        embedding = output;
-      } else if (output instanceof Float32Array || output instanceof Float64Array) {
-        embedding = Array.from(output);
+
+      // Use OpenRouter API if available
+      if (this.useOpenRouter) {
+        try {
+          const response = await fetch(`${this.apiBase}/api/ai/embeddings`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              texts: [text]
+            })
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            if (data.success && data.embeddings && data.embeddings.length > 0) {
+              embedding = data.embeddings[0];
+            } else {
+              throw new Error('Invalid response from OpenRouter API');
+            }
+          } else {
+            throw new Error(`OpenRouter API error: ${response.status}`);
+          }
+        } catch (apiError) {
+          console.warn('[HF-SEARCH] OpenRouter API error, falling back to local model:', apiError.message);
+          // Fallback to local model if available
+          if (this.model) {
+            this.useOpenRouter = false;
+            return this.generateEmbedding(text); // Retry with local model
+          }
+          return null;
+        }
       } else {
-        // Try to extract from tensor
-        embedding = Array.from(output);
+        // Use local Transformers.js model
+        // The model returns a tensor, we need to extract the data
+        const output = await this.model(text, {
+          pooling: 'mean',
+          normalize: true
+        });
+
+        // Convert tensor to array (handle different output formats)
+        if (output.data) {
+          embedding = Array.from(output.data);
+        } else if (Array.isArray(output)) {
+          embedding = output;
+        } else if (output instanceof Float32Array || output instanceof Float64Array) {
+          embedding = Array.from(output);
+        } else {
+          // Try to extract from tensor
+          embedding = Array.from(output);
+        }
       }
 
       // Cache it
-      if (this.embeddingCache.size < this.maxCacheSize) {
+      if (embedding && this.embeddingCache.size < this.maxCacheSize) {
         this.embeddingCache.set(cacheKey, embedding);
       }
 
@@ -286,37 +363,80 @@ class HuggingFaceSemanticSearch {
     const startTime = Date.now();
 
     // Process in batches to avoid memory issues
-    const batchSize = 10;
+    // Use larger batches for API calls, smaller for local model
+    const batchSize = this.useOpenRouter ? 50 : 10;
     let processed = 0;
 
-    for (let i = 0; i < documents.length; i += batchSize) {
-      const batch = documents.slice(i, i + batchSize);
-      
-      await Promise.all(batch.map(async (doc) => {
+    // If using OpenRouter, batch API calls for efficiency
+    if (this.useOpenRouter) {
+      for (let i = 0; i < documents.length; i += batchSize) {
+        const batch = documents.slice(i, i + batchSize);
+        
         try {
-          // Create searchable text from document
-          const searchableText = this.createSearchableText(doc);
+          // Create searchable texts for batch
+          const texts = batch.map(doc => this.createSearchableText(doc));
           
-          // Generate embedding
-          const embedding = await this.generateEmbedding(searchableText);
-          
-          if (embedding) {
-            this.embeddings.set(doc.id, embedding);
-            processed++;
+          // Generate embeddings in batch via API
+          const response = await fetch(`${this.apiBase}/api/ai/embeddings`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ texts })
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            if (data.success && data.embeddings) {
+              // Store embeddings
+              batch.forEach((doc, idx) => {
+                if (data.embeddings[idx]) {
+                  this.embeddings.set(doc.id, data.embeddings[idx]);
+                  processed++;
+                }
+              });
+            }
           }
         } catch (error) {
-          console.warn(`[HF-SEARCH] Error processing document ${doc.id}:`, error.message);
+          console.warn(`[HF-SEARCH] Error processing batch ${i}-${i + batchSize}:`, error.message);
         }
-      }));
 
-      // Log progress
-      if (processed % 50 === 0) {
-        console.log(`[HF-SEARCH] Processed ${processed}/${documents.length} documents...`);
+        // Log progress
+        if (processed % 50 === 0) {
+          console.log(`[HF-SEARCH] Processed ${processed}/${documents.length} documents...`);
+        }
+      }
+    } else {
+      // Use local model (original logic)
+      for (let i = 0; i < documents.length; i += batchSize) {
+        const batch = documents.slice(i, i + batchSize);
+        
+        await Promise.all(batch.map(async (doc) => {
+          try {
+            // Create searchable text from document
+            const searchableText = this.createSearchableText(doc);
+            
+            // Generate embedding
+            const embedding = await this.generateEmbedding(searchableText);
+            
+            if (embedding) {
+              this.embeddings.set(doc.id, embedding);
+              processed++;
+            }
+          } catch (error) {
+            console.warn(`[HF-SEARCH] Error processing document ${doc.id}:`, error.message);
+          }
+        }));
+
+        // Log progress
+        if (processed % 50 === 0) {
+          console.log(`[HF-SEARCH] Processed ${processed}/${documents.length} documents...`);
+        }
       }
     }
 
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-    console.log(`[HF-SEARCH] Generated ${processed} embeddings in ${elapsed}s`);
+    console.log(`[HF-SEARCH] Generated ${processed} embeddings in ${elapsed}s using ${this.useOpenRouter ? 'OpenRouter API' : 'local model'}`);
   }
 
   /**

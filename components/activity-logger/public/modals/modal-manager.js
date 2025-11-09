@@ -45,6 +45,27 @@ class ModalManager {
     `;
     modal.classList.add('active');
     
+    // Add click handler to overlay to close modal
+    const overlay = modal.querySelector('.modal-overlay');
+    if (overlay && !overlay._closeHandler) {
+      overlay._closeHandler = (e) => {
+        if (e.target === overlay) {
+          this.closeEventModal();
+        }
+      };
+      overlay.addEventListener('click', overlay._closeHandler);
+    }
+    
+    // Add Escape key handler
+    if (!modal._escapeHandler) {
+      modal._escapeHandler = (e) => {
+        if (e.key === 'Escape' && modal.classList.contains('active')) {
+          this.closeEventModal();
+        }
+      };
+      document.addEventListener('keydown', modal._escapeHandler);
+    }
+    
     // Check if it's an event or a prompt in cache
     let event = this.state?.data?.events?.find(e => 
       e.id === eventId || 
@@ -295,6 +316,45 @@ class ModalManager {
         
         ${linkedPrompt ? this._buildLinkedPromptSection(linkedPrompt, event) : ''}
         
+        <!-- AI Annotation -->
+        ${event.annotation ? `
+          <div style="
+            background: var(--color-bg-alt);
+            border-left: 3px solid var(--color-primary);
+            padding: var(--space-md);
+            border-radius: var(--radius-md);
+            margin-bottom: var(--space-md);
+          ">
+            <div style="
+              display: flex;
+              align-items: center;
+              gap: var(--space-xs);
+              margin-bottom: var(--space-xs);
+              font-weight: 600;
+              color: var(--color-text);
+              font-size: 0.9em;
+            ">
+              ${window.renderAnnotationIcon ? window.renderAnnotationIcon(16, 'var(--color-primary)') : '<span>✨</span>'}
+              <span>AI Annotation</span>
+            </div>
+            <div style="
+              color: var(--color-text-secondary);
+              font-style: italic;
+              font-size: 0.95em;
+              line-height: 1.5;
+            ">
+              ${escapeHtml(event.annotation)}
+            </div>
+            ${event.intent ? `
+              <div style="margin-top: var(--space-sm);">
+                <span class="badge" style="background: var(--color-primary); color: white; padding: 4px 8px; border-radius: 4px; font-size: 0.85em;">
+                  ${escapeHtml(event.intent)}
+                </span>
+              </div>
+            ` : ''}
+          </div>
+        ` : ''}
+        
         <!-- Event Details -->
         <div>
           <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">Event Details</h4>
@@ -390,7 +450,13 @@ class ModalManager {
           const hasBefore = beforeContent && typeof beforeContent === 'string' && beforeContent.trim().length > 0;
           const hasAfter = afterContent && typeof afterContent === 'string' && afterContent.trim().length > 0;
           
-          if (hasBefore || hasAfter) {
+          // Show code diff if we have either before or after content, OR if there are diff stats indicating changes
+          const hasDiffStats = details?.diff_stats?.has_diff || 
+                             details?.lines_added > 0 || 
+                             details?.lines_removed > 0 ||
+                             (details?.diff_stats && (details.diff_stats.lines_added > 0 || details.diff_stats.lines_removed > 0));
+          
+          if (hasBefore || hasAfter || hasDiffStats) {
             // Normalize to before_content/after_content format
             const normalizedDetails = {
               ...details,
@@ -1106,7 +1172,16 @@ class ModalManager {
   }
 
   closeEventModal() {
-    document.getElementById('eventModal').classList.remove('active');
+    const modal = document.getElementById('eventModal');
+    if (modal) {
+      modal.classList.remove('active');
+      
+      // Remove escape key handler
+      if (modal._escapeHandler) {
+        document.removeEventListener('keydown', modal._escapeHandler);
+        modal._escapeHandler = null;
+      }
+    }
   }
 }
 

@@ -29,8 +29,10 @@
   box-shadow: var(--shadow-xl);
   max-width: 1200px;
   width: 95%;
-  max-height: 85%;
-  overflow: hidden;
+  max-height: 85vh;
+  height: auto;
+  min-height: 200px;
+  overflow: visible;
   display: flex;
   flex-direction: column;
   border: 1px solid var(--border-color);
@@ -43,6 +45,10 @@
   padding: var(--space-5);
   border-bottom: 1px solid var(--border-color);
   background: var(--background-secondary);
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }
 
 .modal-header h2,
@@ -101,7 +107,30 @@
 .modal-body {
   padding: var(--space-5);
   overflow-y: auto;
+  overflow-x: hidden;
   flex: 1;
+  min-height: 0;
+  max-height: calc(85vh - 200px);
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
+}
+
+.modal-body::-webkit-scrollbar {
+  width: 8px;
+}
+
+.modal-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.modal-body::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 4px;
+}
+
+.modal-body::-webkit-scrollbar-thumb:hover {
+  background: var(--text-secondary);
 }
 
 .modal-footer {

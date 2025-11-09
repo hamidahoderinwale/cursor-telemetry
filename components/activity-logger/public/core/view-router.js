@@ -85,16 +85,30 @@ async function renderCurrentView() {
     }
   }
 
-  // Render the view
+  // Render the view (optimized with yielding)
   if (renderFn) {
     try {
-      // Use requestAnimationFrame for smooth rendering
-      if (typeof requestAnimationFrame !== 'undefined') {
-        requestAnimationFrame(() => {
+      // Yield to event loop before rendering heavy views
+      if (['analytics', 'filegraph', 'navigator', 'whiteboard'].includes(viewName)) {
+        // Heavy views: yield first, then render
+        await new Promise(resolve => setTimeout(resolve, 0));
+        if (typeof requestIdleCallback !== 'undefined') {
+          requestIdleCallback(() => {
+            renderFn(container);
+          }, { timeout: 100 });
+        } else {
+          await new Promise(resolve => requestAnimationFrame(resolve));
           renderFn(container);
-        });
+        }
       } else {
-        renderFn(container);
+        // Light views: render immediately with animation frame
+        if (typeof requestAnimationFrame !== 'undefined') {
+          requestAnimationFrame(() => {
+            renderFn(container);
+          });
+        } else {
+          renderFn(container);
+        }
       }
     } catch (error) {
       console.error(`[VIEW] Error rendering ${viewName}:`, error);

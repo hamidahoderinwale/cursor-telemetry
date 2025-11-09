@@ -1318,11 +1318,18 @@ function renderTimelineItem(event, side = 'left', timelineItems = null) {
     // Ignore errors in badge display
   }
   
+  // Check if this is a state transition event
+  const isStateEvent = event.type === 'state_fork' || event.type === 'state_merge' || event.type === 'state_create' || event.type === 'state_switch';
+  const stateEventIcon = isStateEvent ? (event.type === 'state_fork' ? '↗' : event.type === 'state_merge' ? '⇄' : event.type === 'state_create' ? '✨' : '→') : '';
+  const stateEventClass = isStateEvent ? 'state-transition-event' : '';
+  const stateEventStyle = isStateEvent ? 'border-left: 3px solid var(--color-primary); background: var(--color-bg-alt);' : '';
+
   return `
-    <div class="timeline-item timeline-item-left event-content" onclick="showEventModal('${event.id || event.timestamp}')">
+    <div class="timeline-item timeline-item-left event-content ${stateEventClass}" onclick="showEventModal('${event.id || event.timestamp}')" style="${stateEventStyle}">
       <div class="timeline-content">
         <div class="timeline-header">
           <div class="timeline-title">
+            ${stateEventIcon ? `<span style="margin-right: 4px; font-size: 1.2em;">${stateEventIcon}</span>` : ''}
             ${fileInfo.badges || title}
             ${diffStats}
           </div>
@@ -1330,6 +1337,8 @@ function renderTimelineItem(event, side = 'left', timelineItems = null) {
         </div>
         <div class="timeline-description">
           ${desc}
+          ${event.annotation ? `<div class="ai-annotation" style="margin-top: 4px; font-style: italic; color: var(--color-text-secondary); font-size: 0.9em; display: flex; align-items: center; gap: 4px;">${window.renderAnnotationIcon ? window.renderAnnotationIcon(14, 'var(--color-text-secondary)') : '<span>✨</span>'} ${window.escapeHtml(event.annotation)}</div>` : ''}
+          ${event.intent ? `<span class="badge" style="background: var(--color-primary); margin-top: 4px; display: inline-block;">${window.escapeHtml(event.intent)}</span>` : ''}
           ${tagsHtml ? `<div style="display: flex; gap: var(--space-xs); flex-wrap: wrap; margin-top: var(--space-xs); align-items: center;">${tagsHtml}</div>` : ''}
           ${linkedPromptIndicator || contextIndicators ? `
             <div style="display: flex; gap: var(--space-xs); flex-wrap: wrap; margin-top: var(--space-xs); align-items: center;">
@@ -1424,6 +1433,12 @@ function getEnhancedFileInfo(event) {
 }
 
 function getEventDescription(event) {
+  // Use AI annotation if available (preferred)
+  if (event.annotation) {
+    return event.annotation;
+  }
+  
+  // Fallback to original logic
   try {
     const details = typeof event.details === 'string' ? JSON.parse(event.details) : event.details;
     const added = details?.chars_added || 0;
@@ -1437,24 +1452,76 @@ function getEventDescription(event) {
 
 function renderActivityTimeline(events) {
   // Simple timeline for Overview view (not alternating layout)
+  // Group events by state boundaries
+  let currentStateId = null;
+  let stateGroups = [];
+  let currentGroup = [];
+
+  events.forEach(event => {
+    // Check if this is a state transition
+    if (event.type === 'state_create' || event.type === 'state_fork' || event.type === 'state_switch') {
+      // Start new state group
+      if (currentGroup.length > 0) {
+        stateGroups.push({ stateId: currentStateId, events: currentGroup });
+      }
+      currentGroup = [event];
+      try {
+        const details = typeof event.details === 'string' ? JSON.parse(event.details) : event.details;
+        currentStateId = details?.state_id || details?.forked_state_id || null;
+      } catch (e) {
+        currentStateId = null;
+      }
+    } else {
+      currentGroup.push(event);
+    }
+  });
+  
+  // Add last group
+  if (currentGroup.length > 0) {
+    stateGroups.push({ stateId: currentStateId, events: currentGroup });
+  }
+
   return `
     <div class="timeline-simple">
-      ${events.map(event => {
-        const time = new Date(event.timestamp).toLocaleTimeString();
-        const title = window.getEventTitle(event);
-        const desc = window.getEventDescription(event);
-        
-        return `
-          <div class="timeline-simple-item" onclick="showEventModal('${event.id || event.timestamp}')">
-            <div class="timeline-simple-content">
-              <div class="timeline-simple-header">
-                <div class="timeline-simple-title">${window.escapeHtml(title)}</div>
-                <div class="timeline-simple-meta">${time}</div>
-              </div>
-              <div class="timeline-simple-description">${window.escapeHtml(desc)}</div>
-            </div>
+      ${stateGroups.map((group, groupIndex) => {
+        const isStateBoundary = group.stateId !== null;
+        const stateMarker = isStateBoundary ? `
+          <div class="state-boundary-marker" style="
+            background: var(--color-primary);
+            color: white;
+            padding: var(--space-xs) var(--space-sm);
+            border-radius: var(--radius-sm);
+            margin: var(--space-md) 0 var(--space-sm) 0;
+            font-size: 0.85em;
+            font-weight: 600;
+            text-align: center;
+          ">
+            ${group.events[0]?.annotation || 'State Transition'}
           </div>
-        `;
+        ` : '';
+        
+        return stateMarker + group.events.map(event => {
+          const time = new Date(event.timestamp).toLocaleTimeString();
+          const title = window.getEventTitle(event);
+          const desc = window.getEventDescription(event);
+          const isStateEvent = event.type === 'state_fork' || event.type === 'state_merge' || event.type === 'state_create' || event.type === 'state_switch';
+          const stateEventIcon = isStateEvent ? (event.type === 'state_fork' ? '↗' : event.type === 'state_merge' ? '⇄' : event.type === 'state_create' ? '✨' : '→') : '';
+          
+          return `
+            <div class="timeline-simple-item ${isStateEvent ? 'state-transition-event' : ''}" onclick="showEventModal('${event.id || event.timestamp}')" style="${isStateEvent ? 'border-left: 3px solid var(--color-primary); background: var(--color-bg-alt);' : ''}">
+              <div class="timeline-simple-content">
+                <div class="timeline-simple-header">
+                  <div class="timeline-simple-title">
+                    ${stateEventIcon ? `<span style="margin-right: 4px;">${stateEventIcon}</span>` : ''}
+                    ${window.escapeHtml(title)}
+                  </div>
+                  <div class="timeline-simple-meta">${time}</div>
+                </div>
+                <div class="timeline-simple-description">${window.escapeHtml(desc)}</div>
+              </div>
+            </div>
+          `;
+        }).join('');
       }).join('')}
     </div>
   `;

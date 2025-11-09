@@ -71,8 +71,26 @@ async function checkServiceHealth() {
  * Fetch status messages for a time range
  */
 async function fetchStatusMessages(startTime, endTime) {
-  // Validate inputs
+  // Validate inputs - check for NaN and reasonable date range
   if (!startTime || !endTime || isNaN(startTime) || isNaN(endTime)) {
+    return [];
+  }
+
+  // Validate timestamps are reasonable (not from year 2000 or future)
+  // Reject timestamps before 2020-01-01 (1577836800000) or after 10 years from now
+  const MIN_VALID_TIMESTAMP = 1577836800000; // 2020-01-01
+  const MAX_VALID_TIMESTAMP = Date.now() + (10 * 365 * 24 * 60 * 60 * 1000); // 10 years from now
+  
+  if (startTime < MIN_VALID_TIMESTAMP || startTime > MAX_VALID_TIMESTAMP ||
+      endTime < MIN_VALID_TIMESTAMP || endTime > MAX_VALID_TIMESTAMP) {
+    // Invalid timestamp range - silently return empty array
+    return [];
+  }
+
+  // Validate time range is reasonable (not more than 1 year)
+  const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000;
+  if (endTime - startTime > ONE_YEAR_MS) {
+    // Time range too large - silently return empty array
     return [];
   }
 
@@ -319,6 +337,9 @@ async function enhanceTimelineWithStatusMessages(timelineItems) {
   }
   
   // Get time range from timeline items
+  const MIN_VALID_TIMESTAMP = 1577836800000; // 2020-01-01
+  const MAX_VALID_TIMESTAMP = Date.now() + (24 * 60 * 60 * 1000); // 1 day in future max
+  
   const timestamps = timelineItems
     .map(item => item.sortTime || item.timestamp)
     .filter(Boolean)
@@ -329,7 +350,9 @@ async function enhanceTimelineWithStatusMessages(timelineItems) {
       }
       return typeof ts === 'number' && !isNaN(ts) ? ts : null;
     })
-    .filter(Boolean);
+    .filter(Boolean)
+    // Filter out invalid timestamps (year 2000, etc.)
+    .filter(ts => ts >= MIN_VALID_TIMESTAMP && ts <= MAX_VALID_TIMESTAMP);
   
   if (timestamps.length === 0) return timelineItems;
   
@@ -338,6 +361,11 @@ async function enhanceTimelineWithStatusMessages(timelineItems) {
   
   // Validate time range
   if (isNaN(startTime) || isNaN(endTime) || startTime >= endTime) {
+    return timelineItems;
+  }
+  
+  // Additional validation: ensure timestamps are still in valid range after adjustment
+  if (startTime < MIN_VALID_TIMESTAMP || endTime > MAX_VALID_TIMESTAMP) {
     return timelineItems;
   }
   

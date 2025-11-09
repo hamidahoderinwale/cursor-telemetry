@@ -214,13 +214,22 @@ class PersistentDB {
                 workspace_path TEXT,
                 timestamp TEXT,
                 type TEXT,
-                details TEXT
+                details TEXT,
+                annotation TEXT,
+                intent TEXT,
+                tags TEXT,
+                ai_generated INTEGER DEFAULT 0
               )
             `, (err) => {
               if (err) {
                 console.error('Error creating events table:', err);
                 rej(err);
               } else {
+                // Add new columns if they don't exist (migration)
+                this.db.run(`ALTER TABLE events ADD COLUMN annotation TEXT`, () => {});
+                this.db.run(`ALTER TABLE events ADD COLUMN intent TEXT`, () => {});
+                this.db.run(`ALTER TABLE events ADD COLUMN tags TEXT`, () => {});
+                this.db.run(`ALTER TABLE events ADD COLUMN ai_generated INTEGER DEFAULT 0`, () => {});
                 res();
               }
             });
@@ -692,8 +701,8 @@ class PersistentDB {
     return new Promise((resolve, reject) => {
       const stmt = this.db.prepare(`
         INSERT OR REPLACE INTO events 
-        (id, session_id, workspace_path, timestamp, type, details)
-        VALUES (?, ?, ?, ?, ?, ?)
+        (id, session_id, workspace_path, timestamp, type, details, annotation, intent, tags, ai_generated)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
       
       stmt.run(
@@ -702,7 +711,11 @@ class PersistentDB {
         event.workspace_path,
         event.timestamp,
         event.type,
-        typeof event.details === 'object' ? JSON.stringify(event.details) : event.details
+        typeof event.details === 'object' ? JSON.stringify(event.details) : event.details,
+        event.annotation || null,
+        event.intent || null,
+        Array.isArray(event.tags) ? JSON.stringify(event.tags) : (event.tags || null),
+        event.ai_generated ? 1 : 0
       );
       
       stmt.finalize((err) => {
@@ -713,6 +726,89 @@ class PersistentDB {
           resolve(event);
         }
       });
+    });
+  }
+
+  /**
+   * Get a single event by ID
+   */
+  async getEvent(eventId) {
+    await this.init();
+    
+    return new Promise((resolve, reject) => {
+      this.db.get(
+        `SELECT * FROM events WHERE id = ?`,
+        [eventId],
+        (err, row) => {
+          if (err) {
+            console.error('Error getting event:', err);
+            reject(err);
+          } else if (!row) {
+            resolve(null);
+          } else {
+            resolve({
+              ...row,
+              details: row.details ? JSON.parse(row.details) : {},
+              tags: row.tags ? JSON.parse(row.tags || '[]') : [],
+              ai_generated: row.ai_generated === 1
+            });
+          }
+        }
+      );
+    });
+  }
+
+  /**
+   * Get all events for a session
+   */
+  async getEventsBySession(sessionId) {
+    await this.init();
+    
+    return new Promise((resolve, reject) => {
+      this.db.all(
+        `SELECT * FROM events WHERE session_id = ? ORDER BY timestamp ASC`,
+        [sessionId],
+        (err, rows) => {
+          if (err) {
+            console.error('Error getting events by session:', err);
+            reject(err);
+          } else {
+            resolve(rows.map(row => ({
+              ...row,
+              details: row.details ? JSON.parse(row.details) : {},
+              tags: row.tags ? JSON.parse(row.tags || '[]') : [],
+              ai_generated: row.ai_generated === 1
+            })));
+          }
+        }
+      );
+    });
+  }
+
+  /**
+   * Get recent events
+   */
+  async getRecentEvents(limit = 50) {
+    await this.init();
+    
+    return new Promise((resolve, reject) => {
+      this.db.all(
+        `SELECT * FROM events ORDER BY timestamp DESC LIMIT ?`,
+        [limit],
+        (err, rows) => {
+          if (err) {
+            console.error('Error getting recent events:', err);
+            reject(err);
+          } else {
+            resolve(rows.map(row => ({
+              ...row,
+              details: row.details ? JSON.parse(row.details) : {},
+              tags: row.tags ? JSON.parse(row.tags || '[]') : [],
+              ai_generated: row.ai_generated === 1
+            })));
+          }
+        }
+      );
     });
   }
 
@@ -2136,50 +2232,83 @@ class PersistentDB {
     } = options;
     
     return new Promise((resolve, reject) => {
-      let query = 'SELECT * FROM status_messages WHERE 1=1';
-      const params = [];
-      
-      if (startTime) {
-        query += ' AND timestamp >= ?';
-        params.push(startTime);
-      }
-      
-      if (endTime) {
-        query += ' AND timestamp <= ?';
-        params.push(endTime);
-      }
-      
-      if (type) {
-        query += ' AND type = ?';
-        params.push(type);
-      }
-      
-      if (action) {
-        query += ' AND action = ?';
-        params.push(action);
-      }
-      
-      query += ' ORDER BY timestamp DESC LIMIT ?';
-      params.push(limit);
-      
-      this.db.all(query, params, (err, rows) => {
-        if (err) {
-          console.error('Error fetching status messages:', err);
-          reject(err);
-        } else {
-          const messages = rows.map(row => ({
-            id: row.id,
-            timestamp: row.timestamp,
-            message: row.message,
-            type: row.type,
-            action: row.action,
-            filePath: row.file_path,
-            fileName: row.file_name,
-            metadata: JSON.parse(row.metadata || '{}'),
-            createdAt: row.created_at
-          }));
-          resolve(messages);
+      // Check if table exists first
+      this.db.get("SELECT name FROM sqlite_master WHERE type='table' AND name='status_messages'", (tableErr, tableRow) => {
+        if (tableErr) {
+          console.error('Error checking status_messages table:', tableErr);
+          reject(tableErr);
+          return;
         }
+        
+        // If table doesn't exist, return empty array
+        if (!tableRow) {
+          console.warn('[STATUS-MESSAGES] Table status_messages does not exist, returning empty array');
+          resolve([]);
+          return;
+        }
+        
+        let query = 'SELECT * FROM status_messages WHERE 1=1';
+        const params = [];
+        
+        if (startTime) {
+          query += ' AND timestamp >= ?';
+          params.push(startTime);
+        }
+        
+        if (endTime) {
+          query += ' AND timestamp <= ?';
+          params.push(endTime);
+        }
+        
+        if (type) {
+          query += ' AND type = ?';
+          params.push(type);
+        }
+        
+        if (action) {
+          query += ' AND action = ?';
+          params.push(action);
+        }
+        
+        query += ' ORDER BY timestamp DESC LIMIT ?';
+        params.push(limit);
+        
+        this.db.all(query, params, (err, rows) => {
+          if (err) {
+            console.error('Error fetching status messages:', err);
+            reject(err);
+          } else {
+            const messages = rows.map(row => {
+              try {
+                return {
+                  id: row.id,
+                  timestamp: row.timestamp,
+                  message: row.message,
+                  type: row.type,
+                  action: row.action,
+                  filePath: row.file_path,
+                  fileName: row.file_name,
+                  metadata: JSON.parse(row.metadata || '{}'),
+                  createdAt: row.created_at
+                };
+              } catch (parseErr) {
+                console.warn('[STATUS-MESSAGES] Error parsing row metadata:', parseErr);
+                return {
+                  id: row.id,
+                  timestamp: row.timestamp,
+                  message: row.message,
+                  type: row.type,
+                  action: row.action,
+                  filePath: row.file_path,
+                  fileName: row.file_name,
+                  metadata: {},
+                  createdAt: row.created_at
+                };
+              }
+            });
+            resolve(messages);
+          }
+        });
       });
     });
   }

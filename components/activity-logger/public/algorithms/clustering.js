@@ -88,9 +88,12 @@ export function applyClustering(nodes, links, algorithm) {
         clusterNodes.forEach(n => n.cluster = `cluster-${i}`);
         clusters.push({
           id: `cluster-${i}`,
-          name: `Cluster ${i + 1}`,
+          name: `Cluster ${i + 1}`, // Will be updated by annotator
           nodes: clusterNodes,
-          color: clusterColors[i % clusterColors.length]
+          color: clusterColors[i % clusterColors.length],
+          description: '',
+          keywords: [],
+          category: 'unknown'
         });
       }
     }
@@ -101,10 +104,38 @@ export function applyClustering(nodes, links, algorithm) {
       community.forEach(n => n.cluster = `community-${i}`);
       clusters.push({
         id: `community-${i}`,
-        name: `Community ${i + 1}`,
+        name: `Community ${i + 1}`, // Will be updated by annotator
         nodes: community,
-        color: clusterColors[i % clusterColors.length]
+        color: clusterColors[i % clusterColors.length],
+        description: '',
+        keywords: [],
+        category: 'unknown'
       });
+    });
+  }
+  
+  // Annotate clusters asynchronously (non-blocking)
+  if (clusters.length > 0 && typeof window !== 'undefined' && window.clusterAnnotator) {
+    window.clusterAnnotator.annotateClusters(clusters, {
+      useLLM: window.CONFIG?.ENABLE_SEMANTIC_SEARCH === true,
+      useEmbeddings: window.CONFIG?.ENABLE_SEMANTIC_SEARCH === true
+    }).then(annotatedClusters => {
+      // Update clusters with annotations
+      annotatedClusters.forEach((annotated, idx) => {
+        if (clusters[idx]) {
+          clusters[idx].name = annotated.name;
+          clusters[idx].description = annotated.description;
+          clusters[idx].keywords = annotated.keywords;
+          clusters[idx].category = annotated.category;
+        }
+      });
+      
+      // Dispatch event to notify listeners
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('clusters-annotated', { detail: { clusters } }));
+      }
+    }).catch(err => {
+      console.warn('[CLUSTER-ANNOTATOR] Annotation failed:', err.message);
     });
   }
   

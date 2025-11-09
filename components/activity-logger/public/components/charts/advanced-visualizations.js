@@ -22,31 +22,224 @@ class AdvancedVisualizations {
     const container = document.getElementById('contextEvolutionTimeline');
     if (!container) return;
 
+    const prompts = this.state?.data?.prompts || [];
+    
+    // Try to fetch from API first, but fall back to extracting from prompts
+    let changes = [];
     try {
-      // Check if service is online before making request
-      if (window.state && window.state.companionServiceOnline === false) {
-        container.innerHTML = `
-          <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 300px; padding: var(--space-xl); text-align: center;">
-            <div style="font-size: var(--text-lg); color: var(--color-text); margin-bottom: var(--space-xs); font-weight: 500;">Companion Service Offline</div>
-            <div style="font-size: var(--text-sm); color: var(--color-text-muted);">Context evolution data will appear when service is available</div>
-          </div>
-        `;
-        return;
+      if (window.state && window.state.companionServiceOnline !== false && window.APIClient) {
+        const response = await window.APIClient.get('/api/analytics/context/changes?limit=500', { silent: true });
+        changes = response?.data || [];
+      }
+    } catch (error) {
+      // Silently fail and fall back to prompt-based extraction
+      console.log('[CONTEXT] API fetch failed, extracting from prompts:', error.message);
+    }
+    
+    // Fallback: Extract context changes from prompts and events
+    if (changes.length === 0) {
+      const contextChanges = new Map(); // timestamp -> context data
+      const events = this.state?.data?.events || [];
+      
+      // Try to enhance a sample of prompts with context if available
+      // (only enhance first 20 to avoid performance issues)
+      const promptsToEnhance = prompts.slice(0, 20).filter(p => 
+        !p.contextChange && !p.contextChanges && window.enhancePromptWithContext
+      );
+      
+      if (promptsToEnhance.length > 0) {
+        try {
+          await Promise.all(
+            promptsToEnhance.map(p => 
+              window.enhancePromptWithContext(p).catch(() => p)
+            )
+          );
+        } catch (error) {
+          console.log('[CONTEXT] Error enhancing prompts:', error.message);
+        }
       }
       
-      const response = await this.APIClient.get('/api/analytics/context/changes?limit=500', { silent: true });
-      const changes = response?.data || [];
-
-      if (changes.length === 0) {
-        container.innerHTML = `
-          <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 300px; padding: var(--space-xl); text-align: center;">
-            <div style="font-size: var(--text-lg); color: var(--color-text); margin-bottom: var(--space-xs); font-weight: 500;">No Context Changes Tracked</div>
-            <div style="font-size: var(--text-sm); color: var(--color-text-muted);">Context evolution data will appear as you work with Cursor</div>
-          </div>
-        `;
-        return;
+      // First, check if prompts have contextChange or contextChanges already attached
+      prompts.forEach(p => {
+        const promptTime = new Date(p.timestamp).getTime();
+        if (isNaN(promptTime)) return;
+        
+        // Check for pre-computed context changes
+        if (p.contextChange) {
+          const change = p.contextChange;
+          const timestamp = change.timestamp || promptTime;
+          contextChanges.set(timestamp, {
+            timestamp: timestamp,
+            currentFileCount: change.currentFileCount || 0,
+            addedFiles: change.addedFiles || [],
+            removedFiles: change.removedFiles || [],
+            netChange: change.netChange || 0
+          });
+          return;
+        }
+        
+        if (p.contextChanges && Array.isArray(p.contextChanges) && p.contextChanges.length > 0) {
+          p.contextChanges.forEach(change => {
+            const timestamp = change.timestamp || promptTime;
+            contextChanges.set(timestamp, {
+              timestamp: timestamp,
+              currentFileCount: change.currentFileCount || 0,
+              addedFiles: change.addedFiles || [],
+              removedFiles: change.removedFiles || [],
+              netChange: change.netChange || 0
+            });
+          });
+          return;
+        }
+        
+        // Extract context file count from various sources
+        const contextFileCount = p.contextFileCount || p.context_file_count || p.contextFilesCount || 0;
+        
+        // Extract @ mentions from prompt text
+        const text = p.text || p.prompt || p.content || p.preview || p.message || '';
+        const atMatches = text.match(/@[\w\-\.\/\\]+/g) || [];
+        const atFileCount = atMatches.length;
+        
+        // Extract from context metadata
+        const context = p.context || p.composerData || p.metadata || {};
+        const contextFilesJson = p.contextFilesJson || p.context_files_json || p.contextFiles || p.context_files;
+        let contextFilesCount = 0;
+        let addedFiles = [];
+        let removedFiles = [];
+        
+        if (context.atFiles && Array.isArray(context.atFiles)) {
+          contextFilesCount = context.atFiles.length;
+          addedFiles = context.atFiles.map(f => f.reference || f.fileName || f.filePath || f);
+        } else if (contextFilesJson) {
+          try {
+            const files = typeof contextFilesJson === 'string' ? JSON.parse(contextFilesJson) : contextFilesJson;
+            if (Array.isArray(files)) {
+              contextFilesCount = files.length;
+              addedFiles = files.map(f => f.reference || f.fileName || f.filePath || f);
+            }
+          } catch (e) {
+            // Ignore parse errors
+          }
+        }
+        
+        // Check context.contextFiles structure
+        if (context.contextFiles) {
+          const cf = context.contextFiles;
+          if (cf.attachedFiles && Array.isArray(cf.attachedFiles)) {
+            contextFilesCount = Math.max(contextFilesCount, cf.attachedFiles.length);
+            addedFiles = [...addedFiles, ...cf.attachedFiles.map(f => f.name || f.path || f)];
+          }
+          if (cf.codebaseFiles && Array.isArray(cf.codebaseFiles)) {
+            contextFilesCount = Math.max(contextFilesCount, cf.codebaseFiles.length);
+            addedFiles = [...addedFiles, ...cf.codebaseFiles.map(f => f.name || f.path || f)];
+          }
+        }
+        
+        // Use the highest count found
+        const totalFileCount = Math.max(contextFileCount, atFileCount, contextFilesCount);
+        
+        if (totalFileCount > 0) {
+          // Round timestamp to 5-minute intervals to group similar times
+          const roundedTime = Math.floor(promptTime / (5 * 60 * 1000)) * (5 * 60 * 1000);
+          
+          if (!contextChanges.has(roundedTime)) {
+            contextChanges.set(roundedTime, {
+              timestamp: roundedTime,
+              currentFileCount: totalFileCount,
+              addedFiles: addedFiles.length > 0 ? addedFiles : [],
+              removedFiles: removedFiles,
+              netChange: 0
+            });
+          } else {
+            // Update if this has more files or more detailed info
+            const existing = contextChanges.get(roundedTime);
+            if (totalFileCount > existing.currentFileCount) {
+              existing.currentFileCount = totalFileCount;
+            }
+            if (addedFiles.length > existing.addedFiles.length) {
+              existing.addedFiles = addedFiles;
+            }
+          }
+        }
+      });
+      
+      // Also check events for context information
+      events.forEach(e => {
+        if (e.contextChange || e.context) {
+          const eventTime = new Date(e.timestamp).getTime();
+          if (isNaN(eventTime)) return;
+          
+          const change = e.contextChange || {};
+          const context = e.context || {};
+          
+          const fileCount = change.currentFileCount || 
+                          (context.contextFiles ? 
+                            ((context.contextFiles.attachedFiles?.length || 0) + 
+                             (context.contextFiles.codebaseFiles?.length || 0)) : 0) ||
+                          (context.atFiles?.length || 0) || 0;
+          
+          if (fileCount > 0) {
+            const roundedTime = Math.floor(eventTime / (5 * 60 * 1000)) * (5 * 60 * 1000);
+            
+            if (!contextChanges.has(roundedTime)) {
+              contextChanges.set(roundedTime, {
+                timestamp: roundedTime,
+                currentFileCount: fileCount,
+                addedFiles: change.addedFiles || [],
+                removedFiles: change.removedFiles || [],
+                netChange: change.netChange || 0
+              });
+            }
+          }
+        }
+      });
+      
+      // Convert to array and calculate net changes
+      const sortedContexts = Array.from(contextChanges.values())
+        .sort((a, b) => a.timestamp - b.timestamp);
+      
+      // Calculate net changes between consecutive contexts
+      for (let i = 1; i < sortedContexts.length; i++) {
+        const prev = sortedContexts[i - 1];
+        const curr = sortedContexts[i];
+        curr.netChange = curr.currentFileCount - prev.currentFileCount;
+        if (curr.netChange > 0 && curr.addedFiles.length === 0) {
+          curr.addedFiles = Array(curr.netChange).fill('file');
+        } else if (curr.netChange < 0 && curr.removedFiles.length === 0) {
+          curr.removedFiles = Array(Math.abs(curr.netChange)).fill('file');
+        }
       }
+      
+      changes = sortedContexts;
+      
+      // Debug logging
+      if (changes.length === 0 && prompts.length > 0) {
+        console.log('[CONTEXT] No context changes extracted. Sample prompt structure:', {
+          hasContext: !!prompts[0].context,
+          hasContextChange: !!prompts[0].contextChange,
+          hasContextFiles: !!prompts[0].contextFiles,
+          hasContextFileCount: !!prompts[0].contextFileCount,
+          hasAtFiles: !!(prompts[0].context?.atFiles),
+          samplePrompt: {
+            id: prompts[0].id,
+            hasText: !!(prompts[0].text || prompts[0].prompt),
+            contextKeys: prompts[0].context ? Object.keys(prompts[0].context) : []
+          }
+        });
+      }
+    }
 
+    if (changes.length === 0) {
+      container.innerHTML = `
+        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 300px; padding: var(--space-xl); text-align: center;">
+          <div style="font-size: var(--text-lg); color: var(--color-text); margin-bottom: var(--space-xs); font-weight: 500;">No Context Changes Tracked</div>
+          <div style="font-size: var(--text-sm); color: var(--color-text-muted);">Context evolution data will appear as you work with Cursor</div>
+        </div>
+      `;
+      return;
+    }
+
+    try {
       // Sort by timestamp
       const sortedChanges = changes.sort((a, b) => a.timestamp - b.timestamp);
       
@@ -220,12 +413,62 @@ class AdvancedVisualizations {
   /**
    * Render prompt-to-code correlation visualization
    */
-  async renderPromptToCodeCorrelation() {
+  async renderPromptToCodeCorrelation(timeSpan = null) {
     const container = document.getElementById('promptToCodeCorrelation');
     if (!container) return;
 
-    const prompts = this.state?.data?.prompts || [];
-    const events = this.state?.data?.events || [];
+    // Get or initialize time span from stored value or default
+    if (!timeSpan) {
+      timeSpan = window.promptToCodeTimeSpan || 'all';
+    }
+    window.promptToCodeTimeSpan = timeSpan;
+
+    let prompts = this.state?.data?.prompts || [];
+    let events = this.state?.data?.events || [];
+    let entries = this.state?.data?.entries || [];
+
+    // Apply time span filter
+    const now = Date.now();
+    let timeFilter = null;
+    
+    if (timeSpan !== 'all') {
+      let days = 0;
+      switch (timeSpan) {
+        case 'today':
+          days = 1;
+          break;
+        case 'week':
+          days = 7;
+          break;
+        case 'month':
+          days = 30;
+          break;
+        case '3months':
+          days = 90;
+          break;
+        case 'year':
+          days = 365;
+          break;
+        default:
+          days = 0;
+      }
+      
+      if (days > 0) {
+        const cutoff = now - (days * 24 * 60 * 60 * 1000);
+        prompts = prompts.filter(p => {
+          const promptTime = new Date(p.timestamp).getTime();
+          return !isNaN(promptTime) && promptTime >= cutoff;
+        });
+        events = events.filter(e => {
+          const eventTime = new Date(e.timestamp).getTime();
+          return !isNaN(eventTime) && eventTime >= cutoff;
+        });
+        entries = entries.filter(e => {
+          const entryTime = new Date(e.timestamp).getTime();
+          return !isNaN(entryTime) && entryTime >= cutoff;
+        });
+      }
+    }
 
     if (prompts.length === 0) {
       container.innerHTML = `
@@ -237,10 +480,42 @@ class AdvancedVisualizations {
       return;
     }
 
-    // Match prompts to code changes within time windows
-    const codeEvents = events.filter(e => 
-      e.type === 'file-change' || e.type === 'code-change' || e.type === 'file-edit'
-    );
+    // Match prompts to code changes - check multiple event type variations
+    // Also check entries that might be code changes
+    const codeEvents = [
+      ...events.filter(e => {
+        const type = (e.type || '').toLowerCase();
+        return type === 'file-change' || type === 'file_change' || 
+               type === 'code-change' || type === 'code_change' || 
+               type === 'file-edit' || type === 'file_edit' ||
+               type === 'filechange' || type === 'codechange' ||
+               type === 'fileedit' ||
+               (type.includes('file') && type.includes('change')) ||
+               (type.includes('code') && type.includes('change'));
+      }),
+      // Also check entries that have code change indicators
+      ...entries.filter(e => {
+        // Check if entry has before_code/after_code or is tagged as code-change
+        const hasCodeDiff = (e.before_code && e.after_code) || 
+                           (e.beforeCode && e.afterCode) ||
+                           (e.before_content && e.after_content);
+        const tags = (e.tags || []).map(t => String(t).toLowerCase());
+        const isCodeChangeTag = tags.includes('code-change') || 
+                               tags.includes('code_change') ||
+                               tags.includes('file-change') ||
+                               tags.includes('file_change');
+        return hasCodeDiff || isCodeChangeTag;
+      })
+    ];
+
+    // Debug: Log event types found
+    if (codeEvents.length === 0 && (events.length > 0 || entries.length > 0)) {
+      const uniqueEventTypes = [...new Set(events.map(e => e.type).filter(Boolean))];
+      const uniqueEntryTags = [...new Set(entries.flatMap(e => e.tags || []).filter(Boolean))];
+      console.log('[Prompt-to-Code] No code events found. Available event types:', uniqueEventTypes);
+      console.log('[Prompt-to-Code] Available entry tags:', uniqueEntryTags);
+      console.log('[Prompt-to-Code] Total events:', events.length, 'Total entries:', entries.length, 'Total prompts:', prompts.length);
+    }
 
     // Group by time windows (15-minute intervals)
     const timeWindow = 15 * 60 * 1000; // 15 minutes
@@ -248,30 +523,55 @@ class AdvancedVisualizations {
     
     prompts.forEach(prompt => {
       const promptTime = new Date(prompt.timestamp).getTime();
-      const windowStart = promptTime;
-      const windowEnd = promptTime + (30 * 60 * 1000); // 30 minute window
+      if (isNaN(promptTime)) return; // Skip invalid timestamps
+      
+      // Use a wider window: 5 minutes before to 30 minutes after (to catch changes that might have happened slightly before prompt)
+      const windowStart = promptTime - (5 * 60 * 1000); // 5 minutes before
+      const windowEnd = promptTime + (30 * 60 * 1000); // 30 minutes after
       
       // Find code changes within window
       const relatedChanges = codeEvents.filter(e => {
         const eventTime = new Date(e.timestamp).getTime();
+        if (isNaN(eventTime)) return false;
         return eventTime >= windowStart && eventTime <= windowEnd;
       });
+      
+      // Also check for direct links via prompt_id
+      const promptId = prompt.id || prompt.prompt_id;
+      const directlyLinkedChanges = codeEvents.filter(e => {
+        const eventPromptId = e.prompt_id || e.promptId;
+        if (!eventPromptId) return false;
+        return String(eventPromptId) === String(promptId) || parseInt(eventPromptId) === parseInt(promptId);
+      });
+      
+      // Combine both methods
+      const allRelatedChanges = [...new Set([...relatedChanges, ...directlyLinkedChanges])];
 
-      if (relatedChanges.length > 0) {
-        const totalLinesChanged = relatedChanges.reduce((sum, e) => {
-          const details = typeof e.details === 'string' ? JSON.parse(e.details) : e.details;
-          return sum + (details?.lines_added || 0) + (details?.lines_removed || 0);
+      if (allRelatedChanges.length > 0) {
+        // Sort by timestamp to get first change
+        const sortedChanges = allRelatedChanges.sort((a, b) => 
+          new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+        );
+        
+        const totalLinesChanged = allRelatedChanges.reduce((sum, e) => {
+          try {
+            const details = typeof e.details === 'string' ? JSON.parse(e.details || '{}') : (e.details || {});
+            return sum + (details?.lines_added || details?.linesAdded || 0) + (details?.lines_removed || details?.linesRemoved || 0);
+          } catch (err) {
+            return sum;
+          }
         }, 0);
+
+        const firstChangeTime = new Date(sortedChanges[0].timestamp).getTime();
+        const timeToFirstChange = firstChangeTime - promptTime; // Can be negative if change happened before prompt
 
         correlations.push({
           promptTime,
-          promptId: prompt.id,
-          promptText: (prompt.text || prompt.prompt || '').substring(0, 100),
-          changesCount: relatedChanges.length,
+          promptId: prompt.id || prompt.prompt_id,
+          promptText: (prompt.text || prompt.prompt || prompt.content || prompt.preview || '').substring(0, 100),
+          changesCount: allRelatedChanges.length,
           linesChanged: totalLinesChanged,
-          timeToFirstChange: relatedChanges.length > 0 
-            ? new Date(relatedChanges[0].timestamp).getTime() - promptTime
-            : null
+          timeToFirstChange: timeToFirstChange / 1000 / 60 // Convert to minutes
         });
       }
     });
@@ -279,10 +579,9 @@ class AdvancedVisualizations {
     // Calculate statistics
     const successfulPrompts = correlations.length;
     const successRate = prompts.length > 0 ? (successfulPrompts / prompts.length * 100).toFixed(1) : 0;
-    const avgTimeToChange = correlations.filter(c => c.timeToFirstChange !== null).length > 0
-      ? correlations
-          .filter(c => c.timeToFirstChange !== null)
-          .reduce((sum, c) => sum + c.timeToFirstChange, 0) / correlations.filter(c => c.timeToFirstChange !== null).length
+    const correlationsWithTime = correlations.filter(c => c.timeToFirstChange !== null && !isNaN(c.timeToFirstChange));
+    const avgTimeToChange = correlationsWithTime.length > 0
+      ? correlationsWithTime.reduce((sum, c) => sum + c.timeToFirstChange, 0) / correlationsWithTime.length
       : 0;
     const avgChangesPerPrompt = successfulPrompts > 0
       ? correlations.reduce((sum, c) => sum + c.changesCount, 0) / successfulPrompts
@@ -292,6 +591,29 @@ class AdvancedVisualizations {
     const sortedCorrelations = correlations.sort((a, b) => a.promptTime - b.promptTime).slice(-50);
     
     container.innerHTML = `
+      <div style="margin-bottom: var(--space-md); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: var(--space-md);">
+        <h4 style="margin: 0; color: var(--color-text); font-size: var(--text-md);">Prompt-to-Code Correlation</h4>
+        <div style="display: flex; align-items: center; gap: var(--space-sm);">
+          <label for="promptToCodeTimeSpan" style="font-size: var(--text-sm); color: var(--color-text-muted);">Time Span:</label>
+          <select id="promptToCodeTimeSpan" style="
+            padding: var(--space-xs) var(--space-sm);
+            background: var(--color-bg);
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-md);
+            color: var(--color-text);
+            font-size: var(--text-sm);
+            cursor: pointer;
+          " onchange="if(window.advancedVisualizations){window.advancedVisualizations.renderPromptToCodeCorrelation(this.value);}">
+            <option value="all" ${timeSpan === 'all' ? 'selected' : ''}>All Time</option>
+            <option value="today" ${timeSpan === 'today' ? 'selected' : ''}>Today</option>
+            <option value="week" ${timeSpan === 'week' ? 'selected' : ''}>Last 7 Days</option>
+            <option value="month" ${timeSpan === 'month' ? 'selected' : ''}>Last 30 Days</option>
+            <option value="3months" ${timeSpan === '3months' ? 'selected' : ''}>Last 3 Months</option>
+            <option value="year" ${timeSpan === 'year' ? 'selected' : ''}>Last Year</option>
+          </select>
+        </div>
+      </div>
+      
       <div style="margin-bottom: var(--space-lg);">
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--space-md);">
           <div class="stat-card">
@@ -303,7 +625,7 @@ class AdvancedVisualizations {
           </div>
           <div class="stat-card">
             <div class="stat-label">Avg Time to Change</div>
-            <div class="stat-value">${(avgTimeToChange / 1000 / 60).toFixed(1)}m</div>
+            <div class="stat-value">${avgTimeToChange.toFixed(1)}m</div>
             <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">
               From prompt to first code change
             </div>
@@ -699,9 +1021,60 @@ class AdvancedVisualizations {
 window.AdvancedVisualizations = AdvancedVisualizations;
 window.advancedVisualizations = new AdvancedVisualizations();
 
-// Export functions for backward compatibility
-window.renderContextEvolutionTimeline = () => window.advancedVisualizations.renderContextEvolutionTimeline();
-window.renderPromptToCodeCorrelation = () => window.advancedVisualizations.renderPromptToCodeCorrelation();
-window.renderGitCommitTimeline = () => window.advancedVisualizations.renderGitCommitTimeline();
-window.renderFileHotspots = () => window.advancedVisualizations.renderFileHotspots();
+// Export functions for backward compatibility with error handling
+window.renderContextEvolutionTimeline = () => {
+  try {
+    if (window.advancedVisualizations) {
+      return window.advancedVisualizations.renderContextEvolutionTimeline();
+    } else {
+      console.warn('[VISUALIZATIONS] advancedVisualizations not initialized yet');
+      return Promise.resolve();
+    }
+  } catch (error) {
+    console.error('[VISUALIZATIONS] Error rendering context evolution timeline:', error);
+    return Promise.reject(error);
+  }
+};
+
+window.renderPromptToCodeCorrelation = (timeSpan) => {
+  try {
+    if (window.advancedVisualizations) {
+      return window.advancedVisualizations.renderPromptToCodeCorrelation(timeSpan);
+    } else {
+      console.warn('[VISUALIZATIONS] advancedVisualizations not initialized yet');
+      return Promise.resolve();
+    }
+  } catch (error) {
+    console.error('[VISUALIZATIONS] Error rendering prompt-to-code correlation:', error);
+    return Promise.reject(error);
+  }
+};
+
+window.renderGitCommitTimeline = () => {
+  try {
+    if (window.advancedVisualizations) {
+      return window.advancedVisualizations.renderGitCommitTimeline();
+    } else {
+      console.warn('[VISUALIZATIONS] advancedVisualizations not initialized yet');
+      return Promise.resolve();
+    }
+  } catch (error) {
+    console.error('[VISUALIZATIONS] Error rendering git commit timeline:', error);
+    return Promise.reject(error);
+  }
+};
+
+window.renderFileHotspots = () => {
+  try {
+    if (window.advancedVisualizations) {
+      return window.advancedVisualizations.renderFileHotspots();
+    } else {
+      console.warn('[VISUALIZATIONS] advancedVisualizations not initialized yet');
+      return Promise.resolve();
+    }
+  } catch (error) {
+    console.error('[VISUALIZATIONS] Error rendering file hotspots:', error);
+    return Promise.reject(error);
+  }
+};
 

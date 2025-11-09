@@ -48,16 +48,27 @@ if (!window.CONFIG || !window.state || !window.APIClient) {
 // IMPORTANT: Do NOT define local functions with the same names - this causes infinite recursion!
 // Always use window.initializeDashboard, window.fetchRecentData, etc. directly.
 
-function calculateStats() {
-  const events = state.data.events;
-  const entries = state.data.entries;
+async function calculateStats() {
+  const events = state.data.events || [];
+  const entries = state.data.entries || [];
   const terminalCommands = state.data.terminalCommands || [];
 
-  // Count sessions
+  // Count sessions (optimized with Set)
   const sessions = new Set();
-  [...events, ...entries].forEach(item => {
-    if (item.session_id) sessions.add(item.session_id);
-  });
+  // Process in chunks to avoid blocking
+  const allItems = [...events, ...entries];
+  const chunkSize = 1000;
+  for (let i = 0; i < allItems.length; i += chunkSize) {
+    const chunk = allItems.slice(i, i + chunkSize);
+    chunk.forEach(item => {
+      if (item.session_id) sessions.add(item.session_id);
+    });
+    // Yield every chunk to prevent blocking
+    if (i + chunkSize < allItems.length) {
+      // Use setTimeout(0) to yield to event loop
+      await new Promise(resolve => setTimeout(resolve, 0));
+    }
+  }
 
   // Count file changes (use totalEventCount for all-time if available, otherwise use filtered count)
   const fileChanges = state.stats?.totalEventCount || events.filter(e => 
@@ -79,30 +90,47 @@ function calculateStats() {
   
   console.log(`AI Interactions: ${aiInteractions} of ${state.data.prompts?.length || 0} prompts`);
 
-  // Calculate code changed (approximate)
+  // Calculate code changed (approximate) - optimized with chunking
   let totalChars = 0;
-  events.forEach(e => {
-    try {
-      const details = typeof e.details === 'string' ? JSON.parse(e.details) : e.details;
-      const added = details?.chars_added || 0;
-      const deleted = details?.chars_deleted || 0;
-      totalChars += added + deleted;
-    } catch (err) {
-      // Silently skip parsing errors
+  const codeChunkSize = 500;
+  for (let i = 0; i < events.length; i += codeChunkSize) {
+    const chunk = events.slice(i, i + codeChunkSize);
+    chunk.forEach(e => {
+      try {
+        const details = typeof e.details === 'string' ? JSON.parse(e.details) : e.details;
+        const added = details?.chars_added || 0;
+        const deleted = details?.chars_deleted || 0;
+        totalChars += added + deleted;
+      } catch (err) {
+        // Silently skip parsing errors
+      }
+    });
+    // Yield every chunk to prevent blocking
+    if (i + chunkSize < events.length) {
+      await new Promise(resolve => setTimeout(resolve, 0));
     }
-  });
+  }
   
   console.log(`[STATS] Code changed: ${totalChars} chars (${(totalChars / 1024).toFixed(1)} KB) from ${events.length} events`);
 
-  // Calculate average context usage
+  // Calculate average context usage (optimized)
   let totalContextUsage = 0;
   let contextUsageCount = 0;
-  (state.data.prompts || []).forEach(p => {
-    if (p.contextUsage && p.contextUsage > 0) {
-      totalContextUsage += p.contextUsage;
-      contextUsageCount++;
+  const prompts = state.data.prompts || [];
+  const promptChunkSize = 500;
+  for (let i = 0; i < prompts.length; i += promptChunkSize) {
+    const chunk = prompts.slice(i, i + promptChunkSize);
+    chunk.forEach(p => {
+      if (p.contextUsage && p.contextUsage > 0) {
+        totalContextUsage += p.contextUsage;
+        contextUsageCount++;
+      }
+    });
+    // Yield every chunk to prevent blocking
+    if (i + promptChunkSize < prompts.length) {
+      await new Promise(resolve => setTimeout(resolve, 0));
     }
-  });
+  }
   const avgContextUsage = contextUsageCount > 0 ? (totalContextUsage / contextUsageCount) : 0;
 
   state.stats = {
@@ -125,7 +153,8 @@ function handleRealtimeUpdate(data) {
     state.data.events.push(data.data);
   }
   
-  calculateStats();
+  // Fire and forget - don't block on stats calculation
+  calculateStats().catch(err => console.warn('[STATS] Error calculating stats:', err));
   renderCurrentView();
 }
 
@@ -1805,14 +1834,24 @@ function initializeWhenReady() {
       updateConnectionStatus(true);
       await (window.initializeDashboard || (() => { console.error('[ERROR] initializeDashboard not available'); }))();
       
-      // Initialize search engine after data is loaded (with delay to ensure state is populated)
-      setTimeout(() => {
-        if (typeof window.initializeSearch === 'function') {
-          window.initializeSearch().catch(err => {
-            console.warn('[SEARCH] Initial search initialization failed, will retry:', err);
-          });
-        }
-      }, 500);
+      // Initialize search engine after data is loaded (defer to idle time)
+      if (typeof requestIdleCallback !== 'undefined') {
+        requestIdleCallback(() => {
+          if (typeof window.initializeSearch === 'function') {
+            window.initializeSearch().catch(err => {
+              console.warn('[SEARCH] Initial search initialization failed, will retry:', err);
+            });
+          }
+        }, { timeout: 2000 });
+      } else {
+        setTimeout(() => {
+          if (typeof window.initializeSearch === 'function') {
+            window.initializeSearch().catch(err => {
+              console.warn('[SEARCH] Initial search initialization failed, will retry:', err);
+            });
+          }
+        }, 2000);
+      }
       
       console.log('[SUCCESS] Dashboard initialized with warm-start');
     }).catch(error => {
@@ -1840,7 +1879,8 @@ function initializeWhenReady() {
         if (storage && synchronizer) {
           // Use optimized fetch for refresh
           await (window.fetchRecentData || (() => { console.error('[ERROR] fetchRecentData not available'); }))();
-          calculateStats();
+          // Fire and forget - don't block on stats calculation
+  calculateStats().catch(err => console.warn('[STATS] Error calculating stats:', err));
           renderCurrentView();
           // Update status on successful sync
           if (window.state && window.state.connected) {
@@ -1913,7 +1953,8 @@ function initializeWhenReady() {
       
       try {
         await (window.fetchRecentData || (() => { console.error('[ERROR] fetchRecentData not available'); }))();
-        calculateStats();
+        // Fire and forget - don't block on stats calculation
+  calculateStats().catch(err => console.warn('[STATS] Error calculating stats:', err));
         renderCurrentView();
         // Update status on successful sync
         if (window.state && window.state.connected) {

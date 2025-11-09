@@ -1,12 +1,27 @@
 # Cursor Activity Dashboard
 
-A modern, intuitive dashboard for monitoring and visualizing all your Cursor IDE activity data with a fully modular, refactored architecture.
+A modern, intelligent dashboard for monitoring and visualizing all your Cursor IDE activity data with AI-powered annotations, natural language state management, and comprehensive analytics.
 
 ## Features
 
+### AI-Powered Features
+- **Event Annotations** - Automatic AI-generated descriptions (e.g., "Added authentication middleware" instead of "file changed")
+- **Intent Classification** - Automatically tags events as `feature`, `bug-fix`, `refactor`, `experiment`, etc.
+- **State Summarization** - Generates summaries when creating development states
+- **Natural Language Interface** - Control states with commands like "Fork a state for trying authentication"
+- **Semantic Search** - Embedding-based search using OpenRouter API
+- **State Recommendations** - Intelligent suggestions for unfinished experiments and similar states
+
+### Visual State Management
+- **State Graph Visualization** - D3.js graph showing state relationships (like Git graph)
+- **Interactive State Operations** - Click to switch, drag to merge states
+- **Timeline Integration** - State transitions shown in timeline with visual markers
+- **State Boundaries** - Visual markers group events by state
+
 ### Core Features
 - **Real-time Statistics** - Live counts of sessions, entries, events, and code changes
-- **Smart Filtering** - Filter by source (filewatcher, clipboard, DOM, MCP) or type
+- **AI-Annotated Timeline** - Events displayed with Lucide icons and AI descriptions
+- **Smart Filtering** - Filter by source, type, intent, or workspace
 - **Code Change Visualization** - Side-by-side before/after code diffs
 - **Content Display** - Full prompts, responses, and notes with syntax highlighting
 - **Auto-refresh** - Automatically polls companion service for new data
@@ -15,9 +30,8 @@ A modern, intuitive dashboard for monitoring and visualizing all your Cursor IDE
 - **Data Linking** - Automatic linking of prompts to resulting code changes
 - **Image Proxy** - Secure local image serving for screenshots and images in prompts
 - **Temporal Analysis** - Time-based grouping of related activities
-- **Debug Tools** - Built-in debugging and connection testing
-- **Event Tagging** - Automatic tagging of events (file uploads, code changes, AI-generated, etc.) with visual badges
-- **Activity Sessions** - Grouped temporal threads showing related activities in time windows
+- **Event Tagging** - Automatic tagging with visual badges
+- **Activity Sessions** - Grouped temporal threads showing related activities
 
 ### Visualizations
 
@@ -47,6 +61,13 @@ A modern, intuitive dashboard for monitoring and visualizing all your Cursor IDE
 - **File Complexity Trends** - Edit frequency, code churn, and complexity scores over time
 - **Prompt Embeddings Analysis** - Semantic similarity visualization using PCA/t-SNE/MDS
 - **Term Frequency Analysis** - TF-IDF analysis of important terms across files
+- **AI-Generated Cluster Labels** - Cluster names and descriptions using OpenRouter
+
+#### States Page
+- **State Graph Visualization** - D3.js force-directed graph of state relationships
+- **State List** - All states with actions (switch, fork, view details)
+- **State Recommendations** - Unfinished experiments and similar states
+- **Natural Language Commands** - Create, fork, merge states via search palette
 
 #### Navigator Page
 - **Semantic Navigator** - UMAP-based codebase visualization in latent space
@@ -242,10 +263,11 @@ window.getEventTitle = getEventTitle;
 The dashboard includes multiple specialized views:
 
 - **Overview** - Summary statistics, activity heatmap, activity rhythm, productivity pulse
-- **Activity** - Unified timeline of events, prompts, and terminal commands with temporal threading
+- **Activity** - Unified timeline with AI annotations, state transitions, and temporal threading
+- **States** - Visual state management with graph visualization and natural language commands
 - **Threads** - Conversation threads and captured prompts
 - **Analytics** - Comprehensive charts and statistics for productivity insights (13+ visualizations)
-- **File Graph** - Semantic file relationship visualization with dependency strength and complexity trends
+- **File Graph** - Semantic file relationship visualization with AI-generated cluster labels
 - **Navigator** - UMAP-based codebase navigation in latent space
 - **Workspace Comparison** - Compare activity metrics across multiple workspaces
 - **System** - System resource monitoring
@@ -253,6 +275,9 @@ The dashboard includes multiple specialized views:
 
 ### Key Features
 
+- **AI-Annotated Timeline** - Events show AI-generated descriptions with Lucide icons
+- **State Transitions** - Visual markers for state forks, merges, and switches
+- **Natural Language Commands** - Control states via search palette (⌘K)
 - **Alternating Timeline Layout** - Events on left, prompts on right
 - **Temporal Threading** - Groups related activities by time windows
 - **Conversation Threading** - Groups AI prompts by conversation ID
@@ -261,6 +286,7 @@ The dashboard includes multiple specialized views:
 - **Data Linking** - Prompts automatically linked to resulting code changes
 - **Temporal Chunks** - Time-based grouping with all metadata
 - **Linked Data** - Explicit prompt-code relationships in exports
+- **Intent Badges** - Color-coded badges showing event intent
 
 ## Development
 

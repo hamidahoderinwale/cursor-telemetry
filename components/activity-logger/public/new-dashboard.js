@@ -1225,10 +1225,31 @@ function renderTimelineItem(event, side = 'left') {
           </div>
           <div class="timeline-meta">${time}</div>
         </div>
-        <div class="timeline-description">${desc}</div>
+        <div class="timeline-description">
+          ${desc}
+          ${event.annotation ? `<div class="ai-annotation" style="margin-top: 4px; font-style: italic; color: var(--color-text-secondary); font-size: 0.9em; display: flex; align-items: center; gap: 4px;">${window.renderAnnotationIcon ? window.renderAnnotationIcon(14, 'var(--color-text-secondary)') : '<span>✨</span>'} ${window.escapeHtml(event.annotation)}</div>` : ''}
+          ${event.intent ? `<span class="badge" style="background: var(--color-primary); margin-top: 4px; display: inline-block;">${window.escapeHtml(event.intent)}</span>` : ''}
+        </div>
       </div>
     </div>
   `;
+}
+
+function getEventDescription(event) {
+  // Use AI annotation if available
+  if (event.annotation) {
+    return event.annotation;
+  }
+  
+  // Fallback to original logic
+  try {
+    if (event.details && typeof event.details === 'object') {
+      return event.details.description || event.details.notes || 'Event occurred';
+    } else if (typeof event.details === 'string') {
+      return event.details;
+    }
+  } catch {}
+  return 'File modification detected';
 }
 
 function getEventTitle(event) {
@@ -3272,7 +3293,30 @@ function renderD3FileGraph(container, nodes, links) {
   const clusterAlgorithm = document.getElementById('clusteringAlgorithm')?.value || 'none';
   
   // Apply clustering
-  const clusters = applyClustering(nodes, links, clusterAlgorithm);
+  let clusters = applyClustering(nodes, links, clusterAlgorithm);
+  
+  // Annotate clusters with AI-generated labels if cluster annotator is available
+  if (clusters.length > 0 && window.clusterAnnotator && (clusterAlgorithm === 'similarity' || clusterAlgorithm === 'community')) {
+    try {
+      // Annotate clusters asynchronously
+      window.clusterAnnotator.annotateClusters(clusters, { useLLM: true, useEmbeddings: true })
+        .then(annotatedClusters => {
+          // Update cluster names in the visualization
+          if (window.graphG) {
+            const clusterLabels = window.graphG.selectAll('.cluster-labels text');
+            clusterLabels.data(annotatedClusters)
+              .text(d => `${d.name || d.originalName || `Cluster ${d.id}`} (${d.nodes.length})`);
+          }
+          // Update clusters array
+          clusters = annotatedClusters;
+        })
+        .catch(err => {
+          console.warn('[FILE-GRAPH] Failed to annotate clusters:', err.message);
+        });
+    } catch (error) {
+      console.warn('[FILE-GRAPH] Cluster annotation not available:', error.message);
+    }
+  }
   
   // Create SVG with zoom support
   const svg = d3.select(container)
@@ -3625,9 +3669,12 @@ function applyClustering(nodes, links, algorithm) {
         clusterNodes.forEach(n => n.cluster = `cluster-${i}`);
         clusters.push({
           id: `cluster-${i}`,
-          name: `Cluster ${i + 1}`,
+          name: `Cluster ${i + 1}`, // Will be updated by annotator
           nodes: clusterNodes,
-          color: clusterColors[i % clusterColors.length]
+          color: clusterColors[i % clusterColors.length],
+          description: '',
+          keywords: [],
+          category: 'unknown'
         });
       }
     }
@@ -3638,10 +3685,33 @@ function applyClustering(nodes, links, algorithm) {
       community.forEach(n => n.cluster = `community-${i}`);
       clusters.push({
         id: `community-${i}`,
-        name: `Community ${i + 1}`,
+        name: `Community ${i + 1}`, // Will be updated by annotator
         nodes: community,
-        color: clusterColors[i % clusterColors.length]
+        color: clusterColors[i % clusterColors.length],
+        description: '',
+        keywords: [],
+        category: 'unknown'
       });
+    });
+  }
+  
+  // Annotate clusters asynchronously if annotator is available
+  if (clusters.length > 0 && window.clusterAnnotator) {
+    window.clusterAnnotator.annotateClusters(clusters, {
+      useLLM: window.CONFIG?.ENABLE_SEMANTIC_SEARCH === true,
+      useEmbeddings: window.CONFIG?.ENABLE_SEMANTIC_SEARCH === true
+    }).then(annotatedClusters => {
+      annotatedClusters.forEach((annotated, idx) => {
+        if (clusters[idx]) {
+          clusters[idx].name = annotated.name;
+          clusters[idx].description = annotated.description;
+          clusters[idx].keywords = annotated.keywords;
+          clusters[idx].category = annotated.category;
+        }
+      });
+      window.dispatchEvent(new CustomEvent('clusters-annotated', { detail: { clusters } }));
+    }).catch(err => {
+      console.warn('[CLUSTER-ANNOTATOR] Annotation failed:', err.message);
     });
   }
   

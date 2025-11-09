@@ -92,6 +92,9 @@ const createMCPRoutes = require('./routes/mcp.js');
 const createExportImportRoutes = require('./routes/export-import.js');
 const createSharingRoutes = require('./routes/sharing.js');
 const createWhiteboardRoutes = require('./routes/whiteboard.js');
+const createAIRoutes = require('./routes/ai.js');
+const createAnnotationRoutes = require('./routes/annotations.js');
+const createStateRoutes = require('./routes/states.js');
 const SharingService = require('./services/sharing-service.js');
 
 // Initialize persistent database
@@ -429,6 +432,36 @@ function enqueue(kind, payload) {
     persistentDB.saveEvent(payload).catch(err => 
       console.error('Error persisting event:', err.message)
     );
+    
+    // Annotate event asynchronously (non-blocking)
+    if (process.env.OPENROUTER_API_KEY) {
+      setTimeout(async () => {
+        try {
+          const EventAnnotationService = require('./services/event-annotation-service.js');
+          const annotationService = new EventAnnotationService();
+          
+          // Get recent events for context
+          const recentEvents = events.slice(-5).filter(e => e.id !== payload.id);
+          
+          const annotation = await annotationService.annotateEvent(payload, {
+            recentEvents
+          });
+          
+          if (annotation) {
+            // Update event with annotation
+            payload.annotation = annotation;
+            payload.ai_generated = true;
+            await persistentDB.saveEvent(payload);
+            
+            // Broadcast update
+            broadcastUpdate('event-annotated', { eventId: payload.id, annotation });
+          }
+        } catch (error) {
+          // Silently fail - annotation is optional
+          console.debug('[ANNOTATION] Could not annotate event:', error.message);
+        }
+      }, 100); // Small delay to avoid blocking
+    }
   }
   
   console.log(`� Enqueued ${kind} #${sequence}: ${payload.id || payload.type}`);
@@ -1217,6 +1250,23 @@ createSharingRoutes({
   sharingService,
   persistentDB,
   cursorDbParser
+});
+
+// AI routes (OpenRouter embeddings and chat)
+createAIRoutes({
+  app
+});
+
+// Annotation routes (event annotation, intent classification, state summarization)
+createAnnotationRoutes({
+  app,
+  persistentDB
+});
+
+// State management routes (natural language commands, fork/merge, semantic search)
+createStateRoutes({
+  app,
+  persistentDB
 });
 
 // Health check
