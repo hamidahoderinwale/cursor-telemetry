@@ -48,6 +48,22 @@ function renderNavigatorViewTemplate(data) {
         </div>
 
         <div>
+          <h3>Workspace</h3>
+          <select id="navigatorWorkspaceFilter" class="navigator-filter-select" onchange="filterNavigatorByWorkspace(this.value)" title="Filter files by workspace">
+            <option value="all">All Workspaces</option>
+            <!-- Options will be populated dynamically -->
+          </select>
+        </div>
+
+        <div>
+          <h3>Directory</h3>
+          <select id="navigatorDirectoryFilter" class="navigator-filter-select" onchange="filterNavigatorByDirectory(this.value)" title="Filter files by top-level directory">
+            <option value="all">All Directories</option>
+            <!-- Options will be populated dynamically -->
+          </select>
+        </div>
+
+        <div>
           <h3>Transition Speed</h3>
           <input type="range" id="transitionSpeed" min="0.5" max="2" step="0.1" value="1" oninput="updateTransitionSpeed(this.value)">
           <div class="speed-label-wrapper">

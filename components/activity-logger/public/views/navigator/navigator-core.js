@@ -138,6 +138,34 @@ async function initializeNavigator() {
     
     console.log(`[NAVIGATOR] Event lookup map built with ${eventsByFilePath.size} keys`);
     
+    // Extract workspace and directory information
+    const workspaces = new Set();
+    const directories = new Set();
+    
+    // Helper to extract workspace from path
+    const extractWorkspace = (path) => {
+      if (!path) return null;
+      // Try to find workspace root (common patterns)
+      const parts = path.split('/');
+      // Look for common workspace indicators
+      for (let i = 0; i < parts.length; i++) {
+        const part = parts[i];
+        if (part && part !== '.' && part !== '..' && !part.startsWith('.')) {
+          // Return first meaningful directory as workspace
+          return parts.slice(0, i + 1).join('/');
+        }
+      }
+      return path.split('/').slice(0, 2).join('/') || path;
+    };
+    
+    // Helper to extract directory from path
+    const extractDirectory = (path) => {
+      if (!path) return '/';
+      const parts = path.split('/');
+      if (parts.length <= 1) return '/';
+      return parts.slice(0, -1).join('/') || '/';
+    };
+    
     // Prepare files with events - filter out Git object hashes
     let files = data.files
       .filter(f => {
@@ -170,8 +198,31 @@ async function initializeNavigator() {
           });
         }
         
+        // Extract workspace and directory
+        const workspace = extractWorkspace(f.path);
+        const directory = extractDirectory(f.path);
+        const directoryParts = directory.split('/').filter(p => p);
+        const topLevelDir = directoryParts.length > 0 ? directoryParts[0] : '/';
+        
+        // Track workspaces and directories
+        if (workspace) workspaces.add(workspace);
+        if (directory) directories.add(directory);
+        if (topLevelDir) directories.add(topLevelDir);
+        
         // Get meaningful display name
         const displayName = getMeaningfulName(f);
+        
+        // Extract workspace from events if available
+        let eventWorkspace = null;
+        if (relatedEvents.length > 0) {
+          const eventWorkspaces = relatedEvents
+            .map(e => e.workspace_path || e.workspacePath || e.workspace || '')
+            .filter(Boolean);
+          if (eventWorkspaces.length > 0) {
+            eventWorkspace = eventWorkspaces[0]; // Use first workspace found
+            workspaces.add(eventWorkspace);
+          }
+        }
         
         return {
           id: f.path,
@@ -183,11 +234,43 @@ async function initializeNavigator() {
           changes: f.changes || 0,
           lastModified: f.lastModified,
           size: f.size,
-          events: relatedEvents
+          events: relatedEvents,
+          workspace: eventWorkspace || workspace,
+          directory: directory,
+          topLevelDir: topLevelDir,
+          directoryDepth: directoryParts.length
         };
       });
     
     console.log(`[NAVIGATOR] Processing ${files.length} files...`);
+    console.log(`[NAVIGATOR] Found ${workspaces.size} workspaces and ${directories.size} directories`);
+    
+    // Store workspace and directory info in navigator state
+    navigatorState.workspaces = Array.from(workspaces).sort();
+    navigatorState.directories = Array.from(directories).sort();
+    navigatorState.selectedWorkspace = window.state?.currentWorkspace || 'all';
+    navigatorState.selectedDirectory = 'all';
+    
+    // Apply workspace filter if set
+    if (navigatorState.selectedWorkspace && navigatorState.selectedWorkspace !== 'all') {
+      files = files.filter(f => {
+        const fileWorkspace = f.workspace || '';
+        return fileWorkspace === navigatorState.selectedWorkspace || 
+               fileWorkspace.includes(navigatorState.selectedWorkspace) ||
+               navigatorState.selectedWorkspace.includes(fileWorkspace);
+      });
+      console.log(`[NAVIGATOR] Filtered to ${files.length} files in workspace: ${navigatorState.selectedWorkspace}`);
+    }
+    
+    // Apply directory filter if set
+    if (navigatorState.selectedDirectory && navigatorState.selectedDirectory !== 'all') {
+      files = files.filter(f => {
+        return f.topLevelDir === navigatorState.selectedDirectory ||
+               f.directory.startsWith(navigatorState.selectedDirectory) ||
+               f.path.includes(navigatorState.selectedDirectory);
+      });
+      console.log(`[NAVIGATOR] Filtered to ${files.length} files in directory: ${navigatorState.selectedDirectory}`);
+    }
     
     // Limit files for performance (embeddings are O(n²))
     // Reduced from 2000 to 800 for faster computation

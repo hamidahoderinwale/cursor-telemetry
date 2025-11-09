@@ -41,14 +41,35 @@ function renderNavigator(container, nodes, links) {
   navigatorState.zoom = zoom;
   navigatorState.g = g;
   
-  // Create links
+  // Create links with workspace/directory awareness
   const link = g.append('g')
     .selectAll('line')
     .data(links)
     .join('line')
-    .attr('stroke', '#64748b')
-    .attr('stroke-opacity', 0.3)
-    .attr('stroke-width', d => Math.max(1, d.similarity * 2));
+    .attr('stroke', d => {
+      // Color links based on workspace/directory relationships
+      if (d.sameWorkspace && d.sameDirectory) {
+        return '#10b981'; // Green for same workspace + directory
+      } else if (d.sameWorkspace) {
+        return '#3b82f6'; // Blue for same workspace
+      } else if (d.sameDirectory) {
+        return '#8b5cf6'; // Purple for same directory
+      }
+      return '#64748b'; // Gray for other links
+    })
+    .attr('stroke-opacity', d => {
+      // Higher opacity for workspace/directory relationships
+      if (d.sameWorkspace && d.sameDirectory) return 0.6;
+      if (d.sameWorkspace || d.sameDirectory) return 0.4;
+      return 0.3;
+    })
+    .attr('stroke-width', d => {
+      // Thicker lines for workspace/directory relationships
+      const baseWidth = Math.max(1, d.similarity * 2);
+      if (d.sameWorkspace && d.sameDirectory) return baseWidth * 1.5;
+      if (d.sameWorkspace || d.sameDirectory) return baseWidth * 1.2;
+      return baseWidth;
+    });
   
   // Create nodes
   const node = g.append('g')

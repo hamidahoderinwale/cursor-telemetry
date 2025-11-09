@@ -5,6 +5,7 @@
 
 /**
  * Compute physical layout based on co-occurrence similarity
+ * Enhanced with workspace and directory awareness
  */
 function computePhysicalLayout(files) {
   // Use co-occurrence similarity (same as file graph)
@@ -22,13 +23,40 @@ function computePhysicalLayout(files) {
       const intersection = new Set([...sessions1].filter(x => sessions2.has(x)));
       const union = new Set([...sessions1, ...sessions2]);
       
-      const similarity = union.size > 0 ? intersection.size / union.size : 0;
+      let similarity = union.size > 0 ? intersection.size / union.size : 0;
+      
+      // Boost similarity for files in same workspace
+      if (file1.workspace && file2.workspace && file1.workspace === file2.workspace) {
+        similarity *= 1.3; // 30% boost
+      }
+      
+      // Boost similarity for files in same directory
+      if (file1.directory && file2.directory) {
+        const dir1Parts = file1.directory.split('/').filter(p => p);
+        const dir2Parts = file2.directory.split('/').filter(p => p);
+        const commonDepth = Math.min(dir1Parts.length, dir2Parts.length);
+        let commonParts = 0;
+        for (let d = 0; d < commonDepth; d++) {
+          if (dir1Parts[d] === dir2Parts[d]) {
+            commonParts++;
+          } else {
+            break;
+          }
+        }
+        if (commonParts > 0) {
+          // Boost based on directory depth similarity
+          const dirBoost = 1 + (commonParts / Math.max(dir1Parts.length, dir2Parts.length)) * 0.2;
+          similarity *= dirBoost;
+        }
+      }
       
       if (similarity > threshold) {
         links.push({
           source: file1.id,
           target: file2.id,
-          similarity: similarity
+          similarity: similarity,
+          sameWorkspace: file1.workspace === file2.workspace,
+          sameDirectory: file1.directory === file2.directory
         });
       }
     }
