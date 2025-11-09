@@ -779,17 +779,15 @@ a:focus:not(:focus-visible) {
   bottom: 0;
   z-index: 99999 !important; /* Higher z-index to ensure modals are on top */
   display: none !important;
-  align-items: center;
-  justify-content: center;
-  padding: var(--space-xl);
-  pointer-events: auto !important;
-  visibility: visible !important;
-  overflow-y: auto;
-  overflow-x: hidden;
+  /* Removed flexbox centering - .modal-content uses fixed positioning with transform */
+  padding: 0;
+  pointer-events: none !important;
+  visibility: hidden !important;
+  overflow: hidden;
 }
 
 .modal.active {
-  display: flex !important;
+  display: block !important;
   visibility: visible !important;
   opacity: 1 !important;
   pointer-events: auto !important;
