@@ -103,7 +103,8 @@ async function renderActivityView(container) {
     try {
       timelineItems = await window.enhanceTimelineWithStatusMessages(timelineItems);
     } catch (error) {
-      console.warn('Error enhancing timeline with status messages:', error);
+      // Silently fail - status messages are optional
+      // Don't log errors here as they're expected when service is offline
     }
   }
   

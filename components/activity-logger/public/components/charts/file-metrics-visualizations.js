@@ -183,6 +183,53 @@ class FileMetricsVisualizations {
         ? Math.max(...allDeps.map(d => d.strength))
         : 0;
 
+      // Helper function to format file paths for display
+      const formatFilePath = (path) => {
+        if (!path) return '';
+        const parts = path.split('/');
+        const filename = parts[parts.length - 1];
+        
+        // For node_modules, extract package name
+        if (path.includes('node_modules/')) {
+          const nodeModulesIndex = path.indexOf('node_modules/');
+          const afterNodeModules = path.substring(nodeModulesIndex + 'node_modules/'.length);
+          const packageParts = afterNodeModules.split('/');
+          if (packageParts.length > 0) {
+            // Extract package name (handle scoped packages like @apollo/client)
+            let packageName = packageParts[0];
+            
+            // Handle scoped packages (@scope/package)
+            if (packageParts.length > 1 && packageParts[0].startsWith('@')) {
+              packageName = `${packageParts[0]}/${packageParts[1]}`;
+            } else {
+              // Remove version suffix if present (e.g., "next@14.0.0" -> "next")
+              packageName = packageName.split('@')[0];
+            }
+            
+            // Show package name and filename
+            const displayPath = `${packageName}/.../${filename}`;
+            // Truncate if too long (max 55 chars)
+            if (displayPath.length > 55) {
+              const maxPackageLen = Math.max(15, 55 - filename.length - 5);
+              return `${packageName.substring(0, maxPackageLen)}.../${filename}`;
+            }
+            return displayPath;
+          }
+        }
+        
+        // For other paths, show last 2-3 directory levels + filename
+        if (parts.length > 4) {
+          const shortPath = `.../${parts.slice(-3).join('/')}`;
+          return shortPath.length > 55 ? `.../${parts.slice(-2).join('/')}` : shortPath;
+        }
+        return path.length > 55 ? `.../${filename}` : path;
+      };
+
+      // Helper to get full path on hover
+      const getFullPath = (path) => {
+        return this.escapeHtml(path);
+      };
+
       container.innerHTML = `
         <div style="margin-bottom: var(--space-lg);">
           <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--space-md);">
@@ -204,30 +251,34 @@ class FileMetricsVisualizations {
         </div>
 
         <div style="margin-bottom: var(--space-md);">
-          <h4 style="margin-bottom: var(--space-sm); color: var(--color-text); font-size: var(--text-md);">Strongest File Dependencies</h4>
-          <div style="display: flex; flex-direction: column; gap: var(--space-xs); max-height: 400px; overflow-y: auto;">
-            ${topDeps.map(dep => {
+          <h4 style="margin-bottom: var(--space-md); color: var(--color-text); font-size: var(--text-md); font-weight: 600;">Strongest File Dependencies</h4>
+          <div style="display: grid; gap: var(--space-xs); max-height: 500px; overflow-y: auto; padding-right: var(--space-xs);">
+            ${topDeps.map((dep, index) => {
               const intensity = (dep.strength / maxStrength) * 100;
               const color = intensity > 70 ? '#ef4444' : intensity > 40 ? '#f59e0b' : '#10b981';
+              const file1Formatted = formatFilePath(dep.file1);
+              const file2Formatted = formatFilePath(dep.file2);
               
               return `
-                <div style="padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md); border-left: 3px solid ${color};">
-                  <div style="display: flex; justify-content: space-between; align-items: start;">
-                    <div style="flex: 1; min-width: 0;">
-                      <div style="font-size: var(--text-sm); color: var(--color-text); font-family: var(--font-mono); margin-bottom: var(--space-xs);">
-                        ${this.escapeHtml(dep.file1)}
-                      </div>
-                      <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-left: var(--space-md);">
-                        → ${this.escapeHtml(dep.file2)}
-                      </div>
+                <div style="padding: var(--space-sm) var(--space-md); background: var(--color-bg); border-radius: var(--radius-md); border-left: 4px solid ${color}; display: flex; align-items: center; gap: var(--space-md); transition: background 0.2s;" 
+                     onmouseover="this.style.background='var(--color-bg-alt, #f5f5f5)'" 
+                     onmouseout="this.style.background='var(--color-bg)'"
+                     title="${index + 1}. ${getFullPath(dep.file1)} → ${getFullPath(dep.file2)} (Strength: ${dep.strength})">
+                  <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px;">
+                    <div style="font-size: var(--text-sm); color: var(--color-text); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${getFullPath(dep.file1)}">
+                      ${this.escapeHtml(file1Formatted)}
                     </div>
-                    <div style="margin-left: var(--space-sm); display: flex; flex-direction: column; align-items: end;">
-                      <div style="font-size: var(--text-sm); color: var(--color-text); font-weight: 600;">
-                        ${dep.strength}
-                      </div>
-                      <div style="width: 60px; height: 6px; background: var(--color-bg-alt); border-radius: 3px; overflow: hidden; margin-top: var(--space-xs);">
-                        <div style="width: ${intensity}%; height: 100%; background: ${color}; border-radius: 3px;"></div>
-                      </div>
+                    <div style="font-size: var(--text-xs); color: var(--color-text-muted); display: flex; align-items: center; gap: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${getFullPath(dep.file2)}">
+                      <span style="color: ${color}; font-weight: 600;">→</span>
+                      <span>${this.escapeHtml(file2Formatted)}</span>
+                    </div>
+                  </div>
+                  <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex-shrink: 0; min-width: 80px;">
+                    <div style="font-size: var(--text-base); color: var(--color-text); font-weight: 700; line-height: 1.2;">
+                      ${dep.strength}
+                    </div>
+                    <div style="width: 70px; height: 4px; background: var(--color-bg-alt); border-radius: 2px; overflow: hidden;">
+                      <div style="width: ${intensity}%; height: 100%; background: ${color}; border-radius: 2px; transition: width 0.3s;"></div>
                     </div>
                   </div>
                 </div>

@@ -1,21 +1,192 @@
 /**
  * Status Message Visualization
  * Visualizes Cursor status messages like "Read X file", "Planning next moves" in timeline
+ * Version: 2.3 - Complete error suppression, no console output for network errors, defensive health checks
  */
+
+// Track failed requests to prevent spam
+let lastFailureTime = 0;
+let failureCount = 0;
+// Start with serviceOffline = true to prevent initial requests until we confirm service is available
+let serviceOffline = true;
+let healthCheckAttempted = false;
+const FAILURE_COOLDOWN = 30000; // 30 seconds
+const MAX_FAILURES_BEFORE_SILENCE = 1; // Only log first failure, then silence completely
+
+/**
+ * Check if companion service is available
+ * Only attempts health check once per page load to minimize CORS errors
+ */
+async function checkServiceHealth() {
+  // If we've already attempted a health check and service is offline, don't retry immediately
+  if (serviceOffline && healthCheckAttempted) {
+    const timeSinceLastCheck = Date.now() - lastFailureTime;
+    // Only retry after cooldown period
+    if (timeSinceLastCheck < FAILURE_COOLDOWN) {
+      return false;
+    }
+  }
+  
+  // Mark that we've attempted a health check
+  healthCheckAttempted = true;
+  
+  try {
+    const apiBase = window.CONFIG?.API_BASE_URL || 'http://localhost:43917';
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 1000); // Faster timeout
+    
+    // Wrap in try-catch to silently handle all errors
+    let response;
+    try {
+      response = await fetch(`${apiBase}/health`, { 
+        signal: controller.signal,
+        mode: 'cors'
+      });
+    } catch (fetchError) {
+      // Silently catch fetch errors - NO logging
+      clearTimeout(timeoutId);
+      serviceOffline = true;
+      lastFailureTime = Date.now();
+      return false;
+    }
+    
+    clearTimeout(timeoutId);
+    
+    if (response && response.ok) {
+      serviceOffline = false;
+      failureCount = 0;
+      return true;
+    }
+  } catch (e) {
+    // Completely silent - no logging, no errors, nothing
+    // This is expected when service is offline
+  }
+  
+  serviceOffline = true;
+  lastFailureTime = Date.now();
+  return false;
+}
 
 /**
  * Fetch status messages for a time range
  */
 async function fetchStatusMessages(startTime, endTime) {
+  // Validate inputs
+  if (!startTime || !endTime || isNaN(startTime) || isNaN(endTime)) {
+    return [];
+  }
+
+  // If service is marked offline, skip immediately - NO requests, NO errors, NO console output
+  if (serviceOffline) {
+    return [];
+  }
+  
+  // Quick health check - if service is down, mark as offline and return silently
+  const isHealthy = await checkServiceHealth();
+  if (!isHealthy) {
+    serviceOffline = true;
+    return []; // Return silently - NO errors logged
+  }
+
+  // Rate limit error logging
+  const now = Date.now();
+  const timeSinceLastFailure = now - lastFailureTime;
+  
+  // If we've had failures recently, silently fail - NO requests
+  if (failureCount >= MAX_FAILURES_BEFORE_SILENCE && timeSinceLastFailure < FAILURE_COOLDOWN) {
+    return [];
+  }
+
   try {
     const apiBase = window.CONFIG?.API_BASE_URL || 'http://localhost:43917';
-    const response = await fetch(
-      `${apiBase}/api/status-messages?startTime=${startTime}&endTime=${endTime}&limit=50`
-    );
+    
+    // Quick health check before making request - skip if offline
+    if (serviceOffline && timeSinceLastFailure < FAILURE_COOLDOWN) {
+      return [];
+    }
+
+    // Use AbortController for timeout with very short timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 2000); // 2 second timeout
+    
+    // Wrap fetch in additional try-catch to silently handle CORS/network errors
+    let response;
+    try {
+      response = await fetch(
+        `${apiBase}/api/status-messages?startTime=${startTime}&endTime=${endTime}&limit=50`,
+        {
+          signal: controller.signal,
+          mode: 'cors'
+        }
+      );
+    } catch (fetchError) {
+      // Silently catch ALL fetch errors (CORS, network, abort, etc.) - NO logging
+      clearTimeout(timeoutId);
+      serviceOffline = true;
+      failureCount++;
+      lastFailureTime = Date.now();
+      return []; // Return empty array silently - NO console output
+    }
+    
+    clearTimeout(timeoutId);
+
+    if (!response || !response.ok) {
+      // Mark as offline on non-OK response
+      serviceOffline = true;
+      failureCount++;
+      lastFailureTime = Date.now();
+      return []; // Return silently
+    }
+
     const result = await response.json();
-    return result.success ? result.data : [];
+    
+    // Reset failure count on success
+    failureCount = 0;
+    serviceOffline = false;
+    
+    return result.success ? (result.data || []) : [];
   } catch (error) {
-    console.error('Error fetching status messages:', error);
+    // Reset counter after cooldown
+    if (timeSinceLastFailure >= FAILURE_COOLDOWN) {
+      failureCount = 0;
+    }
+    
+    failureCount++;
+    lastFailureTime = now;
+    
+    // Detect network errors - be very aggressive in detection
+    const errorMessage = String(error?.message || error?.toString() || '');
+    const errorName = String(error?.name || '');
+    const errorString = String(error || '');
+    
+    const isNetworkError = 
+      errorMessage.includes('CORS') || 
+      errorMessage.includes('NetworkError') || 
+      errorMessage.includes('Failed to fetch') ||
+      errorMessage.includes('network error') ||
+      errorMessage.includes('fetch') ||
+      errorMessage.includes('TypeError') ||
+      errorName === 'NetworkError' ||
+      errorName === 'TypeError' ||
+      errorName === 'AbortError' ||
+      errorString.includes('NetworkError') ||
+      errorString.includes('CORS') ||
+      // Check if it's a fetch-related TypeError
+      (errorName === 'TypeError' && errorMessage.toLowerCase().includes('fetch'));
+    
+    // Mark service as offline on ANY network-related error
+    if (isNetworkError) {
+      serviceOffline = true;
+      // ABSOLUTELY NEVER log network errors - they're expected when service is offline
+      // Return empty array silently - NO console.error, NO console.warn, NOTHING
+      return [];
+    }
+    
+    // Only log non-network errors, and only first 2, with a clear prefix
+    if (failureCount <= MAX_FAILURES_BEFORE_SILENCE) {
+      console.warn('[Status Messages] Non-network error:', errorMessage.substring(0, 100));
+    }
+    
     return [];
   }
 }
@@ -132,33 +303,71 @@ function renderStatusMessagesInContext(statusMessages, contextChanges) {
 async function enhanceTimelineWithStatusMessages(timelineItems) {
   if (!timelineItems || timelineItems.length === 0) return timelineItems;
   
+  // If service is marked offline and we've already checked, skip immediately (NO requests, NO errors)
+  if (serviceOffline && healthCheckAttempted) {
+    const timeSinceLastCheck = Date.now() - lastFailureTime;
+    // Only retry after cooldown period
+    if (timeSinceLastCheck < FAILURE_COOLDOWN) {
+      return timelineItems;
+    }
+  }
+  
+  // Quick health check before proceeding (only if we haven't checked recently or service was online)
+  const isHealthy = await checkServiceHealth();
+  if (!isHealthy) {
+    return timelineItems; // Skip silently if service is offline
+  }
+  
   // Get time range from timeline items
   const timestamps = timelineItems
     .map(item => item.sortTime || item.timestamp)
     .filter(Boolean)
-    .map(ts => typeof ts === 'string' ? new Date(ts).getTime() : ts);
+    .map(ts => {
+      if (typeof ts === 'string') {
+        const parsed = new Date(ts).getTime();
+        return isNaN(parsed) ? null : parsed;
+      }
+      return typeof ts === 'number' && !isNaN(ts) ? ts : null;
+    })
+    .filter(Boolean);
   
   if (timestamps.length === 0) return timelineItems;
   
   const startTime = Math.min(...timestamps) - 60000; // 1 minute before
   const endTime = Math.max(...timestamps) + 60000;   // 1 minute after
   
-  // Fetch status messages
-  const statusMessages = await fetchStatusMessages(startTime, endTime);
+  // Validate time range
+  if (isNaN(startTime) || isNaN(endTime) || startTime >= endTime) {
+    return timelineItems;
+  }
   
-  // Merge status messages into timeline
-  const enhancedItems = [...timelineItems];
-  
-  statusMessages.forEach(status => {
-    enhancedItems.push({
-      ...status,
-      itemType: 'status',
-      sortTime: status.timestamp
+  try {
+    // Fetch status messages
+    const statusMessages = await fetchStatusMessages(startTime, endTime);
+    
+    if (!statusMessages || statusMessages.length === 0) {
+      return timelineItems;
+    }
+    
+    // Merge status messages into timeline
+    const enhancedItems = [...timelineItems];
+    
+    statusMessages.forEach(status => {
+      if (status && status.timestamp) {
+        enhancedItems.push({
+          ...status,
+          itemType: 'status',
+          sortTime: typeof status.timestamp === 'number' ? status.timestamp : new Date(status.timestamp).getTime()
+        });
+      }
     });
-  });
-  
-  // Re-sort
-  return enhancedItems.sort((a, b) => (b.sortTime || 0) - (a.sortTime || 0));
+    
+    // Re-sort
+    return enhancedItems.sort((a, b) => (b.sortTime || 0) - (a.sortTime || 0));
+  } catch (error) {
+    // Silently fail - don't break the timeline
+    return timelineItems;
+  }
 }
 
 /**
@@ -179,5 +388,25 @@ if (typeof window !== 'undefined') {
   window.getStatusIcon = getStatusIcon;
   window.getStatusColor = getStatusColor;
   window.showStatusMessageModal = showStatusMessageModal;
+  
+  // Perform one initial health check after page load (with delay to avoid blocking)
+  // This will silently fail if service is offline, but won't spam requests
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+      // Wait 2 seconds after page load before attempting health check
+      setTimeout(() => {
+        checkServiceHealth().catch(() => {
+          // Silently ignore - service is offline
+        });
+      }, 2000);
+    });
+  } else {
+    // Page already loaded
+    setTimeout(() => {
+      checkServiceHealth().catch(() => {
+        // Silently ignore - service is offline
+      });
+    }, 2000);
+  }
 }
 

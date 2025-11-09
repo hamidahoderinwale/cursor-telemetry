@@ -198,15 +198,25 @@ async function enhancePromptWithContext(prompt) {
     
     // Fetch related status messages (within 10 seconds)
     if (window.fetchStatusMessages && prompt.timestamp) {
-      try {
-        const promptTime = new Date(prompt.timestamp).getTime();
-        const statusMessages = await window.fetchStatusMessages(
-          promptTime - 10000,
-          promptTime + 10000
-        );
-        prompt.relatedStatusMessages = statusMessages;
-      } catch (error) {
-        // Silently fail if status messages not available
+      // Check if service is available
+      if (window.state && window.state.companionServiceOnline === false) {
+        // Skip if service is offline
+      } else {
+        try {
+          const promptTime = typeof prompt.timestamp === 'number' 
+            ? prompt.timestamp 
+            : new Date(prompt.timestamp).getTime();
+          
+          if (!isNaN(promptTime)) {
+            const statusMessages = await window.fetchStatusMessages(
+              promptTime - 10000,
+              promptTime + 10000
+            );
+            prompt.relatedStatusMessages = statusMessages || [];
+          }
+        } catch (error) {
+          // Silently fail if status messages not available
+        }
       }
     }
     

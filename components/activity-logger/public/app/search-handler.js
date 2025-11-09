@@ -28,6 +28,11 @@ async function initializeSearch() {
     return false;
   }
   
+  // Load HF preference before initializing
+  if (window.loadHuggingFacePreference) {
+    loadHuggingFacePreference();
+  }
+  
   try {
     console.log('[SEARCH] Initializing search engine...');
     searchEngine = new window.SearchEngine();
@@ -56,12 +61,38 @@ async function initializeSearch() {
       return false;
     }
     
-    await searchEngine.initialize(searchData);
-    console.log(`[SUCCESS] Search engine initialized with ${totalItems} items (${events.length} events, ${prompts.length} prompts, ${conversations.length} conversations, ${terminalCommands.length} terminal commands)`);
+    // Initialize search engine with timeout protection
+    try {
+      // Use Promise.race to timeout after 30 seconds
+      const initPromise = searchEngine.initialize(searchData);
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Search initialization timeout')), 30000)
+      );
+      
+      await Promise.race([initPromise, timeoutPromise]);
+      console.log(`[SUCCESS] Search engine initialized with ${totalItems} items (${events.length} events, ${prompts.length} prompts, ${conversations.length} conversations, ${terminalCommands.length} terminal commands)`);
+    } catch (timeoutError) {
+      console.warn('[SEARCH] Search initialization timed out or failed, using fallback search:', timeoutError.message);
+      // Continue without full search - basic search will still work
+      searchEngine = null;
+      return false;
+    }
     
     // Update semantic status after initialization
     setTimeout(() => {
       updateSemanticStatus();
+      // Also update the toggle status
+      if (searchEngine && searchEngine.useHuggingFace && searchEngine.hfSemanticSearch?.isInitialized) {
+        const statusEl = document.getElementById('hfSearchStatus');
+        if (statusEl) {
+          statusEl.textContent = 'Enabled';
+          statusEl.className = 'hf-status-indicator enabled';
+        }
+        const toggle = document.getElementById('hfSemanticSearchToggle');
+        if (toggle) {
+          toggle.checked = true;
+        }
+      }
     }, 3000); // Wait a bit for HF to initialize
     
     return true;
@@ -335,14 +366,178 @@ function selectSearchResult(index) {
 // Export search functions to window
 window.initializeSearch = initializeSearch;
 window.reinitializeSearch = reinitializeSearch;
+/**
+ * Toggle Hugging Face semantic search
+ */
+async function toggleHuggingFaceSearch(enabled) {
+  // Save preference to localStorage
+  if (window.LocalStorageHelper) {
+    window.LocalStorageHelper.set('ENABLE_SEMANTIC_SEARCH', enabled, true);
+  } else {
+    localStorage.setItem('ENABLE_SEMANTIC_SEARCH', JSON.stringify(enabled));
+  }
+  
+  // Update config
+  if (window.CONFIG) {
+    window.CONFIG.ENABLE_SEMANTIC_SEARCH = enabled;
+  }
+  if (window.DASHBOARD_CONFIG) {
+    window.DASHBOARD_CONFIG.ENABLE_SEMANTIC_SEARCH = enabled;
+  }
+  
+  // Update UI
+  const statusEl = document.getElementById('hfSearchStatus');
+  if (statusEl) {
+    if (enabled) {
+      statusEl.textContent = 'Loading...';
+      statusEl.className = 'hf-status-indicator loading';
+    } else {
+      statusEl.textContent = 'Disabled';
+      statusEl.className = 'hf-status-indicator disabled';
+    }
+  }
+  
+  // Reinitialize search engine if it exists
+  if (searchEngine && searchEngine.initialized) {
+    console.log(`[SEARCH] ${enabled ? 'Enabling' : 'Disabling'} Hugging Face semantic search...`);
+    
+    if (enabled) {
+      // Initialize HF search
+      try {
+        const events = window.state?.data?.events || [];
+        const prompts = window.state?.data?.prompts || [];
+        const conversations = window.state?.data?.conversations || [];
+        const terminalCommands = window.state?.data?.terminalCommands || [];
+        
+        const docs = [
+          ...events.map((e, i) => ({
+            id: `event-${e.id || i}`,
+            type: 'event',
+            title: e.file_path || 'File Change',
+            content: JSON.stringify(e.details || {}),
+            timestamp: e.timestamp,
+            workspace: e.workspace || 'unknown'
+          })),
+          ...prompts.map((p, i) => ({
+            id: `prompt-${p.id || i}`,
+            type: 'prompt',
+            title: p.prompt?.substring(0, 50) || 'Prompt',
+            content: p.prompt || '',
+            timestamp: p.timestamp,
+            workspace: p.workspace || 'unknown'
+          }))
+        ];
+        
+        await searchEngine.initializeHuggingFaceSearch(docs);
+        
+        if (searchEngine.useHuggingFace && searchEngine.hfSemanticSearch?.isInitialized) {
+          if (statusEl) {
+            statusEl.textContent = 'Enabled';
+            statusEl.className = 'hf-status-indicator enabled';
+          }
+          updateSemanticStatus();
+          console.log('[SEARCH] Hugging Face semantic search enabled successfully');
+        } else {
+          if (statusEl) {
+            statusEl.textContent = 'Failed';
+            statusEl.className = 'hf-status-indicator failed';
+          }
+          console.warn('[SEARCH] Failed to enable Hugging Face semantic search');
+        }
+      } catch (error) {
+        console.error('[SEARCH] Error enabling Hugging Face search:', error);
+        if (statusEl) {
+          statusEl.textContent = 'Error';
+          statusEl.className = 'hf-status-indicator failed';
+        }
+      }
+    } else {
+      // Disable HF search
+      searchEngine.useHuggingFace = false;
+      if (statusEl) {
+        statusEl.textContent = 'Disabled';
+        statusEl.className = 'hf-status-indicator disabled';
+      }
+      updateSemanticStatus();
+      console.log('[SEARCH] Hugging Face semantic search disabled');
+    }
+  } else {
+    // Search engine not initialized yet, will pick up config on next init
+    if (statusEl) {
+      statusEl.textContent = enabled ? 'Will enable on next search' : 'Disabled';
+      statusEl.className = enabled ? 'hf-status-indicator pending' : 'hf-status-indicator disabled';
+    }
+  }
+}
+
+/**
+ * Load Hugging Face search preference and update UI
+ */
+function loadHuggingFacePreference() {
+  let enabled = false;
+  
+  // Check localStorage
+  if (window.LocalStorageHelper) {
+    enabled = window.LocalStorageHelper.get('ENABLE_SEMANTIC_SEARCH', false, true) === true;
+  } else {
+    const stored = localStorage.getItem('ENABLE_SEMANTIC_SEARCH');
+    if (stored) {
+      try {
+        enabled = JSON.parse(stored) === true;
+      } catch (e) {
+        enabled = false;
+      }
+    }
+  }
+  
+  // Update config
+  if (window.CONFIG) {
+    window.CONFIG.ENABLE_SEMANTIC_SEARCH = enabled;
+  }
+  if (window.DASHBOARD_CONFIG) {
+    window.DASHBOARD_CONFIG.ENABLE_SEMANTIC_SEARCH = enabled;
+  }
+  
+  // Update UI
+  const toggle = document.getElementById('hfSemanticSearchToggle');
+  const statusEl = document.getElementById('hfSearchStatus');
+  
+  if (toggle) {
+    toggle.checked = enabled;
+  }
+  
+  if (statusEl) {
+    if (enabled) {
+      statusEl.textContent = 'Enabled';
+      statusEl.className = 'hf-status-indicator enabled';
+    } else {
+      statusEl.textContent = 'Disabled';
+      statusEl.className = 'hf-status-indicator disabled';
+    }
+  }
+  
+  return enabled;
+}
+
 window.openSearchPalette = openSearchPalette;
 window.closeSearchPalette = closeSearchPalette;
+window.toggleHuggingFaceSearch = toggleHuggingFaceSearch;
+window.loadHuggingFacePreference = loadHuggingFacePreference;
 window.performSearch = performSearch;
 window.navigateSearchResults = navigateSearchResults;
 window.selectSearchResult = selectSearchResult;
 window.renderSearchResults = renderSearchResults;
 window.setSearchQuery = setSearchQuery;
 window.updateSearchExamples = updateSearchExamples;
+
+// Load preference when DOM is ready
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(loadHuggingFacePreference, 500); // Wait for config to load
+  });
+} else {
+  setTimeout(loadHuggingFacePreference, 500);
+}
 window.updateSemanticStatus = updateSemanticStatus;
 
 // Export search state for event listeners in dashboard.js

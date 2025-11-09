@@ -33,7 +33,30 @@
 .whiteboard-subtitle {
   font-size: var(--text-sm, 0.875rem);
   color: var(--color-text-muted, #666);
-  margin: 0;
+  margin: 0 0 var(--space-sm, 0.5rem) 0;
+}
+
+.whiteboard-stats {
+  display: flex;
+  gap: var(--space-lg, 1.5rem);
+  margin-top: var(--space-sm, 0.5rem);
+}
+
+.whiteboard-stat {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs, 0.25rem);
+  font-size: var(--text-sm, 0.875rem);
+}
+
+.whiteboard-stat .stat-label {
+  color: var(--color-text-muted, #666);
+  font-weight: 500;
+}
+
+.whiteboard-stat .stat-value {
+  color: var(--color-text, #333);
+  font-weight: 600;
 }
 
 .whiteboard-header-actions {

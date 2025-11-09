@@ -107,14 +107,22 @@
         const sidebarOverlay = document.getElementById('sidebarOverlay');
         
         function toggleSidebar() {
-          sidebar.classList.toggle('open');
-          sidebarOverlay.classList.toggle('active');
-          document.body.style.overflow = sidebar.classList.contains('open') ? 'hidden' : '';
+          if (sidebar) {
+            sidebar.classList.toggle('open');
+          }
+          if (sidebarOverlay) {
+            sidebarOverlay.classList.toggle('active');
+          }
+          document.body.style.overflow = sidebar && sidebar.classList.contains('open') ? 'hidden' : '';
         }
         
         function closeSidebar() {
-          sidebar.classList.remove('open');
-          sidebarOverlay.classList.remove('active');
+          if (sidebar) {
+            sidebar.classList.remove('open');
+          }
+          if (sidebarOverlay) {
+            sidebarOverlay.classList.remove('active');
+          }
           document.body.style.overflow = '';
         }
         
@@ -425,6 +433,13 @@
           <span><kbd>↵</kbd> select</span>
           <span><kbd>esc</kbd> close</span>
         </div>
+        <div class="search-settings">
+          <label class="search-setting-toggle" title="Enable Hugging Face AI semantic search (requires model download ~20MB)">
+            <input type="checkbox" id="hfSemanticSearchToggle" onchange="toggleHuggingFaceSearch(this.checked)">
+            <span class="toggle-label">AI Semantic Search</span>
+            <span id="hfSearchStatus" class="hf-status-indicator"></span>
+          </label>
+        </div>
         <div class="search-filters">
           <span class="search-filter-hint">Filters: <code>type:</code> <code>workspace:</code> <code>date:</code> <code>mode:</code></span>
         </div>
@@ -484,7 +499,7 @@
   
   <!-- Views (must load before view-router, defer non-critical) -->
   <script src="views/activity/context-visualization.js" defer></script>
-  <script src="views/activity/status-message-visualization.js" defer></script>
+  <script src="views/activity/status-message-visualization.js?v=2.3" defer></script>
   <script src="views/activity/timeline-helpers.js" defer></script>
   <script src="views/activity/search-handler.js" defer></script>
   <script src="views/activity/grouping-handler.js" defer></script>

@@ -39,6 +39,71 @@ class SearchEngine {
   }
 
   /**
+   * Build Lunr index in chunks to prevent timeout
+   * Uses async yielding to prevent browser script timeout
+   */
+  async buildLunrIndexChunked(docs) {
+    const CHUNK_SIZE = 500; // Smaller chunks for better yielding
+    const MAX_DOCS = 10000; // Limit total docs to prevent timeout
+    
+    // Limit total documents if too many
+    const docsToIndex = docs.length > MAX_DOCS ? docs.slice(0, MAX_DOCS) : docs;
+    if (docs.length > MAX_DOCS) {
+      console.log(`[SEARCH] Limiting index to ${MAX_DOCS} most recent documents (out of ${docs.length} total)`);
+    }
+    
+    const chunks = [];
+    for (let i = 0; i < docsToIndex.length; i += CHUNK_SIZE) {
+      chunks.push(docsToIndex.slice(i, i + CHUNK_SIZE));
+    }
+    
+    console.log(`[SEARCH] Building index in ${chunks.length} chunks (${docsToIndex.length} total docs)...`);
+    
+    // Use Builder API for incremental building
+    const builder = new lunr.Builder();
+    builder.ref('id');
+    builder.field('title', { boost: 10 });
+    builder.field('content');
+    builder.field('type', { boost: 5 });
+    builder.field('workspace', { boost: 3 });
+    
+    // Add documents in chunks with yields
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i];
+      
+      // Add chunk documents
+      chunk.forEach(doc => {
+        builder.add({
+          id: doc.id,
+          title: doc.title || '',
+          content: (doc.content || '').substring(0, 5000), // Limit content length
+          type: doc.type || '',
+          workspace: doc.workspace || ''
+        });
+      });
+      
+      // Yield every chunk to prevent blocking
+      if (i < chunks.length - 1) {
+        await new Promise(resolve => {
+          // Use requestIdleCallback if available, else setTimeout
+          if (window.requestIdleCallback) {
+            requestIdleCallback(resolve, { timeout: 50 });
+          } else {
+            setTimeout(resolve, 10);
+          }
+        });
+      }
+      
+      if ((i + 1) % 5 === 0) {
+        console.log(`[SEARCH] Index building progress: ${i + 1}/${chunks.length} chunks`);
+      }
+    }
+    
+    // Build final index
+    return builder.build();
+  }
+
+  /**
    * Build synonym map for query expansion
    */
   buildSynonymMap() {
@@ -166,29 +231,110 @@ class SearchEngine {
     }
 
     // Build Lunr index for full-text search
-    this.lunrIndex = lunr(function() {
-      this.ref('id');
-      this.field('title', { boost: 10 });
-      this.field('content');
-      this.field('type', { boost: 5 });
-      this.field('workspace', { boost: 3 });
-      
-      docs.forEach(doc => {
-        this.add({
-          id: doc.id,
-          title: doc.title,
-          content: doc.content,
-          type: doc.type,
-          workspace: doc.workspace
+    // Skip Lunr for very large datasets (>3000 docs) to prevent browser timeout
+    // Use BM25-based search instead which is more efficient for large datasets
+    try {
+      if (docs.length > 3000) {
+        console.log(`[SEARCH] Large dataset (${docs.length} docs), skipping Lunr to prevent timeout`);
+        console.log(`[SEARCH] Using BM25-based search instead (faster, no timeout risk)`);
+        this.lunrIndex = null; // Skip Lunr, use BM25 only
+      } else if (docs.length > 1000) {
+        // For medium datasets, try building with timeout protection
+        console.log(`[SEARCH] Medium dataset (${docs.length} docs), building Lunr index with timeout protection...`);
+        try {
+          const buildPromise = new Promise((resolve, reject) => {
+            try {
+              const index = lunr(function() {
+                this.ref('id');
+                this.field('title', { boost: 10 });
+                this.field('content');
+                this.field('type', { boost: 5 });
+                this.field('workspace', { boost: 3 });
+                
+                docs.forEach(doc => {
+                  this.add({
+                    id: doc.id,
+                    title: doc.title || '',
+                    content: (doc.content || '').substring(0, 3000), // Limit content length
+                    type: doc.type || '',
+                    workspace: doc.workspace || ''
+                  });
+                });
+              });
+              resolve(index);
+            } catch (err) {
+              reject(err);
+            }
+          });
+          
+          const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Lunr build timeout')), 10000)
+          );
+          
+          this.lunrIndex = await Promise.race([buildPromise, timeoutPromise]);
+          console.log('[SEARCH] Lunr index built successfully');
+        } catch (error) {
+          console.warn('[SEARCH] Lunr build failed or timed out, using BM25 search:', error.message);
+          this.lunrIndex = null;
+        }
+      } else {
+        // For smaller datasets, build normally
+        this.lunrIndex = lunr(function() {
+          this.ref('id');
+          this.field('title', { boost: 10 });
+          this.field('content');
+          this.field('type', { boost: 5 });
+          this.field('workspace', { boost: 3 });
+          
+          docs.forEach(doc => {
+            this.add({
+              id: doc.id,
+              title: doc.title || '',
+              content: (doc.content || '').substring(0, 5000), // Limit content length
+              type: doc.type || '',
+              workspace: doc.workspace || ''
+            });
+          });
         });
-      });
-    });
+        console.log('[SEARCH] Lunr index built successfully');
+      }
+    } catch (error) {
+      console.warn('[SEARCH] Lunr index build failed, falling back to BM25 search:', error.message);
+      // Create a minimal index or skip Lunr
+      this.lunrIndex = null;
+    }
 
-    // Build TF-IDF vectors for semantic search
-    this.buildTFIDFVectors(docs);
-    
-    // Build BM25 index
-    this.buildBM25Index(docs);
+    // Build TF-IDF vectors and BM25 index
+    // If Lunr was skipped (large dataset), build BM25 immediately as primary search method
+    // Otherwise, defer for very large datasets to prevent blocking
+    if (!this.lunrIndex && docs.length > 0) {
+      // Lunr was skipped, BM25 is primary - build it immediately
+      console.log('[SEARCH] Building BM25 index (primary search method)...');
+      try {
+        this.buildBM25Index(docs);
+        console.log('[SEARCH] BM25 index built successfully');
+      } catch (error) {
+        console.warn('[SEARCH] BM25 build failed:', error.message);
+      }
+    } else if (docs.length > 5000) {
+      // Very large dataset with Lunr - defer TF-IDF/BM25 to prevent blocking
+      setTimeout(() => {
+        try {
+          this.buildTFIDFVectors(docs);
+          this.buildBM25Index(docs);
+        } catch (error) {
+          console.warn('[SEARCH] TF-IDF/BM25 build failed:', error.message);
+        }
+      }, 100);
+    } else {
+      // Normal case - build both
+      try {
+        this.buildTFIDFVectors(docs);
+        this.buildBM25Index(docs);
+      } catch (error) {
+        console.warn('[SEARCH] TF-IDF/BM25 build failed:', error.message);
+      }
+    }
 
     // Initialize Hugging Face semantic search (in background, non-blocking)
     // Only if enabled in config - explicitly check for true (not just truthy)
@@ -251,9 +397,14 @@ class SearchEngine {
         console.log('[SEARCH] Hugging Face semantic search enabled');
         
         // Generate embeddings in background (non-blocking)
+        // For large datasets, this can take a while - log progress
         setTimeout(() => {
-          this.hfSemanticSearch.generateDocumentEmbeddings(docs).catch(err => {
+          console.log(`[SEARCH] Starting embedding generation for ${docs.length} documents (this may take several minutes)...`);
+          this.hfSemanticSearch.generateDocumentEmbeddings(docs).then(() => {
+            console.log('[SEARCH] Embedding generation complete - semantic search is now fully functional');
+          }).catch(err => {
             console.warn('[SEARCH] Error generating embeddings:', err.message);
+            console.warn('[SEARCH] Semantic search will still work, but may be slower (generating embeddings on-the-fly)');
           });
         }, 2000); // Delay to let UI render first
       } else {
@@ -616,8 +767,8 @@ class SearchEngine {
     let results = [];
     const resultMap = new Map(); // To deduplicate and merge scores
 
-    // 1. Full-text search with Lunr
-    if (searchText) {
+    // 1. Full-text search with Lunr (if available)
+    if (searchText && this.lunrIndex) {
       try {
         const lunrResults = this.lunrIndex.search(expandedQuery);
         lunrResults.forEach(result => {
@@ -649,27 +800,36 @@ class SearchEngine {
           console.warn('Fallback search also failed:', e2);
         }
       }
+    } else if (searchText && !this.lunrIndex) {
+      // Lunr not available (large dataset), use BM25 only
+      // This will be handled in step 2 below
     }
 
-    // 2. BM25 ranking for all documents
-    if (searchText && resultMap.size < 50) {
-      this.documents.forEach(doc => {
-        const bm25Score = this.calculateBM25Score(searchText, doc.id);
-        if (bm25Score > 0.5) {
-          if (resultMap.has(doc.id)) {
-            resultMap.get(doc.id).bm25Score = bm25Score;
-            if (!resultMap.get(doc.id).searchMethods.includes('bm25')) {
-              resultMap.get(doc.id).searchMethods.push('bm25');
+    // 2. BM25 ranking for all documents (primary method when Lunr is unavailable)
+    if (searchText) {
+      // If Lunr is not available, use BM25 as primary search method
+      const bm25Threshold = this.lunrIndex ? 0.5 : 0.1; // Lower threshold when Lunr unavailable
+      const maxResults = this.lunrIndex ? 50 : 100; // More results when Lunr unavailable
+      
+      if (resultMap.size < maxResults) {
+        this.documents.forEach(doc => {
+          const bm25Score = this.calculateBM25Score(searchText, doc.id);
+          if (bm25Score > bm25Threshold) {
+            if (resultMap.has(doc.id)) {
+              resultMap.get(doc.id).bm25Score = bm25Score;
+              if (!resultMap.get(doc.id).searchMethods.includes('bm25')) {
+                resultMap.get(doc.id).searchMethods.push('bm25');
+              }
+            } else {
+              resultMap.set(doc.id, {
+                ...doc,
+                bm25Score,
+                searchMethods: ['bm25']
+              });
             }
-          } else {
-            resultMap.set(doc.id, {
-              ...doc,
-              bm25Score,
-              searchMethods: ['bm25']
-            });
           }
-        }
-      });
+        });
+      }
     }
 
     // 3. Semantic search (Hugging Face embeddings if available, otherwise TF-IDF)

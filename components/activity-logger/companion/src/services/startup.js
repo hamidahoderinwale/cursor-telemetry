@@ -141,6 +141,12 @@ function createStartupService(deps) {
             if (data.prompts && data.prompts.length > 0) {
               console.log(`[CHAT] Found ${data.prompts.length} prompts in Cursor database`);
               
+              // Check if dbRef is available and has prompts array
+              if (!dbRef || !dbRef.prompts) {
+                console.warn('[CHAT] dbRef not available, skipping prompt processing');
+                return;
+              }
+              
               for (const prompt of data.prompts) {
                 const exists = dbRef.prompts.find(p => p.text === prompt.text);
                 if (!exists) {

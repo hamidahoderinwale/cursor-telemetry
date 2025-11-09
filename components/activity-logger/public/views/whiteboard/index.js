@@ -11,16 +11,26 @@ function renderWhiteboardView(container) {
         <div class="whiteboard-header-left">
           <h1 class="whiteboard-title">Whiteboard</h1>
           <p class="whiteboard-subtitle">Build custom analytics with queries and visualizations</p>
+          <div class="whiteboard-stats">
+            <div class="whiteboard-stat">
+              <span class="stat-label">Code Changed:</span>
+              <span class="stat-value" id="whiteboardCodeChanged">0 KB</span>
+            </div>
+            <div class="whiteboard-stat">
+              <span class="stat-label">Avg Context Used:</span>
+              <span class="stat-value" id="whiteboardAvgContext">0%</span>
+            </div>
+          </div>
         </div>
         <div class="whiteboard-header-actions">
           <button class="btn btn-secondary" id="whiteboardNewBtn" title="New whiteboard">
             <span>+ New</span>
           </button>
           <button class="btn btn-secondary" id="whiteboardSaveBtn" title="Save whiteboard">
-            <span>💾 Save</span>
+            <span>Save</span>
           </button>
           <button class="btn btn-secondary" id="whiteboardLoadBtn" title="Load whiteboard">
-            <span>📂 Load</span>
+            <span>Load</span>
           </button>
           <button class="btn btn-primary" id="whiteboardAddQueryBtn" title="Add query block">
             <span>+ Query</span>
@@ -68,10 +78,10 @@ function renderWhiteboardView(container) {
               <span class="query-status" title="Query status"></span>
             </div>
             <div class="query-block-actions">
-              <button class="btn-icon" title="Run query" data-action="run">▶</button>
-              <button class="btn-icon" title="Visualize" data-action="visualize">📊</button>
-              <button class="btn-icon" title="Export" data-action="export">📥</button>
-              <button class="btn-icon" title="Delete" data-action="delete">🗑</button>
+              <button class="btn-icon" title="Run query" data-action="run">Run</button>
+              <button class="btn-icon" title="Visualize" data-action="visualize">Chart</button>
+              <button class="btn-icon" title="Export" data-action="export">Export</button>
+              <button class="btn-icon" title="Delete" data-action="delete">×</button>
             </div>
           </div>
           <div class="query-block-body">
@@ -119,8 +129,8 @@ function renderWhiteboardView(container) {
                 </div>
               </div>
               <div class="query-actions">
-                <button class="btn btn-primary" data-action="generate-query">✨ Generate Query</button>
-                <button class="btn" data-action="execute-query">▶ Execute</button>
+                <button class="btn btn-primary" data-action="generate-query">Generate Query</button>
+                <button class="btn" data-action="execute-query">Execute</button>
               </div>
             </div>
             <div class="query-results" style="display: none;">
@@ -145,6 +155,21 @@ function renderWhiteboardView(container) {
 
   // Initialize whiteboard
   initializeWhiteboard();
+  
+  // Update stats when view is rendered
+  // Also listen for stats updates
+  if (window.state && window.state.stats) {
+    updateWhiteboardStats();
+  }
+  
+  // Update stats periodically or when stats change
+  const statsInterval = setInterval(() => {
+    if (document.getElementById('whiteboardCodeChanged')) {
+      updateWhiteboardStats();
+    } else {
+      clearInterval(statsInterval);
+    }
+  }, 2000);
 }
 
 function initializeWhiteboard() {
@@ -160,6 +185,65 @@ function initializeWhiteboard() {
     container,
     emptyState
   });
+
+  // Update stats display
+  updateWhiteboardStats();
+
+  // Add default sample query if whiteboard is empty
+  setTimeout(() => {
+    if (whiteboard.queries.size === 0) {
+      const sampleQueryId = whiteboard.addQueryBlock('Sample Query: File Changes This Week');
+      // Wait a bit for the query block to be fully initialized
+      setTimeout(() => {
+        const sampleBlock = document.getElementById(sampleQueryId);
+        if (sampleBlock) {
+          // Find the inner query-block element
+          const innerBlock = sampleBlock.querySelector('.query-block') || sampleBlock;
+          
+          // Set sample SQL query
+          const sqlInput = innerBlock.querySelector('.sql-input');
+          if (sqlInput) {
+            sqlInput.value = `SELECT 
+  file_path,
+  COUNT(*) as change_count,
+  SUM(CASE WHEN details LIKE '%chars_added%' THEN 1 ELSE 0 END) as additions
+FROM events 
+WHERE timestamp > datetime('now', '-7 days')
+GROUP BY file_path
+ORDER BY change_count DESC
+LIMIT 10`;
+            // Update the query object
+            const query = whiteboard.queries.get(sampleQueryId);
+            if (query) {
+              query.query = sqlInput.value;
+              query.sql = sqlInput.value;
+              query.mode = 'sql';
+            }
+          }
+          
+          // Switch to SQL mode
+          const sqlTab = innerBlock.querySelector('.query-tab[data-mode="sql"]');
+          if (sqlTab) {
+            // Trigger click to switch tabs
+            sqlTab.click();
+          } else {
+            // Fallback: manually switch
+            const tabs = innerBlock.querySelectorAll('.query-tab');
+            tabs.forEach(t => t.classList.remove('active'));
+            if (sqlTab) sqlTab.classList.add('active');
+            
+            // Show SQL input
+            innerBlock.querySelectorAll('.query-input').forEach(input => {
+              input.style.display = 'none';
+            });
+            innerBlock.querySelector('.query-builder')?.style.setProperty('display', 'none');
+            const sqlInputEl = innerBlock.querySelector('.sql-input');
+            if (sqlInputEl) sqlInputEl.style.display = 'block';
+          }
+        }
+      }, 200);
+    }
+  }, 100);
 
   // Event listeners with null checks
   const addQueryBtn = document.getElementById('whiteboardAddQueryBtn');
@@ -219,6 +303,42 @@ function initializeWhiteboard() {
   window.whiteboard = whiteboard;
 }
 
+/**
+ * Update whiteboard stats display
+ */
+function updateWhiteboardStats() {
+  // Get stats from window.state or calculate them
+  let codeChanged = '0 KB';
+  let avgContext = '0%';
+  
+  if (window.state && window.state.stats) {
+    codeChanged = `${window.state.stats.codeChanged || 0} KB`;
+    avgContext = `${window.state.stats.avgContext || 0}%`;
+  } else if (window.calculateStats) {
+    // Calculate stats if available
+    const stats = window.calculateStats();
+    if (stats) {
+      codeChanged = `${stats.codeChanged || 0} KB`;
+      avgContext = `${stats.avgContext || 0}%`;
+    // Update window.state if it exists
+      if (window.state) {
+        window.state.stats = stats;
+      }
+    }
+  }
+  
+  const codeChangedEl = document.getElementById('whiteboardCodeChanged');
+  const avgContextEl = document.getElementById('whiteboardAvgContext');
+  
+  if (codeChangedEl) {
+    codeChangedEl.textContent = codeChanged;
+  }
+  if (avgContextEl) {
+    avgContextEl.textContent = avgContext;
+  }
+}
+
 // Export to window for global access
 window.renderWhiteboardView = renderWhiteboardView;
+window.updateWhiteboardStats = updateWhiteboardStats;
 

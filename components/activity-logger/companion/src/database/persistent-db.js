@@ -451,6 +451,73 @@ class PersistentDB {
             });
           }));
 
+          // Schema config table (for custom field configurations)
+          tables.push(new Promise((res, rej) => {
+            this.db.run(`
+              CREATE TABLE IF NOT EXISTS schema_config (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                table_name TEXT NOT NULL,
+                field_name TEXT NOT NULL,
+                field_type TEXT NOT NULL,
+                display_name TEXT,
+                description TEXT,
+                enabled INTEGER DEFAULT 1,
+                config_json TEXT,
+                workspace_id TEXT,
+                workspace_path TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(table_name, field_name, workspace_id)
+              )
+            `, (err) => {
+              if (err) {
+                console.error('Error creating schema_config table:', err);
+                rej(err);
+              } else {
+                // Try to add workspace columns if they don't exist (migration)
+                const alterQueries = [
+                  `ALTER TABLE schema_config ADD COLUMN workspace_id TEXT`,
+                  `ALTER TABLE schema_config ADD COLUMN workspace_path TEXT`
+                ];
+                
+                Promise.all(alterQueries.map(query => {
+                  return new Promise((resolve) => {
+                    this.db.run(query, (alterErr) => {
+                      // Silently ignore "duplicate column" errors
+                      if (alterErr && !alterErr.message.includes('duplicate column') && !alterErr.message.includes('already exists')) {
+                        console.warn('Error adding workspace column to schema_config:', alterErr.message);
+                      }
+                      resolve();
+                    });
+                  });
+                })).then(() => {
+                  res();
+                });
+              }
+            });
+          }));
+
+          // Whiteboards table (for saved whiteboard configurations)
+          tables.push(new Promise((res, rej) => {
+            this.db.run(`
+              CREATE TABLE IF NOT EXISTS whiteboards (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                description TEXT,
+                data TEXT NOT NULL,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+              )
+            `, (err) => {
+              if (err) {
+                console.error('Error creating whiteboards table:', err);
+                rej(err);
+              } else {
+                res();
+              }
+            });
+          }));
+
           // Create indexes for better query performance
           this.db.run(`CREATE INDEX IF NOT EXISTS idx_entries_session ON entries(session_id)`);
           this.db.run(`CREATE INDEX IF NOT EXISTS idx_entries_timestamp ON entries(timestamp)`);

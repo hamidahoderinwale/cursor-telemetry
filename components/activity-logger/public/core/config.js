@@ -38,3 +38,26 @@ window.DASHBOARD_CONFIG = DASHBOARD_CONFIG;
 if (!window.CONFIG || !window.CONFIG.ENABLE_SEMANTIC_SEARCH) {
   window.CONFIG = CONFIG;
 }
+
+// Load HF preference from localStorage if available (after a short delay to ensure localStorage is ready)
+setTimeout(() => {
+  if (window.loadHuggingFacePreference) {
+    window.loadHuggingFacePreference();
+  } else {
+    // Fallback: check localStorage directly
+    try {
+      const stored = localStorage.getItem('ENABLE_SEMANTIC_SEARCH');
+      if (stored) {
+        const enabled = JSON.parse(stored) === true;
+        if (window.CONFIG) {
+          window.CONFIG.ENABLE_SEMANTIC_SEARCH = enabled;
+        }
+        if (window.DASHBOARD_CONFIG) {
+          window.DASHBOARD_CONFIG.ENABLE_SEMANTIC_SEARCH = enabled;
+        }
+      }
+    } catch (e) {
+      // Ignore errors
+    }
+  }
+}, 100);

@@ -23,6 +23,17 @@ class AdvancedVisualizations {
     if (!container) return;
 
     try {
+      // Check if service is online before making request
+      if (window.state && window.state.companionServiceOnline === false) {
+        container.innerHTML = `
+          <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 300px; padding: var(--space-xl); text-align: center;">
+            <div style="font-size: var(--text-lg); color: var(--color-text); margin-bottom: var(--space-xs); font-weight: 500;">Companion Service Offline</div>
+            <div style="font-size: var(--text-sm); color: var(--color-text-muted);">Context evolution data will appear when service is available</div>
+          </div>
+        `;
+        return;
+      }
+      
       const response = await this.APIClient.get('/api/analytics/context/changes?limit=500', { silent: true });
       const changes = response?.data || [];
 

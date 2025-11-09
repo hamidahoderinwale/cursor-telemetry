@@ -61,41 +61,64 @@ class HuggingFaceSemanticSearch {
       // Load Transformers.js dynamically
       let pipeline;
       try {
-        // Try to use ES module import
-        const transformers = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2');
+        // Try to use ES module import with timeout
+        const importPromise = import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2');
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Import timeout')), 15000)
+        );
+        
+        const transformers = await Promise.race([importPromise, timeoutPromise]);
         pipeline = transformers.pipeline;
+        console.log('[HF-SEARCH] Transformers.js loaded via ES module import');
       } catch (importError) {
         // If import fails, try loading via script tag
-        console.log('[HF-SEARCH] ES module import failed, trying script tag...');
-        await this.loadTransformersJS();
-        if (window.pipeline) {
-          pipeline = window.pipeline;
-        } else {
-          throw new Error('Transformers.js not available');
+        console.log('[HF-SEARCH] ES module import failed, trying script tag fallback...', importError.message);
+        try {
+          await this.loadTransformersJS();
+          if (window.pipeline) {
+            pipeline = window.pipeline;
+            console.log('[HF-SEARCH] Transformers.js loaded via script tag');
+          } else {
+            throw new Error('Transformers.js not available after script tag load');
+          }
+        } catch (scriptError) {
+          throw new Error(`Failed to load Transformers.js: ${scriptError.message}`);
         }
       }
 
-      // Initialize the embedding pipeline
-      this.model = await pipeline(
+      // Initialize the embedding pipeline with timeout
+      console.log(`[HF-SEARCH] Loading model: ${this.modelName} (this may take 30-60 seconds on first load)...`);
+      
+      const modelLoadPromise = pipeline(
         'feature-extraction',
         this.modelName,
         {
           quantized: true, // Use quantized model for faster loading
           progress_callback: (progress) => {
             if (progress.status === 'progress') {
-              console.log(`[HF-SEARCH] Loading: ${Math.round(progress.progress * 100)}%`);
+              console.log(`[HF-SEARCH] Model loading: ${Math.round(progress.progress * 100)}%`);
             }
           }
         }
       );
+      
+      const modelTimeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Model loading timeout (60s)')), 60000)
+      );
+      
+      this.model = await Promise.race([modelLoadPromise, modelTimeoutPromise]);
 
       this.isInitialized = true;
       console.log('[HF-SEARCH] Model loaded successfully');
       return true;
     } catch (error) {
       console.warn('[HF-SEARCH] Failed to initialize model:', error.message);
-      console.warn('[HF-SEARCH] Falling back to TF-IDF semantic search');
-      console.warn('[HF-SEARCH] Note: Hugging Face search requires Transformers.js library');
+      console.warn('[HF-SEARCH] Common issues:');
+      console.warn('  - Network/CORS: Transformers.js CDN may be blocked');
+      console.warn('  - Timeout: Model download may be too slow');
+      console.warn('  - Memory: Browser may not have enough memory');
+      console.warn('[HF-SEARCH] Falling back to TF-IDF/BM25 semantic search');
+      console.warn('[HF-SEARCH] To enable: Set ENABLE_SEMANTIC_SEARCH: true in config.js');
       this.isInitialized = false;
       return false;
     }
@@ -114,28 +137,66 @@ class HuggingFaceSemanticSearch {
       // Check if already loading
       if (window._transformersLoading) {
         window.addEventListener('transformers-loaded', resolve, { once: true });
+        window.addEventListener('transformers-error', reject, { once: true });
         return;
       }
 
       window._transformersLoading = true;
 
+      // Set timeout for loading (30 seconds)
+      const timeout = setTimeout(() => {
+        window._transformersLoading = false;
+        reject(new Error('Transformers.js loading timeout (30s)'));
+      }, 30000);
+
+      // Store timeout ID in window for cleanup
+      window._transformersTimeout = timeout;
+      
       // Load via script tag (for browsers that don't support dynamic imports)
       const script = document.createElement('script');
       script.type = 'module';
       script.textContent = `
-        import { pipeline } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2';
-        window.pipeline = pipeline;
-        window._transformersLoading = false;
-        window.dispatchEvent(new Event('transformers-loaded'));
+        try {
+          import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2').then(module => {
+            window.pipeline = module.pipeline;
+            window._transformersLoading = false;
+            if (window._transformersTimeout) {
+              clearTimeout(window._transformersTimeout);
+              window._transformersTimeout = null;
+            }
+            window.dispatchEvent(new Event('transformers-loaded'));
+          }).catch(err => {
+            window._transformersLoading = false;
+            if (window._transformersTimeout) {
+              clearTimeout(window._transformersTimeout);
+              window._transformersTimeout = null;
+            }
+            window.dispatchEvent(new CustomEvent('transformers-error', { detail: err }));
+          });
+        } catch (err) {
+          window._transformersLoading = false;
+          if (window._transformersTimeout) {
+            clearTimeout(window._transformersTimeout);
+            window._transformersTimeout = null;
+          }
+          window.dispatchEvent(new CustomEvent('transformers-error', { detail: err }));
+        }
       `;
       script.onerror = () => {
         window._transformersLoading = false;
-        reject(new Error('Failed to load Transformers.js'));
+        clearTimeout(timeout);
+        reject(new Error('Failed to load Transformers.js script'));
       };
       document.head.appendChild(script);
       
       window.addEventListener('transformers-loaded', () => {
+        clearTimeout(timeout);
         resolve();
+      }, { once: true });
+      
+      window.addEventListener('transformers-error', (event) => {
+        clearTimeout(timeout);
+        reject(event.detail || new Error('Transformers.js loading failed'));
       }, { once: true });
     });
   }
