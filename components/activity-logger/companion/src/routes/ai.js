@@ -11,14 +11,8 @@ const fetchPromise = import('node-fetch').then(mod => {
 function createAIRoutes(deps) {
   const { app } = deps;
   
-  // Clean API key extraction - remove whitespace and check for placeholder
-  const rawKey = (process.env.OPENROUTER_API_KEY || '').trim();
-  const isPlaceholder = rawKey === '' || 
-                       rawKey === 'your_key_here' || 
-                       rawKey === 'your_openrouter_api_key_here' ||
-                       rawKey.length < 20; // Real keys are much longer
-  
-  const openRouterKey = isPlaceholder ? '' : rawKey;
+  // Clean API key extraction - accept any non-empty value from .env
+  const openRouterKey = (process.env.OPENROUTER_API_KEY || '').trim();
   const openRouterEndpoint = 'https://openrouter.ai/api/v1';
   
   // Use free models by default - no API key required
@@ -28,13 +22,13 @@ function createAIRoutes(deps) {
   const chatModel = process.env.OPENROUTER_CHAT_MODEL || 'qwen/qwen-2.5-0.5b-instruct:free';
 
   // Log status on startup
-  if (openRouterKey) {
-    console.log('[AI] ✓ OpenRouter API key configured - using premium models');
+  if (openRouterKey && openRouterKey.length > 0) {
+    console.log('[AI] ✓ OpenRouter API key found - attempting to use OpenRouter API');
     console.log(`[AI]   Embedding model: ${embeddingModel}`);
     console.log(`[AI]   Chat model: ${chatModel}`);
+    console.log(`[AI]   Key length: ${openRouterKey.length} characters`);
   } else {
-    console.log('[AI] ℹ OpenRouter API key not configured - using free local models');
-    console.log('[AI]   Set OPENROUTER_API_KEY in .env for better quality annotations');
+    console.log('[AI] ℹ OpenRouter API key not set - using free local models');
     console.log('[AI]   Free models: Transformers.js (local, no API key needed)');
   }
 
