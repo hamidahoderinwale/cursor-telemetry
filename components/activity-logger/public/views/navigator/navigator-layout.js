@@ -56,50 +56,88 @@ function computePhysicalLayout(files) {
 }
 
 /**
- * Build kNN graph for UMAP-like layout
+ * Build kNN graph for UMAP-like layout (optimized with sampling)
  */
-function buildKNN(vectors, k) {
+async function buildKNN(vectors, k) {
   const sims = (a, b) => window.cosineSimilarityVector ? window.cosineSimilarityVector(a, b) : 0;
   const neighbors = [];
-  for (let i = 0; i < vectors.length; i++) {
+  const n = vectors.length;
+  
+  // For large datasets, use sampling to speed up kNN
+  const useSampling = n > 500;
+  const sampleSize = useSampling ? Math.min(300, Math.floor(n * 0.3)) : n;
+  
+  for (let i = 0; i < n; i++) {
     const scores = [];
-    for (let j = 0; j < vectors.length; j++) {
-      if (i === j) continue;
-      scores.push({ index: j, score: sims(vectors[i], vectors[j]) });
+    
+    if (useSampling) {
+      // Sample random indices for comparison (much faster)
+      const sampled = new Set();
+      while (sampled.size < sampleSize) {
+        const idx = Math.floor(Math.random() * n);
+        if (idx !== i) sampled.add(idx);
+      }
+      sampled.forEach(j => {
+        scores.push({ index: j, score: sims(vectors[i], vectors[j]) });
+      });
+    } else {
+      // Full comparison for small datasets
+      for (let j = 0; j < n; j++) {
+        if (i === j) continue;
+        scores.push({ index: j, score: sims(vectors[i], vectors[j]) });
+      }
     }
+    
     scores.sort((a, b) => b.score - a.score);
     neighbors.push(scores.slice(0, k));
+    
+    // Yield every 50 files to prevent blocking
+    if (i % 50 === 0 && i > 0) {
+      await new Promise(resolve => {
+        if (typeof requestIdleCallback !== 'undefined') {
+          requestIdleCallback(() => resolve(), { timeout: 10 });
+        } else {
+          setTimeout(resolve, 0);
+        }
+      });
+    }
   }
   return neighbors;
 }
 
 /**
- * Create feature vector from file for semantic analysis
+ * Create feature vector from file for semantic analysis (optimized)
  */
 function createFeatureVector(file) {
   // Create a simple feature vector based on file characteristics
   const vector = [];
   
-  // Content-based features (simplified TF-IDF)
-  const words = (file.content || '').toLowerCase().match(/\b\w+\b/g) || [];
+  // Content-based features (simplified TF-IDF - reduced for speed)
+  const content = (file.content || '').substring(0, 10000); // Limit content size
+  const words = content.toLowerCase().match(/\b\w{3,}\b/g) || []; // Only words 3+ chars
   const wordCounts = {};
   words.forEach(w => wordCounts[w] = (wordCounts[w] || 0) + 1);
   
-  // Take top 100 words as features
+  // Take top 50 words as features (reduced from 100)
   const topWords = Object.entries(wordCounts)
     .sort((a, b) => b[1] - a[1])
-    .slice(0, 100);
+    .slice(0, 50);
   
   topWords.forEach(([word, count]) => {
-    vector.push(count / words.length); // Normalized frequency
+    vector.push(count / Math.max(words.length, 1)); // Normalized frequency
   });
   
+  // Pad to fixed size for consistency
+  while (vector.length < 50) {
+    vector.push(0);
+  }
+  
   // Structural features
-  vector.push(file.changes / 100); // Normalized changes
-  vector.push(file.events.length / 50); // Normalized event count
+  vector.push(Math.min(file.changes / 100, 1)); // Normalized changes (capped)
+  vector.push(Math.min(file.events.length / 50, 1)); // Normalized event count (capped)
   
   // Extension one-hot (simplified)
-  const exts = ['js', 'ts', 'py', 'html', 'css', 'json', 'md'];
+  const exts = ['js', 'ts', 'py', 'html', 'css', 'json', 'md', 'tsx', 'jsx'];
   exts.forEach(ext => {
     vector.push(file.ext === ext ? 1 : 0);
   });
@@ -108,17 +146,32 @@ function createFeatureVector(file) {
 }
 
 /**
- * UMAP-like latent layout: kNN graph + attractive/repulsive optimization (simplified)
+ * UMAP-like latent layout: kNN graph + attractive/repulsive optimization (optimized)
  */
-function computeLatentLayoutUMAP(files) {
+async function computeLatentLayoutUMAP(files) {
   const width = 800, height = 700;
   const padding = 100;
-  const vectors = files.map(file => createFeatureVector(file));
+  
+  // Create feature vectors with progress updates
+  const vectors = [];
+  for (let i = 0; i < files.length; i++) {
+    vectors.push(createFeatureVector(files[i]));
+    // Yield every 100 files
+    if (i % 100 === 0 && i > 0) {
+      await new Promise(resolve => {
+        if (typeof requestIdleCallback !== 'undefined') {
+          requestIdleCallback(() => resolve(), { timeout: 10 });
+        } else {
+          setTimeout(resolve, 0);
+        }
+      });
+    }
+  }
   console.log(`[UMAP] Building feature space for ${vectors.length} nodes`);
 
-  // Build kNN graph using cosine similarity
+  // Build kNN graph using cosine similarity (now async)
   const k = Math.min(15, Math.max(5, Math.floor(Math.sqrt(files.length))));
-  const neighbors = buildKNN(vectors, k);
+  const neighbors = await buildKNN(vectors, k);
   console.log(`[UMAP] kNN graph built with k=${k}`);
 
   // Initialize positions (PCA-lite via random small circle)
@@ -127,11 +180,16 @@ function computeLatentLayoutUMAP(files) {
     return [Math.cos(angle) * 0.01, Math.sin(angle) * 0.01];
   });
 
-  // Optimize (epochs) - attractive along edges, weak repulsive for non-neighbors (sampled)
-  const epochs = Math.min(100, 20 + Math.floor(files.length / 50));
-  const learningRate = 0.1;
+  // Optimize (epochs) - significantly reduced for speed
+  // Adaptive epochs: fewer for larger datasets
+  const baseEpochs = files.length < 200 ? 30 : files.length < 500 ? 20 : 15;
+  const epochs = Math.min(baseEpochs, 10 + Math.floor(files.length / 100));
+  const learningRate = 0.15; // Slightly higher for faster convergence
   const minDist = 0.1;
-  const negSamples = 3;
+  const negSamples = 2; // Reduced from 3
+  
+  console.log(`[UMAP] Running ${epochs} optimization epochs...`);
+  
   for (let e = 0; e < epochs; e++) {
     for (let i = 0; i < vectors.length; i++) {
       const pi = positions[i];
@@ -150,7 +208,7 @@ function computeLatentLayoutUMAP(files) {
         pj[0] += grad * dx;
         pj[1] += grad * dy;
       }
-      // Negative sampling: mild repulsion from random nodes
+      // Negative sampling: mild repulsion from random nodes (reduced)
       for (let s = 0; s < negSamples; s++) {
         const j = Math.floor(Math.random() * vectors.length);
         if (j === i) continue;
@@ -166,7 +224,21 @@ function computeLatentLayoutUMAP(files) {
         pj[1] -= inv * dy * 0.01;
       }
     }
-    if (e % 10 === 0) console.log(`[UMAP] Epoch ${e}/${epochs}`);
+    
+    // Yield to browser every epoch for large datasets
+    if (files.length > 300 && e < epochs - 1) {
+      await new Promise(resolve => {
+        if (typeof requestIdleCallback !== 'undefined') {
+          requestIdleCallback(() => resolve(), { timeout: 10 });
+        } else {
+          setTimeout(resolve, 0);
+        }
+      });
+    }
+    
+    if (e % 5 === 0 || e === epochs - 1) {
+      console.log(`[UMAP] Epoch ${e + 1}/${epochs}`);
+    }
   }
 
   // Scale to canvas

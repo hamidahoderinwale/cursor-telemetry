@@ -190,7 +190,8 @@ async function initializeNavigator() {
     console.log(`[NAVIGATOR] Processing ${files.length} files...`);
     
     // Limit files for performance (embeddings are O(n²))
-    const MAX_FILES = 2000; // Increased to cover more of the database while keeping O(n^2) manageable
+    // Reduced from 2000 to 800 for faster computation
+    const MAX_FILES = 800;
     if (files.length > MAX_FILES) {
       console.warn(`[NAVIGATOR] Too many files (${files.length}), limiting to ${MAX_FILES} most active files`);
       // Sort by activity (events + changes) and take top N
@@ -200,11 +201,17 @@ async function initializeNavigator() {
         .slice(0, MAX_FILES);
     }
     
+    // Update loading message
+    container.innerHTML = '<div class="loading-wrapper"><div class="loading-spinner"></div><span>Computing physical layout...</span></div>';
+    
     // Compute physical positions (co-occurrence based)
     const { nodes: physicalNodes, links } = window.computePhysicalLayout(files);
     
-    // Compute latent positions (semantic similarity based) using UMAP-like layout
-    const latentNodes = window.computeLatentLayoutUMAP(files);
+    // Update loading message
+    container.innerHTML = '<div class="loading-wrapper"><div class="loading-spinner"></div><span>Computing latent embeddings...</span></div>';
+    
+    // Compute latent positions (semantic similarity based) using UMAP-like layout (now async)
+    const latentNodes = await window.computeLatentLayoutUMAP(files);
     
     // Store positions
     physicalNodes.forEach(n => {
