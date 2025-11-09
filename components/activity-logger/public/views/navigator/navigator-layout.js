@@ -287,9 +287,67 @@ async function computeLatentLayoutUMAP(files) {
 
 /**
  * Detect latent clusters using k-means on latent positions
+ * Enhanced with workspace and directory awareness
  */
 function detectLatentClusters(nodes, links) {
-  // Use k-means clustering on latent positions
+  // First, try workspace/directory-based clustering
+  const workspaceClusters = new Map();
+  const directoryClusters = new Map();
+  
+  nodes.forEach(node => {
+    // Group by workspace
+    if (node.workspace) {
+      if (!workspaceClusters.has(node.workspace)) {
+        workspaceClusters.set(node.workspace, []);
+      }
+      workspaceClusters.get(node.workspace).push(node);
+    }
+    
+    // Group by top-level directory
+    if (node.topLevelDir && node.topLevelDir !== '/') {
+      if (!directoryClusters.has(node.topLevelDir)) {
+        directoryClusters.set(node.topLevelDir, []);
+      }
+      directoryClusters.get(node.topLevelDir).push(node);
+    }
+  });
+  
+  // If we have good workspace/directory groupings, use those
+  if (workspaceClusters.size > 0 && workspaceClusters.size <= 10) {
+    const clusters = [];
+    const clusterColors = [
+      '#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', 
+      '#10b981', '#3b82f6', '#ef4444', '#14b8a6', '#f97316', '#06b6d4'
+    ];
+    
+    let colorIndex = 0;
+    workspaceClusters.forEach((clusterNodes, workspace) => {
+      if (clusterNodes.length > 0) {
+        clusterNodes.forEach(n => n.cluster = `workspace-${workspace}`);
+        const centroid = {
+          x: d3.mean(clusterNodes, d => d.x),
+          y: d3.mean(clusterNodes, d => d.y)
+        };
+        clusters.push({
+          id: `workspace-${workspace}`,
+          name: `Workspace: ${workspace.split('/').pop()}`,
+          nodes: clusterNodes,
+          color: clusterColors[colorIndex % clusterColors.length],
+          centroid: centroid,
+          type: 'workspace',
+          workspace: workspace
+        });
+        colorIndex++;
+      }
+    });
+    
+    if (clusters.length > 0) {
+      console.log(`[CLUSTER] Using workspace-based clustering: ${clusters.length} clusters`);
+      return clusters;
+    }
+  }
+  
+  // Fall back to k-means on latent positions
   // More aggressive clustering: aim for 3-8 clusters based on file count
   let k;
   if (nodes.length < 6) {
