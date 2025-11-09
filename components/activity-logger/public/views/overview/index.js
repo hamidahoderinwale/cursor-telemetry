@@ -185,10 +185,10 @@ function renderOverviewView(container) {
       <!-- Two Column Layout -->
       <div class="overview-grid-2col">
         
-        <!-- Activity Rhythm -->
+        <!-- Activity Overview -->
         <div class="card">
           <div class="card-header">
-            <h3 class="card-title">Activity Rhythm</h3>
+            <h3 class="card-title">Activity Overview</h3>
             <p class="card-subtitle">Your coding patterns by hour of day</p>
           </div>
           <div class="card-body">
