@@ -819,10 +819,10 @@ a:focus:not(:focus-visible) {
 }
 
 .modal-content {
-  position: fixed;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
+  position: fixed !important;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
@@ -836,8 +836,8 @@ a:focus:not(:focus-visible) {
   animation: slideUp var(--transition-slow);
   width: 90%;
   max-width: 900px;
-  margin: 0;
-  z-index: 9999 !important; /* Higher than overlay to ensure content is on top */
+  margin: 0 !important;
+  z-index: 10000 !important; /* Higher than overlay to ensure content is on top */
   /* Prevent blur - ensure crisp rendering */
   filter: none !important;
   backdrop-filter: none !important;
