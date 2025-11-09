@@ -99,9 +99,18 @@ function renderNavigator(container, nodes, links) {
       }
       return getFileTypeColor(d.ext);
     })
-    .attr('stroke', '#fff')
-    .attr('stroke-width', 2)
-    .attr('class', 'nav-node-circle');
+    .attr('stroke', d => {
+      // Add workspace/directory indicator border
+      if (d.workspace) return '#3b82f6'; // Blue border for workspace files
+      return '#fff';
+    })
+    .attr('stroke-width', d => {
+      // Thicker border for workspace files
+      return d.workspace ? 2.5 : 2;
+    })
+    .attr('class', 'nav-node-circle')
+    .attr('data-workspace', d => d.workspace || '')
+    .attr('data-directory', d => d.topLevelDir || '');
   
   const labels = node.append('text')
     .text(d => d.name)
