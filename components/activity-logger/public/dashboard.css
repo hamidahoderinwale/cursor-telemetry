@@ -825,16 +825,16 @@ a:focus:not(:focus-visible) {
   transform: translate(-50%, -50%);
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-xl);
+  border-radius: var(--radius-lg);
   max-height: 90vh;
   height: auto;
   min-height: 200px;
-  overflow: visible;
+  overflow: hidden;
   display: flex !important;
   flex-direction: column;
   box-shadow: var(--shadow-xl);
   animation: slideUp var(--transition-slow);
-  width: 100%;
+  width: 90%;
   max-width: 900px;
   margin: 0;
   z-index: 9999 !important; /* Higher than overlay to ensure content is on top */
@@ -844,9 +844,6 @@ a:focus:not(:focus-visible) {
   -webkit-backdrop-filter: none !important;
   /* Create new stacking context to isolate from backdrop */
   isolation: isolate;
-  /* Hardware acceleration for crisp rendering */
-  transform: translateZ(0);
-  will-change: auto;
   /* Improve text rendering */
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -906,14 +903,17 @@ a:focus:not(:focus-visible) {
 .modal-body {
   flex: 1;
   padding: var(--space-xl);
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
   min-height: 0;
   max-height: calc(90vh - 120px); /* Account for header and padding */
   /* Smooth scrolling */
   -webkit-overflow-scrolling: touch;
   scrollbar-width: thin;
   scrollbar-color: var(--color-border) transparent;
+  /* Ensure scrolling works */
+  position: relative;
+  overscroll-behavior: contain;
   /* Prevent blur - ensure crisp rendering */
   filter: none !important;
   backdrop-filter: none !important;
