@@ -165,12 +165,20 @@ function createAIRoutes(deps) {
    * Check if AI services are available
    */
   app.get('/api/ai/status', (req, res) => {
+    // Check if key is set and not a placeholder
+    const hasValidKey = !!openRouterKey && 
+                       openRouterKey.trim() !== '' && 
+                       openRouterKey !== 'your_key_here' &&
+                       openRouterKey.length > 10; // Real keys are longer
+    
     res.json({
       success: true,
-      available: !!openRouterKey,
+      available: hasValidKey,
       embeddingModel: embeddingModel,
       chatModel: chatModel,
-      hasApiKey: !!openRouterKey
+      hasApiKey: hasValidKey,
+      keyLength: openRouterKey ? openRouterKey.length : 0,
+      isPlaceholder: openRouterKey === 'your_key_here'
     });
   });
 }
