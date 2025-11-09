@@ -9,7 +9,15 @@
   <!-- Load Stack Sans Text and Inter from Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Stack+Sans+Text:wght@200..700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Stack+Sans+Text:wght@200..700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+  <noscript><link href="https://fonts.googleapis.com/css2?family=Stack+Sans+Text:wght@200..700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet"></noscript>
+  
+  <!-- Preload critical resources -->
+  <link rel="preload" href="dashboard.css" as="style">
+  <link rel="preload" href="core/config.js" as="script">
+  <link rel="preload" href="core/state.js" as="script">
+  <link rel="preload" href="core/api-client.js" as="script">
+  <link rel="preload" href="dashboard.js" as="script">
   
   <!-- Styles -->
   <link rel="stylesheet" href="dashboard.css">
@@ -22,6 +30,7 @@
   <link rel="stylesheet" href="views/system/styles.css">
   <link rel="stylesheet" href="views/file-graph/styles.css">
   <link rel="stylesheet" href="views/schema-config/styles.css">
+  <link rel="stylesheet" href="views/workspace-comparison/styles.css">
   <link rel="stylesheet" href="views/activity/context-visualization.css">
   <link rel="stylesheet" href="views/activity/status-message-visualization.css">
   
@@ -73,8 +82,67 @@
   </script>
 </head>
 <body>
+  <!-- Skip to main content link for accessibility -->
+  <a href="#main-content" class="skip-link">Skip to main content</a>
+  
   <!-- Main App Container -->
   <div id="app" class="app-container">
+    
+    <!-- Mobile Menu Toggle -->
+    <button class="mobile-menu-toggle" id="mobileMenuToggle" aria-label="Toggle menu">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M3 12h18M3 6h18M3 18h18"/>
+      </svg>
+    </button>
+    
+    <!-- Sidebar Overlay (Mobile) -->
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+    
+    <!-- Mobile Menu Toggle Script -->
+    <script>
+      (function() {
+        const mobileMenuToggle = document.getElementById('mobileMenuToggle');
+        const sidebar = document.querySelector('.sidebar');
+        const sidebarOverlay = document.getElementById('sidebarOverlay');
+        
+        function toggleSidebar() {
+          sidebar.classList.toggle('open');
+          sidebarOverlay.classList.toggle('active');
+          document.body.style.overflow = sidebar.classList.contains('open') ? 'hidden' : '';
+        }
+        
+        function closeSidebar() {
+          sidebar.classList.remove('open');
+          sidebarOverlay.classList.remove('active');
+          document.body.style.overflow = '';
+        }
+        
+        if (mobileMenuToggle) {
+          mobileMenuToggle.addEventListener('click', toggleSidebar);
+        }
+        
+        if (sidebarOverlay) {
+          sidebarOverlay.addEventListener('click', closeSidebar);
+        }
+        
+        // Close sidebar when clicking a nav link on mobile
+        const navLinks = document.querySelectorAll('.nav-link');
+        navLinks.forEach(link => {
+          link.addEventListener('click', () => {
+            if (window.innerWidth <= 768) {
+              closeSidebar();
+            }
+          });
+        });
+        
+        // Close sidebar on window resize if it becomes desktop size
+        window.addEventListener('resize', () => {
+          if (window.innerWidth > 768) {
+            closeSidebar();
+          }
+        });
+      })();
+    </script>
     
     <!-- Status Popup -->
     <div id="statusPopup" class="status-popup">
@@ -158,6 +226,13 @@
           <span>System</span>
         </a>
         
+        <a href="#workspace-comparison" class="nav-link" data-view="workspace-comparison">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+            <path d="M8 3H5a2 2 0 00-2 2v3m18 0V5a2 2 0 00-2-2h-3m0 18h3a2 2 0 002-2v-3M3 16v3a2 2 0 002 2h3"/>
+          </svg>
+          <span>Compare</span>
+        </a>
+        
         <a href="#api-docs" class="nav-link" data-view="api-docs">
           <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
             <path d="M9 4.804A7.968 7.968 0 005.5 4c-1.255 0-2.443.29-3.5.804v10A7.969 7.969 0 015.5 14c1.669 0 3.218.51 4.5 1.385A7.962 7.962 0 0114.5 14c1.255 0 2.443.29 3.5.804v-10A7.968 7.968 0 0014.5 4c-1.255 0-2.443.29-3.5.804V12a1 1 0 11-2 0V4.804z"/>
@@ -197,7 +272,7 @@
     </aside>
 
     <!-- Main Content -->
-    <main class="main-content">
+    <main id="main-content" class="main-content" role="main" aria-label="Main content">
       <!-- Header Stats -->
       <header class="dashboard-header">
         <div class="stats-grid">
@@ -366,11 +441,11 @@
     }
   </script>
   
-  <!-- External Libraries -->
-  <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
-  <script src="https://d3js.org/d3.v7.min.js"></script>
-  <script src="https://unpkg.com/lunr/lunr.js"></script>
+  <!-- External Libraries (async for non-blocking load) -->
+  <script src="https://cdn.socket.io/4.5.4/socket.io.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js" defer></script>
+  <script src="https://d3js.org/d3.v7.min.js" defer></script>
+  <script src="https://unpkg.com/lunr/lunr.js" defer></script>
   
   <!-- Core Modules -->
   <script src="core/config.js"></script>
@@ -383,10 +458,10 @@
   <!-- <script type="module" src="algorithms/dimensionality-reduction.js"></script> -->
   <!-- <script type="module" src="algorithms/clustering.js"></script> -->
   
-  <!-- UI Modules (commented out - ES modules require HTTP, not file://) -->
-  <!-- <script type="module" src="modals/modal-manager.js"></script> -->
+  <!-- Modals (load early - needed by views) -->
+  <script src="modals/modal-manager.js"></script>
   
-  <!-- Utilities (load first - no dependencies) -->
+  <!-- Utilities (load first - no dependencies, but can defer non-critical ones) -->
   <script src="utils/helpers.js"></script>
   <script src="utils/file-helpers.js"></script>
   <script src="utils/math-helpers.js"></script>
@@ -394,89 +469,93 @@
   <script src="utils/time-formatting.js"></script>
   <script src="utils/event-helpers.js"></script>
   <script src="utils/temporal-threading.js"></script>
-  <script src="utils/event-tagging.js"></script>
+  <script src="utils/event-tagging.js" defer></script>
   <script src="utils/templates.js"></script>
-  <script src="utils/export-options-modal.js"></script>
-  <script src="utils/schema-validator.js"></script>
+  <script src="utils/export-options-modal.js" defer></script>
+  <script src="utils/schema-validator.js" defer></script>
   
-  <!-- Views (must load before view-router) -->
-  <script src="views/activity/context-visualization.js"></script>
-  <script src="views/activity/status-message-visualization.js"></script>
-  <script src="views/activity/timeline-helpers.js"></script>
-  <script src="views/activity/search-handler.js"></script>
-  <script src="views/activity/grouping-handler.js"></script>
-  <script src="views/overview/helpers.js"></script>
-  <script src="views/overview/heatmap.js"></script>
-  <script src="views/overview/index.js"></script>
-  <script src="views/activity/index.js"></script>
-  <script src="views/threads/helpers.js"></script>
-  <script src="views/threads/index.js"></script>
-  <script src="views/analytics/chart-helpers.js"></script>
-  <script src="views/analytics/model-usage-diagnostics.js"></script>
-  <script src="views/analytics/index.js"></script>
-  <script src="views/system/templates.js"></script>
-  <script src="views/system/index.js"></script>
-  <script src="views/file-graph/templates.js"></script>
-  <script src="views/file-graph/tfidf-analyzer.js"></script>
-  <script src="views/file-graph/embeddings-visualization.js"></script>
-  <script src="views/file-graph/helpers.js"></script>
-  <script src="views/file-graph/d3-renderer.js"></script>
-  <script src="views/file-graph/file-graph.js"></script>
-  <script src="views/schema-config/index.js"></script>
-  <script src="views/file-graph/index.js"></script>
-  <script src="views/navigator/templates.js"></script>
-  <script src="views/navigator/navigator-layout.js"></script>
-  <script src="views/navigator/navigator-renderer.js"></script>
-  <script src="views/navigator/navigator-core.js"></script>
-  <script src="views/navigator/index.js"></script>
-  <script src="views/api-docs/templates.js"></script>
-  <script src="views/api-docs/index.js"></script>
+  <!-- Views (must load before view-router, defer non-critical) -->
+  <script src="views/activity/context-visualization.js" defer></script>
+  <script src="views/activity/status-message-visualization.js" defer></script>
+  <script src="views/activity/timeline-helpers.js" defer></script>
+  <script src="views/activity/search-handler.js" defer></script>
+  <script src="views/activity/grouping-handler.js" defer></script>
+  <script src="views/overview/helpers.js" defer></script>
+  <script src="views/overview/heatmap.js" defer></script>
+  <script src="views/overview/activity-rhythm.js" defer></script>
+  <script src="views/overview/index.js" defer></script>
+  <script src="views/activity/index.js" defer></script>
+  <script src="views/threads/helpers.js" defer></script>
+  <script src="views/threads/index.js" defer></script>
+  <script src="views/analytics/chart-helpers.js" defer></script>
+  <script src="views/analytics/model-usage-diagnostics.js" defer></script>
+  <script src="views/analytics/index.js" defer></script>
+  <script src="views/system/templates.js" defer></script>
+  <script src="views/system/index.js" defer></script>
+  <script src="views/file-graph/templates.js" defer></script>
+  <script src="views/file-graph/tfidf-analyzer.js" defer></script>
+  <script src="views/file-graph/embeddings-visualization.js" defer></script>
+  <script src="views/file-graph/helpers.js" defer></script>
+  <script src="views/file-graph/d3-renderer.js" defer></script>
+  <script src="views/file-graph/file-graph.js" defer></script>
+  <script src="views/schema-config/index.js" defer></script>
+  <script src="views/file-graph/index.js" defer></script>
+  <script src="views/workspace-comparison/index.js" defer></script>
+  <script src="views/navigator/templates.js" defer></script>
+  <script src="views/navigator/navigator-layout.js" defer></script>
+  <script src="views/navigator/navigator-renderer.js" defer></script>
+  <script src="views/navigator/navigator-core.js" defer></script>
+  <script src="views/navigator/index.js" defer></script>
+  <script src="views/api-docs/templates.js" defer></script>
+  <script src="views/api-docs/index.js" defer></script>
   
-  <!-- View Router (loads after all views) -->
-  <script src="core/view-router.js"></script>
+  <!-- View Router (loads after all views, defer since views are deferred) -->
+  <script src="core/view-router.js" defer></script>
   
-  <!-- Components -->
-  <script src="components/charts/chart-utils.js"></script>
+  <!-- Components (defer - not needed for initial render) -->
+  <script src="components/charts/chart-utils.js" defer></script>
   <!-- Chart renderers (commented out - ES modules require HTTP, not file://) -->
   <!-- <script type="module" src="components/charts/chart-renderers.js"></script> -->
   <!-- <script type="module" src="components/charts/analytics-renderers.js"></script> -->
+  <script src="components/charts/advanced-visualizations.js" defer></script>
+  <script src="components/charts/file-metrics-visualizations.js" defer></script>
   
-  <!-- Services: Data -->
-  <script src="services/data/persistent-storage.js"></script>
-  <script src="services/data/data-synchronizer.js"></script>
+  <!-- Services: Data (defer - loaded after initial render) -->
+  <script src="services/data/persistent-storage.js" defer></script>
+  <script src="services/data/data-synchronizer.js" defer></script>
   
-  <!-- Services: Search (load before app/search-handler.js) -->
-  <script src="services/search/search-engine.js"></script>
-  <script src="services/search/semantic-analysis-engine.js"></script>
-  <script src="services/search/huggingface-semantic-search.js"></script>
+  <!-- Services: Search (defer - not needed immediately) -->
+  <script src="services/search/search-engine.js" defer></script>
+  <script src="services/search/semantic-analysis-engine.js" defer></script>
+  <script src="services/search/huggingface-semantic-search.js" defer></script>
   
-  <!-- Services: Analytics -->
-  <script src="services/analytics/analytics-manager.js"></script>
-  <script src="services/analytics/analytics-aggregator.js"></script>
-  <script src="services/analytics/prompt-analytics-engine.js"></script>
+  <!-- Services: Analytics (defer - not needed for initial render) -->
+  <script src="services/analytics/analytics-manager.js" defer></script>
+  <script src="services/analytics/analytics-aggregator.js" defer></script>
+  <script src="services/analytics/prompt-analytics-engine.js" defer></script>
   
-    <!-- App Modules -->
-    <script src="app/progress-tracker.js"></script>
-    <script src="app/status-popup.js"></script>
-    <script src="app/export-handler.js"></script>
-    <script src="app/import-handler.js"></script>
-    <script src="app/search-handler.js"></script>
-    <script src="app/ui-helpers.js"></script>
-    <script src="app/data-initializer.js"></script>
+  <!-- App Modules (defer - loaded after core) -->
+  <script src="app/progress-tracker.js" defer></script>
+  <script src="app/status-popup.js"></script>
+  <script src="app/export-handler.js" defer></script>
+  <script src="app/import-handler.js" defer></script>
+  <script src="app/search-handler.js" defer></script>
+  <script src="app/ui-helpers.js" defer></script>
+  <script src="app/data-initializer.js" defer></script>
   
-  <!-- Utilities -->
-  <script src="utils/local-storage-helper.js"></script>
-  <script src="utils/dashboard-helpers.js"></script>
+  <!-- Utilities (defer - not critical for initial load) -->
+  <script src="utils/local-storage-helper.js" defer></script>
+  <script src="utils/dashboard-helpers.js" defer></script>
   
-  <!-- Config & Main Dashboard -->
+  <!-- Config & Main Dashboard (must load last, synchronous) -->
   <script src="config.js"></script>
   <script src="dashboard.js"></script>
   
-  <!-- Visualizations -->
-  <script src="visualizations/file-graph-visualizer.js"></script>
-  <script src="visualizations/time-series-visualizer.js"></script>
+  <!-- Visualizations (defer - loaded on demand) -->
+  <script src="visualizations/file-graph-visualizer.js" defer></script>
+  <script src="visualizations/time-series-visualizer.js" defer></script>
   
-  <!-- Widgets -->
-  <script src="widgets/prompt-display-system.js"></script>
+  <!-- Widgets (defer - not needed for initial render) -->
+  <script src="widgets/prompt-display-system.js" defer></script>
 </body>
 </html>

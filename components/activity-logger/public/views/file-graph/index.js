@@ -17,6 +17,23 @@ function renderFileGraphView(container) {
   // Initialize file graph after DOM is ready
   setTimeout(() => {
     if (window.initializeD3FileGraph) window.initializeD3FileGraph();
+    
+    // Load file metrics visualizations
+    if (window.renderFileDependencyStrength) {
+      window.renderFileDependencyStrength().catch(err => {
+        if (!err.message || !err.message.includes('not found')) {
+          console.warn('[FILE] File dependency strength not available:', err.message);
+        }
+      });
+    }
+    
+    if (window.renderFileComplexityTrends) {
+      window.renderFileComplexityTrends().catch(err => {
+        if (!err.message || !err.message.includes('not found')) {
+          console.warn('[FILE] File complexity trends not available:', err.message);
+        }
+      });
+    }
   }, 100);
 }
 

@@ -162,7 +162,7 @@ const db = {
 };
 
 const PORT = process.env.PORT || 43917;
-const HOST = process.env.HOST || '127.0.0.1';
+const HOST = process.env.HOST || 'localhost';
 const app = express();
 const { Server } = require('socket.io');
 

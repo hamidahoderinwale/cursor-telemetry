@@ -3,7 +3,7 @@
 
 class CompanionIntegration {
   constructor() {
-    this.companionUrl = 'http://127.0.0.1:43917';
+    this.companionUrl = window.CONFIG?.API_BASE || window.DASHBOARD_CONFIG?.API_BASE || 'http://localhost:43917';
     this.pollingInterval = 2000; // 2 seconds
     this.lastCursor = null;
     this.isPolling = false;

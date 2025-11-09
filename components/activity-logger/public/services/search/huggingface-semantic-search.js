@@ -33,6 +33,27 @@ class HuggingFaceSemanticSearch {
       return true;
     }
 
+    // Check config before initializing - this is a safety check
+    // Add debug logging to understand why it might be initializing
+    const configValue = window.CONFIG?.ENABLE_SEMANTIC_SEARCH;
+    const dashboardConfigValue = window.DASHBOARD_CONFIG?.ENABLE_SEMANTIC_SEARCH;
+    const enableSemantic = (window.CONFIG && window.CONFIG.ENABLE_SEMANTIC_SEARCH === true) || 
+                          (window.DASHBOARD_CONFIG && window.DASHBOARD_CONFIG.ENABLE_SEMANTIC_SEARCH === true) ||
+                          false;
+    
+    console.log('[HF-SEARCH] Config check before initialization:', {
+      'window.CONFIG?.ENABLE_SEMANTIC_SEARCH': configValue,
+      'window.DASHBOARD_CONFIG?.ENABLE_SEMANTIC_SEARCH': dashboardConfigValue,
+      'enableSemantic': enableSemantic,
+      'window.CONFIG exists': !!window.CONFIG,
+      'window.DASHBOARD_CONFIG exists': !!window.DASHBOARD_CONFIG
+    });
+    
+    if (!enableSemantic) {
+      console.log('[HF-SEARCH] Hugging Face semantic search disabled in config - skipping model initialization');
+      return false;
+    }
+
     try {
       console.log('[HF-SEARCH] Initializing Hugging Face semantic search...');
       console.log('[HF-SEARCH] Loading model:', this.modelName);

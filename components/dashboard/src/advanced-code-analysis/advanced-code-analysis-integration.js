@@ -50,7 +50,7 @@ class AdvancedCodeAnalysisIntegration extends EventEmitter {
     // Initialize integration
     this.initializeIntegration();
     
-    console.log('🔗 Advanced Code Analysis Integration initialized');
+    console.log(' Advanced Code Analysis Integration initialized');
   }
   
   /**
@@ -107,7 +107,7 @@ class AdvancedCodeAnalysisIntegration extends EventEmitter {
       }
     }, this.options.analysisInterval);
     
-    console.log('🔄 Real-time analysis started');
+    console.log(' Real-time analysis started');
   }
   
   /**
@@ -117,7 +117,7 @@ class AdvancedCodeAnalysisIntegration extends EventEmitter {
     if (this.realTimeProcessor) {
       clearInterval(this.realTimeProcessor);
       this.realTimeProcessor = null;
-      console.log('🛑 Real-time analysis stopped');
+      console.log(' Real-time analysis stopped');
     }
   }
   
@@ -459,7 +459,7 @@ class AdvancedCodeAnalysisIntegration extends EventEmitter {
     this.analysisHistory = [];
     this.processingQueue = [];
     
-    console.log('🧹 Advanced Code Analysis Integration cleared');
+    console.log(' Advanced Code Analysis Integration cleared');
   }
   
   /**

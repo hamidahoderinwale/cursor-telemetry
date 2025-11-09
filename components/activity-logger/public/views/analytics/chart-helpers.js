@@ -93,7 +93,7 @@ function renderHourlyChart() {
   
   if (allEvents.length === 0 && allPrompts.length === 0) {
     console.warn('[CHART] No data for hourlyChart');
-    ctx.parentElement.innerHTML = '<div style="padding: var(--space-xl); text-align: center; color: var(--color-text-muted);">No activity data available</div>';
+    ctx.parentElement.innerHTML = '<div style="padding: var(--space-xl); text-align: center; color: var(--color-text-muted); font-style: normal;">No activity data available</div>';
     return;
   }
 

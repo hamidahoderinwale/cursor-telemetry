@@ -145,8 +145,8 @@ function renderActivityHeatmap(container) {
   if (totalActivities === 0) {
     container.innerHTML = `
       <div class="empty-state" style="padding: 3rem; text-align: center;">
-        <div class="empty-state-text" style="font-size: 1.1rem; font-weight: 500; margin-bottom: 0.5rem;">No activity data available</div>
-        <div class="empty-state-hint" style="font-size: 0.9rem; color: var(--color-text-muted);">
+        <div class="empty-state-text" style="font-size: 1.1rem; font-weight: 500; margin-bottom: 0.5rem; font-style: normal;">No activity data available</div>
+        <div class="empty-state-hint" style="font-size: 0.9rem; color: var(--color-text-muted); font-style: normal;">
           Start coding to see your activity heatmap. Make sure the companion service is running.
         </div>
       </div>
@@ -159,9 +159,6 @@ function renderActivityHeatmap(container) {
   const p25 = sortedCounts[Math.floor(sortedCounts.length * 0.25)] || 0;
   const p50 = sortedCounts[Math.floor(sortedCounts.length * 0.5)] || 0;
   const p75 = sortedCounts[Math.floor(sortedCounts.length * 0.75)] || 0;
-  
-  // Day labels (Sun-Sat)
-  const dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   
   // Month labels - track which months we've seen
   const monthLabels = [];
@@ -184,7 +181,6 @@ function renderActivityHeatmap(container) {
   
   // Header with month labels
   html += '<div class="heatmap-header">';
-  html += '<div class="heatmap-day-labels-column"></div>'; // Empty corner
   html += '<div class="heatmap-months-row">';
   
   let lastMonthIndex = -1;
@@ -211,12 +207,6 @@ function renderActivityHeatmap(container) {
   
   // Main heatmap grid
   html += '<div class="heatmap-content">';
-  html += '<div class="heatmap-day-labels">';
-  dayLabels.forEach((label, index) => {
-    html += `<div class="heatmap-day-label">${label}</div>`;
-  });
-  html += '</div>';
-  
   html += '<div class="heatmap-grid">';
   
   // Render weeks (columns)
@@ -277,7 +267,7 @@ function renderActivityHeatmap(container) {
       ].filter(Boolean).join(' ');
       
       html += `<div class="${cellClasses}" 
-                    style="background-color: ${color}; transition: all 0.2s ease;" 
+                    style="--cell-color: ${color}; transition: all 0.2s ease;" 
                     title="${tooltip.replace(/\n/g, ' • ')}"
                     data-date="${date.toISOString()}"
                     data-count="${count}"
@@ -308,7 +298,7 @@ function renderActivityHeatmap(container) {
     const intensity = i / 4;
     const color = getGitHubColor(intensity);
     const label = i === 0 ? 'No' : i === 1 ? 'Low' : i === 2 ? 'Medium' : i === 3 ? 'High' : 'Very high';
-    html += `<div class="legend-cell" style="background-color: ${color};" title="${label} activity"></div>`;
+    html += `<div class="legend-cell" style="--cell-color: ${color};" title="${label} activity"></div>`;
   }
   html += '</div>';
   html += '<span class="legend-label">More</span>';

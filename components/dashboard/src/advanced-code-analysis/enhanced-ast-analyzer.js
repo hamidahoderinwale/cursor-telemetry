@@ -41,7 +41,7 @@ class EnhancedASTAnalyzer extends EventEmitter {
     // Initialize language parsers
     this.initializeParsers();
     
-    console.log('🧠 Enhanced AST Analyzer initialized');
+    console.log(' Enhanced AST Analyzer initialized');
   }
   
   /**
@@ -691,7 +691,7 @@ class EnhancedASTAnalyzer extends EventEmitter {
     this.semanticIndex.clear();
     this.hierarchicalDocs.clear();
     
-    console.log('🧹 Enhanced AST Analyzer cache cleared');
+    console.log(' Enhanced AST Analyzer cache cleared');
   }
   
   /**

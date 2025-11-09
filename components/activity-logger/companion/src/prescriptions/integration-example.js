@@ -34,7 +34,7 @@
 //   global.prescriptionInjector = prescriptionSystem.injector;
 //   global.prescriptionDetector = prescriptionSystem.detector;
 // } else {
-//   console.error('✗ Failed to initialize prescription system');
+//   console.error(' Failed to initialize prescription system');
 // }
 
 /*

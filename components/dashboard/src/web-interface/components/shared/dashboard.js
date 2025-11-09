@@ -604,7 +604,7 @@ class LiveDashboard {
             });
             
             this.socket.on('process-change', (process) => {
-                console.log('🔄 Process change:', process.displayName, process.isRunning ? 'started' : 'stopped');
+                console.log(' Process change:', process.displayName, process.isRunning ? 'started' : 'stopped');
                 this.handleProcessChange(process);
             });
             
@@ -846,7 +846,7 @@ class LiveDashboard {
     }
     
     handleProcessChange(process) {
-        console.log('🔄 Process change:', process);
+        console.log(' Process change:', process);
         
         // Update connection status if it's Cursor
         if (process.displayName && process.displayName.toLowerCase().includes('cursor')) {
@@ -2966,7 +2966,7 @@ class LiveDashboard {
         const recommendations = [
             {
                 priority: sensitiveFiles > 0 ? 'high' : 'low',
-                icon: '🔒',
+                icon: '',
                 title: 'Secure Sensitive Files',
                 description: sensitiveFiles > 0 ? 
                     `Found ${sensitiveFiles} potentially sensitive files. Consider using environment variables or secure storage.` :
@@ -3092,7 +3092,7 @@ class LiveDashboard {
         if (privacyScore < 60) {
             recommendations.push({
                 priority: 'high',
-                icon: '🔒',
+                icon: '',
                 title: 'Enable Data Anonymization',
                 description: 'Consider anonymizing sensitive data before analysis'
             });
@@ -6115,7 +6115,7 @@ class LiveDashboard {
                     <div class="memory-list-container">
                         <div id="memory-list" class="memory-list">
                             <div class="no-data-state">
-                                <div class="no-data-icon">🧠</div>
+                                <div class="no-data-icon"></div>
                                 <h3>No memories found</h3>
                                 <p>Create your first memory to get started with intelligent session management.</p>
                                 <button class="btn btn-primary" onclick="window.dashboard.addMemory()">
@@ -6578,7 +6578,7 @@ class LiveDashboard {
         if (this.memories.length === 0) {
             container.innerHTML = `
                 <div class="no-data-state">
-                    <div class="no-data-icon">🧠</div>
+                    <div class="no-data-icon"></div>
                     <h3>No memories found</h3>
                     <p>Create your first memory to get started with intelligent session management.</p>
                     <button class="btn btn-primary" onclick="window.dashboard.addMemory()">

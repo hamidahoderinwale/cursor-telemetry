@@ -6,7 +6,7 @@
 // Export database as JSON (with size limits to prevent browser crashes)
 async function exportDatabase(limit = 1000, includeAllFields = false) {
   try {
-    console.log('📤 Exporting database...', { limit, includeAllFields });
+    console.log(' Exporting database...', { limit, includeAllFields });
     
     // Show loading state
     const exportBtn = document.querySelector('.export-btn');
@@ -109,7 +109,7 @@ async function exportDatabase(limit = 1000, includeAllFields = false) {
     const exportBtn = document.querySelector('.export-btn');
     if (exportBtn) {
       const originalHTML = exportBtn.innerHTML;
-      exportBtn.innerHTML = '<span>✗ Failed</span>';
+      exportBtn.innerHTML = '<span> Failed</span>';
       exportBtn.style.color = '#ef4444';
       setTimeout(() => {
         exportBtn.innerHTML = originalHTML;
@@ -140,7 +140,7 @@ async function exportDatabaseWithOptions() {
 // Export with filters (for export options modal)
 async function exportDatabaseWithFilters({ dateFrom, dateTo, limit = 1000, types = {}, options = {} }) {
   try {
-    console.log('📤 Exporting database with filters...', { dateFrom, dateTo, limit, types, options });
+    console.log(' Exporting database with filters...', { dateFrom, dateTo, limit, types, options });
     
     // Show loading state
     const exportBtn = document.querySelector('.export-btn');
@@ -234,7 +234,7 @@ async function exportDatabaseWithFilters({ dateFrom, dateTo, limit = 1000, types
     const exportBtn = document.querySelector('.export-btn');
     if (exportBtn) {
       const originalHTML = exportBtn.innerHTML;
-      exportBtn.innerHTML = '<span>✗ Failed</span>';
+      exportBtn.innerHTML = '<span> Failed</span>';
       exportBtn.style.color = '#ef4444';
       setTimeout(() => {
         exportBtn.innerHTML = originalHTML;
@@ -332,7 +332,7 @@ async function handleStreamingExport(url, exportBtn, originalHTML, { dateFrom, l
   } catch (error) {
     console.error('Streaming export error:', error);
     if (exportBtn) {
-      exportBtn.innerHTML = '<span>✗ Failed</span>';
+      exportBtn.innerHTML = '<span> Failed</span>';
       exportBtn.style.color = '#ef4444';
       setTimeout(() => {
         exportBtn.innerHTML = originalHTML;

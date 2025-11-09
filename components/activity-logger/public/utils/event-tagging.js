@@ -45,6 +45,11 @@ const TAG_STYLES = {
   [EVENT_TAG_CATEGORIES.CONFIG_CHANGE]: { icon: '[Config]', color: '#6366f1', bg: 'rgba(99, 102, 241, 0.1)' },
   [EVENT_TAG_CATEGORIES.AI_GENERATED]: { icon: '[AI]', color: '#ec4899', bg: 'rgba(236, 72, 153, 0.1)' },
   [EVENT_TAG_CATEGORIES.MANUAL]: { icon: '[Manual]', color: '#6b7280', bg: 'rgba(107, 114, 128, 0.1)' },
+  [EVENT_TAG_CATEGORIES.AUTO_DETECTED]: { icon: '[Auto]', color: '#06b6d4', bg: 'rgba(6, 182, 212, 0.1)' },
+  [EVENT_TAG_CATEGORIES.CREATED]: { icon: '[New]', color: '#10b981', bg: 'rgba(16, 185, 129, 0.1)' },
+  [EVENT_TAG_CATEGORIES.MODIFIED]: { icon: '[Edit]', color: '#3b82f6', bg: 'rgba(59, 130, 246, 0.1)' },
+  [EVENT_TAG_CATEGORIES.DELETED]: { icon: '[Delete]', color: '#ef4444', bg: 'rgba(239, 68, 68, 0.1)' },
+  [EVENT_TAG_CATEGORIES.RENAMED]: { icon: '[Rename]', color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.1)' },
   [EVENT_TAG_CATEGORIES.REFACTORING]: { icon: '[Refactor]', color: '#8b5cf6', bg: 'rgba(139, 92, 246, 0.1)' },
   [EVENT_TAG_CATEGORIES.BUG_FIX]: { icon: '[Bug]', color: '#ef4444', bg: 'rgba(239, 68, 68, 0.1)' },
   [EVENT_TAG_CATEGORIES.FEATURE_ADD]: { icon: '[Feature]', color: '#10b981', bg: 'rgba(16, 185, 129, 0.1)' },
@@ -216,13 +221,36 @@ function autoTagEvent(event) {
     }
   }
   
-  const filePath = details?.file_path || event.file_path;
+  const filePath = details?.file_path || event.file_path || event.path;
   const beforeCode = details?.before_code || details?.before_content;
   const afterCode = details?.after_code || details?.after_content;
   const source = event.source || details?.source;
+  const eventType = event.type || details?.type || details?.change_type;
   
-  // Detect file type
-  if (filePath) {
+  // For file_change or code_change events, always add appropriate tag
+  if (eventType === 'file_change' || eventType === 'file-change' || eventType === 'code_change' || eventType === 'code-change') {
+    if (filePath) {
+      const fileType = getFileType(filePath);
+      
+      if (fileType === 'image') {
+        tags.push(EVENT_TAG_CATEGORIES.IMAGE_UPLOAD);
+      } else if (isDocumentUpload(filePath, afterCode || beforeCode)) {
+        tags.push(EVENT_TAG_CATEGORIES.DOCUMENT_UPLOAD);
+      } else if (fileType === 'config') {
+        tags.push(EVENT_TAG_CATEGORIES.CONFIG_CHANGE);
+      } else if (isCodeChange(filePath, beforeCode, afterCode)) {
+        tags.push(EVENT_TAG_CATEGORIES.CODE_CHANGE);
+      } else {
+        tags.push(EVENT_TAG_CATEGORIES.FILE_UPLOAD);
+      }
+    } else {
+      // No file path but it's a file change event
+      tags.push(EVENT_TAG_CATEGORIES.FILE_UPLOAD);
+    }
+  }
+  
+  // Detect file type from path if available
+  if (filePath && tags.length === 0) {
     const fileType = getFileType(filePath);
     
     if (fileType === 'image') {
@@ -262,14 +290,29 @@ function autoTagEvent(event) {
     tags.push(EVENT_TAG_CATEGORIES.AI_GENERATED);
   }
   
-  return tags;
+  // Filter to ensure only valid tags that exist in TAG_STYLES are returned
+  // Also remove duplicates and null/undefined values
+  const validTags = tags
+    .filter(tag => tag && typeof tag === 'string' && TAG_STYLES[tag])
+    .filter((tag, index, self) => self.indexOf(tag) === index); // Remove duplicates
+  
+  return validTags;
 }
 
 /**
  * Get tag badge HTML
  */
 function renderTagBadge(tag, compact = false) {
-  const style = TAG_STYLES[tag] || { icon: '[Tag]', color: '#6b7280', bg: 'rgba(107, 114, 128, 0.1)' };
+  if (!tag || typeof tag !== 'string') {
+    return ''; // Don't render invalid tags
+  }
+  
+  const style = TAG_STYLES[tag];
+  if (!style) {
+    // If tag doesn't exist in styles, don't render it (instead of showing [Tag])
+    return '';
+  }
+  
   const label = tag.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
   
   if (compact) {
@@ -313,13 +356,16 @@ function renderTags(tags, compact = false, event = null) {
     return '';
   }
   
-  const tagHtml = tags.map(tag => renderTagBadge(tag, compact)).join(' ');
+  // Filter out invalid tags and render valid ones
+  const validTags = tags.filter(tag => tag && typeof tag === 'string' && TAG_STYLES[tag]);
+  const tagHtml = validTags.map(tag => renderTagBadge(tag, compact)).filter(html => html).join(' ');
   
   // Add workspace badge if event provided
   if (event) {
     const workspace = getEventWorkspace(event);
     if (workspace) {
-      return tagHtml + ' ' + renderWorkspaceBadge(workspace, compact);
+      const workspaceBadge = renderWorkspaceBadge(workspace, compact);
+      return tagHtml ? tagHtml + ' ' + workspaceBadge : workspaceBadge;
     }
   }
   

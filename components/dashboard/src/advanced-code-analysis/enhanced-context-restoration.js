@@ -35,7 +35,7 @@ class EnhancedContextRestoration extends EventEmitter {
     this.memoryContexts = new Map();
     this.restorationHistory = [];
     
-    console.log('🔄 Enhanced Context Restoration initialized');
+    console.log(' Enhanced Context Restoration initialized');
   }
   
   /**
@@ -443,7 +443,7 @@ class EnhancedContextRestoration extends EventEmitter {
     this.memoryContexts.clear();
     this.restorationHistory = [];
     
-    console.log('🧹 Enhanced Context Restoration cleared');
+    console.log(' Enhanced Context Restoration cleared');
   }
   
   /**

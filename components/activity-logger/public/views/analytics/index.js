@@ -193,6 +193,50 @@ function renderAnalyticsView(container) {
         </div>
       </div>
 
+      <!-- Context Evolution Timeline -->
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title" title="Tracks how your context window evolves over time - showing when files are added or removed from context, context size changes, and context switching patterns">Context Evolution Timeline</h3>
+          <p class="card-subtitle">Context window changes, file additions/removals, and context switching patterns over time</p>
+        </div>
+        <div class="card-body">
+          <div id="contextEvolutionTimeline" style="min-height: 300px;"></div>
+        </div>
+      </div>
+
+      <!-- Prompt-to-Code Correlation -->
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title" title="Analyzes the correlation between AI prompts and resulting code changes - showing success rate, time from prompt to code change, and how many changes each prompt generates">Prompt-to-Code Correlation</h3>
+          <p class="card-subtitle">Success rate, time to first change, and code change patterns following prompts</p>
+        </div>
+        <div class="card-body">
+          <div id="promptToCodeCorrelation" style="min-height: 300px;"></div>
+        </div>
+      </div>
+
+      <!-- Git Commit Timeline -->
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title" title="Shows your git commit history with commit messages, timestamps, and branch information. Helps track development milestones and commit frequency">Git Commit Timeline</h3>
+          <p class="card-subtitle">Recent commits, commit frequency, and branch activity</p>
+        </div>
+        <div class="card-body">
+          <div id="gitCommitTimeline" style="min-height: 250px;"></div>
+        </div>
+      </div>
+
+      <!-- File Hotspots -->
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title" title="Identifies files that are edited most frequently - showing edit counts, lines changed, and recency to highlight your most active development areas">File Hotspots</h3>
+          <p class="card-subtitle">Most frequently edited files with edit counts, lines changed, and activity scores</p>
+        </div>
+        <div class="card-body">
+          <div id="fileHotspots" style="min-height: 250px;"></div>
+        </div>
+      </div>
+
     </div>
   `;
 
@@ -352,6 +396,39 @@ function renderAnalyticsView(container) {
       }
     } else {
       console.warn('[CHART] renderPromptEffectiveness not available');
+    }
+    
+    // Advanced visualizations
+    if (window.renderContextEvolutionTimeline) {
+      window.renderContextEvolutionTimeline().catch(err => {
+        if (!err.message || !err.message.includes('not found')) {
+          console.warn('[INFO] Context evolution timeline not available:', err.message);
+        }
+      });
+    }
+    
+    if (window.renderPromptToCodeCorrelation) {
+      window.renderPromptToCodeCorrelation().catch(err => {
+        if (!err.message || !err.message.includes('not found')) {
+          console.warn('[INFO] Prompt-to-code correlation not available:', err.message);
+        }
+      });
+    }
+    
+    if (window.renderGitCommitTimeline) {
+      window.renderGitCommitTimeline().catch(err => {
+        if (!err.message || !err.message.includes('not found')) {
+          console.warn('[INFO] Git commit timeline not available:', err.message);
+        }
+      });
+    }
+    
+    if (window.renderFileHotspots) {
+      window.renderFileHotspots().catch(err => {
+        if (!err.message || !err.message.includes('not found')) {
+          console.warn('[INFO] File hotspots not available:', err.message);
+        }
+      });
     }
   }, 300);
 }

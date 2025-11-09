@@ -52,7 +52,7 @@ class EnhancedDashboardIntegration extends EventEmitter {
     // Initialize integration
     this.initializeIntegration();
     
-    console.log('🔗 Enhanced Dashboard Integration initialized');
+    console.log('Enhanced Dashboard Integration initialized');
   }
   
   /**
@@ -101,7 +101,7 @@ class EnhancedDashboardIntegration extends EventEmitter {
       }
     }, this.options.analysisInterval);
     
-    console.log('🔄 Real-time analysis started');
+    console.log('Real-time analysis started');
   }
   
   /**
@@ -111,7 +111,7 @@ class EnhancedDashboardIntegration extends EventEmitter {
     if (this.realTimeProcessor) {
       clearInterval(this.realTimeProcessor);
       this.realTimeProcessor = null;
-      console.log('🛑 Real-time analysis stopped');
+      console.log('Real-time analysis stopped');
     }
   }
   
@@ -404,7 +404,7 @@ class EnhancedDashboardIntegration extends EventEmitter {
     this.dashboardState.searchResults = [];
     this.processingQueue = [];
     
-    console.log('🧹 Dashboard state cleared');
+    console.log('Dashboard state cleared');
   }
   
   /**
@@ -484,7 +484,7 @@ class EnhancedDashboardIntegration extends EventEmitter {
     this.contextRestoration.clear();
     this.clearDashboardState();
     
-    console.log('🧹 Enhanced Dashboard Integration cleared');
+    console.log('Enhanced Dashboard Integration cleared');
   }
 }
 

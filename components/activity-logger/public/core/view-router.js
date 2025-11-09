@@ -51,6 +51,9 @@ function renderCurrentView() {
     case 'schema-config':
       if (window.renderSchemaConfigView) window.renderSchemaConfigView(container);
       break;
+    case 'workspace-comparison':
+      if (window.renderWorkspaceComparisonView) window.renderWorkspaceComparisonView(container);
+      break;
     default:
       container.innerHTML = '<div class="empty-state">View not found</div>';
   }

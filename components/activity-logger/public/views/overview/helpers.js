@@ -151,7 +151,109 @@ function renderWorkspacesList() {
   `;
 }
 
+function renderWorkspacesVisual() {
+  const workspaces = window.state?.data?.workspaces || [];
+  const events = window.state?.data?.events || [];
+  const prompts = window.state?.data?.prompts || [];
+  
+  // Build workspace activity map
+  const workspaceMap = new Map();
+  
+  // Extract from events
+  events.forEach(event => {
+    const wsPath = event.workspace_path || event.workspacePath || event.workspace;
+    if (wsPath) {
+      if (!workspaceMap.has(wsPath)) {
+        workspaceMap.set(wsPath, {
+          path: wsPath,
+          name: wsPath.split('/').pop() || 'Unknown',
+          events: 0,
+          prompts: 0
+        });
+      }
+      workspaceMap.get(wsPath).events++;
+    }
+  });
+  
+  // Extract from prompts
+  prompts.forEach(prompt => {
+    const wsPath = prompt.workspace_path || prompt.workspacePath || prompt.workspaceName || prompt.workspaceId;
+    if (wsPath) {
+      if (!workspaceMap.has(wsPath)) {
+        workspaceMap.set(wsPath, {
+          path: wsPath,
+          name: wsPath.split('/').pop() || 'Unknown',
+          events: 0,
+          prompts: 0
+        });
+      }
+      workspaceMap.get(wsPath).prompts++;
+    }
+  });
+  
+  // Use provided workspaces if available
+  if (workspaces.length > 0) {
+    workspaces.forEach(ws => {
+      const wsPath = ws.path || ws.name;
+      if (wsPath && !workspaceMap.has(wsPath)) {
+        workspaceMap.set(wsPath, {
+          path: wsPath,
+          name: ws.name || wsPath.split('/').pop() || 'Unknown',
+          events: ws.events || ws.eventCount || 0,
+          prompts: ws.promptCount || 0
+        });
+      }
+    });
+  }
+  
+  const workspaceList = Array.from(workspaceMap.values());
+  
+  if (workspaceList.length === 0) {
+    return `
+      <div class="empty-state">
+        <div class="empty-state-text">No workspaces detected</div>
+        <div class="empty-state-hint" style="font-size: 0.85em; margin-top: 8px; line-height: 1.5;">
+          Workspaces will appear as you work in different projects.
+        </div>
+      </div>
+    `;
+  }
+  
+  // Calculate max activity for normalization
+  const maxActivity = Math.max(...workspaceList.map(ws => ws.events + ws.prompts), 1);
+  
+  // Sort by activity
+  workspaceList.sort((a, b) => (b.events + b.prompts) - (a.events + a.prompts));
+  
+  return `
+    <div class="workspaces-visual">
+      ${workspaceList.slice(0, 5).map(ws => {
+        const totalActivity = ws.events + ws.prompts;
+        const activityPercent = (totalActivity / maxActivity) * 100;
+        return `
+          <div class="workspace-visual-item" onclick="if(window.switchView) window.switchView('activity'); if(window.setWorkspaceFilter) window.setWorkspaceFilter('${ws.path}')" style="cursor: pointer;">
+            <div class="workspace-visual-name">${window.escapeHtml ? window.escapeHtml(ws.name) : ws.name}</div>
+            <div class="workspace-visual-bar">
+              <div class="workspace-visual-bar-fill" style="width: ${activityPercent}%;"></div>
+            </div>
+            <div class="workspace-visual-stats">
+              <span>${ws.events} events</span>
+              ${ws.prompts > 0 ? `<span>${ws.prompts} prompts</span>` : ''}
+            </div>
+          </div>
+        `;
+      }).join('')}
+      ${workspaceList.length > 5 ? `
+        <div class="workspace-visual-more">
+          +${workspaceList.length - 5} more workspace${workspaceList.length - 5 !== 1 ? 's' : ''}
+        </div>
+      ` : ''}
+    </div>
+  `;
+}
+
 // Export to window for global access
 window.renderSystemStatus = renderSystemStatus;
 window.renderWorkspacesList = renderWorkspacesList;
+window.renderWorkspacesVisual = renderWorkspacesVisual;
 

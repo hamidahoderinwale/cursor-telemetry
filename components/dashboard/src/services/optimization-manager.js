@@ -533,7 +533,7 @@ class OptimizationManager extends EventEmitter {
      * Shutdown all services
      */
     async shutdown() {
-        console.log('🛑 Shutting down optimization services...');
+        console.log(' Shutting down optimization services...');
         
         try {
             // Stop WebSocket server

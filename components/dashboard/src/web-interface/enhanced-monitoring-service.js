@@ -123,7 +123,7 @@ class EnhancedMonitoringService extends EventEmitter {
             return;
         }
         
-        console.log('🛑 Stopping Enhanced Monitoring Service...');
+        console.log(' Stopping Enhanced Monitoring Service...');
         
         try {
             // Stop file watcher

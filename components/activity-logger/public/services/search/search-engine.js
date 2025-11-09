@@ -21,6 +21,7 @@ class SearchEngine {
     this.documents = [];
     this.tfidfVectors = new Map(); // For semantic search
     this.bm25Index = new Map(); // BM25 scores cache
+    this.bm25DocFrequency = new Map(); // Shared document frequency for BM25
     this.searchHistory = this.loadSearchHistory();
     this.searchAnalytics = this.loadSearchAnalytics();
     this.synonyms = this.buildSynonymMap();
@@ -190,9 +191,29 @@ class SearchEngine {
     this.buildBM25Index(docs);
 
     // Initialize Hugging Face semantic search (in background, non-blocking)
-    this.initializeHuggingFaceSearch(docs).catch(err => {
-      console.warn('[SEARCH] Hugging Face search initialization failed:', err.message);
+    // Only if enabled in config - explicitly check for true (not just truthy)
+    // Add debug logging to understand config state
+    const configValue = window.CONFIG?.ENABLE_SEMANTIC_SEARCH;
+    const dashboardConfigValue = window.DASHBOARD_CONFIG?.ENABLE_SEMANTIC_SEARCH;
+    const enableSemantic = (window.CONFIG && window.CONFIG.ENABLE_SEMANTIC_SEARCH === true) || 
+                          (window.DASHBOARD_CONFIG && window.DASHBOARD_CONFIG.ENABLE_SEMANTIC_SEARCH === true) ||
+                          false;
+    
+    console.log('[SEARCH] Config check for Hugging Face:', {
+      'window.CONFIG?.ENABLE_SEMANTIC_SEARCH': configValue,
+      'window.DASHBOARD_CONFIG?.ENABLE_SEMANTIC_SEARCH': dashboardConfigValue,
+      'enableSemantic': enableSemantic,
+      'window.CONFIG exists': !!window.CONFIG,
+      'window.DASHBOARD_CONFIG exists': !!window.DASHBOARD_CONFIG
     });
+    
+    if (enableSemantic) {
+      this.initializeHuggingFaceSearch(docs).catch(err => {
+        console.warn('[SEARCH] Hugging Face search initialization failed:', err.message);
+      });
+    } else {
+      console.log('[SEARCH] Hugging Face semantic search disabled in config - skipping initialization');
+    }
 
     this.initialized = true;
     console.log(`[SUCCESS] Search engine initialized with ${this.documents.length} documents`);
@@ -202,6 +223,16 @@ class SearchEngine {
    * Initialize Hugging Face semantic search (optional enhancement)
    */
   async initializeHuggingFaceSearch(docs) {
+    // Double-check config - this should have been checked before calling, but verify here too
+    // Explicitly check for === true (not just truthy) to prevent accidental initialization
+    const enableSemantic = (window.CONFIG && window.CONFIG.ENABLE_SEMANTIC_SEARCH === true) || 
+                          (window.DASHBOARD_CONFIG && window.DASHBOARD_CONFIG.ENABLE_SEMANTIC_SEARCH === true) ||
+                          false;
+    if (!enableSemantic) {
+      console.log('[SEARCH] Hugging Face semantic search disabled in config (skipping initialization)');
+      return;
+    }
+    
     // Check if HuggingFaceSemanticSearch is available
     if (typeof window.HuggingFaceSemanticSearch === 'undefined') {
       console.log('[SEARCH] Hugging Face semantic search not available (module not loaded)');
@@ -237,36 +268,83 @@ class SearchEngine {
   /**
    * Build BM25 index for better ranking
    * BM25 is a probabilistic ranking function that improves upon TF-IDF
+   * Process in chunks to avoid blocking the main thread
    */
   buildBM25Index(docs) {
-    // Calculate average document length
-    const totalLength = docs.reduce((sum, doc) => sum + this.tokenize(doc.content).length, 0);
-    this.avgDocLength = totalLength / docs.length;
+    if (!docs || docs.length === 0) {
+      this.avgDocLength = 0;
+      return;
+    }
     
-    // Calculate document frequencies
+    // Process in chunks to avoid timeout
+    const CHUNK_SIZE = 100;
+    let currentIndex = 0;
+    let totalLength = 0;
     const docFrequency = new Map();
-    docs.forEach(doc => {
-      const tokens = new Set(this.tokenize(doc.content));
-      tokens.forEach(token => {
-        docFrequency.set(token, (docFrequency.get(token) || 0) + 1);
-      });
-    });
     
-    // Store BM25 data for each document
-    docs.forEach(doc => {
-      const tokens = this.tokenize(doc.content);
-      const tokenCounts = new Map();
+    const processChunk = () => {
+      const endIndex = Math.min(currentIndex + CHUNK_SIZE, docs.length);
       
-      tokens.forEach(token => {
-        tokenCounts.set(token, (tokenCounts.get(token) || 0) + 1);
-      });
+      // Process chunk
+      for (let i = currentIndex; i < endIndex; i++) {
+        const doc = docs[i];
+        if (!doc || !doc.content) continue;
+        
+        try {
+          const tokens = this.tokenize(doc.content);
+          totalLength += tokens.length;
+          
+          // Calculate document frequencies
+          const uniqueTokens = new Set(tokens);
+          uniqueTokens.forEach(token => {
+            docFrequency.set(token, (docFrequency.get(token) || 0) + 1);
+          });
+          
+          // Store token counts for this document
+          const tokenCounts = new Map();
+          tokens.forEach(token => {
+            tokenCounts.set(token, (tokenCounts.get(token) || 0) + 1);
+          });
+          
+          this.bm25Index.set(doc.id, {
+            length: tokens.length,
+            tokenCounts
+          });
+        } catch (error) {
+          console.warn('[SEARCH] Error processing document for BM25:', error);
+        }
+      }
       
-      this.bm25Index.set(doc.id, {
-        length: tokens.length,
-        tokenCounts,
-        docFrequency
-      });
-    });
+      currentIndex = endIndex;
+      
+      // Calculate average document length after first chunk
+      if (currentIndex > 0) {
+        this.avgDocLength = totalLength / currentIndex;
+      }
+      
+      // Store shared docFrequency in a shared location (on the last document processed)
+      if (currentIndex >= docs.length) {
+        this.avgDocLength = totalLength / docs.length;
+        // Store docFrequency globally for BM25 calculations
+        this.bm25DocFrequency = docFrequency;
+      }
+      
+      // Continue processing if there are more documents
+      if (currentIndex < docs.length) {
+        if (typeof requestIdleCallback !== 'undefined') {
+          requestIdleCallback(processChunk, { timeout: 50 });
+        } else {
+          setTimeout(processChunk, 0);
+        }
+      }
+    };
+    
+    // Start processing
+    if (typeof requestIdleCallback !== 'undefined') {
+      requestIdleCallback(processChunk, { timeout: 50 });
+    } else {
+      setTimeout(processChunk, 0);
+    }
   }
 
   /**
@@ -279,7 +357,8 @@ class SearchEngine {
     
     if (!bm25Data) return 0;
     
-    const { length, tokenCounts, docFrequency } = bm25Data;
+    const { length, tokenCounts } = bm25Data;
+    const docFrequency = this.bm25DocFrequency || new Map();
     const N = this.documents.length;
     let score = 0;
     
@@ -306,42 +385,118 @@ class SearchEngine {
    * Build TF-IDF vectors for semantic search
    */
   buildTFIDFVectors(docs) {
-    // Simple TF-IDF implementation
+    // Simple TF-IDF implementation with chunked processing to avoid timeouts
     const termFrequency = new Map();
     const documentFrequency = new Map();
     
-    // Calculate term frequencies
-    docs.forEach(doc => {
-      const tokens = this.tokenize(doc.content);
-      const termCounts = new Map();
-      
-      tokens.forEach(token => {
-        termCounts.set(token, (termCounts.get(token) || 0) + 1);
-        if (!documentFrequency.has(token)) {
-          documentFrequency.set(token, 0);
-        }
-        if (termCounts.get(token) === 1) {
-          documentFrequency.set(token, documentFrequency.get(token) + 1);
-        }
-      });
-      
-      termFrequency.set(doc.id, termCounts);
-    });
+    // Process in chunks to avoid blocking the main thread
+    const chunkSize = 100;
+    let currentIndex = 0;
     
-    // Calculate TF-IDF vectors
-    const numDocs = docs.length;
-    docs.forEach(doc => {
-      const vector = new Map();
-      const termCounts = termFrequency.get(doc.id) || new Map();
+    const processChunk = () => {
+      const endIndex = Math.min(currentIndex + chunkSize, docs.length);
       
-      termCounts.forEach((count, term) => {
-        const tf = count / Math.max(...Array.from(termCounts.values()));
-        const idf = Math.log(numDocs / (documentFrequency.get(term) || 1));
-        vector.set(term, tf * idf);
+      // Calculate term frequencies for this chunk
+      for (let i = currentIndex; i < endIndex; i++) {
+        const doc = docs[i];
+        const tokens = this.tokenize(doc.content);
+        const termCounts = new Map();
+        
+        tokens.forEach(token => {
+          termCounts.set(token, (termCounts.get(token) || 0) + 1);
+          if (!documentFrequency.has(token)) {
+            documentFrequency.set(token, 0);
+          }
+          if (termCounts.get(token) === 1) {
+            documentFrequency.set(token, documentFrequency.get(token) + 1);
+          }
+        });
+        
+        termFrequency.set(doc.id, termCounts);
+      }
+      
+      currentIndex = endIndex;
+      
+      if (currentIndex < docs.length) {
+        // Process next chunk asynchronously
+        if (typeof requestIdleCallback !== 'undefined') {
+          requestIdleCallback(processChunk, { timeout: 100 });
+        } else {
+          setTimeout(processChunk, 0);
+        }
+      } else {
+        // All chunks processed, now calculate TF-IDF vectors
+        this.calculateTFIDFVectors(docs, termFrequency, documentFrequency);
+      }
+    };
+    
+    // Start processing
+    if (docs.length === 0) {
+      return;
+    }
+    
+    if (docs.length <= chunkSize) {
+      // Small dataset, process synchronously
+      docs.forEach(doc => {
+        const tokens = this.tokenize(doc.content);
+        const termCounts = new Map();
+        
+        tokens.forEach(token => {
+          termCounts.set(token, (termCounts.get(token) || 0) + 1);
+          if (!documentFrequency.has(token)) {
+            documentFrequency.set(token, 0);
+          }
+          if (termCounts.get(token) === 1) {
+            documentFrequency.set(token, documentFrequency.get(token) + 1);
+          }
+        });
+        
+        termFrequency.set(doc.id, termCounts);
       });
+      this.calculateTFIDFVectors(docs, termFrequency, documentFrequency);
+    } else {
+      // Large dataset, process in chunks
+      processChunk();
+    }
+  }
+  
+  calculateTFIDFVectors(docs, termFrequency, documentFrequency) {
+    const numDocs = docs.length;
+    const chunkSize = 100;
+    let currentIndex = 0;
+    
+    const processVectorChunk = () => {
+      const endIndex = Math.min(currentIndex + chunkSize, docs.length);
       
-      this.tfidfVectors.set(doc.id, vector);
-    });
+      for (let i = currentIndex; i < endIndex; i++) {
+        const doc = docs[i];
+        const vector = new Map();
+        const termCounts = termFrequency.get(doc.id) || new Map();
+        
+        if (termCounts.size > 0) {
+          const maxCount = Math.max(...Array.from(termCounts.values()));
+          termCounts.forEach((count, term) => {
+            const tf = count / maxCount;
+            const idf = Math.log(numDocs / (documentFrequency.get(term) || 1));
+            vector.set(term, tf * idf);
+          });
+        }
+        
+        this.tfidfVectors.set(doc.id, vector);
+      }
+      
+      currentIndex = endIndex;
+      
+      if (currentIndex < docs.length) {
+        if (typeof requestIdleCallback !== 'undefined') {
+          requestIdleCallback(processVectorChunk, { timeout: 100 });
+        } else {
+          setTimeout(processVectorChunk, 0);
+        }
+      }
+    };
+    
+    processVectorChunk();
   }
 
   /**

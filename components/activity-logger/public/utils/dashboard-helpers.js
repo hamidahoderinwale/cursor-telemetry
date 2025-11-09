@@ -96,7 +96,7 @@ function createWorkspaceBadge(workspacePath, size = 'sm') {
                  padding: ${padding}; border-radius: var(--radius-sm); font-size: ${fontSize}; 
                  font-weight: 500; font-family: var(--font-mono);"
           title="${window.escapeHtml ? window.escapeHtml(workspacePath) : workspacePath}">
-      📁 ${window.escapeHtml ? window.escapeHtml(workspaceName) : workspaceName}
+      ${window.escapeHtml ? window.escapeHtml(workspaceName) : workspaceName}
     </span>
   `;
 }

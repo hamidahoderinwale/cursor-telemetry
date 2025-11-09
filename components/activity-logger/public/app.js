@@ -1485,7 +1485,8 @@ function startCompanionPolling() {
             
             let response;
             try {
-              response = await fetch(`http://127.0.0.1:43917/queue?since=${since}`, {
+              const apiBase = window.CONFIG?.API_BASE || window.DASHBOARD_CONFIG?.API_BASE || 'http://localhost:43917';
+              response = await fetch(`${apiBase}/queue?since=${since}`, {
                   signal: controller.signal
               });
               clearTimeout(timeoutId);
@@ -1596,7 +1597,8 @@ function startCompanionPolling() {
                     }
                     
                     // Acknowledge the data
-                    await fetch('http://127.0.0.1:43917/ack', {
+                    const apiBase = window.CONFIG?.API_BASE || window.DASHBOARD_CONFIG?.API_BASE || 'http://localhost:43917';
+                    await fetch(`${apiBase}/ack`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ cursor: data.cursor })
@@ -2963,7 +2965,8 @@ async function updateCompanionDebugInfo() {
     
     try {
         // Get companion health
-        const healthResponse = await fetch('http://127.0.0.1:43917/health');
+        const apiBase = window.CONFIG?.API_BASE || window.DASHBOARD_CONFIG?.API_BASE || 'http://localhost:43917';
+        const healthResponse = await fetch(`${apiBase}/health`);
         if (healthResponse.ok) {
             const healthData = await healthResponse.json();
             
@@ -3039,7 +3042,8 @@ async function refreshCompanionData() {
 
 async function testCompanionConnection() {
     try {
-        const response = await fetch('http://127.0.0.1:43917/health');
+        const apiBase = window.CONFIG?.API_BASE || window.DASHBOARD_CONFIG?.API_BASE || 'http://localhost:43917';
+        const response = await fetch(`${apiBase}/health`);
         if (response.ok) {
             const data = await response.json();
             showNotification(`Companion connected: ${data.entries} entries, ${data.events} events`, 'success');
@@ -3452,7 +3456,8 @@ window.debugDatabase = async function() {
 // Test companion connection
 window.testCompanion = async function() {
     try {
-        const response = await fetch('http://127.0.0.1:43917/queue?since=0');
+        const apiBase = window.CONFIG?.API_BASE || window.DASHBOARD_CONFIG?.API_BASE || 'http://localhost:43917';
+        const response = await fetch(`${apiBase}/queue?since=0`);
         const data = await response.json();
         console.log('=== COMPANION TEST ===');
         console.log('Response status:', response.status);

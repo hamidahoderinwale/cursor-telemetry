@@ -505,7 +505,7 @@ class EnhancedFileWatcher extends EventEmitter {
      * Stop watching
      */
     async stopWatching() {
-        console.log('🛑 Stopping file watcher...');
+        console.log(' Stopping file watcher...');
         
         // Clear all timeouts
         for (const [filePath, buffer] of this.changeBuffer) {

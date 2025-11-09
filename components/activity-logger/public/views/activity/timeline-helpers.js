@@ -540,7 +540,7 @@ function renderPromptTimelineItem(prompt, side = 'right', timelineItems = null, 
     return '';
   }
   
-  const icon = '🤖';
+  const icon = '';
   const source = prompt.source || 'cursor';
   
   // Find related events using sequence-based linking if timeline items available
@@ -561,7 +561,7 @@ function renderPromptTimelineItem(prompt, side = 'right', timelineItems = null, 
     relatedEventsIndicator = `
       <div class="prompt-related-events" style="margin-top: var(--space-xs); padding-top: var(--space-xs); border-top: 1px dashed var(--color-border);">
         <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-bottom: var(--space-xs);">
-          <span style="color: var(--color-accent);">↓</span> Related code changes (${relatedEvents.length})
+          <span style="color: var(--color-accent);">Related code changes (${relatedEvents.length})</span>
         </div>
         ${topRelated.map((event, idx) => {
           const eventDetails = typeof event.details === 'string' ? JSON.parse(event.details) : event.details;
@@ -632,7 +632,7 @@ function renderPromptTimelineItem(prompt, side = 'right', timelineItems = null, 
     if (change.addedFiles?.length > 0 || change.removedFiles?.length > 0) {
       const netChange = change.netChange || 0;
       const changeText = netChange > 0 ? `+${netChange}` : netChange < 0 ? `${netChange}` : '±0';
-      contextChangeIndicator = `<span class="context-change-badge" title="${change.addedFiles.length} added, ${change.removedFiles.length} removed">📁 ${changeText}</span>`;
+      contextChangeIndicator = `<span class="context-change-badge" title="${change.addedFiles.length} added, ${change.removedFiles.length} removed">${changeText}</span>`;
     }
   }
   
@@ -840,7 +840,7 @@ function renderTemporalThread(thread, timelineItems = null) {
         metadataBadges.push(window.createWorkspaceBadge(workspacePath, 'sm'));
       } else {
         const workspaceName = window.getWorkspaceName ? window.getWorkspaceName(workspacePath) : workspacePath.split('/').pop();
-        metadataBadges.push(`<span class="badge" style="background: var(--color-primary); color: white;" title="${workspacePath}">📁 ${workspaceName}</span>`);
+        metadataBadges.push(`<span class="badge" style="background: var(--color-primary); color: white;" title="${workspacePath}">${workspaceName}</span>`);
       }
     });
   }
@@ -909,7 +909,7 @@ function renderTemporalThread(thread, timelineItems = null) {
       <div style="display: flex; align-items: center; gap: var(--space-xs); margin-bottom: var(--space-xs);">
         ${window.createWorkspaceBadge ? window.createWorkspaceBadge(primaryWorkspace, 'md') : `
           <span class="badge" style="background: ${workspaceColor}; color: white; font-weight: 500;" title="${primaryWorkspace}">
-            📁 ${window.escapeHtml ? window.escapeHtml(workspaceName) : workspaceName}
+            ${window.escapeHtml ? window.escapeHtml(workspaceName) : workspaceName}
           </span>
         `}
         ${uniqueWorkspaces.length > 1 ? `
@@ -951,33 +951,21 @@ function renderTemporalThread(thread, timelineItems = null) {
           <div class="timeline-title">
             <span id="thread-icon-${threadId}" class="timeline-title-icon">▼</span>
             <span class="timeline-title-text">Activity Session</span>
-            <span class="timeline-title-meta">(${totalItems} items • ${durationText})</span>
+            <span class="timeline-title-meta">${totalItems} items • ${durationText}</span>
           </div>
           <div class="timeline-meta">${window.formatTimeAgo(actualStartTime)}</div>
         </div>
         <div class="timeline-description">
-          ${workspaceDisplay}
-          <div style="display: flex; flex-wrap: wrap; gap: var(--space-xs); align-items: center; margin-bottom: var(--space-xs);">
-            <span class="badge badge-prompt" title="Start: ${startDate.toLocaleString()}, End: ${endDate.toLocaleString()}">${timeRange}</span>
-            <span class="badge">${summary}</span>
-            ${sessionMetadata.totalLinesAdded > 0 || sessionMetadata.totalLinesRemoved > 0 ? `
-              <span class="badge" style="background: var(--color-success); color: white;">
-                +${sessionMetadata.totalLinesAdded}${sessionMetadata.totalLinesRemoved > 0 ? `/-${sessionMetadata.totalLinesRemoved}` : ''} lines
-              </span>
-            ` : ''}
-            ${sessionMetadata.linkedPairs > 0 ? `
-              <span class="badge" style="background: var(--color-warning); color: white;" title="Prompts linked to code changes">
-                ${sessionMetadata.linkedPairs} linked
+          <div style="display: flex; flex-wrap: wrap; gap: var(--space-sm); align-items: center; margin-bottom: var(--space-sm);">
+            ${workspaceDisplay}
+            <span style="font-size: var(--text-sm); color: var(--color-text-muted);">${timeRange}</span>
+            ${sessionMetadata.filesChanged.size > 0 ? `
+              <span style="font-size: var(--text-sm); color: var(--color-text-muted);">
+                ${sessionMetadata.filesChanged.size} file${sessionMetadata.filesChanged.size !== 1 ? 's' : ''}
               </span>
             ` : ''}
           </div>
           ${fileSummary}
-          ${sessionMetadata.modelsUsed.size > 0 ? `
-            <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">
-              Models: ${Array.from(sessionMetadata.modelsUsed).slice(0, 2).join(', ')}${sessionMetadata.modelsUsed.size > 2 ? ` +${sessionMetadata.modelsUsed.size - 2} more` : ''}
-            </div>
-          ` : ''}
-          ${conversationSummary}
         </div>
         
         <!-- Thread items (expanded by default) -->
@@ -991,15 +979,91 @@ function renderTemporalThread(thread, timelineItems = null) {
               if (item.itemType === 'event' && item.prompt_id) {
                 const linkedPrompt = sortedItems.find(i => i.itemType === 'prompt' && (i.id === item.prompt_id || i.id === parseInt(item.prompt_id)));
                 if (linkedPrompt && Math.abs(item.sortTime - linkedPrompt.sortTime) < 300000) { // 5 min
-                  relationshipIndicator = `<div class="timeline-relationship-indicator" style="padding: var(--space-xs) var(--space-sm); margin-bottom: var(--space-xs); background: rgba(59, 130, 246, 0.1); border-left: 3px solid var(--color-primary); border-radius: var(--radius-sm); font-size: var(--text-xs); color: var(--color-text-muted);">
-                    <span style="color: var(--color-primary);">🔗</span> Linked to prompt above (${Math.round(Math.abs(item.sortTime - linkedPrompt.sortTime) / 1000)}s gap)
+                  // Calculate color based on file additions/deletions
+                  let bgColor = 'rgba(59, 130, 246, 0.1)'; // Default blue
+                  let borderColor = 'var(--color-primary)'; // Default blue
+                  
+                  try {
+                    const details = typeof item.details === 'string' ? JSON.parse(item.details) : item.details;
+                    const linesAdded = details?.lines_added || details?.diff_stats?.lines_added || 0;
+                    const linesRemoved = details?.lines_removed || details?.diff_stats?.lines_removed || 0;
+                    const total = linesAdded + linesRemoved;
+                    
+                    if (total > 0) {
+                      const addRatio = linesAdded / total;
+                      const removeRatio = linesRemoved / total;
+                      
+                      // Warmer colors (orange/red) for more additions, cooler (blue/cyan) for more deletions
+                      if (addRatio > 0.6) {
+                        // Mostly additions - warm orange
+                        bgColor = 'rgba(251, 146, 60, 0.1)';
+                        borderColor = '#fb923c'; // orange-400
+                      } else if (removeRatio > 0.6) {
+                        // Mostly deletions - cool cyan
+                        bgColor = 'rgba(34, 211, 238, 0.1)';
+                        borderColor = '#22d3ee'; // cyan-400
+                      } else if (addRatio > removeRatio) {
+                        // More additions - warm yellow-orange
+                        bgColor = 'rgba(251, 191, 36, 0.1)';
+                        borderColor = '#fbbf24'; // amber-400
+                      } else if (removeRatio > addRatio) {
+                        // More deletions - cool blue
+                        bgColor = 'rgba(96, 165, 250, 0.1)';
+                        borderColor = '#60a5fa'; // blue-400
+                      }
+                      // Balanced changes keep default blue
+                    }
+                  } catch (e) {
+                    // Keep default colors if parsing fails
+                  }
+                  
+                  relationshipIndicator = `<div class="timeline-relationship-indicator" style="padding: var(--space-xs) var(--space-sm); margin-bottom: var(--space-xs); background: ${bgColor}; border-left: 3px solid ${borderColor}; border-radius: var(--radius-sm); font-size: var(--text-xs); color: var(--color-text-muted);">
+                    <span style="color: ${borderColor};"></span> Linked to prompt above (${Math.round(Math.abs(item.sortTime - linkedPrompt.sortTime) / 1000)}s gap)
                   </div>`;
                 }
               } else if (item.itemType === 'prompt' && (item.linked_entry_id || item.linkedEntryId)) {
                 const linkedEntry = sortedItems.find(i => i.itemType === 'event' && (i.id === item.linked_entry_id || i.id === item.linkedEntryId || i.id === parseInt(item.linked_entry_id || item.linkedEntryId)));
                 if (linkedEntry && Math.abs(item.sortTime - linkedEntry.sortTime) < 300000) {
-                  relationshipIndicator = `<div class="timeline-relationship-indicator" style="padding: var(--space-xs) var(--space-sm); margin-bottom: var(--space-xs); background: rgba(34, 197, 94, 0.1); border-left: 3px solid var(--color-success); border-radius: var(--radius-sm); font-size: var(--text-xs); color: var(--color-text-muted);">
-                    <span style="color: var(--color-success);">[Code]</span> Generated code change below (${Math.round(Math.abs(item.sortTime - linkedEntry.sortTime) / 1000)}s gap)
+                  // Calculate color based on file additions/deletions
+                  let bgColor = 'rgba(34, 197, 94, 0.1)'; // Default green
+                  let borderColor = 'var(--color-success)'; // Default green
+                  
+                  try {
+                    const details = typeof linkedEntry.details === 'string' ? JSON.parse(linkedEntry.details) : linkedEntry.details;
+                    const linesAdded = details?.lines_added || details?.diff_stats?.lines_added || 0;
+                    const linesRemoved = details?.lines_removed || details?.diff_stats?.lines_removed || 0;
+                    const total = linesAdded + linesRemoved;
+                    
+                    if (total > 0) {
+                      const addRatio = linesAdded / total;
+                      const removeRatio = linesRemoved / total;
+                      
+                      // Warmer colors (orange/red) for more additions, cooler (blue/cyan) for more deletions
+                      if (addRatio > 0.6) {
+                        // Mostly additions - warm orange
+                        bgColor = 'rgba(251, 146, 60, 0.1)';
+                        borderColor = '#fb923c'; // orange-400
+                      } else if (removeRatio > 0.6) {
+                        // Mostly deletions - cool cyan
+                        bgColor = 'rgba(34, 211, 238, 0.1)';
+                        borderColor = '#22d3ee'; // cyan-400
+                      } else if (addRatio > removeRatio) {
+                        // More additions - warm yellow-orange
+                        bgColor = 'rgba(251, 191, 36, 0.1)';
+                        borderColor = '#fbbf24'; // amber-400
+                      } else if (removeRatio > addRatio) {
+                        // More deletions - cool blue
+                        bgColor = 'rgba(96, 165, 250, 0.1)';
+                        borderColor = '#60a5fa'; // blue-400
+                      }
+                      // Balanced changes keep default green
+                    }
+                  } catch (e) {
+                    // Keep default colors if parsing fails
+                  }
+                  
+                  relationshipIndicator = `<div class="timeline-relationship-indicator" style="padding: var(--space-xs) var(--space-sm); margin-bottom: var(--space-xs); background: ${bgColor}; border-left: 3px solid ${borderColor}; border-radius: var(--radius-sm); font-size: var(--text-xs); color: var(--color-text-muted);">
+                    <span style="color: ${borderColor};">[Code]</span> Generated code change below (${Math.round(Math.abs(item.sortTime - linkedEntry.sortTime) / 1000)}s gap)
                   </div>`;
                 }
               }
@@ -1126,10 +1190,13 @@ function renderTimelineItem(event, side = 'left', timelineItems = null) {
     eventTags = window.autoTagEvent(event);
   }
   
-  // Render tags (including workspace)
+  // Only render tags if we have actual tags (not empty)
   let tagsHtml = '';
-  if (window.renderTags) {
-    tagsHtml = `<div style="display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px;">${window.renderTags(eventTags, true, event)}</div>`;
+  if (eventTags && eventTags.length > 0 && window.renderTags) {
+    tagsHtml = window.renderTags(eventTags, true, event);
+  } else if (event.workspace_path && window.renderWorkspaceBadge) {
+    // If no tags but has workspace, show workspace badge
+    tagsHtml = window.renderWorkspaceBadge(event.workspace_path, true);
   }
   
   // Find related prompts using improved algorithm
@@ -1257,15 +1324,19 @@ function renderTimelineItem(event, side = 'left', timelineItems = null) {
         <div class="timeline-header">
           <div class="timeline-title">
             ${fileInfo.badges || title}
-            ${linkedPromptIndicator}
-            ${contextIndicators}
             ${diffStats}
           </div>
           <div class="timeline-meta">${time}</div>
         </div>
         <div class="timeline-description">
           ${desc}
-          ${tagsHtml}
+          ${tagsHtml ? `<div style="display: flex; gap: var(--space-xs); flex-wrap: wrap; margin-top: var(--space-xs); align-items: center;">${tagsHtml}</div>` : ''}
+          ${linkedPromptIndicator || contextIndicators ? `
+            <div style="display: flex; gap: var(--space-xs); flex-wrap: wrap; margin-top: var(--space-xs); align-items: center;">
+              ${linkedPromptIndicator}
+              ${contextIndicators}
+            </div>
+          ` : ''}
         </div>
         ${relatedPromptsIndicator}
       </div>

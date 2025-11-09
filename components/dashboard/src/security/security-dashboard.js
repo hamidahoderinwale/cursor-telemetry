@@ -56,7 +56,7 @@ class SecurityDashboard {
     this.container.innerHTML = `
       <div class="security-dashboard">
         <div class="security-header">
-          <h2>🔒 Security Dashboard</h2>
+          <h2>Security Dashboard</h2>
           <div class="security-status">
             <span class="status-indicator ${this.getRiskClass(this.analytics.summary.riskScore)}">
               ${this.getRiskLevel(this.analytics.summary.riskScore)}
@@ -67,7 +67,7 @@ class SecurityDashboard {
         <div class="security-overview">
           <div class="metrics-grid">
             <div class="metric-card critical">
-              <div class="metric-icon">🚨</div>
+              <div class="metric-icon"></div>
               <div class="metric-content">
                 <div class="metric-label">Total Issues</div>
                 <div class="metric-value">${this.analytics.summary.totalIssues}</div>
@@ -75,7 +75,7 @@ class SecurityDashboard {
             </div>
             
             <div class="metric-card ${this.getRiskClass(this.analytics.summary.riskScore)}">
-              <div class="metric-icon">⚠️</div>
+              <div class="metric-icon"></div>
               <div class="metric-content">
                 <div class="metric-label">Risk Score</div>
                 <div class="metric-value">${this.analytics.summary.riskScore}</div>
@@ -83,7 +83,7 @@ class SecurityDashboard {
             </div>
             
             <div class="metric-card high">
-              <div class="metric-icon">🔑</div>
+              <div class="metric-icon"></div>
               <div class="metric-content">
                 <div class="metric-label">Critical Issues</div>
                 <div class="metric-value">${this.analytics.summary.issuesBySeverity.critical || 0}</div>
@@ -91,7 +91,7 @@ class SecurityDashboard {
             </div>
             
             <div class="metric-card medium">
-              <div class="metric-icon">🔐</div>
+              <div class="metric-icon"></div>
               <div class="metric-content">
                 <div class="metric-label">High Issues</div>
                 <div class="metric-value">${this.analytics.summary.issuesBySeverity.high || 0}</div>
@@ -117,7 +117,7 @@ class SecurityDashboard {
         </div>
 
         <div class="security-recommendations">
-          <h3>🛡️ Security Recommendations</h3>
+          <h3> Security Recommendations</h3>
           <div class="recommendations-list">
             ${this.renderRecommendations()}
           </div>
@@ -125,13 +125,13 @@ class SecurityDashboard {
 
         <div class="security-actions">
           <button class="btn btn-primary" onclick="securityDashboard.refresh()">
-            🔄 Refresh
+            Refresh
           </button>
           <button class="btn btn-secondary" onclick="securityDashboard.exportReport()">
-            📊 Export Report
+            Export Report
           </button>
           <button class="btn btn-danger" onclick="securityDashboard.showCriticalIssues()">
-            🚨 Critical Issues
+            Critical Issues
           </button>
         </div>
       </div>
@@ -200,7 +200,7 @@ class SecurityDashboard {
   renderLoading() {
     this.container.innerHTML = `
       <div class="security-dashboard loading">
-        <div class="loading-spinner">🔄</div>
+        <div class="loading-spinner"></div>
         <div class="loading-text">Loading security analytics...</div>
       </div>
     `;
@@ -212,7 +212,7 @@ class SecurityDashboard {
   renderError(error) {
     this.container.innerHTML = `
       <div class="security-dashboard error">
-        <div class="error-icon">❌</div>
+        <div class="error-icon"></div>
         <div class="error-message">Failed to load security analytics</div>
         <div class="error-details">${error.message}</div>
         <button class="btn btn-primary" onclick="securityDashboard.init()">

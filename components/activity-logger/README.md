@@ -4,6 +4,7 @@ A modern, intuitive dashboard for monitoring and visualizing all your Cursor IDE
 
 ## Features
 
+### Core Features
 - **Real-time Statistics** - Live counts of sessions, entries, events, and code changes
 - **Smart Filtering** - Filter by source (filewatcher, clipboard, DOM, MCP) or type
 - **Code Change Visualization** - Side-by-side before/after code diffs
@@ -15,6 +16,46 @@ A modern, intuitive dashboard for monitoring and visualizing all your Cursor IDE
 - **Image Proxy** - Secure local image serving for screenshots and images in prompts
 - **Temporal Analysis** - Time-based grouping of related activities
 - **Debug Tools** - Built-in debugging and connection testing
+- **Event Tagging** - Automatic tagging of events (file uploads, code changes, AI-generated, etc.) with visual badges
+- **Activity Sessions** - Grouped temporal threads showing related activities in time windows
+
+### Visualizations
+
+#### Overview Page
+- **Activity Heatmap** - Year-long activity calendar showing daily coding intensity
+- **Activity Rhythm** - D3.js visualization of coding patterns by hour of day (6am, 12pm, 6pm labels)
+- **Productivity Pulse** - Circular gauge comparing today's activity to weekly average
+
+#### Analytics Page
+- **AI Activity & Code Output** - Correlation between prompts and code changes over time (hourly/daily/weekly/monthly)
+- **Context Usage Over Time** - AI context window utilization with color-coded thresholds
+- **Model Usage Analytics** - Distribution of AI models used across prompts and modes
+- **File Changes by Type** - Breakdown of modifications by file extension
+- **Recent Activity** - 15-minute interval timeline of development events
+- **Context File Analytics** - Analysis of @ referenced files and context patterns
+- **Enhanced Context Window Analytics** - Real metrics: file references, token counts, adoption rate
+- **Productivity Insights** - Active coding time, prompt iteration patterns, line changes, code churn
+- **Prompt Effectiveness** - Time from prompt to code change, success rate, iteration patterns
+- **Context Evolution Timeline** - Tracks context window changes, file additions/removals over time
+- **Prompt-to-Code Correlation** - Success rate, time to first change, code change patterns
+- **Git Commit Timeline** - Commit history with messages, timestamps, and branch information
+- **File Hotspots** - Most frequently edited files with edit counts, lines changed, and activity scores
+
+#### File Graph Page
+- **Semantic File Network** - Interactive network graph showing file relationships
+- **File Dependency Strength** - File relationships based on co-occurrence and temporal patterns
+- **File Complexity Trends** - Edit frequency, code churn, and complexity scores over time
+- **Prompt Embeddings Analysis** - Semantic similarity visualization using PCA/t-SNE/MDS
+- **Term Frequency Analysis** - TF-IDF analysis of important terms across files
+
+#### Navigator Page
+- **Semantic Navigator** - UMAP-based codebase visualization in latent space
+- **Physical/Latent/Hybrid Views** - Different perspectives on file relationships
+- **Semantic Insights** - Automatically discovered patterns and clusters
+
+#### Workspace Comparison
+- **Multi-Workspace Analysis** - Compare activity across multiple workspaces
+- **Add/Remove Workspaces** - Dynamic workspace selection for comparison
 
 ## Quick Start
 
@@ -135,7 +176,7 @@ public/
 
 ## Architecture Principles
 
-### 🔹 Separation of Concerns
+### Separation of Concerns
 
 1. **HTML Templates** → Separate template files (`templates.js`, `helpers.js`)
    - All HTML markup is in dedicated template modules
@@ -152,7 +193,7 @@ public/
    - Reusable across multiple views
    - No HTML or DOM manipulation
 
-### 🔹 Module Loading Order
+### Module Loading Order
 
 The `dashboard.html` loads modules in a specific order:
 
@@ -176,7 +217,7 @@ The `dashboard.html` loads modules in a specific order:
 5. **View router** (depends on all views)
    - `core/view-router.js`
 
-### 🔹 Function Exports
+### Function Exports
 
 All functions are exported to `window` for global access:
 
@@ -200,12 +241,13 @@ window.getEventTitle = getEventTitle;
 
 The dashboard includes multiple specialized views:
 
-- **Overview** - Summary statistics, recent activity, system status
-- **Activity** - Unified timeline of events, prompts, and terminal commands
+- **Overview** - Summary statistics, activity heatmap, activity rhythm, productivity pulse
+- **Activity** - Unified timeline of events, prompts, and terminal commands with temporal threading
 - **Threads** - Conversation threads and captured prompts
-- **Analytics** - Charts and statistics for productivity insights
-- **File Graph** - Semantic file relationship visualization
-- **Navigator** - UMAP-based codebase navigation
+- **Analytics** - Comprehensive charts and statistics for productivity insights (13+ visualizations)
+- **File Graph** - Semantic file relationship visualization with dependency strength and complexity trends
+- **Navigator** - UMAP-based codebase navigation in latent space
+- **Workspace Comparison** - Compare activity metrics across multiple workspaces
 - **System** - System resource monitoring
 - **API Docs** - Complete API documentation
 
@@ -319,6 +361,47 @@ The exported JSON file contains:
 - **Stats** - Summary statistics
 
 See [`EXPORT_CONTENTS.md`](./EXPORT_CONTENTS.md) for detailed export structure documentation.
+
+## Data Import & Redeploy
+
+The dashboard supports importing previously exported data to restore or merge telemetry data.
+
+### Import Functionality
+
+Access the import feature via the "Import Data" button in the dashboard. The import system:
+
+- **Schema Validation** - Validates imported data structure against expected schema
+- **Merge Strategy** - Options to merge with existing data or replace it
+- **Data Deduplication** - Automatically handles duplicate entries based on timestamps and IDs
+- **Workspace Preservation** - Maintains workspace associations from imported data
+- **Progress Tracking** - Shows import progress and statistics
+
+### Import API Endpoint
+
+```
+POST /api/import/database
+```
+
+**Request Body:**
+- JSON file matching the export structure (see [Export Structure](#export-structure))
+
+**Query Parameters:**
+- `merge` - If `true`, merges with existing data; if `false`, replaces existing data (default: `true`)
+- `validate` - If `true`, validates schema before importing (default: `true`)
+
+**Example:**
+```bash
+curl -X POST "http://localhost:43917/api/import/database?merge=true" \
+  -H "Content-Type: application/json" \
+  -d @exported-data.json
+```
+
+### Use Cases
+
+- **Backup & Restore** - Export data before major changes, restore if needed
+- **Data Migration** - Move telemetry data between systems
+- **Workspace Consolidation** - Merge data from multiple sources
+- **Development/Testing** - Import sample data for testing visualizations
 
 ## Data Linking
 
@@ -467,12 +550,18 @@ The dashboard is now ready to use! It will automatically display all your Cursor
 - Proper module loading order established
 - All functions exported and accessible
 - Advanced export system with filters and options
+- Data import/redeploy functionality with schema validation
 - Data linking (prompt-code relationships)
 - Image proxy support
 - Temporal chunks and analytics
-
-**In Progress:**
-- Modular architecture with functions in `app/`, `views/`, `services/`, and `components/` directories
-- Gradually migrating remaining inline HTML to templates
+- Event tagging system with visual badges
+- Activity Session display with improved layout
+- 13+ analytics visualizations (Context Evolution, Prompt-to-Code Correlation, Git Timeline, File Hotspots, etc.)
+- Overview page redesign with Activity Rhythm (D3.js) and Productivity Pulse
+- Workspace comparison with multi-workspace support
+- File Dependency Strength and Complexity Trends visualizations
+- Responsive design improvements
+- Accessibility enhancements (ARIA labels, keyboard navigation, focus states)
+- Performance optimizations (chunked processing, conditional loading)
 
 Enjoy monitoring your Cursor activity!

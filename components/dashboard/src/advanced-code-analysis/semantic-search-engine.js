@@ -34,7 +34,7 @@ class SemanticSearchEngine extends EventEmitter {
     this.contextCache = new Map();
     this.searchHistory = [];
     
-    console.log('🔍 Semantic Search Engine initialized');
+    console.log(' Semantic Search Engine initialized');
   }
   
   /**
@@ -613,7 +613,7 @@ class SemanticSearchEngine extends EventEmitter {
     this.contextCache.clear();
     this.searchHistory = [];
     
-    console.log('🧹 Semantic Search Engine cleared');
+    console.log(' Semantic Search Engine cleared');
   }
 }
 

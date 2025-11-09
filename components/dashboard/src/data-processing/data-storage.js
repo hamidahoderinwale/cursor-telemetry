@@ -579,7 +579,7 @@ class DataStorage {
       
       if (recentSessions.length !== sessions.length) {
         await this.saveToFile(this.sessionsFile, recentSessions);
-        console.log(`🧹 Cleaned up ${sessions.length - recentSessions.length} old sessions`);
+        console.log(` Cleaned up ${sessions.length - recentSessions.length} old sessions`);
       }
       
       // Clean up old individual session files
@@ -605,7 +605,7 @@ class DataStorage {
         }
         
         if (cleanedFiles > 0) {
-          console.log(`🧹 Cleaned up ${cleanedFiles} old session files`);
+          console.log(` Cleaned up ${cleanedFiles} old session files`);
         }
       }
       

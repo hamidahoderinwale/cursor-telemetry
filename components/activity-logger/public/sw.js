@@ -3,18 +3,22 @@
  * Provides offline support and caching for better performance
  */
 
-const CACHE_NAME = 'cursor-telemetry-v3';
+const CACHE_NAME = 'cursor-telemetry-v4';
 const CACHE_DURATION = 30 * 60 * 1000; // 30 minutes
 
-// Assets to cache immediately
+// Assets to cache immediately (critical path only)
 const PRECACHE_ASSETS = [
   '/dashboard.html',
-  '/dashboard.js',
   '/dashboard.css',
-  '/services/data/persistent-storage.js',
-  '/services/data/data-synchronizer.js',
-  '/services/analytics/analytics-aggregator.js',
-  '/services/search/search-engine.js'
+  '/core/config.js',
+  '/core/state.js',
+  '/core/api-client.js',
+  '/utils/helpers.js',
+  '/utils/templates.js',
+  '/utils/time-formatting.js',
+  '/views/activity/timeline-helpers.js',
+  '/app/status-popup.js',
+  '/dashboard.js'
 ];
 
 // Install event - cache core assets

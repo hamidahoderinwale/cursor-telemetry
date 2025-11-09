@@ -213,16 +213,63 @@ class DataSynchronizer {
       // console.log('[SYNC] Syncing from companion service...');
     }
     
+    // First check if service is available
+    try {
+      const healthController = new AbortController();
+      const healthTimeoutId = setTimeout(() => healthController.abort(), 2000); // 2 second timeout
+      
+      const healthCheck = await fetch(`${this.companionUrl}/health`, { 
+        signal: healthController.signal
+      });
+      clearTimeout(healthTimeoutId);
+      
+      if (!healthCheck.ok) {
+        // Service is not healthy, skip sync
+        if (window.state) window.state.companionServiceOnline = false;
+        return;
+      }
+    } catch (error) {
+      // Service is not reachable, mark as offline and skip sync
+      if (window.state) window.state.companionServiceOnline = false;
+      // Only log if we haven't seen this error recently (avoid spam)
+      if (!this._lastOfflineLog || Date.now() - this._lastOfflineLog > 30000) {
+        // Suppress expected errors (CORS, network, timeout)
+        const isExpectedError = error.name === 'AbortError' || 
+                               error.message?.includes('CORS') ||
+                               error.message?.includes('Failed to fetch') ||
+                               error.message?.includes('NetworkError');
+        if (!isExpectedError) {
+          console.warn('[SYNC] Companion service unavailable, skipping sync');
+        }
+        this._lastOfflineLog = Date.now();
+      }
+      return; // Gracefully skip this sync
+    }
+    
     try {
       // Get events
       let eventsResponse;
       try {
-        eventsResponse = await fetch(`${this.companionUrl}/queue?since=${this.lastSync.events}`);
+        const eventsController = new AbortController();
+        const eventsTimeoutId = setTimeout(() => eventsController.abort(), 5000); // 5 second timeout
+        
+        eventsResponse = await fetch(`${this.companionUrl}/queue?since=${this.lastSync.events}`, {
+          signal: eventsController.signal
+        });
+        clearTimeout(eventsTimeoutId);
+        
         if (!eventsResponse.ok) {
           throw new Error(`HTTP ${eventsResponse.status}: ${eventsResponse.statusText}`);
         }
       } catch (error) {
-        console.warn('[SYNC] Failed to fetch queue events:', error.message);
+        // Only log network errors if they're unexpected (not CORS/timeout)
+        const isExpectedError = error.name === 'AbortError' || 
+                               error.message?.includes('CORS') ||
+                               error.message?.includes('Failed to fetch') ||
+                               error.message?.includes('NetworkError');
+        if (!isExpectedError) {
+          console.warn('[SYNC] Failed to fetch queue events:', error.message);
+        }
         return; // Gracefully skip this sync
       }
       
@@ -236,6 +283,22 @@ class DataSynchronizer {
           }
           this.lastSync.events = eventsData.cursor || this.lastSync.events;
           this._saveLastSync(); // Persist to localStorage
+          
+          // Reload events from storage to update state
+          if (window.state && this.storage) {
+            const allEvents = await this.storage.getAllEvents(1000);
+            if (allEvents && allEvents.length > 0) {
+              window.state.data.events = allEvents;
+              // Trigger stats recalculation and view refresh
+              if (window.calculateStats) {
+                window.calculateStats();
+              }
+              // Re-render charts if analytics view is active
+              if (window.state.currentView === 'analytics' && window.renderCurrentView) {
+                setTimeout(() => window.renderCurrentView(), 100);
+              }
+            }
+          }
         }
         
         // Mark as online if we got a response
@@ -251,6 +314,22 @@ class DataSynchronizer {
           const stored = await this.storage.storePrompts(entriesData.entries);
           if (!isOffline) {
             console.log(`  Stored ${stored} new entries`);
+          }
+          
+          // Reload prompts from storage to update state
+          if (window.state && this.storage) {
+            const allPrompts = await this.storage.getAllPrompts(500);
+            if (allPrompts && allPrompts.length > 0) {
+              window.state.data.prompts = allPrompts;
+              // Trigger stats recalculation and view refresh
+              if (window.calculateStats) {
+                window.calculateStats();
+              }
+              // Re-render charts if analytics view is active
+              if (window.state.currentView === 'analytics' && window.renderCurrentView) {
+                setTimeout(() => window.renderCurrentView(), 100);
+              }
+            }
           }
         }
         

@@ -33,7 +33,7 @@ class EnhancedMemoryGenerator extends EventEmitter {
     this.contextCache = new Map();
     this.generationHistory = [];
     
-    console.log('🧠 Enhanced Memory Generator initialized');
+    console.log(' Enhanced Memory Generator initialized');
   }
   
   /**
@@ -1034,7 +1034,7 @@ class EnhancedMemoryGenerator extends EventEmitter {
     this.contextCache.clear();
     this.generationHistory = [];
     
-    console.log('🧹 Enhanced Memory Generator cleared');
+    console.log(' Enhanced Memory Generator cleared');
   }
 }
 

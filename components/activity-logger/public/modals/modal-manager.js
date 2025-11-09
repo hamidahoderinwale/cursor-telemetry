@@ -3,7 +3,7 @@
  * Handles event, prompt, thread, and terminal modals
  */
 
-export class ModalManager {
+class ModalManager {
   constructor() {
     this.state = window.state;
     this.escapeHtml = window.escapeHtml || ((text) => {
@@ -283,13 +283,13 @@ export class ModalManager {
               <div style="padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md);">
                 <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-bottom: var(--space-sm);">Screenshot Preview:</div>
                 <div style="border-radius: var(--radius-md); overflow: hidden; background: #000; display: flex; align-items: center; justify-content: center; max-height: 400px;">
-                  <img src="${window.CONFIG?.API_BASE_URL || 'http://127.0.0.1:43917'}/api/image?path=${encodeURIComponent(details.file_path)}" 
+                  <img src="${window.CONFIG?.API_BASE_URL || window.CONFIG?.API_BASE || window.DASHBOARD_CONFIG?.API_BASE || 'http://localhost:43917'}/api/image?path=${encodeURIComponent(details.file_path)}" 
                        alt="Screenshot" 
                        style="max-width: 100%; max-height: 400px; object-fit: contain;"
                        onerror="this.parentElement.innerHTML = '<div style=\\'padding: var(--space-lg); color: var(--color-text-muted); text-align: center;\\'>Image not accessible<br><span style=\\'font-size: 0.85em; font-family: var(--font-mono);\\'>Path: ${details.file_path}</span><br><span style=\\'font-size: 0.75em; margin-top: 8px; display: block;\\'>Workaround: The file may have been moved or deleted. Try opening it manually from Finder.</span></div>'">
                 </div>
                 <div style="margin-top: var(--space-sm); text-align: center; display: flex; gap: var(--space-sm); justify-content: center;">
-                  <a href="${window.CONFIG?.API_BASE_URL || 'http://127.0.0.1:43917'}/api/image?path=${encodeURIComponent(details.file_path)}" target="_blank" style="color: var(--color-accent); font-size: var(--text-sm); text-decoration: none;">
+                  <a href="${window.CONFIG?.API_BASE_URL || window.CONFIG?.API_BASE || window.DASHBOARD_CONFIG?.API_BASE || 'http://localhost:43917'}/api/image?path=${encodeURIComponent(details.file_path)}" target="_blank" style="color: var(--color-accent); font-size: var(--text-sm); text-decoration: none;">
                     View Full Size
                   </a>
                   <span style="color: var(--color-text-muted);">|</span>
@@ -450,10 +450,10 @@ export class ModalManager {
                    onmouseover="this.style.transform='scale(1.02)'; this.style.boxShadow='0 8px 16px rgba(0,0,0,0.15)';" 
                    onmouseout="this.style.transform=''; this.style.boxShadow='';">
                 <div style="position: relative; background: #000; aspect-ratio: 16/9; overflow: hidden;">
-                  <img src="${window.CONFIG?.API_BASE_URL || 'http://127.0.0.1:43917'}/api/image?path=${encodeURIComponent(screenshot.path)}" 
+                  <img src="${window.CONFIG?.API_BASE_URL || window.CONFIG?.API_BASE || window.DASHBOARD_CONFIG?.API_BASE || 'http://localhost:43917'}/api/image?path=${encodeURIComponent(screenshot.path)}" 
                        alt="${screenshot.fileName}" 
                        style="width: 100%; height: 100%; object-fit: contain; cursor: pointer;"
-                       onclick="window.open('${window.CONFIG?.API_BASE_URL || 'http://127.0.0.1:43917'}/api/image?path=${encodeURIComponent(screenshot.path)}', '_blank')"
+                       onclick="window.open('${window.CONFIG?.API_BASE_URL || window.CONFIG?.API_BASE || window.DASHBOARD_CONFIG?.API_BASE || 'http://localhost:43917'}/api/image?path=${encodeURIComponent(screenshot.path)}', '_blank')"
                        onerror="this.parentElement.innerHTML = '<div style=\\'display: flex; align-items: center; justify-content: center; height: 100%; color: var(--color-text-muted); padding: var(--space-md); text-align: center; flex-direction: column;\\'>Image<div style=\\'font-size: 0.75em; margin-top: 8px;\\'>Screenshot not accessible</div><div style=\\'font-size: 0.65em; margin-top: 4px; color: var(--color-text-muted);\\'>File may have been moved</div></div>'">
                   <div style="position: absolute; top: 8px; right: 8px; background: rgba(0,0,0,0.7); color: white; padding: 4px 8px; border-radius: 4px; font-size: 10px; font-weight: 600;">
                     ${timingText} ${isBefore ? 'before' : 'after'}

@@ -523,7 +523,7 @@ class EnhancedClusterMap {
                             <option value="clusters">Procedural Clusters</option>
                         </select>
                         <button class="btn btn-sm" onclick="window.enhancedClusterMap.refresh()" title="Refresh data">
-                            <span class="refresh-icon">🔄</span> Refresh
+                            <span class="refresh-icon"></span> Refresh
                         </button>
                         <button class="btn btn-sm" onclick="window.enhancedClusterMap.resetView()" title="Reset zoom and pan">Reset View</button>
                     </div>
@@ -972,7 +972,7 @@ class EnhancedClusterMap {
         // Refresh every 30 seconds
         this.updateInterval = setInterval(() => {
             if (!this.isLoading) {
-                console.log('🔄 Auto-refreshing cluster data...');
+                console.log(' Auto-refreshing cluster data...');
                 this.loadData();
             }
         }, 30000);
@@ -1055,7 +1055,7 @@ class EnhancedClusterMap {
      * Manual refresh method
      */
     async refresh() {
-        console.log('🔄 Manual refresh triggered');
+        console.log(' Manual refresh triggered');
         await this.loadData();
         this.render();
     }
@@ -1076,7 +1076,7 @@ class EnhancedClusterMap {
             window.dashboard.socket.off('live-durations-update');
         }
 
-        console.log('🧹 Enhanced cluster map cleaned up');
+        console.log(' Enhanced cluster map cleaned up');
     }
 
     /**

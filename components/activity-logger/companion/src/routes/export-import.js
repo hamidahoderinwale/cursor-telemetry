@@ -297,7 +297,7 @@ function createExportImportRoutes(deps) {
   // Database export with streaming support
   app.get('/api/export/database', async (req, res) => {
     try {
-      console.log('📤 Export request received');
+      console.log(' Export request received');
       
       // Check if streaming is requested
       const useStreaming = req.query.stream === 'true' || req.query.streaming === 'true';

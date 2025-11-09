@@ -38,7 +38,7 @@ function renderContextChangeIndicator(contextChange, compact = false) {
     return `
       <span class="context-change-badge ${changeClass}" 
             title="${addedFiles.length} added, ${removedFiles.length} removed (${currentFileCount} total)">
-        📁 ${changeText}
+        ${changeText}
       </span>
     `;
   }

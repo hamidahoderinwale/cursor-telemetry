@@ -296,3 +296,128 @@
   background: var(--color-warning);
   color: white;
 }
+
+/* Responsive Design */
+@media (max-width: 1024px) {
+  .analytics-view {
+    gap: var(--space-lg);
+  }
+  
+  .analytics-grid {
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  }
+  
+  .analytics-grid-2col {
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  }
+  
+  .data-status-info-content {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .data-status-info-right {
+    width: 100%;
+    justify-content: space-between;
+  }
+}
+
+@media (max-width: 768px) {
+  .analytics-view {
+    gap: var(--space-md);
+  }
+  
+  .analytics-grid,
+  .analytics-grid-2col {
+    grid-template-columns: 1fr;
+    gap: var(--space-md);
+  }
+  
+  .chart-container {
+    max-height: 250px;
+  }
+  
+  .chart-container-small {
+    max-height: 200px;
+  }
+  
+  .chart-header-controls {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-sm);
+  }
+  
+  .timescale-controls {
+    flex-wrap: wrap;
+    width: 100%;
+  }
+  
+  .data-status-content {
+    flex-direction: column;
+  }
+  
+  .data-status-info-content {
+    flex-direction: column;
+    gap: var(--space-sm);
+  }
+  
+  .data-status-info-left {
+    width: 100%;
+  }
+  
+  .data-status-info-right {
+    width: 100%;
+    flex-direction: column;
+    gap: var(--space-sm);
+  }
+  
+  .data-status-freshness {
+    text-align: left;
+  }
+  
+  .prompt-card {
+    padding: var(--space-sm);
+  }
+  
+  .prompt-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-xs);
+  }
+}
+
+@media (max-width: 480px) {
+  .analytics-view {
+    gap: var(--space-sm);
+  }
+  
+  .chart-container {
+    max-height: 200px;
+  }
+  
+  .chart-container-small {
+    max-height: 150px;
+  }
+  
+  .btn-timescale {
+    padding: 6px 10px;
+    font-size: var(--text-xs);
+  }
+  
+  .data-status-alert,
+  .data-status-info {
+    padding: var(--space-sm);
+  }
+  
+  .data-status-instructions {
+    gap: var(--space-xs);
+  }
+  
+  .prompt-content {
+    font-size: var(--text-xs);
+  }
+  
+  .prompt-meta {
+    gap: var(--space-xs);
+  }
+}

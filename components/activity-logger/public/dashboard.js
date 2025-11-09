@@ -199,8 +199,9 @@ function renderUnifiedTimeline(items) {
   if (realRenderer && realRenderer !== renderUnifiedTimeline) {
     return realRenderer(items);
   }
-  console.error('[ERROR] views/activity/timeline-helpers.js not loaded');
-  return '<div class="empty-state">Timeline helpers not loaded</div>';
+  // Don't log warning - file is still loading or will load via defer
+  // The overview view will retry rendering once the script loads
+  return '<div class="empty-state"><div class="empty-state-text" style="font-style: normal;">Loading timeline...</div></div>';
 }
 // DO NOT assign this stub to window - it would cause infinite recursion
 
@@ -210,7 +211,10 @@ function renderConversationThread(conversation, side = 'right') {
   if (window.renderConversationThread) {
     return window.renderConversationThread(conversation, side);
   }
-  console.error('[ERROR] views/activity/timeline-helpers.js not loaded');
+  // Don't log error on initial load - file might still be loading
+  if (document.readyState === 'complete') {
+    console.warn('[WARNING] views/activity/timeline-helpers.js not loaded yet');
+  }
   return '';
 }
 
@@ -296,7 +300,10 @@ function renderPromptTimelineItem(prompt, side = 'right', timelineItems = null) 
   if (window.renderPromptTimelineItem) {
     return window.renderPromptTimelineItem(prompt, side, timelineItems);
   }
-  console.error('[ERROR] views/activity/timeline-helpers.js not loaded');
+  // Don't log error on initial load - file might still be loading
+  if (document.readyState === 'complete') {
+    console.warn('[WARNING] views/activity/timeline-helpers.js not loaded yet');
+  }
   return '';
 }
 
@@ -306,7 +313,10 @@ function renderTemporalThread(thread, timelineItems = null) {
   if (window.renderTemporalThread) {
     return window.renderTemporalThread(thread, timelineItems);
   }
-  console.error('[ERROR] views/activity/timeline-helpers.js not loaded');
+  // Don't log error on initial load - file might still be loading
+  if (document.readyState === 'complete') {
+    console.warn('[WARNING] views/activity/timeline-helpers.js not loaded yet');
+  }
   return '';
 }
 
@@ -414,7 +424,10 @@ function renderTerminalTimelineItem(cmd, side = 'left', timelineItems = null) {
   if (window.renderTerminalTimelineItem) {
     return window.renderTerminalTimelineItem(cmd, side, timelineItems);
   }
-  console.error('[ERROR] views/activity/timeline-helpers.js not loaded');
+  // Don't log error on initial load - file might still be loading
+  if (document.readyState === 'complete') {
+    console.warn('[WARNING] views/activity/timeline-helpers.js not loaded yet');
+  }
   return '';
 }
 // NOTE: renderTimelineItem is now in views/activity/timeline-helpers.js
@@ -423,7 +436,10 @@ function renderTimelineItem(event, side = 'left', timelineItems = null) {
   if (window.renderTimelineItem) {
     return window.renderTimelineItem(event, side, timelineItems);
   }
-  console.error('[ERROR] views/activity/timeline-helpers.js not loaded');
+  // Don't log error on initial load - file might still be loading
+  if (document.readyState === 'complete') {
+    console.warn('[WARNING] views/activity/timeline-helpers.js not loaded yet');
+  }
   return '';
 }
 
@@ -1716,9 +1732,24 @@ document.head.appendChild(fadeOutStyle);
 // Initialization
 // ===================================
 
-document.addEventListener('DOMContentLoaded', () => {
+// Wait for both DOM and deferred scripts to load
+function initializeWhenReady() {
+  // Check if critical functions are available (from deferred scripts)
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initializeWhenReady);
+    return;
+  }
+  
+  // Wait a tick for deferred scripts to execute
+  if (document.readyState === 'interactive' || document.readyState === 'loading') {
+    setTimeout(initializeWhenReady, 0);
+    return;
+  }
+  
   // Initialize status popup FIRST (before any console.logs)
-  initStatusPopup();
+  if (typeof initStatusPopup === 'function') {
+    initStatusPopup();
+  }
   
   console.log('Initializing Cursor Telemetry Dashboard');
 
@@ -2000,7 +2031,18 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   
   console.log('Dashboard initialized');
-});
+}
+
+// Start initialization - wait for DOM and deferred scripts
+if (document.readyState === 'complete' || document.readyState === 'interactive') {
+  // DOM already loaded, wait a tick for deferred scripts
+  setTimeout(initializeWhenReady, 0);
+} else {
+  document.addEventListener('DOMContentLoaded', () => {
+    // Wait a tick for deferred scripts to execute
+    setTimeout(initializeWhenReady, 0);
+  });
+}
 
 // ===================================
 // Search Engine

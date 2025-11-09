@@ -207,7 +207,7 @@ class ContextAwareMonitor extends EventEmitter {
                     
                     this.emit('prompt-file-linked', link);
                     
-                    console.log(`🔗 Linked prompt to file: ${path.basename(filePath)}`);
+                    console.log(` Linked prompt to file: ${path.basename(filePath)}`);
                 }
             });
         });
@@ -272,7 +272,7 @@ class ContextAwareMonitor extends EventEmitter {
         
         this.emit('explicit-prompt-file-link', link);
         
-        console.log(`🔗 Explicit link created: ${promptId} -> ${path.basename(filePath)}`);
+        console.log(` Explicit link created: ${promptId} -> ${path.basename(filePath)}`);
         
         return link;
     }

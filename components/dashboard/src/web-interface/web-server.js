@@ -12,7 +12,7 @@ const { execSync } = require('child_process');
 // Add graceful shutdown handling
 let conversationMonitor = null;
 process.on('SIGINT', async () => {
-  console.log('\n🛑 Shutting down gracefully...');
+  console.log('\n Shutting down gracefully...');
   if (conversationMonitor) {
     await conversationMonitor.optimizeStorage();
   }
@@ -20,7 +20,7 @@ process.on('SIGINT', async () => {
 });
 
 process.on('SIGTERM', async () => {
-  console.log('\n🛑 Shutting down gracefully...');
+  console.log('\n Shutting down gracefully...');
   if (conversationMonitor) {
     await conversationMonitor.optimizeStorage();
   }
@@ -881,7 +881,7 @@ async function initializeContextAwareMonitor() {
     });
     
     contextAwareMonitor.on('prompt-file-linked', (link) => {
-      console.log(`🔗 Prompt-file link created: ${link.promptId} -> ${path.basename(link.filePath)}`);
+      console.log(` Prompt-file link created: ${link.promptId} -> ${path.basename(link.filePath)}`);
       io.emit('prompt-file-linked', link);
     });
     
@@ -891,7 +891,7 @@ async function initializeContextAwareMonitor() {
     });
     
     contextAwareMonitor.on('explicit-prompt-file-link', (link) => {
-      console.log(`🔗 Explicit prompt-file link: ${link.promptId} -> ${path.basename(link.filePath)}`);
+      console.log(` Explicit prompt-file link: ${link.promptId} -> ${path.basename(link.filePath)}`);
       io.emit('explicit-prompt-file-link', link);
     });
     

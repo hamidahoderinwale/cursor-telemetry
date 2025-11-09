@@ -6,18 +6,18 @@ window.CONFIG = {
   // When deployed to Netlify, users will connect to their local companion service
   // When running locally, it uses localhost
   API_BASE: window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-    ? 'http://127.0.0.1:43917'
-    : ((window.LocalStorageHelper?.get('COMPANION_API_URL', null, false)) || localStorage.getItem('COMPANION_API_URL') || 'http://127.0.0.1:43917'),
+    ? 'http://localhost:43917'
+    : ((window.LocalStorageHelper?.get('COMPANION_API_URL', null, false)) || localStorage.getItem('COMPANION_API_URL') || 'http://localhost:43917'),
   
   // Legacy alias for backward compatibility
   API_BASE_URL: window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-    ? 'http://127.0.0.1:43917'
-    : ((window.LocalStorageHelper?.get('COMPANION_API_URL', null, false)) || localStorage.getItem('COMPANION_API_URL') || 'http://127.0.0.1:43917'),
+    ? 'http://localhost:43917'
+    : ((window.LocalStorageHelper?.get('COMPANION_API_URL', null, false)) || localStorage.getItem('COMPANION_API_URL') || 'http://localhost:43917'),
   
   // WebSocket Configuration
   WS_URL: window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-    ? 'ws://127.0.0.1:43917'
-    : ((window.LocalStorageHelper?.get('COMPANION_WS_URL', null, false)) || localStorage.getItem('COMPANION_WS_URL') || 'ws://127.0.0.1:43917'),
+    ? 'ws://localhost:43917'
+    : ((window.LocalStorageHelper?.get('COMPANION_WS_URL', null, false)) || localStorage.getItem('COMPANION_WS_URL') || 'ws://localhost:43917'),
   
   // App Configuration
   APP_NAME: 'Cursor Telemetry Dashboard',
@@ -29,7 +29,11 @@ window.CONFIG = {
     ANALYTICS: true,
     FILE_GRAPH: true,
     TERMINAL_CAPTURE: true
-  }
+  },
+  
+  // Search Configuration
+  ENABLE_SEMANTIC_SEARCH: false, // Disable Hugging Face semantic search by default (heavy computation)
+  ENABLE_TF_IDF: false // Disable TF-IDF by default to save memory
 };
 
 // Allow users to configure their companion service URL

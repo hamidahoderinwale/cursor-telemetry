@@ -5,18 +5,18 @@
 
 function diagnoseModelUsageData() {
   const prompts = window.state?.data?.prompts || [];
-  
-  console.group('🔍 AI Model Usage Diagnostics');
+
+  console.group('AI Model Usage Diagnostics');
   console.log(`Total prompts: ${prompts.length}`);
   
   if (prompts.length === 0) {
-    console.warn('⚠️ No prompts data available');
+    console.warn(' No prompts data available');
     console.groupEnd();
     return;
   }
   
   // Sample first 5 prompts to see structure
-  console.log('\n📋 Sample prompts (first 5):');
+  console.log('\n Sample prompts (first 5):');
   prompts.slice(0, 5).forEach((p, i) => {
     console.log(`\nPrompt ${i + 1}:`, {
       id: p.id,
@@ -77,29 +77,29 @@ function diagnoseModelUsageData() {
     if (modelName === 'Unknown') modelFields.unknown++;
   });
   
-  console.log('\n📊 Model Data Availability:');
+  console.log('\nModel Data Availability:');
   console.table(modelFields);
   
-  console.log(`\n🎯 Unique Models Found: ${modelNames.size}`);
+  console.log(`\n Unique Models Found: ${modelNames.size}`);
   console.log('Models:', Array.from(modelNames).slice(0, 20));
   
-  console.log(`\n🎯 Unique Modes Found: ${modes.size}`);
+  console.log(`\nUnique Modes Found: ${modes.size}`);
   console.log('Modes:', Array.from(modes));
   
   // Check component rendering
   const container = document.getElementById('modelUsageAnalytics');
   if (container) {
-    console.log('\n✅ Component container found');
+    console.log('\nComponent container found');
     console.log('Container content length:', container.innerHTML.length);
   } else {
-    console.warn('\n⚠️ Component container NOT found (view might not be active)');
+    console.warn('\nComponent container NOT found (view might not be active)');
   }
   
   // Check if function is available
   if (window.renderModelUsageAnalytics) {
-    console.log('✅ renderModelUsageAnalytics function is available');
+    console.log('renderModelUsageAnalytics function is available');
   } else {
-    console.error('❌ renderModelUsageAnalytics function NOT available');
+    console.error('renderModelUsageAnalytics function NOT available');
   }
   
   console.groupEnd();
@@ -121,7 +121,7 @@ window.diagnoseModelUsageData = diagnoseModelUsageData;
 
 // Auto-run if in analytics view
 if (document.getElementById('modelUsageAnalytics')) {
-  console.log('🔍 Running automatic diagnostics...');
+  console.log('Running automatic diagnostics...');
   setTimeout(() => diagnoseModelUsageData(), 1000);
 }
 

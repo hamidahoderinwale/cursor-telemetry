@@ -26,7 +26,15 @@ function initStatusPopup() {
     const statusKeywords = ['Initializing', 'Loaded', 'Fetching', 'connected', 'ready', 'error', 'warning'];
     const hasStatusKeyword = statusKeywords.some(keyword => message.includes(keyword));
     
-    if (hasStatusKeyword && statusPopupContent) {
+    // Filter out verbose service worker messages
+    const swMessages = ['[SW] Update found', '[SW] Registered', '[SW] Unregistered', '[SW] Installing', '[SW] Activating'];
+    const isSWMessage = swMessages.some(swMsg => message.includes(swMsg));
+    
+    // Filter out expected sync errors (service starting up)
+    const expectedErrors = ['CORS request did not succeed', 'Failed to fetch queue events', 'Companion service unavailable'];
+    const isExpectedError = expectedErrors.some(err => message.includes(err));
+    
+    if (hasStatusKeyword && statusPopupContent && !isSWMessage && !isExpectedError) {
       addStatusMessage(message);
     }
   };

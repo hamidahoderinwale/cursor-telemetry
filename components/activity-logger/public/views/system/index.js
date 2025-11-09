@@ -12,12 +12,21 @@ function renderSystemView(container) {
     if (!window.state?.data?.systemResources || window.state.data.systemResources.length === 0) {
       fetchSystemResources().then(() => {
         if (window.renderSystemResourcesChart) window.renderSystemResourcesChart();
+        if (window.renderSystemResourceStats) window.renderSystemResourceStats();
+        if (window.renderResourceDistributionChart) window.renderResourceDistributionChart();
+        if (window.renderPerformanceTrends) window.renderPerformanceTrends();
       }).catch(() => {
         // Still try to render even if fetch fails
         if (window.renderSystemResourcesChart) window.renderSystemResourcesChart();
+        if (window.renderSystemResourceStats) window.renderSystemResourceStats();
+        if (window.renderResourceDistributionChart) window.renderResourceDistributionChart();
+        if (window.renderPerformanceTrends) window.renderPerformanceTrends();
       });
     } else {
       if (window.renderSystemResourcesChart) window.renderSystemResourcesChart();
+      if (window.renderSystemResourceStats) window.renderSystemResourceStats();
+      if (window.renderResourceDistributionChart) window.renderResourceDistributionChart();
+      if (window.renderPerformanceTrends) window.renderPerformanceTrends();
     }
   }, 100);
 }
@@ -163,7 +172,269 @@ function renderSystemResourcesChart() {
   });
 }
 
+/**
+ * Render system resource statistics
+ */
+function renderSystemResourceStats() {
+  const container = document.getElementById('systemResourceStats');
+  if (!container) return;
+
+  const data = (window.state?.data?.systemResources || []).slice(-100);
+  
+  if (data.length === 0) {
+    container.innerHTML = `
+      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 200px; text-align: center;">
+        <div style="font-size: var(--text-md); font-weight: 500; color: var(--color-text); margin-bottom: var(--space-xs);">No Data Available</div>
+        <div style="font-size: var(--text-sm); color: var(--color-text-muted);">System statistics will appear as data is collected</div>
+      </div>
+    `;
+    return;
+  }
+
+  const memoryData = data.map(d => {
+    const memBytes = d.memory?.rss || d.memory?.heapUsed || d.memory || 0;
+    return parseFloat((memBytes / 1024 / 1024).toFixed(1));
+  });
+  
+  const cpuData = data.map(d => {
+    const loadAvg = d.system?.loadAverage || d.loadAverage || [0];
+    return loadAvg[0] || 0;
+  });
+
+  const avgMemory = memoryData.reduce((a, b) => a + b, 0) / memoryData.length;
+  const maxMemory = Math.max(...memoryData);
+  const minMemory = Math.min(...memoryData);
+  
+  const avgCpu = cpuData.reduce((a, b) => a + b, 0) / cpuData.length;
+  const maxCpu = Math.max(...cpuData);
+  const minCpu = Math.min(...cpuData);
+
+  container.innerHTML = `
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--space-md);">
+      <div class="stat-card">
+        <div class="stat-label">Avg Memory</div>
+        <div class="stat-value">${avgMemory.toFixed(1)} MB</div>
+        <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">
+          Range: ${minMemory.toFixed(1)} - ${maxMemory.toFixed(1)} MB
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Peak Memory</div>
+        <div class="stat-value">${maxMemory.toFixed(1)} MB</div>
+        <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">
+          Maximum observed
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Avg CPU Load</div>
+        <div class="stat-value">${avgCpu.toFixed(2)}</div>
+        <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">
+          Range: ${minCpu.toFixed(2)} - ${maxCpu.toFixed(2)}
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Peak CPU Load</div>
+        <div class="stat-value">${maxCpu.toFixed(2)}</div>
+        <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">
+          Maximum observed
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+/**
+ * Render resource distribution chart
+ */
+function renderResourceDistributionChart() {
+  const canvas = document.getElementById('resourceDistributionChart');
+  if (!canvas || !window.Chart) return;
+
+  const data = (window.state?.data?.systemResources || []).slice(-100);
+  
+  if (data.length === 0) return;
+
+  if (canvas.chart) {
+    canvas.chart.destroy();
+  }
+
+  const memoryData = data.map(d => {
+    const memBytes = d.memory?.rss || d.memory?.heapUsed || d.memory || 0;
+    return parseFloat((memBytes / 1024 / 1024).toFixed(1));
+  });
+
+  // Create bins for distribution
+  const bins = [0, 50, 100, 150, 200, 300, 500, 1000, Infinity];
+  const distribution = new Array(bins.length - 1).fill(0);
+  
+  memoryData.forEach(mem => {
+    for (let i = 0; i < bins.length - 1; i++) {
+      if (mem >= bins[i] && mem < bins[i + 1]) {
+        distribution[i]++;
+        break;
+      }
+    }
+  });
+
+  const labels = bins.slice(0, -1).map((bin, i) => {
+    if (i === bins.length - 2) return `${bin}+ MB`;
+    return `${bin}-${bins[i + 1]} MB`;
+  });
+
+  canvas.chart = new Chart(canvas.getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Memory Usage Distribution',
+        data: distribution,
+        backgroundColor: '#3b82f6',
+        borderColor: '#2563eb',
+        borderWidth: 1
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      plugins: {
+        legend: {
+          display: false
+        }
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          title: {
+            display: true,
+            text: 'Frequency'
+          }
+        },
+        x: {
+          title: {
+            display: true,
+            text: 'Memory Range'
+          }
+        }
+      }
+    }
+  });
+}
+
+/**
+ * Render performance trends (correlation with activity)
+ */
+function renderPerformanceTrends() {
+  const container = document.getElementById('performanceTrends');
+  if (!container) return;
+
+  const systemData = (window.state?.data?.systemResources || []).slice(-100);
+  const events = window.state?.data?.events || [];
+
+  if (systemData.length === 0) {
+    container.innerHTML = `
+      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 200px; text-align: center;">
+        <div style="font-size: var(--text-md); font-weight: 500; color: var(--color-text); margin-bottom: var(--space-xs);">No Data Available</div>
+        <div style="font-size: var(--text-sm); color: var(--color-text-muted);">Performance trends will appear as data is collected</div>
+      </div>
+    `;
+    return;
+  }
+
+  // Group events by time windows (5-minute intervals)
+  const timeWindow = 5 * 60 * 1000;
+  const activityWindows = new Map();
+
+  events.forEach(e => {
+    const timestamp = new Date(e.timestamp).getTime();
+    const windowKey = Math.floor(timestamp / timeWindow) * timeWindow;
+    activityWindows.set(windowKey, (activityWindows.get(windowKey) || 0) + 1);
+  });
+
+  // Match system data to activity windows
+  const correlations = [];
+  systemData.forEach(d => {
+    const timestamp = d.timestamp;
+    const windowKey = Math.floor(timestamp / timeWindow) * timeWindow;
+    const activity = activityWindows.get(windowKey) || 0;
+    
+    const memBytes = d.memory?.rss || d.memory?.heapUsed || d.memory || 0;
+    const memoryMB = memBytes / 1024 / 1024;
+    const cpuLoad = d.system?.loadAverage?.[0] || d.loadAverage?.[0] || 0;
+
+    correlations.push({
+      timestamp,
+      memory: memoryMB,
+      cpu: cpuLoad,
+      activity
+    });
+  });
+
+  // Calculate correlation statistics
+  const activePeriods = correlations.filter(c => c.activity > 0);
+  const idlePeriods = correlations.filter(c => c.activity === 0);
+
+  const avgMemoryActive = activePeriods.length > 0
+    ? activePeriods.reduce((sum, c) => sum + c.memory, 0) / activePeriods.length
+    : 0;
+  const avgMemoryIdle = idlePeriods.length > 0
+    ? idlePeriods.reduce((sum, c) => sum + c.memory, 0) / idlePeriods.length
+    : 0;
+
+  const avgCpuActive = activePeriods.length > 0
+    ? activePeriods.reduce((sum, c) => sum + c.cpu, 0) / activePeriods.length
+    : 0;
+  const avgCpuIdle = idlePeriods.length > 0
+    ? idlePeriods.reduce((sum, c) => sum + c.cpu, 0) / idlePeriods.length
+    : 0;
+
+  container.innerHTML = `
+    <div style="margin-bottom: var(--space-md);">
+      <h4 style="margin-bottom: var(--space-sm); color: var(--color-text); font-size: var(--text-md);">Resource Usage: Active vs Idle Periods</h4>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--space-md);">
+        <div class="stat-card">
+          <div class="stat-label">Memory (Active)</div>
+          <div class="stat-value">${avgMemoryActive.toFixed(1)} MB</div>
+          <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">
+            ${activePeriods.length} periods
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Memory (Idle)</div>
+          <div class="stat-value">${avgMemoryIdle.toFixed(1)} MB</div>
+          <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">
+            ${idlePeriods.length} periods
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">CPU Load (Active)</div>
+          <div class="stat-value">${avgCpuActive.toFixed(2)}</div>
+          <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">
+            During coding activity
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">CPU Load (Idle)</div>
+          <div class="stat-value">${avgCpuIdle.toFixed(2)}</div>
+          <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">
+            No activity
+          </div>
+        </div>
+      </div>
+    </div>
+    ${avgMemoryActive > avgMemoryIdle ? `
+      <div style="padding: var(--space-sm); background: #10b98115; border-radius: var(--radius-md); border-left: 3px solid #10b981;">
+        <div style="font-size: var(--text-sm); color: var(--color-text);">
+          <strong>Insight:</strong> Memory usage is ${((avgMemoryActive - avgMemoryIdle) / avgMemoryIdle * 100).toFixed(1)}% higher during active coding periods
+        </div>
+      </div>
+    ` : ''}
+  `;
+}
+
 // Export to window for global access
 window.renderSystemView = renderSystemView;
 window.renderSystemResourcesChart = renderSystemResourcesChart;
 window.fetchSystemResources = fetchSystemResources;
+window.renderSystemResourceStats = renderSystemResourceStats;
+window.renderResourceDistributionChart = renderResourceDistributionChart;
+window.renderPerformanceTrends = renderPerformanceTrends;

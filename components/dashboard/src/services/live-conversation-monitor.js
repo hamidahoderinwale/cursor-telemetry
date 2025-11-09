@@ -99,7 +99,7 @@ class LiveConversationMonitor {
         if (this.monitorInterval) {
             clearInterval(this.monitorInterval);
         }
-        console.log('🛑 Live conversation monitoring stopped');
+        console.log(' Live conversation monitoring stopped');
     }
 
     async checkCursorDatabase() {

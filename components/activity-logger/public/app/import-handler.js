@@ -23,52 +23,107 @@ async function showImportModal() {
         <button class="modal-close" onclick="closeImportModal()">&times;</button>
       </div>
       <div class="modal-body export-modal-section">
-        <p class="import-description">
-          Import previously exported data to restore events, prompts, workspaces, and terminal commands.
-          This allows you to redeploy data from another system or restore from a backup.
-        </p>
-        
-        <div class="import-section">
-          <h3 class="card-title">File Selection</h3>
-          <div class="export-modal-field-group">
-            <label class="form-label">Select exported JSON file:</label>
-            <input type="file" id="importFileInput" accept=".json" class="form-input file-input">
-            <div class="file-input-hint">Choose a file exported from the Export JSON feature</div>
+        <!-- Use Cases / Workflow Explanation -->
+        <div class="import-use-cases">
+          <h3 class="card-title">Common Use Cases</h3>
+          <div class="use-cases-grid">
+            <div class="use-case-item">
+              <div class="use-case-icon">💾</div>
+              <div class="use-case-title">Backup & Restore</div>
+              <div class="use-case-desc">Restore your telemetry data from a backup file</div>
+            </div>
+            <div class="use-case-item">
+              <div class="use-case-icon">🔄</div>
+              <div class="use-case-title">System Migration</div>
+              <div class="use-case-desc">Move your data to a new machine or installation</div>
+            </div>
+            <div class="use-case-item">
+              <div class="use-case-icon">📦</div>
+              <div class="use-case-title">Redeployment</div>
+              <div class="use-case-desc">Restore data after resetting or reinstalling the service</div>
+            </div>
+            <div class="use-case-item">
+              <div class="use-case-icon">🔀</div>
+              <div class="use-case-title">Data Merging</div>
+              <div class="use-case-desc">Combine data from multiple sources or time periods</div>
+            </div>
           </div>
         </div>
         
         <div class="import-section">
-          <h3 class="card-title">Import Options</h3>
+          <h3 class="card-title">Step 1: Select Export File</h3>
           <div class="export-modal-field-group">
-            <label class="form-label">Workspace Filter (optional):</label>
-            <input type="text" id="importWorkspaceFilter" class="form-input" placeholder="Leave empty to import all workspaces">
-            <div class="file-input-hint">Only import data for a specific workspace. Leave empty to import all.</div>
+            <label class="form-label">Select exported JSON file:</label>
+            <input type="file" id="importFileInput" accept=".json" class="form-input file-input">
+            <div class="file-input-hint">Choose a file exported from the "Export JSON" feature. The file should contain events, prompts, workspaces, and terminal commands.</div>
           </div>
+          <div id="filePreview" class="file-preview" style="display: none;">
+            <div class="file-preview-header">
+              <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor" style="margin-right: 8px;">
+                <path d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z"/>
+              </svg>
+              <span id="fileName"></span>
+              <span id="fileSize" class="file-size"></span>
+            </div>
+          </div>
+        </div>
+        
+        <div class="import-section">
+          <h3 class="card-title">Step 2: Configure Import Options</h3>
+          
           <div class="export-modal-field-group">
-            <label class="form-label">Merge Strategy:</label>
+            <label class="form-label">
+              Merge Strategy
+              <span class="tooltip-icon" title="Determines how to handle records that already exist in your database">i</span>
+            </label>
             <select id="importMergeStrategy" class="form-input">
-              <option value="skip">Skip duplicates (default)</option>
-              <option value="overwrite">Overwrite existing</option>
+              <option value="skip">Skip duplicates (recommended)</option>
+              <option value="overwrite">Overwrite existing records</option>
               <option value="merge">Merge (combine data)</option>
               <option value="append">Append all (allow duplicates)</option>
             </select>
-            <div class="file-input-hint">How to handle records that already exist in the database.</div>
+            <div class="merge-strategy-help">
+              <div class="strategy-option" data-strategy="skip">
+                <strong>Skip duplicates:</strong> Only import records that don't already exist. Safe for backups and restores.
+              </div>
+              <div class="strategy-option" data-strategy="overwrite">
+                <strong>Overwrite existing:</strong> Replace existing records with imported data. Use when updating data.
+              </div>
+              <div class="strategy-option" data-strategy="merge">
+                <strong>Merge:</strong> Combine data from both sources. Useful for merging datasets.
+              </div>
+              <div class="strategy-option" data-strategy="append">
+                <strong>Append all:</strong> Import everything, even duplicates. Creates duplicate records.
+              </div>
+            </div>
           </div>
-          <div class="export-modal-checkbox-group">
-            <label class="export-modal-checkbox-label">
-              <input type="checkbox" id="importOverwrite">
-              <span>
-                <strong>Overwrite existing records</strong>
-                <div class="description">Legacy option - use Merge Strategy above instead. If checked, sets strategy to "overwrite".</div>
-              </span>
+          
+          <div class="export-modal-field-group">
+            <label class="form-label">
+              Workspace Filter (optional)
+              <span class="tooltip-icon" title="Only import data for a specific workspace path">i</span>
             </label>
+            <input type="text" id="importWorkspaceFilter" class="form-input" placeholder="Leave empty to import all workspaces">
+            <div class="file-input-hint">Enter a workspace path to import only data from that workspace. Leave empty to import all workspaces from the file.</div>
+          </div>
+          
+          <div class="export-modal-checkbox-group">
             <label class="export-modal-checkbox-label">
               <input type="checkbox" id="importDryRun">
               <span>
                 <strong>Dry run (validate only)</strong>
-                <div class="description">Test the import without actually importing data. Useful to check for errors before importing.</div>
+                <div class="description">Test the import without actually importing data. Shows what would be imported without making changes. Recommended for first-time imports.</div>
               </span>
             </label>
+          </div>
+          
+          <div class="import-warning-box" style="display: none;" id="overwriteWarning">
+            <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor" style="flex-shrink: 0; margin-right: 8px; color: var(--color-warning);">
+              <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+            </svg>
+            <div>
+              <strong>Warning:</strong> This will overwrite existing records. Make sure you have a backup before proceeding.
+            </div>
           </div>
         </div>
         

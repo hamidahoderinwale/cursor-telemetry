@@ -240,6 +240,28 @@ function renderFileGraphViewTemplate(data) {
         </div>
 
       </div>
+
+      <!-- File Dependency Strength -->
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title" title="Shows which files are strongly related based on co-occurrence in prompts, temporal proximity (edited close together), and edit patterns. Higher strength indicates files that are frequently worked on together">File Dependency Strength</h3>
+          <p class="card-subtitle">File relationships based on co-occurrence and temporal patterns</p>
+        </div>
+        <div class="card-body">
+          <div id="fileDependencyStrength" style="min-height: 300px;"></div>
+        </div>
+      </div>
+
+      <!-- File Complexity Trends -->
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title" title="Tracks complexity metrics for files over time including edit frequency, code churn (lines added/removed), and overall complexity scores. Helps identify files that require frequent maintenance">File Complexity Trends</h3>
+          <p class="card-subtitle">Edit frequency, code churn, and complexity scores over time</p>
+        </div>
+        <div class="card-body">
+          <div id="fileComplexityTrends" style="min-height: 300px;"></div>
+        </div>
+      </div>
     </div>
   `;
 }

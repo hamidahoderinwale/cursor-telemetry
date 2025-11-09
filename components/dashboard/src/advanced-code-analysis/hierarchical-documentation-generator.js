@@ -36,7 +36,7 @@ class HierarchicalDocumentationGenerator extends EventEmitter {
     this.contextCache = new Map();
     this.generationHistory = [];
     
-    console.log('📚 Hierarchical Documentation Generator initialized');
+    console.log(' Hierarchical Documentation Generator initialized');
   }
   
   /**
@@ -868,7 +868,7 @@ class HierarchicalDocumentationGenerator extends EventEmitter {
     this.contextCache.clear();
     this.generationHistory = [];
     
-    console.log('🧹 Hierarchical Documentation Generator cleared');
+    console.log(' Hierarchical Documentation Generator cleared');
   }
 }
 
