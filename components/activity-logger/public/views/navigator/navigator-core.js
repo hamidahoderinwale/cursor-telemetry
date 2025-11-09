@@ -7,7 +7,7 @@
 const navigatorState = {
   viewMode: 'physical',
   interpolation: 0.0,
-  transitionSpeed: 1.0,
+  transitionSpeed: 2.0, // Maximum speed by default
   physicalPositions: new Map(),
   latentPositions: new Map(),
   nodes: [],

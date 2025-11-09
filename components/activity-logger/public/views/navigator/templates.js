@@ -65,10 +65,10 @@ function renderNavigatorViewTemplate(data) {
 
         <div>
           <h3>Transition Speed</h3>
-          <input type="range" id="transitionSpeed" min="0.5" max="2" step="0.1" value="1" oninput="updateTransitionSpeed(this.value)">
+          <input type="range" id="transitionSpeed" min="0.5" max="2" step="0.1" value="2" oninput="updateTransitionSpeed(this.value)">
           <div class="speed-label-wrapper">
             <span>Slow</span>
-            <span id="speedLabel">1.0x</span>
+            <span id="speedLabel">2.0x</span>
             <span>Fast</span>
           </div>
         </div>

@@ -820,6 +820,7 @@ window.setNavigatorViewMode = setNavigatorViewMode;
 window.animateInterpolation = animateInterpolation;
 window.updateInterpolationDisplay = updateInterpolationDisplay;
 window.updateTransitionSpeed = updateTransitionSpeed;
+window.initializeTransitionSpeed = initializeTransitionSpeed;
 window.renderMiniMap = renderMiniMap;
 window.updateMiniMapViewport = updateMiniMapViewport;
 window.navigateToMiniMapPosition = navigateToMiniMapPosition;
