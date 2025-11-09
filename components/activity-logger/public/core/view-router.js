@@ -28,7 +28,14 @@ const debouncedRender = window.debounce ?
   renderCurrentView;
 
 function switchView(viewName) {
-  window.state.currentView = viewName;
+  const oldView = window.state.currentView;
+  
+  // Update state with reactive notification
+  if (window.updateState) {
+    window.updateState({ currentView: viewName });
+  } else {
+    window.state.currentView = viewName;
+  }
   
   // Optimize nav link updates with batch DOM updates
   if (window.batchDOMUpdates) {
@@ -60,6 +67,11 @@ async function renderCurrentView() {
   if (!container) return;
 
   const viewName = window.state.currentView;
+  
+  // Show loading state if available
+  if (window.setLoading) {
+    window.setLoading(viewName, true);
+  }
   
   // Check if view render function is already cached
   let renderFn = viewRenderCache.get(viewName);
@@ -95,27 +107,56 @@ async function renderCurrentView() {
         if (typeof requestIdleCallback !== 'undefined') {
           requestIdleCallback(() => {
             renderFn(container);
+            if (window.setLoading) window.setLoading(viewName, false);
           }, { timeout: 100 });
         } else {
           await new Promise(resolve => requestAnimationFrame(resolve));
           renderFn(container);
+          if (window.setLoading) window.setLoading(viewName, false);
         }
       } else {
         // Light views: render immediately with animation frame
         if (typeof requestAnimationFrame !== 'undefined') {
           requestAnimationFrame(() => {
             renderFn(container);
+            if (window.setLoading) window.setLoading(viewName, false);
           });
         } else {
           renderFn(container);
+          if (window.setLoading) window.setLoading(viewName, false);
         }
+      }
+      
+      // Clear any errors for this view
+      if (window.setError) {
+        window.setError(viewName, null);
       }
     } catch (error) {
       console.error(`[VIEW] Error rendering ${viewName}:`, error);
-      container.innerHTML = `<div class="empty-state">Error loading view: ${error.message}</div>`;
+      container.innerHTML = `<div class="empty-state">
+        <h3>Error loading view</h3>
+        <p>${error.message}</p>
+        <button class="btn btn-primary" onclick="window.renderCurrentView()">Retry</button>
+      </div>`;
+      
+      // Set error state
+      if (window.setError) {
+        window.setError(viewName, error);
+      }
+      if (window.setLoading) {
+        window.setLoading(viewName, false);
+      }
     }
   } else {
-    container.innerHTML = '<div class="empty-state">View not found or not loaded</div>';
+    container.innerHTML = '<div class="empty-state">
+      <h3>View not found</h3>
+      <p>The view "${viewName}" could not be loaded. It may not be available yet.</p>
+      <button class="btn btn-primary" onclick="window.renderCurrentView()">Retry</button>
+    </div>';
+    
+    if (window.setLoading) {
+      window.setLoading(viewName, false);
+    }
   }
 }
 
