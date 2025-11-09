@@ -2,8 +2,30 @@
 
 const path = require('path');
 
-// Load environment variables from workspace root
-require('dotenv').config({ path: path.resolve(__dirname, '../../../../../.env') });
+// Load environment variables from companion directory and workspace root
+// Try companion directory first (more specific), then workspace root
+const companionEnvPath = path.resolve(__dirname, '../.env');
+// Calculate workspace root: from companion/src/ go up to workspace root
+// companion/src/ -> companion/ -> activity-logger/ -> components/ -> cursor-telemetry/ -> workspace root
+// Try multiple possible paths to find the .env file
+const possiblePaths = [
+  path.resolve(__dirname, '../../../../../.env'), // 5 levels up (most common)
+  path.resolve(__dirname, '../../../../../../.env'), // 6 levels up (if workspace is nested)
+  path.resolve(process.cwd(), '.env'), // Current working directory
+  path.resolve(process.env.HOME || '', 'new_cursor/.env'), // Fallback to common location
+];
+
+// Load companion .env first
+require('dotenv').config({ path: companionEnvPath });
+
+// Try to load workspace .env from any of the possible paths
+for (const envPath of possiblePaths) {
+  const result = require('dotenv').config({ path: envPath });
+  if (!result.error) {
+    console.log(`[ENV] Loaded .env from: ${envPath}`);
+    break;
+  }
+}
 
 const express = require('express');
 const cors = require('cors');
