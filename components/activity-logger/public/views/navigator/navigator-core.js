@@ -315,6 +315,14 @@ async function initializeNavigator() {
     // Render
     window.renderNavigator(container, physicalNodes, links);
     
+    // Populate workspace and directory filters
+    populateNavigatorFilters();
+    
+    // Initialize transition speed display
+    if (window.initializeTransitionSpeed) {
+      window.initializeTransitionSpeed();
+    }
+    
     // Render mini-map
     window.renderMiniMap();
     
