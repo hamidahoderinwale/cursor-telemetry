@@ -758,44 +758,108 @@ class ModalManager {
 
   _buildNoRelatedPromptsDebugHTML(event, allPrompts) {
     const eventTime = new Date(event.timestamp).getTime();
-    const eventWorkspace = (event.workspace_path || event.details?.workspace_path || '').toLowerCase();
+    const normalizeWorkspacePath = window.normalizeWorkspacePath || ((path) => (path || '').toLowerCase().replace(/[\/\\]+/g, '/').replace(/^\/+|\/+$/g, ''));
+    const eventWorkspace = normalizeWorkspacePath(event.workspace_path || event.details?.workspace_path || '');
     
-    // Show info about nearby prompts
-    const nearbyPrompts = allPrompts.filter(p => {
-      const promptTime = new Date(p.timestamp).getTime();
-      const timeDiff = Math.abs(eventTime - promptTime);
-      return timeDiff < 15 * 60 * 1000; // 15 minutes
-    });
+    // Find nearby prompts (within 15 minutes) and score them
+    const nearbyPrompts = allPrompts
+      .map(p => {
+        const promptTime = new Date(p.timestamp).getTime();
+        const timeDiff = Math.abs(eventTime - promptTime);
+        if (timeDiff > 15 * 60 * 1000) return null; // Outside 15 minutes
+        
+        const promptWorkspace = normalizeWorkspacePath(p.workspacePath || p.workspaceId || p.workspace_name || '');
+        const workspaceMatch = eventWorkspace && promptWorkspace && eventWorkspace === promptWorkspace;
+        const minutes = Math.floor(timeDiff / 60000);
+        const isBefore = new Date(p.timestamp).getTime() < eventTime;
+        
+        return {
+          ...p,
+          timeDiff,
+          minutes,
+          isBefore,
+          workspaceMatch,
+          promptWorkspace
+        };
+      })
+      .filter(p => p !== null)
+      .sort((a, b) => {
+        // Sort by: workspace match first, then by time proximity
+        if (a.workspaceMatch !== b.workspaceMatch) return b.workspaceMatch - a.workspaceMatch;
+        return a.timeDiff - b.timeDiff;
+      });
+    
+    if (nearbyPrompts.length === 0) {
+      return `
+        <div>
+          <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">Related AI Prompts</h4>
+          <div style="padding: var(--space-md); background: rgba(148, 163, 184, 0.1); border-radius: var(--radius-md); border: 1px dashed var(--color-border);">
+            <div style="font-size: var(--text-sm); color: var(--color-text-muted);">
+              No prompts found within 15 minutes of this event.
+            </div>
+            <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">
+              Total prompts available: ${allPrompts.length}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+    
+    // Show nearby prompts with workspace info
+    const workspaceMatched = nearbyPrompts.filter(p => p.workspaceMatch);
+    const workspaceMismatched = nearbyPrompts.filter(p => !p.workspaceMatch);
     
     return `
       <div>
-        <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">Related AI Prompts</h4>
-        <div style="padding: var(--space-md); background: rgba(148, 163, 184, 0.1); border-radius: var(--radius-md); border: 1px dashed var(--color-border);">
-          <div style="font-size: var(--text-sm); color: var(--color-text-muted); margin-bottom: var(--space-xs);">
-            <strong>No prompts found within 15 minutes of this event</strong>
-          </div>
-          <div style="font-size: var(--text-xs); color: var(--color-text-muted);">
-            <div>Total prompts available: ${allPrompts.length}</div>
-            <div>Prompts within 15 minutes: ${nearbyPrompts.length}</div>
-            ${nearbyPrompts.length > 0 ? `
-              <div style="margin-top: var(--space-sm); padding-top: var(--space-sm); border-top: 1px solid var(--color-border);">
-                <div style="font-weight: 500; margin-bottom: var(--space-xs);">Nearby prompts (may not match workspace):</div>
-                ${nearbyPrompts.slice(0, 3).map(p => {
-                  const promptText = (p.text || p.prompt || p.preview || '').substring(0, 80);
-                  const timeDiff = Math.abs(eventTime - new Date(p.timestamp).getTime());
-                  const minutes = Math.floor(timeDiff / 60000);
-                  const isBefore = new Date(p.timestamp).getTime() < eventTime;
-                  const escapedText = window.escapeHtml ? window.escapeHtml(promptText) : promptText.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                  return `
-                    <div style="margin-top: var(--space-xs); padding: var(--space-xs); background: var(--color-bg); border-radius: var(--radius-sm); font-size: 10px;">
-                      <div style="color: var(--color-text);">${escapedText}${promptText.length >= 80 ? '...' : ''}</div>
-                      <div style="color: var(--color-text-muted); margin-top: 2px;">${minutes}m ${isBefore ? 'before' : 'after'}</div>
-                    </div>
-                  `;
-                }).join('')}
+        <h4 style="margin-bottom: var(--space-md); color: var(--color-text); display: flex; align-items: center; gap: var(--space-sm);">
+          <span>Related AI Prompts</span>
+          <span style="background: var(--color-accent); color: white; font-size: var(--text-xs); padding: 2px 8px; border-radius: 12px;">${nearbyPrompts.length}</span>
+        </h4>
+        <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-bottom: var(--space-md);">
+          ${workspaceMatched.length > 0 
+            ? `${workspaceMatched.length} from same workspace, ${workspaceMismatched.length} from other workspaces`
+            : `${nearbyPrompts.length} nearby prompts (different workspace)`}
+        </div>
+        <div style="display: grid; gap: var(--space-sm);">
+          ${nearbyPrompts.slice(0, 5).map((prompt, idx) => {
+            const promptText = (prompt.text || prompt.prompt || prompt.preview || prompt.content || 'No prompt text').substring(0, 150);
+            const timeDiffText = prompt.minutes > 0 
+              ? `${prompt.minutes}m ${prompt.isBefore ? 'before' : 'after'}`
+              : `${Math.floor(prompt.timeDiff / 1000)}s ${prompt.isBefore ? 'before' : 'after'}`;
+            const escapedText = window.escapeHtml ? window.escapeHtml(promptText) : promptText.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            
+            return `
+              <div style="padding: var(--space-md); background: var(--color-bg); border-left: 3px solid ${prompt.workspaceMatch ? 'var(--color-success)' : 'var(--color-warning)'}; border-radius: var(--radius-md); cursor: pointer; transition: all 0.2s;" 
+                   onmouseover="this.style.transform='translateX(4px)'; this.style.boxShadow='0 4px 12px rgba(0,0,0,0.1)';" 
+                   onmouseout="this.style.transform=''; this.style.boxShadow='';"
+                   onclick="closeEventModal(); setTimeout(() => showEventModal('${prompt.id}'), 100)">
+                <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: var(--space-xs);">
+                  <div style="display: flex; align-items: center; gap: var(--space-xs); flex-wrap: wrap;">
+                    <span style="color: var(--color-primary); font-weight: 600; font-size: var(--text-xs);">#${idx + 1}</span>
+                    <span style="font-size: var(--text-xs); color: var(--color-text-muted);">${timeDiffText}</span>
+                    ${!prompt.workspaceMatch ? `
+                      <span style="font-size: var(--text-xs); color: var(--color-warning); font-weight: 500;" title="Different workspace: ${window.escapeHtml ? window.escapeHtml(prompt.promptWorkspace) : prompt.promptWorkspace}">
+                        ⚠ Different workspace
+                      </span>
+                    ` : `
+                      <span style="font-size: var(--text-xs); color: var(--color-success); font-weight: 500;">✓ Same workspace</span>
+                    `}
+                  </div>
+                  <span class="badge badge-prompt" style="font-size: 10px; padding: 2px 6px;">
+                    ${prompt.source || 'cursor'}
+                  </span>
+                </div>
+                <div style="font-size: var(--text-sm); color: var(--color-text); line-height: 1.5;">
+                  ${escapedText}${promptText.length >= 150 ? '...' : ''}
+                </div>
               </div>
-            ` : ''}
-          </div>
+            `;
+          }).join('')}
+          ${nearbyPrompts.length > 5 ? `
+            <div style="text-align: center; padding: var(--space-md); color: var(--color-text-muted); font-size: var(--text-sm); background: var(--color-bg); border-radius: var(--radius-md); border: 1px dashed var(--color-border);">
+              + ${nearbyPrompts.length - 5} more nearby prompts
+            </div>
+          ` : ''}
         </div>
       </div>
     `;

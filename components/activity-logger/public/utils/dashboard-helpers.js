@@ -361,8 +361,10 @@ function findRelatedPrompts(event, timeWindowMinutes = 15) {
       const fallbackBonus = timeOnlyFallback ? 0.2 : 0;
       const relevanceScore = Math.min(1.0, baseScore + fallbackBonus);
       
-      // Include if relevance is above threshold OR time-only fallback applies
-      if (relevanceScore < 0.2 && !timeOnlyFallback) {
+      // Always include prompts within 5 minutes, even if workspace doesn't match
+      // Lower threshold for time-based matches to show more relevant prompts
+      const minScore = isWithinShortWindow ? 0.1 : 0.2;
+      if (relevanceScore < minScore && !timeOnlyFallback) {
         return null;
       }
       
