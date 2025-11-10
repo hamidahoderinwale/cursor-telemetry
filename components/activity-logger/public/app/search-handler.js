@@ -144,6 +144,14 @@ function openSearchPalette() {
     // Show example queries if search is empty and HF is available
     updateSearchExamples();
     updateSemanticStatus();
+    updateRecentSearches();
+    updateClearButton();
+    
+    // Add input listener for clear button
+    const input = document.getElementById('searchInput');
+    if (input) {
+      input.addEventListener('input', updateClearButton);
+    }
   }
 }
 
