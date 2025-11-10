@@ -231,7 +231,7 @@ function renderFileGraphViewTemplate(data) {
               </div>
             </div>
             <div class="embeddings-subsection">
-              <h4 class="embeddings-subsection-title help" title="Terms ranked by TF-IDF (Term Frequency-Inverse Document Frequency) score. Higher scores indicate terms that are important in specific files but rare across all files.">
+              <h4 class="embeddings-subsection-title help" title="TF-IDF (Term Frequency-Inverse Document Frequency): Scoring method that ranks terms by importance. TF (Term Frequency) = how often term appears in file. IDF (Inverse Document Frequency) = log(total files / files containing term). High TF-IDF = term is common in this file but rare overall (distinctive). Formula: TF-IDF(t,d) = TF(t,d) × log(N/DF(t)) where N = total files, DF = files containing term.">
                 Top Terms by Importance:
               </h4>
               <div id="topTerms" class="embeddings-subsection-content scrollable">
