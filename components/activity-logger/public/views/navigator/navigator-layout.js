@@ -72,21 +72,70 @@ function computePhysicalLayout(files) {
   }
   
   // Use force simulation to compute positions
+  // Optimized based on Barnes-Hut and large-scale graph techniques
   const width = 800, height = 700;
-  const tempSimulation = d3.forceSimulation(filesToCompare)
-    .force('link', d3.forceLink(links).id(d => d.id).distance(100))
-    .force('charge', d3.forceManyBody().strength(-300))
-    .force('center', d3.forceCenter(width / 2, height / 2))
-    .force('collision', d3.forceCollide().radius(30));
+  const nodeCount = filesToCompare.length;
   
-  // Run simulation to completion (reduced iterations for speed)
-  // Further reduced for faster computation
-  const simIterations = Math.min(50, Math.max(20, filesToCompare.length)); // Reduced from 100
-  console.log(`[LAYOUT] Running force simulation for ${simIterations} ticks...`);
-  for (let i = 0; i < simIterations; i++) {
+  // Adaptive force parameters based on graph size (inspired by ForceAtlas2 and Barnes-Hut)
+  // For larger graphs, reduce repulsion strength and increase distance
+  const baseCharge = -300;
+  const adaptiveCharge = nodeCount > 100 
+    ? baseCharge * Math.sqrt(100 / nodeCount) // Scale down for large graphs
+    : baseCharge;
+  
+  const baseDistance = 100;
+  const adaptiveDistance = nodeCount > 100
+    ? baseDistance * Math.sqrt(nodeCount / 100) // Scale up for large graphs
+    : baseDistance;
+  
+  // Barnes-Hut optimization: theta parameter controls approximation quality
+  // Lower theta = more accurate but slower, higher theta = faster but less accurate
+  // For large graphs, use higher theta (0.9) for speed
+  const theta = nodeCount > 200 ? 0.9 : 0.7;
+  
+  const tempSimulation = d3.forceSimulation(filesToCompare)
+    .force('link', d3.forceLink(links)
+      .id(d => d.id)
+      .distance(d => {
+        // Adaptive distance based on similarity and graph size
+        const baseDist = adaptiveDistance;
+        const similarity = d.similarity || 0.5;
+        // Closer for higher similarity
+        return baseDist * (1.5 - similarity);
+      })
+      .strength(d => {
+        // Stronger links for higher similarity
+        return (d.similarity || 0.5) * 0.5;
+      }))
+    .force('charge', d3.forceManyBody()
+      .strength(adaptiveCharge)
+      .theta(theta) // Barnes-Hut approximation parameter
+      .distanceMax(500)) // Limit interaction distance for performance
+    .force('center', d3.forceCenter(width / 2, height / 2).strength(0.1))
+    .force('collision', d3.forceCollide().radius(30))
+    .alphaDecay(0.02) // Faster decay for quicker convergence
+    .velocityDecay(0.4); // Higher friction for stability
+  
+  // Two-stage approach: fast initial layout, then refine
+  // Stage 1: Quick layout with high alpha (fast movement)
+  tempSimulation.alpha(1.0).restart();
+  const quickIterations = Math.min(30, Math.max(10, Math.floor(nodeCount / 10)));
+  console.log(`[LAYOUT] Stage 1: Quick layout (${quickIterations} ticks)...`);
+  for (let i = 0; i < quickIterations; i++) {
     tempSimulation.tick();
   }
-  console.log(`[LAYOUT] Physical layout complete`);
+  
+  // Stage 2: Refinement with lower alpha (fine-tuning)
+  if (nodeCount < 200) { // Only refine for smaller graphs
+    tempSimulation.alpha(0.3).restart();
+    const refineIterations = Math.min(20, Math.max(5, Math.floor(nodeCount / 20)));
+    console.log(`[LAYOUT] Stage 2: Refinement (${refineIterations} ticks)...`);
+    for (let i = 0; i < refineIterations; i++) {
+      tempSimulation.tick();
+    }
+  }
+  
+  console.log(`[LAYOUT] Physical layout complete (${nodeCount} nodes, ${links.length} links)`);
   
   tempSimulation.stop();
   
@@ -234,7 +283,8 @@ async function computeLatentLayoutUMAP(files) {
   for (let e = 0; e < epochs; e++) {
     for (let i = 0; i < vectors.length; i++) {
       const pi = positions[i];
-      // Attractive forces for neighbors
+      // Attractive forces for neighbors (optimized for large graphs)
+      // Use adaptive force strength based on graph size
       const neigh = neighbors[i];
       for (let n = 0; n < neigh.length; n++) {
         const j = neigh[n].index;

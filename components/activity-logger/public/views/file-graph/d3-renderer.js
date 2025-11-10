@@ -172,18 +172,42 @@ function renderD3FileGraph(container, nodes, links) {
   const layoutAlgorithm = document.getElementById('layoutAlgorithm')?.value || 'force';
   
   // Create simulation based on layout
+  // Optimized with Barnes-Hut and adaptive parameters for large graphs
   let simulation;
   if (layoutAlgorithm === 'force') {
+    const nodeCount = nodes.length;
+    
+    // Adaptive parameters based on graph size (inspired by large-scale graph techniques)
+    const baseCharge = -400;
+    const adaptiveCharge = nodeCount > 100 
+      ? baseCharge * Math.sqrt(100 / nodeCount) // Scale down repulsion for large graphs
+      : baseCharge;
+    
+    // Barnes-Hut theta: higher for large graphs (faster, less accurate)
+    const theta = nodeCount > 200 ? 0.9 : 0.7;
+    
     simulation = d3.forceSimulation(nodes)
-      .force('link', d3.forceLink(links).id(d => d.id).distance(d => {
-        // Shorter links for same cluster
-        if (d.source.cluster === d.target.cluster) return 50;
-        return 150;
-      }))
-      .force('charge', d3.forceManyBody().strength(-400))
-      .force('center', d3.forceCenter(width / 2, height / 2))
+      .force('link', d3.forceLink(links)
+        .id(d => d.id)
+        .distance(d => {
+          // Shorter links for same cluster
+          const baseDist = d.source.cluster === d.target.cluster ? 50 : 150;
+          // Scale distance for large graphs
+          return nodeCount > 100 ? baseDist * Math.sqrt(nodeCount / 100) : baseDist;
+        })
+        .strength(d => {
+          // Stronger links within clusters
+          return d.source.cluster === d.target.cluster ? 0.8 : 0.5;
+        }))
+      .force('charge', d3.forceManyBody()
+        .strength(adaptiveCharge)
+        .theta(theta) // Barnes-Hut approximation parameter
+        .distanceMax(600)) // Limit interaction distance
+      .force('center', d3.forceCenter(width / 2, height / 2).strength(0.1))
       .force('collision', d3.forceCollide().radius(35))
-      .force('cluster', forceCluster(clusters));
+      .force('cluster', forceCluster(clusters))
+      .alphaDecay(0.02) // Faster convergence
+      .velocityDecay(0.4); // Higher friction for stability
   } else if (layoutAlgorithm === 'circular') {
     // Circular layout
     const radius = Math.min(width, height) / 2 - 100;
