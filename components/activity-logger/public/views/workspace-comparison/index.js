@@ -569,6 +569,7 @@ function renderWorkspaceComparisonChart(metrics) {
 
   const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'];
   
+  // Use grouped bar chart for better comparison
   canvas.chart = new Chart(canvas.getContext('2d'), {
     type: 'bar',
     data: {
@@ -578,54 +579,51 @@ function renderWorkspaceComparisonChart(metrics) {
           label: 'Prompts',
           data: metrics.map(m => m.prompts),
           backgroundColor: colors[0],
-          yAxisID: 'y-prompts'
+          yAxisID: 'y'
         },
         {
           label: 'Events',
           data: metrics.map(m => m.events),
           backgroundColor: colors[1],
-          yAxisID: 'y-events'
+          yAxisID: 'y'
         },
         {
           label: 'File Changes',
           data: metrics.map(m => m.fileChanges),
           backgroundColor: colors[2],
-          yAxisID: 'y-changes'
+          yAxisID: 'y'
         }
       ]
     },
     options: {
       responsive: true,
-      maintainAspectRatio: true,
+      maintainAspectRatio: false,
       plugins: {
         legend: {
           display: true,
           position: 'top'
+        },
+        tooltip: {
+          mode: 'index',
+          intersect: false
         }
       },
       scales: {
-        'y-prompts': {
+        y: {
           type: 'linear',
           position: 'left',
+          beginAtZero: true,
           title: {
             display: true,
-            text: 'Prompts'
+            text: 'Count'
+          },
+          ticks: {
+            precision: 0
           }
         },
-        'y-events': {
-          type: 'linear',
-          position: 'right',
-          title: {
-            display: true,
-            text: 'Events & Changes'
-          }
-        },
-        'y-changes': {
-          type: 'linear',
-          position: 'right',
-          title: {
-            display: true,
-            text: 'File Changes'
+        x: {
+          grid: {
+            display: false
           }
         }
       }
