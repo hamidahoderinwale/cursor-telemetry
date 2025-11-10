@@ -1,8 +1,8 @@
 # Netlify Configuration for Cursor Telemetry Dashboard
 
 [build]
-  base = "components/activity-logger"
-  publish = "public"
+  base = "/"
+  publish = "components/activity-logger/public"
   command = "echo 'Static site - no build needed'"
 
 # Development settings
