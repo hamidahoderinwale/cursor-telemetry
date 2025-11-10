@@ -585,6 +585,11 @@ function selectSearchResult(index) {
   
   const result = searchResults[index];
   
+  // Track click for analytics
+  if (searchEngine && searchEngine.trackClick) {
+    searchEngine.trackClick(result.type || 'unknown', result.id || result.path);
+  }
+  
   // Close search palette
   closeSearchPalette();
   
@@ -592,10 +597,14 @@ function selectSearchResult(index) {
   if (result.type === 'event' && result.id) {
     if (window.showEventModal) {
       window.showEventModal(result.id);
+    } else if (window.switchView) {
+      window.switchView('activity');
     }
   } else if (result.type === 'prompt' && result.id) {
     if (window.showPromptInModal) {
       window.showPromptInModal(result.id);
+    } else if (window.switchView) {
+      window.switchView('activity');
     }
   } else if (result.type === 'conversation' && result.id) {
     // Switch to activity view and highlight conversation
@@ -603,9 +612,22 @@ function selectSearchResult(index) {
       window.switchView('activity');
       // Could scroll to conversation in timeline
     }
-  } else if (result.file_path) {
-    // Could open file in editor or show file graph
-    console.log('[SEARCH] Selected file:', result.file_path);
+  } else if (result.type === 'terminal' && result.id) {
+    if (window.switchView) {
+      window.switchView('activity');
+    }
+  } else if (result.file_path || result.path) {
+    const filePath = result.file_path || result.path;
+    // Try to show in file graph or navigator
+    if (window.switchView) {
+      window.switchView('file-graph');
+      // Could highlight file in graph
+      setTimeout(() => {
+        if (window.focusOnNode) {
+          window.focusOnNode(filePath);
+        }
+      }, 300);
+    }
   }
 }
 

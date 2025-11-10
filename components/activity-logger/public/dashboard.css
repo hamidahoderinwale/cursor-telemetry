@@ -2529,10 +2529,22 @@ textarea:disabled {
   border: 1px solid transparent;
 }
 
-.search-result-item:hover,
-.search-result-item.selected {
+.search-result-item:hover {
   background: var(--color-bg-alt);
-  border-color: var(--color-primary);
+}
+
+.search-result-item.selected {
+  background: var(--color-primary)10;
+  border-left: 3px solid var(--color-primary);
+}
+
+/* Highlight matched query terms */
+.search-result-item mark {
+  background: var(--color-warning)30;
+  color: var(--color-warning);
+  font-weight: 600;
+  padding: 1px 2px;
+  border-radius: 2px;
 }
 
 .search-result-icon {
