@@ -411,84 +411,157 @@
     <div class="search-palette-overlay" onclick="closeSearchPalette()"></div>
     <div class="search-palette-content">
       <div class="search-palette-header">
-        <div class="search-input-wrapper">
-          <svg class="search-icon" width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor">
-            <circle cx="8" cy="8" r="6" stroke-width="2"/>
-            <path d="M13 13l4 4" stroke-width="2" stroke-linecap="round"/>
-          </svg>
-          <input 
-            type="text" 
-            id="searchInput" 
-            class="search-input" 
-            placeholder="Search or ask questions... (e.g., 'What files did I modify when fixing bugs?')"
-            autocomplete="off"
-            spellcheck="false"
-          />
-          <div id="searchSemanticStatus" class="search-semantic-status" style="display: none;" title="Hugging Face semantic search enabled">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <path d="M12 2L2 7l10 5 10-5-10-5z" stroke-width="2"/>
-              <path d="M2 17l10 5 10-5M2 12l10 5 10-5" stroke-width="2"/>
+        <div class="search-header-top">
+          <div class="search-input-wrapper">
+            <svg class="search-icon" width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor">
+              <circle cx="8" cy="8" r="6" stroke-width="2"/>
+              <path d="M13 13l4 4" stroke-width="2" stroke-linecap="round"/>
             </svg>
-            <span>AI</span>
+            <input 
+              type="text" 
+              id="searchInput" 
+              class="search-input" 
+              placeholder="Search events, prompts, files, or ask questions..."
+              autocomplete="off"
+              spellcheck="false"
+            />
+            <button id="clearSearchBtn" class="search-clear-btn" onclick="clearSearchInput()" style="display: none;" title="Clear search">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor">
+                <path d="M12 4L4 12M4 4l8 8" stroke-width="2" stroke-linecap="round"/>
+              </svg>
+            </button>
+            <div id="searchSemanticStatus" class="search-semantic-status" style="display: none;" title="Hugging Face semantic search enabled">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <path d="M12 2L2 7l10 5 10-5-10-5z" stroke-width="2"/>
+                <path d="M2 17l10 5 10-5M2 12l10 5 10-5" stroke-width="2"/>
+              </svg>
+              <span>AI</span>
+            </div>
+            <kbd class="search-kbd">esc</kbd>
           </div>
-          <kbd class="search-kbd">esc</kbd>
+        </div>
+        <!-- Quick Filter Chips -->
+        <div class="search-quick-filters" id="searchQuickFilters">
+          <button class="filter-chip" data-filter="type:prompt" onclick="applyQuickFilter('type:prompt')" title="Filter by prompts">
+            <span>💬</span> Prompts
+          </button>
+          <button class="filter-chip" data-filter="type:event" onclick="applyQuickFilter('type:event')" title="Filter by events">
+            <span>📝</span> Events
+          </button>
+          <button class="filter-chip" data-filter="type:terminal" onclick="applyQuickFilter('type:terminal')" title="Filter by terminal commands">
+            <span>⌨️</span> Terminal
+          </button>
+          <button class="filter-chip" data-filter="date:today" onclick="applyQuickFilter('date:today')" title="Filter by today">
+            <span>📅</span> Today
+          </button>
+          <button class="filter-chip" data-filter="date:week" onclick="applyQuickFilter('date:week')" title="Filter by this week">
+            <span>📆</span> This Week
+          </button>
+        </div>
+        <!-- Recent Searches -->
+        <div id="recentSearches" class="recent-searches" style="display: none;">
+          <div class="recent-searches-header">
+            <span>Recent Searches</span>
+            <button class="clear-recent-btn" onclick="clearRecentSearches()" title="Clear recent searches">Clear</button>
+          </div>
+          <div id="recentSearchesList" class="recent-searches-list"></div>
         </div>
       </div>
       <div class="search-palette-body">
+        <!-- Loading State -->
+        <div id="searchLoading" class="search-loading" style="display: none;">
+          <div class="search-loading-spinner"></div>
+          <span>Searching...</span>
+        </div>
+        <!-- Results -->
         <div id="searchResults" class="search-results">
           <!-- Results will be rendered here -->
         </div>
+        <!-- Suggestions/Examples -->
         <div id="searchSuggestions" class="search-suggestions">
-          <!-- Example queries for semantic search -->
           <div id="searchExamples" class="search-examples" style="display: none;">
-            <div class="search-examples-header">Try asking:</div>
-            <div class="search-examples-list">
-              <button class="search-example" onclick="if(window.setSearchQuery) window.setSearchQuery('What files did I modify when fixing bugs?')">
-                What files did I modify when fixing bugs?
-              </button>
-              <button class="search-example" onclick="if(window.setSearchQuery) window.setSearchQuery('Show me prompts about authentication')">
-                Show me prompts about authentication
-              </button>
-              <button class="search-example" onclick="if(window.setSearchQuery) window.setSearchQuery('Find code changes related to database queries')">
-                Find code changes related to database queries
-              </button>
-              <button class="search-example" onclick="if(window.setSearchQuery) window.setSearchQuery('What did I work on last week?')">
-                What did I work on last week?
-              </button>
+            <div class="search-examples-section">
+              <div class="search-examples-header">
+                <span>💡</span> Try asking:
+              </div>
+              <div class="search-examples-grid">
+                <button class="search-example" onclick="if(window.setSearchQuery) window.setSearchQuery('What files did I modify when fixing bugs?')">
+                  <span class="example-icon">🐛</span>
+                  <div>
+                    <div class="example-title">Find bug fixes</div>
+                    <div class="example-desc">What files did I modify when fixing bugs?</div>
+                  </div>
+                </button>
+                <button class="search-example" onclick="if(window.setSearchQuery) window.setSearchQuery('Show me prompts about authentication')">
+                  <span class="example-icon">🔐</span>
+                  <div>
+                    <div class="example-title">Authentication prompts</div>
+                    <div class="example-desc">Show me prompts about authentication</div>
+                  </div>
+                </button>
+                <button class="search-example" onclick="if(window.setSearchQuery) window.setSearchQuery('Find code changes related to database queries')">
+                  <span class="example-icon">🗄️</span>
+                  <div>
+                    <div class="example-title">Database changes</div>
+                    <div class="example-desc">Find code changes related to database queries</div>
+                  </div>
+                </button>
+                <button class="search-example" onclick="if(window.setSearchQuery) window.setSearchQuery('What did I work on last week?')">
+                  <span class="example-icon">📅</span>
+                  <div>
+                    <div class="example-title">Recent work</div>
+                    <div class="example-desc">What did I work on last week?</div>
+                  </div>
+                </button>
+              </div>
             </div>
-            <div class="search-examples-header" style="margin-top: var(--space-md);">State Commands:</div>
-            <div class="search-examples-list">
-              <button class="search-example" onclick="if(window.setSearchQuery) window.setSearchQuery('Fork a state for trying a new authentication approach')">
-                Fork a state for trying a new authentication approach
-              </button>
-              <button class="search-example" onclick="if(window.setSearchQuery) window.setSearchQuery('Show me states where I was fixing the login bug')">
-                Show me states where I was fixing the login bug
-              </button>
-              <button class="search-example" onclick="if(window.setSearchQuery) window.setSearchQuery('Find states where I was working on API endpoints')">
-                Find states where I was working on API endpoints
-              </button>
-              <button class="search-example" onclick="if(window.setSearchQuery) window.setSearchQuery('Merge the performance optimization into main')">
-                Merge the performance optimization into main
-              </button>
+            <div class="search-examples-section">
+              <div class="search-examples-header">
+                <span>⚡</span> State Commands:
+              </div>
+              <div class="search-examples-grid">
+                <button class="search-example" onclick="if(window.setSearchQuery) window.setSearchQuery('Fork a state for trying a new authentication approach')">
+                  <span class="example-icon">🌿</span>
+                  <div>
+                    <div class="example-title">Fork state</div>
+                    <div class="example-desc">Fork a state for trying a new authentication approach</div>
+                  </div>
+                </button>
+                <button class="search-example" onclick="if(window.setSearchQuery) window.setSearchQuery('Show me states where I was fixing the login bug')">
+                  <span class="example-icon">🔍</span>
+                  <div>
+                    <div class="example-title">Find states</div>
+                    <div class="example-desc">Show me states where I was fixing the login bug</div>
+                  </div>
+                </button>
+              </div>
             </div>
           </div>
         </div>
       </div>
       <div class="search-palette-footer">
-        <div class="search-hint">
-          <span><kbd>↑</kbd><kbd>↓</kbd> navigate</span>
-          <span><kbd>↵</kbd> select</span>
-          <span><kbd>esc</kbd> close</span>
+        <div class="search-footer-left">
+          <div class="search-hint">
+            <span><kbd>↑</kbd><kbd>↓</kbd> navigate</span>
+            <span><kbd>↵</kbd> select</span>
+            <span><kbd>esc</kbd> close</span>
+            <span id="searchResultCount" style="display: none; margin-left: var(--space-md); font-weight: 500;"></span>
+          </div>
         </div>
-        <div class="search-settings">
-          <label class="search-setting-toggle" title="Enable Hugging Face AI semantic search (requires model download ~20MB)">
-            <input type="checkbox" id="hfSemanticSearchToggle" onchange="toggleHuggingFaceSearch(this.checked)">
-            <span class="toggle-label">AI Semantic Search</span>
-            <span id="hfSearchStatus" class="hf-status-indicator"></span>
-          </label>
-        </div>
-        <div class="search-filters">
-          <span class="search-filter-hint">Filters: <code>type:</code> <code>workspace:</code> <code>date:</code> <code>mode:</code></span>
+        <div class="search-footer-right">
+          <div class="search-settings">
+            <label class="search-setting-toggle" title="Enable Hugging Face AI semantic search (requires model download ~20MB)">
+              <input type="checkbox" id="hfSemanticSearchToggle" onchange="toggleHuggingFaceSearch(this.checked)">
+              <span class="toggle-label">AI Search</span>
+              <span id="hfSearchStatus" class="hf-status-indicator"></span>
+            </label>
+          </div>
+          <div class="search-filters-hint" title="Use filters: type:prompt, workspace:name, date:today, mode:chat">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor">
+              <path d="M2 4h12M4 8h8M6 12h4" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+            <span>Filters</span>
+          </div>
         </div>
       </div>
     </div>

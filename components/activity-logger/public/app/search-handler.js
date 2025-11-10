@@ -200,6 +200,128 @@ function closeSearchPalette() {
   }
   searchSelectedIndex = -1;
   searchResults = [];
+  window.currentSearchQuery = '';
+  
+  // Hide loading state
+  const loading = document.getElementById('searchLoading');
+  if (loading) loading.style.display = 'none';
+}
+
+/**
+ * Clear search input
+ */
+function clearSearchInput() {
+  const input = document.getElementById('searchInput');
+  if (input) {
+    input.value = '';
+    input.focus();
+    updateClearButton();
+    performSearch('');
+  }
+}
+
+/**
+ * Update clear button visibility
+ */
+function updateClearButton() {
+  const input = document.getElementById('searchInput');
+  const clearBtn = document.getElementById('clearSearchBtn');
+  if (input && clearBtn) {
+    clearBtn.style.display = input.value.trim().length > 0 ? 'flex' : 'none';
+  }
+}
+
+/**
+ * Apply quick filter
+ */
+function applyQuickFilter(filter) {
+  const input = document.getElementById('searchInput');
+  if (input) {
+    const currentValue = input.value.trim();
+    // Remove existing filter if present
+    const filterType = filter.split(':')[0];
+    const cleaned = currentValue.replace(new RegExp(`${filterType}:[^\\s]+`, 'gi'), '').trim();
+    input.value = cleaned ? `${filter} ${cleaned}` : filter;
+    input.focus();
+    performSearch(input.value);
+    
+    // Update active state of filter chips
+    document.querySelectorAll('.filter-chip').forEach(chip => {
+      chip.classList.remove('active');
+      if (chip.dataset.filter === filter) {
+        chip.classList.add('active');
+      }
+    });
+  }
+}
+
+/**
+ * Update recent searches display
+ */
+function updateRecentSearches() {
+  const recentContainer = document.getElementById('recentSearches');
+  const recentList = document.getElementById('recentSearchesList');
+  if (!recentContainer || !recentList) return;
+  
+  const recent = getRecentSearches();
+  if (recent.length === 0) {
+    recentContainer.style.display = 'none';
+    return;
+  }
+  
+  recentContainer.style.display = 'block';
+  recentList.innerHTML = recent.slice(0, 5).map((query, index) => `
+    <button class="recent-search-item" onclick="if(window.setSearchQuery) window.setSearchQuery('${query.replace(/'/g, "\\'")}')">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor">
+        <path d="M8 2L2 7l6 5 6-5-6-5z" stroke-width="1.5"/>
+      </svg>
+      <span>${window.escapeHtml ? window.escapeHtml(query) : query}</span>
+    </button>
+  `).join('');
+}
+
+/**
+ * Get recent searches from localStorage
+ */
+function getRecentSearches() {
+  try {
+    const stored = localStorage.getItem('recentSearches');
+    return stored ? JSON.parse(stored) : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+/**
+ * Save search to recent searches
+ */
+function saveRecentSearch(query) {
+  if (!query || query.trim().length === 0) return;
+  
+  try {
+    const recent = getRecentSearches();
+    // Remove if already exists
+    const filtered = recent.filter(q => q !== query);
+    // Add to front
+    filtered.unshift(query);
+    // Keep only last 10
+    const limited = filtered.slice(0, 10);
+    localStorage.setItem('recentSearches', JSON.stringify(limited));
+  } catch (e) {
+    console.warn('[SEARCH] Failed to save recent search:', e);
+  }
+}
+
+/**
+ * Clear recent searches
+ */
+function clearRecentSearches() {
+  try {
+    localStorage.removeItem('recentSearches');
+    updateRecentSearches();
+  } catch (e) {
+    console.warn('[SEARCH] Failed to clear recent searches:', e);
+  }
 }
 
 /**
@@ -274,15 +396,35 @@ async function performSearch(query) {
     // Store current query for highlighting
     window.currentSearchQuery = query;
     
+    // Show loading state
+    const loading = document.getElementById('searchLoading');
+    const resultsEl = document.getElementById('searchResults');
+    if (loading) loading.style.display = 'flex';
+    if (resultsEl) resultsEl.style.display = 'none';
+    
+    // Save to recent searches if query is meaningful
+    if (query.trim().length > 2) {
+      saveRecentSearch(query.trim());
+    }
+    
     // Search is now async (supports Hugging Face semantic search)
     const results = await searchEngine.search(query, { limit: 30 }); // Increased limit for better results
     searchResults = results;
     searchSelectedIndex = -1;
+    
+    // Hide loading, show results
+    if (loading) loading.style.display = 'none';
+    if (resultsEl) resultsEl.style.display = 'block';
+    
     renderSearchResults(results);
+    updateResultCount(results.length);
   } catch (error) {
     console.error('[ERROR] Search failed:', error);
+    const loading = document.getElementById('searchLoading');
     const resultsEl = document.getElementById('searchResults');
+    if (loading) loading.style.display = 'none';
     if (resultsEl) {
+      resultsEl.style.display = 'block';
       resultsEl.innerHTML = '<div class="search-error" style="padding: var(--space-md); text-align: center; color: var(--color-error);">Search error: ' + error.message + '</div>';
     }
   }
@@ -351,6 +493,9 @@ function renderSearchResults(results) {
   const resultsEl = document.getElementById('searchResults');
   if (!resultsEl) return;
   
+  // Update result count
+  updateResultCount(results.length);
+  
   if (results.length === 0) {
     resultsEl.innerHTML = `
       <div class="search-empty" style="
@@ -358,11 +503,15 @@ function renderSearchResults(results) {
         text-align: center;
         color: var(--color-text-muted);
       ">
-        <div style="font-size: 2rem; margin-bottom: var(--space-sm); opacity: 0.5;">🔍</div>
-        <div style="font-size: var(--text-md); font-weight: 500; margin-bottom: var(--space-xs); color: var(--color-text);">No results found</div>
-        <div style="font-size: var(--text-sm); margin-bottom: var(--space-md);">Try different keywords or use filters like <code>type:</code>, <code>workspace:</code>, or <code>date:</code></div>
-        <div style="font-size: var(--text-xs); color: var(--color-text-muted);">
-          Examples: <code>type:prompt authentication</code> | <code>workspace:my-project</code> | <code>date:today</code>
+        <div style="font-size: 3rem; margin-bottom: var(--space-md); opacity: 0.3;">🔍</div>
+        <div style="font-size: var(--text-lg); font-weight: 600; margin-bottom: var(--space-sm); color: var(--color-text);">No results found</div>
+        <div style="font-size: var(--text-sm); margin-bottom: var(--space-md); color: var(--color-text-secondary);">
+          Try different keywords or use the quick filters above
+        </div>
+        <div style="display: flex; gap: var(--space-xs); justify-content: center; flex-wrap: wrap; font-size: var(--text-xs);">
+          <code style="padding: 4px 8px; background: var(--color-bg-alt); border-radius: var(--radius-sm);">type:prompt</code>
+          <code style="padding: 4px 8px; background: var(--color-bg-alt); border-radius: var(--radius-sm);">workspace:name</code>
+          <code style="padding: 4px 8px; background: var(--color-bg-alt); border-radius: var(--radius-sm);">date:today</code>
         </div>
       </div>
     `;
@@ -554,6 +703,21 @@ function renderSearchResults(results) {
   }).join('');
   
   resultsEl.innerHTML = html;
+}
+
+/**
+ * Update result count display
+ */
+function updateResultCount(count) {
+  const countEl = document.getElementById('searchResultCount');
+  if (countEl) {
+    if (count > 0) {
+      countEl.style.display = 'inline';
+      countEl.textContent = `${count} result${count !== 1 ? 's' : ''}`;
+    } else {
+      countEl.style.display = 'none';
+    }
+  }
 }
 
 /**
