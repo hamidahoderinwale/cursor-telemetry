@@ -424,6 +424,7 @@
               placeholder="Search events, prompts, files, or ask questions..."
               autocomplete="off"
               spellcheck="false"
+              oninput="if(window.updateClearButton) window.updateClearButton(); if(window.updateSearchExamples) window.updateSearchExamples();"
             />
             <button id="clearSearchBtn" class="search-clear-btn" onclick="clearSearchInput()" style="display: none;" title="Clear search">
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor">

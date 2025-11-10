@@ -173,11 +173,15 @@ function setSearchQuery(query) {
 function updateSearchExamples() {
   const input = document.getElementById('searchInput');
   const examples = document.getElementById('searchExamples');
+  const recentSearches = document.getElementById('recentSearches');
   if (examples && input) {
-    if (input.value.trim().length === 0) {
-      examples.style.display = 'block';
-    } else {
+    const hasQuery = input.value.trim().length > 0;
+    if (hasQuery) {
       examples.style.display = 'none';
+      if (recentSearches) recentSearches.style.display = 'none';
+    } else {
+      examples.style.display = 'block';
+      updateRecentSearches(); // Show recent searches when empty
     }
   }
 }
