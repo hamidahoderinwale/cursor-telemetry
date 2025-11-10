@@ -17,7 +17,8 @@ function createExportImportRoutes(deps) {
       limit, includeAllFields, since, until,
       excludeEvents, excludePrompts, excludeTerminal, excludeContext,
       noCodeDiffs, noLinkedData, noTemporalChunks,
-      abstractionLevel, abstractPrompts, extractPatterns
+      abstractionLevel, abstractPrompts, extractPatterns,
+      fieldFilter // Pass field filter from main handler
     } = options;
     
     try {
@@ -34,6 +35,22 @@ function createExportImportRoutes(deps) {
           if (until && itemTime > until) return false;
           return true;
         });
+      };
+      
+      // Helper to filter object fields based on config (if fieldFilter provided)
+      const filterFields = (obj, tableName) => {
+        if (!fieldFilter || !fieldFilter.has(tableName)) return obj; // No config = export all
+        const tableConfig = fieldFilter.get(tableName);
+        const filtered = {};
+        for (const [key, value] of Object.entries(obj)) {
+          const enabled = tableConfig.get(key);
+          if (enabled === undefined || enabled === true) {
+            // Field not configured or enabled = include it
+            filtered[key] = value;
+          }
+          // If enabled === false, exclude the field
+        }
+        return filtered;
       };
       
       // Helper to write JSON chunk
@@ -160,7 +177,11 @@ function createExportImportRoutes(deps) {
           
           // Apply abstraction
           const processed = processEntry(enriched);
-          writeChunk('      ' + JSON.stringify(processed).split('\n').join('\n      '));
+          
+          // Filter fields based on schema config (entries table)
+          const filtered = filterFields(processed, 'entries');
+          
+          writeChunk('      ' + JSON.stringify(filtered).split('\n').join('\n      '));
           processedCount++;
           
           // Flush periodically
@@ -210,7 +231,11 @@ function createExportImportRoutes(deps) {
           firstPrompt = false;
           
           const processed = processPrompt(prompt);
-          writeChunk('      ' + JSON.stringify(processed).split('\n').join('\n      '));
+          
+          // Filter fields based on schema config (prompts table)
+          const filtered = filterFields(processed, 'prompts');
+          
+          writeChunk('      ' + JSON.stringify(filtered).split('\n').join('\n      '));
           processedCount++;
           
           // Flush periodically
@@ -234,7 +259,11 @@ function createExportImportRoutes(deps) {
         for (const cmd of filteredCommands.slice(0, limit)) {
           if (!firstCmd) writeChunk(',\n');
           firstCmd = false;
-          writeChunk('      ' + JSON.stringify(cmd).split('\n').join('\n      '));
+          
+          // Filter fields based on schema config (terminal_commands table)
+          const filtered = filterFields(cmd, 'terminal_commands');
+          
+          writeChunk('      ' + JSON.stringify(filtered).split('\n').join('\n      '));
         }
         
         writeChunk('\n    ],\n');
@@ -252,7 +281,11 @@ function createExportImportRoutes(deps) {
         for (const snapshot of filteredSnapshots.slice(0, limit)) {
           if (!firstSnapshot) writeChunk(',\n');
           firstSnapshot = false;
-          writeChunk('      ' + JSON.stringify(snapshot).split('\n').join('\n      '));
+          
+          // Filter fields based on schema config (context_snapshots table)
+          const filtered = filterFields(snapshot, 'context_snapshots');
+          
+          writeChunk('      ' + JSON.stringify(filtered).split('\n').join('\n      '));
         }
         
         writeChunk('\n    ],\n');
@@ -309,6 +342,40 @@ function createExportImportRoutes(deps) {
       const limit = parseInt(req.query.limit) || 1000;
       const includeAllFields = req.query.full === 'true';
       
+      // Get custom field configurations for export filtering
+      let fieldConfigs = [];
+      try {
+        fieldConfigs = await persistentDB.getCustomFieldConfigs(null, null, true);
+        console.log(`[EXPORT] Loaded ${fieldConfigs.length} field configurations for export filtering`);
+      } catch (err) {
+        console.warn('[EXPORT] Could not load field configs, exporting all fields:', err.message);
+      }
+      
+      // Build field filter map: table -> field -> enabled
+      const fieldFilter = new Map();
+      fieldConfigs.forEach(config => {
+        if (!fieldFilter.has(config.table_name)) {
+          fieldFilter.set(config.table_name, new Map());
+        }
+        fieldFilter.get(config.table_name).set(config.field_name, config.enabled === 1);
+      });
+      
+      // Helper to filter object fields based on config
+      const filterFields = (obj, tableName) => {
+        if (!fieldFilter.has(tableName)) return obj; // No config = export all
+        const tableConfig = fieldFilter.get(tableName);
+        const filtered = {};
+        for (const [key, value] of Object.entries(obj)) {
+          const enabled = tableConfig.get(key);
+          if (enabled === undefined || enabled === true) {
+            // Field not configured or enabled = include it
+            filtered[key] = value;
+          }
+          // If enabled === false, exclude the field
+        }
+        return filtered;
+      };
+      
       // Parse date strings - handle both ISO date strings (YYYY-MM-DD) and timestamps
       let since = null;
       let until = null;
@@ -360,7 +427,8 @@ function createExportImportRoutes(deps) {
           limit, includeAllFields, since, until,
           excludeEvents, excludePrompts, excludeTerminal, excludeContext,
           noCodeDiffs, noLinkedData, noTemporalChunks,
-          abstractionLevel, abstractPrompts, extractPatterns
+          abstractionLevel, abstractPrompts, extractPatterns,
+          fieldFilter // Pass field filter to streaming handler
         });
       }
       

@@ -53,10 +53,12 @@ class SchemaConfigView {
     container.innerHTML = `
       <div class="schema-config-view">
         <div class="schema-header">
-          <h2>Database Schema Configuration</h2>
-          <p class="schema-description">
-            View and configure your database schema. Add custom fields, modify table structures, 
-            and manage field configurations. Schema-aware imports validate data compatibility before importing.
+          <h2>Export Field Configuration</h2>
+          <p class="schema-description" style="background: var(--color-bg-alt); padding: var(--space-md); border-radius: var(--radius-md); border-left: 3px solid var(--color-primary);">
+            <strong>Purpose:</strong> Configure which fields are included in database exports. 
+            Enable/disable fields to control what data is exported. Disabled fields are excluded from exports for privacy and file size control.
+            <br><br>
+            <strong>Note:</strong> This does not modify the database schema structure. It only controls which fields appear in exported JSON files.
           </p>
           <div class="schema-header-actions">
             <div class="view-mode-toggle" style="display: flex; gap: var(--space-sm); align-items: center;">
@@ -274,13 +276,23 @@ class SchemaConfigView {
       `;
     }
 
+    // Count enabled/disabled fields
+    const totalFields = this.schema.tables.reduce((sum, table) => sum + table.columns.length, 0);
+    const enabledFields = this.customFields.filter(f => f.enabled).length;
+    const disabledFields = this.customFields.filter(f => !f.enabled).length;
+
     // Show schema overview by default
     return `
       <div class="schema-overview">
         <div class="overview-header">
-          <h3>Current Database Schema</h3>
+          <h3>Export Field Configuration</h3>
           <p class="overview-description">
-            Overview of all tables and their structure. Click on any table to view details and make modifications.
+            Configure which database fields are included in exports. 
+            <strong>Enabled fields</strong> are exported; <strong>disabled fields</strong> are excluded.
+            <br><br>
+            <span style="color: var(--color-success);">✓ ${enabledFields} fields enabled</span> | 
+            <span style="color: var(--color-text-muted);">✗ ${disabledFields} fields disabled</span> | 
+            <span style="color: var(--color-text-muted);">${totalFields - enabledFields - disabledFields} not configured (exported by default)</span>
           </p>
         </div>
 
@@ -362,16 +374,26 @@ class SchemaConfigView {
 
           <div class="section">
             <div class="section-header">
-              <h4>Custom Field Configurations</h4>
-              <span class="section-count">${tableCustomFields.length} configured</span>
+              <h4>Export Field Configuration</h4>
+              <span class="section-count">
+                ${tableCustomFields.filter(f => f.enabled).length} enabled, 
+                ${tableCustomFields.filter(f => !f.enabled).length} disabled
+              </span>
             </div>
-            <p class="section-description">Metadata and display configurations for fields. These don't modify the database schema but control how fields are displayed and used.</p>
+            <p class="section-description">
+              <strong>Controls which fields are included in database exports.</strong> 
+              Toggle fields on/off to include or exclude them from exported JSON files. 
+              This helps reduce file size and protect sensitive data.
+            </p>
             <div class="custom-fields-list">
               ${this.renderCustomFields(tableCustomFields)}
             </div>
             <button class="btn btn-secondary" onclick="schemaConfigView.showAddCustomFieldModal()">
-              Add Custom Field Configuration
+              Configure Field for Export
             </button>
+            <div style="margin-top: var(--space-sm); padding: var(--space-sm); background: var(--color-bg-alt); border-radius: var(--radius-sm); font-size: var(--text-xs); color: var(--color-text-muted);">
+              <strong>Tip:</strong> Fields not listed here are exported by default. Add configurations to exclude specific fields from exports.
+            </div>
           </div>
         </div>
       </div>
@@ -396,27 +418,35 @@ class SchemaConfigView {
 
   renderCustomFields(fields) {
     if (fields.length === 0) {
-      return '<p class="empty-state">No custom field configurations</p>';
+      return '<p class="empty-state">No field configurations. All fields will be exported by default.</p>';
     }
 
     return fields.map(field => `
-      <div class="custom-field-item">
-        <div class="field-header">
-          <span class="field-name">${field.displayName || field.fieldName}</span>
-          <div class="field-actions">
+      <div class="custom-field-item" style="border-left: 3px solid ${field.enabled ? 'var(--color-success)' : 'var(--color-error)'}; padding: var(--space-sm); margin-bottom: var(--space-xs); background: var(--color-bg); border-radius: var(--radius-sm);">
+        <div class="field-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-xs);">
+          <div>
+            <span class="field-name" style="font-weight: 600;">${field.displayName || field.fieldName}</span>
+            <span style="color: var(--color-text-muted); font-size: var(--text-xs); margin-left: var(--space-xs);">
+              (${field.tableName}.${field.fieldName})
+            </span>
+          </div>
+          <div class="field-actions" style="display: flex; align-items: center; gap: var(--space-sm);">
+            <span style="font-size: var(--text-xs); color: ${field.enabled ? 'var(--color-success)' : 'var(--color-text-muted)'};">
+              ${field.enabled ? '✓ Exported' : '✗ Excluded'}
+            </span>
             <label class="toggle-switch">
               <input type="checkbox" ${field.enabled ? 'checked' : ''} 
                      onchange="schemaConfigView.toggleField('${field.tableName}', '${field.fieldName}', this.checked)">
               <span class="slider"></span>
             </label>
-            <button class="btn-icon" onclick="schemaConfigView.deleteCustomField('${field.tableName}', '${field.fieldName}')" title="Delete">
-              [Delete]
+            <button class="btn-icon" onclick="schemaConfigView.deleteCustomField('${field.tableName}', '${field.fieldName}')" title="Remove configuration (field will be exported by default)">
+              [Remove]
             </button>
           </div>
         </div>
-        <div class="field-details">
+        <div class="field-details" style="font-size: var(--text-xs); color: var(--color-text-muted);">
           <span class="field-type">Type: ${field.fieldType}</span>
-          ${field.description ? `<p class="field-description">${field.description}</p>` : ''}
+          ${field.description ? `<span style="margin-left: var(--space-sm);">• ${field.description}</span>` : ''}
         </div>
       </div>
     `).join('');
