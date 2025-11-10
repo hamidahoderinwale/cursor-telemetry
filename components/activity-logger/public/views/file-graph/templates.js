@@ -7,26 +7,26 @@ function renderFileGraphViewTemplate(data) {
   return `
     <div class="file-graph-view">
       <div class="view-header">
-        <h2 title="Interactive network graph showing relationships between files in your codebase. Files are connected based on semantic similarity, co-modification patterns, or temporal proximity. You can overlay AI activity, complexity metrics, and apply various clustering algorithms">Semantic File Network</h2>
+        <h2 title="Semantic File Network: Interactive graph visualization using force-directed layout (D3.js with Barnes-Hut optimization). Files are connected based on TF-IDF semantic similarity, co-occurrence patterns, or temporal proximity. Uses adaptive charge strength and theta parameter (0.7-0.9) for performance. Supports clustering algorithms (k-means, community detection) and AI activity overlays. Complexity: O(n log n) with Barnes-Hut optimization.">Semantic File Network</h2>
         <p class="view-subtitle">Interactive code relationship visualization with AI activity overlay</p>
       </div>
 
       <div class="graph-controls">
         <div class="control-group">
-          <label>Analysis Mode:</label>
-          <select id="graphMetric" onchange="updateFileGraph()">
-            <option value="tfidf">TF-IDF Semantic</option>
-            <option value="cooccurrence">Co-occurrence</option>
-            <option value="temporal">Temporal Proximity</option>
+          <label title="Analysis mode determines how file relationships (edges) are calculated">Analysis Mode:</label>
+          <select id="graphMetric" onchange="updateFileGraph()" title="Choose how to measure similarity between files">
+            <option value="tfidf" title="TF-IDF Semantic: Uses Term Frequency-Inverse Document Frequency to measure semantic similarity based on code content. Files with similar keywords/terms get higher similarity scores. Good for finding files with similar functionality or purpose.">TF-IDF Semantic</option>
+            <option value="cooccurrence" title="Co-occurrence: Measures how often files are modified together in the same session or prompt. Uses Jaccard similarity (intersection/union) of editing sessions. Files frequently edited together get connected. Good for finding related work patterns.">Co-occurrence</option>
+            <option value="temporal" title="Temporal Proximity: Connects files based on when they were modified. Files edited close together in time get connected. Good for understanding development workflows and sequential patterns.">Temporal Proximity</option>
           </select>
         </div>
 
         <div class="control-group">
-          <label>Layout:</label>
-          <select id="layoutAlgorithm" onchange="updateFileGraph()">
-            <option value="force">Force-Directed</option>
-            <option value="circular">Circular</option>
-            <option value="radial">Radial</option>
+          <label title="Layout algorithm determines how files are positioned in the graph visualization">Layout:</label>
+          <select id="layoutAlgorithm" onchange="updateFileGraph()" title="Choose the layout algorithm for positioning files">
+            <option value="force" title="Force-Directed Layout: Uses physics simulation (D3.js) with Barnes-Hut optimization. Nodes repel each other, edges attract connected nodes. Optimized for large graphs with adaptive charge strength and theta parameter (0.7-0.9). Complexity: O(n log n) with Barnes-Hut, O(n²) without. Best for showing natural clustering and relationships.">Force-Directed</option>
+            <option value="circular" title="Circular Layout: Arranges all files in a circle. Simple and fast, good for small graphs. All nodes equidistant from center.">Circular</option>
+            <option value="radial" title="Radial Layout: Arranges files in clusters around a central point. Each cluster forms a circle. Good for hierarchical or cluster-based visualization.">Radial</option>
           </select>
         </div>
 
@@ -50,14 +50,14 @@ function renderFileGraphViewTemplate(data) {
         </div>
 
         <div class="control-group">
-          <label>Clustering:</label>
-          <select id="clusteringAlgorithm" onchange="updateFileGraph()">
-            <option value="none">None</option>
-            <option value="fileType">By File Type</option>
-            <option value="workspace">By Workspace</option>
-            <option value="directory">By Directory</option>
-            <option value="similarity">By Similarity</option>
-            <option value="community">Community Detection</option>
+          <label title="Clustering groups related files together visually, often with colors or regions">Clustering:</label>
+          <select id="clusteringAlgorithm" onchange="updateFileGraph()" title="Choose how to group files into clusters">
+            <option value="none" title="No clustering: Files are positioned based only on layout algorithm without grouping">None</option>
+            <option value="fileType" title="By File Type: Groups files by extension (.js, .ts, .py, etc.). Simple and fast.">By File Type</option>
+            <option value="workspace" title="By Workspace: Groups files by their workspace path. Files from same project appear together.">By Workspace</option>
+            <option value="directory" title="By Directory: Groups files by directory structure. Files in same folder appear together.">By Directory</option>
+            <option value="similarity" title="By Similarity: Uses similarity scores to form clusters. Files with high similarity scores are grouped. May use k-means or hierarchical clustering.">By Similarity</option>
+            <option value="community" title="Community Detection: Uses graph algorithms (like Louvain or modularity optimization) to detect communities in the file graph. Finds natural groupings based on connection patterns.">Community Detection</option>
           </select>
         </div>
 
@@ -146,7 +146,7 @@ function renderFileGraphViewTemplate(data) {
         <!-- Prompt Embeddings Analysis -->
         <div class="card">
           <div class="card-header">
-            <h3 class="card-title help-cursor" title="Visualizes semantic similarity between your AI prompts using TF-IDF embeddings and dimensionality reduction (PCA/t-SNE/MDS). Prompts with similar content appear closer together. Data is extracted from your Cursor database and analyzed locally.">
+            <h3 class="card-title help-cursor" title="Prompts Embedding Analysis: Uses TF-IDF (Term Frequency-Inverse Document Frequency) to create feature vectors from prompt text. Then applies dimensionality reduction: PCA (Principal Component Analysis - linear, fastest), t-SNE (t-Distributed Stochastic Neighbor Embedding - non-linear, best clusters), or MDS (Multidimensional Scaling - preserves distances). Prompts with similar content appear closer in 2D/3D space. All processing done locally in browser.">
               Prompts Embedding Analysis
             </h3>
           </div>
@@ -173,11 +173,11 @@ function renderFileGraphViewTemplate(data) {
             <div class="embeddings-controls">
               <div class="embeddings-controls-row">
                 <div class="embeddings-control-group">
-                  <label class="embeddings-control-label" title="PCA: Fastest, linear. t-SNE: Best clusters. MDS: Preserves distances.">Reduction Method:</label>
-                  <select id="embeddingsReductionMethod" class="embeddings-control-select" onchange="renderEmbeddingsVisualization()">
-                    <option value="pca">PCA (Principal Component Analysis)</option>
-                    <option value="tsne">t-SNE (t-Distributed Stochastic Neighbor Embedding)</option>
-                    <option value="mds">MDS (Multidimensional Scaling)</option>
+                  <label class="embeddings-control-label" title="Dimensionality reduction method: Projects high-dimensional TF-IDF vectors to 2D/3D for visualization">Reduction Method:</label>
+                  <select id="embeddingsReductionMethod" class="embeddings-control-select" onchange="renderEmbeddingsVisualization()" title="Choose dimensionality reduction algorithm">
+                    <option value="pca" title="PCA (Principal Component Analysis): Linear transformation that finds directions of maximum variance. Fastest method, preserves global structure. Good for linear relationships. Complexity: O(n*d²) where d is dimensions.">PCA (Principal Component Analysis)</option>
+                    <option value="tsne" title="t-SNE (t-Distributed Stochastic Neighbor Embedding): Non-linear method that preserves local neighborhoods. Excellent for clustering and finding groups. Slower than PCA but better for non-linear relationships. Uses probability distributions to model similarities.">t-SNE (t-Distributed Stochastic Neighbor Embedding)</option>
+                    <option value="mds" title="MDS (Multidimensional Scaling): Preserves pairwise distances between points. Good when you want to maintain relative distances. Can be metric (preserves exact distances) or non-metric (preserves rank order).">MDS (Multidimensional Scaling)</option>
                   </select>
                 </div>
                 <div class="embeddings-control-group">

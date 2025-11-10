@@ -7,7 +7,7 @@ function renderNavigatorViewTemplate(data) {
   return `
     <div class="navigator-view">
       <div class="view-header">
-        <h2 title="Visualizes your codebase in a 2D space where files with similar code or that are frequently modified together appear closer. Uses UMAP dimensionality reduction to create a semantic map of your code">Semantic Navigator</h2>
+        <h2 title="Semantic Navigator: Visualizes your codebase in 2D space using advanced algorithms. Physical mode uses force-directed layout (Barnes-Hut optimized) for co-modification relationships. Latent mode uses UMAP (kNN graph + dimensionality reduction) for semantic similarity. Files with similar code or frequently modified together appear closer. Optimized for large graphs with adaptive parameters and sampling strategies.">Semantic Navigator</h2>
         <p class="view-subtitle">Explore your codebase in latent space - where semantic similarity becomes visual proximity</p>
       </div>
 
@@ -16,13 +16,13 @@ function renderNavigatorViewTemplate(data) {
         <div>
           <h3>View Mode</h3>
           <div class="view-mode-switcher">
-            <button class="view-mode-btn active" data-mode="physical" onclick="setNavigatorViewMode('physical')" title="Shows files based on direct co-modification relationships - files that are frequently edited together appear closer">
+            <button class="view-mode-btn active" data-mode="physical" onclick="setNavigatorViewMode('physical')" title="Physical Layout: Uses force-directed graph layout (D3.js with Barnes-Hut optimization) based on co-modification relationships. Files frequently edited together in the same sessions appear closer. Uses Jaccard similarity of editing sessions. Optimized with adaptive charge strength and theta parameter (0.7-0.9) for large graphs. Complexity: O(n log n).">
               <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                 <path d="M4 4h3v3H4V4zm5 0h3v3H9V4zM4 9h3v3H4V9zm5 0h3v3H9V9z"/>
               </svg>
               Physical
             </button>
-            <button class="view-mode-btn" data-mode="hybrid" onclick="setNavigatorViewMode('hybrid')" title="Blends both physical co-modification and semantic similarity to show a balanced view of file relationships">
+            <button class="view-mode-btn" data-mode="hybrid" onclick="setNavigatorViewMode('hybrid')" title="Hybrid Layout: Interpolates between physical (co-modification) and latent (semantic) layouts. Blends both relationship types to show a balanced view. Uses weighted combination of both positioning methods.">
               <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                 <circle cx="8" cy="4" r="2"/>
                 <circle cx="4" cy="12" r="2"/>
@@ -31,7 +31,7 @@ function renderNavigatorViewTemplate(data) {
               </svg>
               Hybrid
             </button>
-            <button class="view-mode-btn" data-mode="latent" onclick="setNavigatorViewMode('latent')" title="Shows files based on semantic similarity using UMAP - files with similar code content appear closer regardless of when they were modified">
+            <button class="view-mode-btn" data-mode="latent" onclick="setNavigatorViewMode('latent')" title="Latent Layout: Uses UMAP (Uniform Manifold Approximation and Projection) algorithm for dimensionality reduction. First builds a kNN (k-Nearest Neighbors) graph using cosine similarity of feature vectors (TF-IDF + structural features). Then optimizes 2D positions using attractive/repulsive forces. Files with similar code content appear closer regardless of when modified. Optimized with logarithmic sampling and two-stage refinement for large graphs. Complexity: O(n log n) for kNN, then O(n*k) for optimization.">
               <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                 <circle cx="8" cy="8" r="6"/>
                 <circle cx="8" cy="8" r="3"/>
@@ -145,7 +145,7 @@ function renderNavigatorViewTemplate(data) {
       <!-- Semantic Insights -->
       <div class="card semantic-insights">
         <div class="card-header">
-          <h3 class="card-title" title="Automatically discovered patterns and clusters in your codebase based on semantic analysis. Shows groups of related files and insights about code organization">Semantic Insights</h3>
+          <h3 class="card-title" title="Semantic Insights: Automatically discovers patterns using clustering algorithms (k-means, community detection) and semantic analysis. Analyzes file relationships from kNN graphs, co-occurrence patterns, and feature vectors. Shows groups of related files, code organization patterns, and insights about development workflows. Uses AI-powered cluster annotation when available.">Semantic Insights</h3>
           <p class="card-subtitle">Discovered patterns in latent space</p>
         </div>
         <div class="card-body">
