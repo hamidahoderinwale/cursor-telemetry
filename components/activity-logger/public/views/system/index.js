@@ -210,33 +210,33 @@ function renderSystemResourceStats() {
   const minCpu = Math.min(...cpuData);
 
   container.innerHTML = `
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--space-md);">
-      <div class="stat-card">
-        <div class="stat-label">Avg Memory</div>
-        <div class="stat-value">${avgMemory.toFixed(1)} MB</div>
-        <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">
-          Range: ${minMemory.toFixed(1)} - ${maxMemory.toFixed(1)} MB
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: var(--space-lg);">
+      <div class="stat-card" style="padding: var(--space-lg);">
+        <div class="stat-label" style="font-size: var(--text-sm); font-weight: 500; color: var(--color-text-muted); margin-bottom: var(--space-sm); text-transform: uppercase; letter-spacing: 0.5px;">Avg Memory</div>
+        <div class="stat-value" style="font-size: 2rem; font-weight: 600; color: var(--color-text); margin-bottom: var(--space-md); line-height: 1.2;">${avgMemory.toFixed(1)} <span style="font-size: 1rem; font-weight: 400; color: var(--color-text-muted);">MB</span></div>
+        <div style="font-size: var(--text-xs); color: var(--color-text-muted); padding-top: var(--space-sm); border-top: 1px solid var(--color-border);">
+          <span style="opacity: 0.7;">Range:</span> <strong>${minMemory.toFixed(1)}</strong> - <strong>${maxMemory.toFixed(1)}</strong> MB
         </div>
       </div>
-      <div class="stat-card">
-        <div class="stat-label">Peak Memory</div>
-        <div class="stat-value">${maxMemory.toFixed(1)} MB</div>
-        <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">
-          Maximum observed
+      <div class="stat-card" style="padding: var(--space-lg);">
+        <div class="stat-label" style="font-size: var(--text-sm); font-weight: 500; color: var(--color-text-muted); margin-bottom: var(--space-sm); text-transform: uppercase; letter-spacing: 0.5px;">Peak Memory</div>
+        <div class="stat-value" style="font-size: 2rem; font-weight: 600; color: var(--color-text); margin-bottom: var(--space-md); line-height: 1.2;">${maxMemory.toFixed(1)} <span style="font-size: 1rem; font-weight: 400; color: var(--color-text-muted);">MB</span></div>
+        <div style="font-size: var(--text-xs); color: var(--color-text-muted); padding-top: var(--space-sm); border-top: 1px solid var(--color-border);">
+          <span style="opacity: 0.7;">Maximum observed</span>
         </div>
       </div>
-      <div class="stat-card">
-        <div class="stat-label">Avg CPU Load</div>
-        <div class="stat-value">${avgCpu.toFixed(2)}</div>
-        <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">
-          Range: ${minCpu.toFixed(2)} - ${maxCpu.toFixed(2)}
+      <div class="stat-card" style="padding: var(--space-lg);">
+        <div class="stat-label" style="font-size: var(--text-sm); font-weight: 500; color: var(--color-text-muted); margin-bottom: var(--space-sm); text-transform: uppercase; letter-spacing: 0.5px;">Avg CPU Load</div>
+        <div class="stat-value" style="font-size: 2rem; font-weight: 600; color: var(--color-text); margin-bottom: var(--space-md); line-height: 1.2;">${avgCpu.toFixed(2)}</div>
+        <div style="font-size: var(--text-xs); color: var(--color-text-muted); padding-top: var(--space-sm); border-top: 1px solid var(--color-border);">
+          <span style="opacity: 0.7;">Range:</span> <strong>${minCpu.toFixed(2)}</strong> - <strong>${maxCpu.toFixed(2)}</strong>
         </div>
       </div>
-      <div class="stat-card">
-        <div class="stat-label">Peak CPU Load</div>
-        <div class="stat-value">${maxCpu.toFixed(2)}</div>
-        <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">
-          Maximum observed
+      <div class="stat-card" style="padding: var(--space-lg);">
+        <div class="stat-label" style="font-size: var(--text-sm); font-weight: 500; color: var(--color-text-muted); margin-bottom: var(--space-sm); text-transform: uppercase; letter-spacing: 0.5px;">Peak CPU Load</div>
+        <div class="stat-value" style="font-size: 2rem; font-weight: 600; color: var(--color-text); margin-bottom: var(--space-md); line-height: 1.2;">${maxCpu.toFixed(2)}</div>
+        <div style="font-size: var(--text-xs); color: var(--color-text-muted); padding-top: var(--space-sm); border-top: 1px solid var(--color-border);">
+          <span style="opacity: 0.7;">Maximum observed</span>
         </div>
       </div>
     </div>
