@@ -22,216 +22,134 @@ function showExportOptionsModal() {
   };
 
   modal.innerHTML = `
-    <div class="modal-content export-modal-content">
+    <div class="modal-content export-modal-content" style="max-width: 600px;">
       <div class="modal-header">
         <h2>Export Options</h2>
         <button class="modal-close" onclick="closeExportOptionsModal()">&times;</button>
       </div>
       
-      <div class="modal-body export-modal-section">
+      <div class="modal-body" style="padding: var(--space-md);">
         
-        <!-- Date Range -->
-        <div>
-          <h3 class="card-title">Date Range</h3>
-          <div class="export-modal-field-group">
-            <div>
-              <label class="form-label">From</label>
-              <input type="date" id="exportDateFrom" class="form-input" value="${formatDate(oneWeekAgo)}">
-            </div>
-            <div>
-              <label class="form-label">To</label>
-              <input type="date" id="exportDateTo" class="form-input" value="${formatDate(today)}">
-            </div>
-          </div>
-          <div class="export-modal-date-presets">
-            <button class="btn btn-sm" onclick="setExportDateRange('today')">Today</button>
-            <button class="btn btn-sm" onclick="setExportDateRange('week')">Last Week</button>
-            <button class="btn btn-sm" onclick="setExportDateRange('month')">Last Month</button>
-            <button class="btn btn-sm" onclick="setExportDateRange('all')">All Time</button>
-          </div>
-        </div>
-        
-        <!-- Workspace Selection -->
-        <div>
-          <h3 class="card-title">Workspace</h3>
-          <div class="export-modal-field-group">
-            <label class="form-label">
-              Select workspaces to export
-              <span class="tooltip-icon" title="Export activity for selected workspaces only">i</span>
-            </label>
-            <div id="exportWorkspaceSelector" class="workspace-selector-container">
-              <div class="workspace-selector-checkbox-group">
-                <label class="export-modal-checkbox-label">
-                  <input type="checkbox" id="exportWorkspaceAll" checked onchange="toggleAllWorkspaces(this.checked)">
-                  <span>
-                    <strong>All Workspaces</strong>
-                    <div class="description">Export data from all tracked workspaces</div>
-                  </span>
-                </label>
-                <div style="margin-top: var(--space-xs);">
-                  <button type="button" class="btn btn-sm" onclick="document.getElementById('exportWorkspaceAll').checked = false; toggleAllWorkspaces(false);" style="font-size: var(--text-xs);">
-                    Select specific workspaces
-                  </button>
-                </div>
-              </div>
-              <div id="exportWorkspaceList" class="workspace-list-container" style="display: none; margin-top: var(--space-sm); max-height: 200px; overflow-y: auto; border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: var(--space-sm);">
-                <!-- Workspace checkboxes will be populated here -->
-              </div>
-            </div>
-          </div>
-        </div>
-        
-        <!-- Data Types -->
-        <div>
-          <h3 class="card-title">Data Types</h3>
-          <div class="export-modal-checkbox-group">
-            <label class="export-modal-checkbox-label">
-              <input type="checkbox" id="exportTypeEvents" checked>
-              <span>
-                <strong>File Changes</strong>
-                <div class="description">Code changes, file edits</div>
-              </span>
-            </label>
-            <label class="export-modal-checkbox-label">
-              <input type="checkbox" id="exportTypePrompts" checked>
-              <span>
-                <strong>AI Prompts</strong>
-                <div class="description">Captured prompts and conversations</div>
-              </span>
-            </label>
-            <label class="export-modal-checkbox-label">
-              <input type="checkbox" id="exportTypeTerminal" checked>
-              <span>
-                <strong>Terminal Commands</strong>
-                <div class="description">Command line activity</div>
-              </span>
-            </label>
-            <label class="export-modal-checkbox-label">
-              <input type="checkbox" id="exportTypeContext" checked>
-              <span>
-                <strong>Context Snapshots</strong>
-                <div class="description">Workspace context data</div>
-              </span>
-            </label>
-          </div>
-        </div>
-        
-        <!-- NEW: Procedural Abstraction Level -->
-        <div class="abstraction-level-section">
-          <h3 class="card-title">
-            Privacy-Expressiveness Level
-            <span class="tooltip-icon" title="Controls how much detail is preserved vs. abstracted for privacy">[Info]</span>
-          </h3>
+        <!-- Compact Grid Layout -->
+        <div style="display: grid; gap: var(--space-md);">
           
-          <div class="abstraction-level-selector">
-            <div class="abstraction-spectrum">
-              <div class="spectrum-bar">
-                <div class="spectrum-indicator" id="abstractionIndicator"></div>
+          <!-- Date Range - Compact -->
+          <div>
+            <label class="form-label" style="font-size: var(--text-sm); font-weight: 600; margin-bottom: var(--space-xs); display: block;">Date Range</label>
+            <div style="display: grid; grid-template-columns: 1fr 1fr auto; gap: var(--space-xs); align-items: end;">
+              <div>
+                <input type="date" id="exportDateFrom" class="form-input" value="${formatDate(oneWeekAgo)}" style="font-size: var(--text-sm);">
               </div>
-              <div class="spectrum-labels">
-                <span class="spectrum-label">Raw</span>
-                <span class="spectrum-label">Code Abstracts</span>
-                <span class="spectrum-label">Statement-Level</span>
-                <span class="spectrum-label">Workflow-Level</span>
+              <div>
+                <input type="date" id="exportDateTo" class="form-input" value="${formatDate(today)}" style="font-size: var(--text-sm);">
+              </div>
+              <div style="display: flex; gap: 2px;">
+                <button class="btn btn-sm" onclick="setExportDateRange('week')" title="Last Week" style="padding: 6px 8px; font-size: 11px;">Week</button>
+                <button class="btn btn-sm" onclick="setExportDateRange('month')" title="Last Month" style="padding: 6px 8px; font-size: 11px;">Month</button>
+                <button class="btn btn-sm" onclick="setExportDateRange('all')" title="All Time" style="padding: 6px 8px; font-size: 11px;">All</button>
               </div>
             </div>
-            
-            <div class="abstraction-radio-group">
-              <label class="abstraction-radio-label">
-                <input type="radio" name="abstractionLevel" value="0" checked onchange="updateAbstractionLevel(0)">
-                <div class="radio-content">
-                  <strong>Level 0: Raw Traces</strong>
-                  <div class="description">Full code diffs, explicit links, all metadata. Maximum expressiveness, minimum privacy.</div>
-                  <div class="example">Example: Full before/after code, complete prompt text</div>
-                </div>
+          </div>
+          
+          <!-- Workspace - Compact -->
+          <div>
+            <label class="form-label" style="font-size: var(--text-sm); font-weight: 600; margin-bottom: var(--space-xs); display: block;">Workspace</label>
+            <div id="exportWorkspaceSelector">
+              <label style="display: flex; align-items: center; gap: var(--space-xs); cursor: pointer;">
+                <input type="checkbox" id="exportWorkspaceAll" checked onchange="toggleAllWorkspaces(this.checked)">
+                <span style="font-size: var(--text-sm);">All Workspaces</span>
               </label>
-              
-              <label class="abstraction-radio-label">
-                <input type="radio" name="abstractionLevel" value="1" onchange="updateAbstractionLevel(1)">
-                <div class="radio-content">
-                  <strong>Level 1: Code Abstracts</strong>
-                  <div class="description">Remove code content, preserve diff stats and metadata. Medium expressiveness, increased privacy.</div>
-                  <div class="example">Example: "+150/-50 lines in auth.js" instead of full code</div>
-                </div>
+              <div id="exportWorkspaceList" style="display: none; margin-top: var(--space-xs); max-height: 150px; overflow-y: auto; border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: var(--space-xs);"></div>
+              <button type="button" class="btn btn-sm" onclick="document.getElementById('exportWorkspaceAll').checked = false; toggleAllWorkspaces(false);" 
+                      style="margin-top: var(--space-xs); font-size: var(--text-xs); padding: 4px 8px; display: none;" id="selectSpecificWorkspacesBtn">
+                Select specific
+              </button>
+            </div>
+          </div>
+          
+          <!-- Data Types - Compact Inline -->
+          <div>
+            <label class="form-label" style="font-size: var(--text-sm); font-weight: 600; margin-bottom: var(--space-xs); display: block;">Data Types</label>
+            <div style="display: flex; flex-wrap: wrap; gap: var(--space-sm);">
+              <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: var(--text-sm);">
+                <input type="checkbox" id="exportTypeEvents" checked>
+                <span>File Changes</span>
               </label>
-              
-              <label class="abstraction-radio-label">
-                <input type="radio" name="abstractionLevel" value="2" onchange="updateAbstractionLevel(2)">
-                <div class="radio-content">
-                  <strong>Level 2: Statement-Level</strong>
-                  <div class="description">Abstract changes to descriptions. Reduced expressiveness, high privacy.</div>
-                  <div class="example">Example: "added error handling in authenticate()" not code</div>
-                </div>
+              <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: var(--text-sm);">
+                <input type="checkbox" id="exportTypePrompts" checked>
+                <span>AI Prompts</span>
               </label>
-              
-              <label class="abstraction-radio-label">
-                <input type="radio" name="abstractionLevel" value="3" onchange="updateAbstractionLevel(3)">
-                <div class="radio-content">
-                  <strong>Level 3: Workflow-Level</strong>
-                  <div class="description">Extract reusable patterns only. Minimal expressiveness, maximum privacy.</div>
-                  <div class="example">Example: "refactoring component" workflow template</div>
-                </div>
+              <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: var(--text-sm);">
+                <input type="checkbox" id="exportTypeTerminal" checked>
+                <span>Terminal</span>
+              </label>
+              <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: var(--text-sm);">
+                <input type="checkbox" id="exportTypeContext" checked>
+                <span>Context</span>
               </label>
             </div>
           </div>
-        </div>
-        
-        <!-- Advanced Options (auto-enabled/disabled based on abstraction level) -->
-        <div id="advancedOptionsSection">
-          <h3 class="card-title">Advanced Options</h3>
-          <div class="export-modal-checkbox-group">
-            <label class="export-modal-checkbox-label">
-              <input type="checkbox" id="exportIncludeCodeDiffs" checked>
-              <span>
-                <strong>Include Code Diffs</strong>
-                <div class="description">Before/after code content (disabled at Level 1+)</div>
-              </span>
+          
+          <!-- Privacy Level - Compact Dropdown -->
+          <div>
+            <label class="form-label" style="font-size: var(--text-sm); font-weight: 600; margin-bottom: var(--space-xs); display: flex; align-items: center; gap: var(--space-xs);">
+              Privacy Level
+              <span style="color: var(--color-text-muted); font-size: 10px; font-weight: normal;" title="Higher levels remove code content for privacy">(0=Raw, 3=Max Privacy)</span>
             </label>
-            <label class="export-modal-checkbox-label">
-              <input type="checkbox" id="exportIncludeLinkedData" checked>
-              <span>
-                <strong>Include Linked Data</strong>
-                <div class="description">Prompt-code relationships (disabled at Level 3)</div>
-              </span>
-            </label>
-            <label class="export-modal-checkbox-label">
-              <input type="checkbox" id="exportIncludeTemporalChunks" checked>
-              <span>
-                <strong>Include Temporal Chunks</strong>
-                <div class="description">Time-grouped activity sessions (disabled at Level 3)</div>
-              </span>
-            </label>
-            <label class="export-modal-checkbox-label">
-              <input type="checkbox" id="exportAbstractPrompts">
-              <span>
-                <strong>Abstract Prompt Text</strong>
-                <div class="description">Replace prompts with descriptions (Level 2+)</div>
-              </span>
-            </label>
-            <label class="export-modal-checkbox-label">
-              <input type="checkbox" id="exportExtractPatterns">
-              <span>
-                <strong>Extract Workflow Patterns</strong>
-                <div class="description">Identify reusable workflow templates (Level 3)</div>
-              </span>
-            </label>
-            <label class="export-modal-checkbox-label">
-              <input type="checkbox" id="exportFullMetadata">
-              <span>
-                <strong>Full Metadata</strong>
-                <div class="description">All fields (larger file, slower export)</div>
-              </span>
-            </label>
+            <select id="exportAbstractionLevel" class="form-input" onchange="updateAbstractionLevelFromSelect(this.value)" style="font-size: var(--text-sm);">
+              <option value="0">Level 0: Raw (Full code, all metadata)</option>
+              <option value="1" selected>Level 1: Abstracts (Stats only, no code)</option>
+              <option value="2">Level 2: Statements (Descriptions only)</option>
+              <option value="3">Level 3: Workflows (Patterns only)</option>
+            </select>
+            <div id="privacyLevelHint" style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: 4px;"></div>
           </div>
-        </div>
-        
-        <!-- Item Limit -->
-        <div>
-          <h3 class="card-title">Item Limit</h3>
-          <input type="number" id="exportLimit" class="form-input" value="1000" min="100" max="10000" step="100">
-          <div class="card-subtitle" style="margin-top: var(--space-xs);">
-            Maximum items per type (recommended: 1000-5000)
+          
+          <!-- Item Limit - Compact -->
+          <div>
+            <label class="form-label" style="font-size: var(--text-sm); font-weight: 600; margin-bottom: var(--space-xs); display: block;">
+              Item Limit
+              <span style="font-weight: normal; color: var(--color-text-muted);">(per type)</span>
+            </label>
+            <input type="number" id="exportLimit" class="form-input" value="1000" min="100" max="10000" step="100" style="font-size: var(--text-sm); width: 120px;">
           </div>
+          
+          <!-- Advanced Options - Collapsible -->
+          <div>
+            <button type="button" class="btn btn-sm" onclick="toggleAdvancedOptions()" id="advancedOptionsToggle" 
+                    style="font-size: var(--text-xs); padding: 4px 8px; color: var(--color-text-muted);">
+              <span id="advancedOptionsToggleText">▼</span> Advanced Options
+            </button>
+            <div id="advancedOptionsSection" style="display: none; margin-top: var(--space-sm); padding-top: var(--space-sm); border-top: 1px solid var(--color-border);">
+              <div style="display: grid; gap: var(--space-xs);">
+                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: var(--text-sm);">
+                  <input type="checkbox" id="exportIncludeCodeDiffs" checked>
+                  <span>Code Diffs</span>
+                </label>
+                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: var(--text-sm);">
+                  <input type="checkbox" id="exportIncludeLinkedData" checked>
+                  <span>Linked Data</span>
+                </label>
+                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: var(--text-sm);">
+                  <input type="checkbox" id="exportIncludeTemporalChunks" checked>
+                  <span>Temporal Chunks</span>
+                </label>
+                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: var(--text-sm);">
+                  <input type="checkbox" id="exportAbstractPrompts">
+                  <span>Abstract Prompts</span>
+                </label>
+                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: var(--text-sm);">
+                  <input type="checkbox" id="exportExtractPatterns">
+                  <span>Extract Patterns</span>
+                </label>
+                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: var(--text-sm);">
+                  <input type="checkbox" id="exportFullMetadata">
+                  <span>Full Metadata</span>
+                </label>
+              </div>
+            </div>
+          </div>
+          
         </div>
         
       </div>
@@ -256,11 +174,53 @@ function showExportOptionsModal() {
 
   modal.classList.add('active');
   
-  // Initialize abstraction level
-  updateAbstractionLevel(0);
+  // Initialize abstraction level (default to 1)
+  updateAbstractionLevelFromSelect('1');
   
   // Load and populate workspaces
   loadWorkspacesForExport();
+  
+  // Show "Select specific" button if workspaces exist
+  setTimeout(() => {
+    const workspaceList = document.getElementById('exportWorkspaceList');
+    const selectBtn = document.getElementById('selectSpecificWorkspacesBtn');
+    if (workspaceList && workspaceList.children.length > 0 && selectBtn) {
+      selectBtn.style.display = 'inline-block';
+    }
+  }, 100);
+}
+
+function toggleAdvancedOptions() {
+  const section = document.getElementById('advancedOptionsSection');
+  const toggle = document.getElementById('advancedOptionsToggleText');
+  if (section) {
+    const isVisible = section.style.display !== 'none';
+    section.style.display = isVisible ? 'none' : 'block';
+    if (toggle) {
+      toggle.textContent = isVisible ? '▼' : '▲';
+    }
+  }
+}
+
+function updateAbstractionLevelFromSelect(level) {
+  const levelNum = parseInt(level);
+  const radio = document.querySelector(`input[name="abstractionLevel"][value="${levelNum}"]`);
+  if (radio) {
+    radio.checked = true;
+  }
+  updateAbstractionLevel(levelNum);
+  
+  // Update hint
+  const hints = {
+    0: 'Full code diffs, all metadata',
+    1: 'Stats only, no code content',
+    2: 'Descriptions only, high privacy',
+    3: 'Patterns only, maximum privacy'
+  };
+  const hintEl = document.getElementById('privacyLevelHint');
+  if (hintEl) {
+    hintEl.textContent = hints[levelNum] || '';
+  }
 }
 
 function loadWorkspacesForExport() {
@@ -295,18 +255,15 @@ function loadWorkspacesForExport() {
   // Check if "All Workspaces" is checked
   const allWorkspacesChecked = allWorkspacesCheckbox.checked;
   
-  // Populate workspace checkboxes
+  // Populate workspace checkboxes (compact)
   workspaceList.innerHTML = workspaceArray.map(ws => {
     const displayName = ws.split('/').pop() || ws;
     const escapedWs = window.escapeHtml ? window.escapeHtml(ws) : ws;
     const escapedDisplay = window.escapeHtml ? window.escapeHtml(displayName) : displayName;
     return `
-      <label class="export-modal-checkbox-label" style="margin-bottom: var(--space-xs);">
+      <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: var(--text-sm); padding: 4px 0;">
         <input type="checkbox" class="export-workspace-checkbox" value="${escapedWs}" ${allWorkspacesChecked ? 'disabled' : ''}>
-        <span>
-          <strong>${escapedDisplay}</strong>
-          <div class="description" style="font-size: var(--text-xs); color: var(--color-text-muted);">${escapedWs}</div>
-        </span>
+        <span title="${escapedWs}">${escapedDisplay}</span>
       </label>
     `;
   }).join('');
@@ -419,10 +376,10 @@ async function executeExportWithOptions() {
   const toDate = document.getElementById('exportDateTo').value;
   const limit = parseInt(document.getElementById('exportLimit').value) || 1000;
   
-  // Get abstraction level
-  const abstractionLevel = parseInt(
-    document.querySelector('input[name="abstractionLevel"]:checked')?.value || '0'
-  );
+  // Get abstraction level from select or radio
+  const selectEl = document.getElementById('exportAbstractionLevel');
+  const abstractionLevel = selectEl ? parseInt(selectEl.value) : 
+    parseInt(document.querySelector('input[name="abstractionLevel"]:checked')?.value || '0');
   
   // Get workspace selection
   const allWorkspaces = document.getElementById('exportWorkspaceAll').checked;
@@ -509,5 +466,7 @@ window.closeExportOptionsModal = closeExportOptionsModal;
 window.setExportDateRange = setExportDateRange;
 window.executeExportWithOptions = executeExportWithOptions;
 window.updateAbstractionLevel = updateAbstractionLevel;
+window.updateAbstractionLevelFromSelect = updateAbstractionLevelFromSelect;
 window.toggleAllWorkspaces = toggleAllWorkspaces;
+window.toggleAdvancedOptions = toggleAdvancedOptions;
 window.shareFromExportModal = shareFromExportModal;
