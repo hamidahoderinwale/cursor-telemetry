@@ -78,7 +78,9 @@ class FileGraphVisualizer {
     try {
       // Try loading from backend API first (much faster)
       const apiBase = window.CONFIG?.API_BASE_URL || 'http://localhost:43917';
-      const response = await fetch(`${apiBase}/api/analytics/context/file-relationships?minCount=1`);
+      
+      // Try with minCount=1 first (most permissive, fastest to return data)
+      let response = await fetch(`${apiBase}/api/analytics/context/file-relationships?minCount=1`);
       if (response.ok) {
         const result = await response.json();
         if (result.success && result.data) {
@@ -87,6 +89,24 @@ class FileGraphVisualizer {
           
           if (this.nodes.length > 0) {
             console.log(`[SUCCESS] Loaded ${this.nodes.length} nodes and ${this.links.length} edges from API`);
+            // Render immediately with available data
+            this.render();
+            return;
+          }
+        }
+      }
+      
+      // If no data with minCount=1, try minCount=0 (include all files, even single mentions)
+      response = await fetch(`${apiBase}/api/analytics/context/file-relationships?minCount=0`);
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success && result.data) {
+          this.nodes = result.data.nodes || [];
+          this.links = result.data.edges || [];
+          
+          if (this.nodes.length > 0) {
+            console.log(`[SUCCESS] Loaded ${this.nodes.length} nodes and ${this.links.length} edges from API (minCount=0)`);
+            this.render();
             return;
           }
         }
@@ -100,7 +120,8 @@ class FileGraphVisualizer {
       }
 
       // Get all events with file content (limited for performance)
-      const events = await sync.storage.getAllEvents(200); // Reduced from 500
+      // Reduced further for faster initial load - can load more on demand
+      const events = await sync.storage.getAllEvents(100); // Reduced from 200 for faster loading
       
       // Build file map
       const fileMap = new Map();

@@ -93,7 +93,8 @@ function createAnalyticsRoutes(deps) {
 
   app.get('/api/analytics/context/file-relationships', (req, res) => {
     try {
-      const minCount = parseInt(req.query.minCount) || 2;
+      // Default to minCount=1 for faster response (includes more files)
+      const minCount = parseInt(req.query.minCount) || 1;
       const cacheKey = `graph:${minCount}`;
       
       const cached = fileGraphCache.get(cacheKey);
@@ -106,13 +107,16 @@ function createAnalyticsRoutes(deps) {
         });
       }
       
+      // Get graph data (this is fast - uses pre-computed co-occurrence data)
       const graph = contextAnalyzer.getFileRelationshipGraph(minCount);
       
+      // Cache the result
       fileGraphCache.set(cacheKey, {
         data: graph,
         timestamp: Date.now()
       });
       
+      // Limit cache size
       if (fileGraphCache.size > 10) {
         const oldestKey = Array.from(fileGraphCache.keys())[0];
         fileGraphCache.delete(oldestKey);
