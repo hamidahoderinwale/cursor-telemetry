@@ -9,13 +9,22 @@
  */
 function computePhysicalLayout(files) {
   // Use co-occurrence similarity (same as file graph)
+  // Optimized: limit comparisons for large datasets
   const links = [];
   const threshold = 0.3;
+  const MAX_FILES_FOR_FULL_COMPARISON = 300; // Only do full O(n²) for smaller sets
   
-  for (let i = 0; i < files.length; i++) {
-    for (let j = i + 1; j < files.length; j++) {
-      const file1 = files[i];
-      const file2 = files[j];
+  // For large datasets, use sampling to reduce comparisons
+  const filesToCompare = files.length > MAX_FILES_FOR_FULL_COMPARISON 
+    ? files.slice(0, MAX_FILES_FOR_FULL_COMPARISON) 
+    : files;
+  
+  console.log(`[LAYOUT] Computing physical layout for ${filesToCompare.length} files (of ${files.length} total)`);
+  
+  for (let i = 0; i < filesToCompare.length; i++) {
+    for (let j = i + 1; j < filesToCompare.length; j++) {
+      const file1 = filesToCompare[i];
+      const file2 = filesToCompare[j];
       
       const sessions1 = new Set((file1.events || []).map(e => e.session_id).filter(Boolean));
       const sessions2 = new Set((file2.events || []).map(e => e.session_id).filter(Boolean));
