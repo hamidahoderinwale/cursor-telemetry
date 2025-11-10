@@ -121,7 +121,7 @@ class FileGraphVisualizer {
 
       // Get all events with file content (limited for performance)
       // Reduced further for faster initial load - can load more on demand
-      const events = await sync.storage.getAllEvents(100); // Reduced from 200 for faster loading
+      const events = await sync.storage.getAllEvents(50); // Reduced from 100 for faster loading
       
       // Build file map
       const fileMap = new Map();

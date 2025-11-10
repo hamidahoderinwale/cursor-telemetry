@@ -55,14 +55,45 @@ async function initializeNavigator() {
     // Show loading
     container.innerHTML = '<div class="loading-wrapper"><div class="loading-spinner"></div><span>Computing latent embeddings...</span></div>';
     
-    // Fetch file data
+    // Fetch file data - reduced limit for faster initial load
+    // Start with 500 files, can load more on demand
     let response, data;
     try {
-      response = await fetch(`${window.CONFIG.API_BASE}/api/file-contents?limit=100000`);
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      // Check cache first
+      const cacheKey = 'navigatorFileData';
+      const cacheExpiry = 5 * 60 * 1000; // 5 minutes
+      const cached = sessionStorage.getItem(cacheKey);
+      
+      if (cached) {
+        try {
+          const cachedData = JSON.parse(cached);
+          if (Date.now() - cachedData.timestamp < cacheExpiry) {
+            console.log('[NAVIGATOR] Using cached file data');
+            data = cachedData.data;
+          }
+        } catch (e) {
+          // Cache invalid, fetch fresh
+        }
       }
-      data = await response.json();
+      
+      if (!data) {
+        // Reduced from 100k to 500 for much faster initial load
+        response = await fetch(`${window.CONFIG.API_BASE}/api/file-contents?limit=500`);
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        data = await response.json();
+        
+        // Cache the data
+        try {
+          sessionStorage.setItem(cacheKey, JSON.stringify({
+            data: data,
+            timestamp: Date.now()
+          }));
+        } catch (e) {
+          // Cache storage failed, continue anyway
+        }
+      }
     } catch (error) {
       console.warn('[NAVIGATOR] Failed to fetch file contents:', error.message);
       container.innerHTML = `
@@ -287,36 +318,59 @@ async function initializeNavigator() {
     // Update loading message
     container.innerHTML = '<div class="loading-wrapper"><div class="loading-spinner"></div><span>Computing physical layout...</span></div>';
     
-    // Compute physical positions (co-occurrence based)
+    // Compute physical positions (co-occurrence based) - show this first for immediate feedback
     const { nodes: physicalNodes, links } = window.computePhysicalLayout(files);
     
-    // Update loading message
-    container.innerHTML = '<div class="loading-wrapper"><div class="loading-spinner"></div><span>Computing latent embeddings...</span></div>';
-    
-    // Compute latent positions (semantic similarity based) using UMAP-like layout (now async)
-    const latentNodes = await window.computeLatentLayoutUMAP(files);
-    
-    // Store positions
+    // Store physical positions immediately
     physicalNodes.forEach(n => {
       navigatorState.physicalPositions.set(n.id, { x: n.x, y: n.y });
     });
-    
-    latentNodes.forEach(n => {
-      navigatorState.latentPositions.set(n.id, { x: n.x, y: n.y });
-    });
-    
-    // Detect latent clusters
-    navigatorState.clusters = window.detectLatentClusters(latentNodes, links);
     
     // Store data
     navigatorState.nodes = physicalNodes;
     navigatorState.links = links;
     
-    // Render
+    // Render physical layout immediately (progressive loading)
     window.renderNavigator(container, physicalNodes, links);
+    console.log('[NAVIGATOR] Physical layout rendered, computing latent embeddings in background...');
     
-    // Populate workspace and directory filters
+    // Populate workspace and directory filters (can do this while latent computes)
     populateNavigatorFilters();
+    
+    // Compute latent positions in background (defer to idle time for better UX)
+    // This allows users to see and interact with the graph while latent positions compute
+    const computeLatentAsync = async () => {
+      try {
+        container.innerHTML = '<div class="loading-wrapper"><div class="loading-spinner"></div><span>Computing latent embeddings (this may take a moment)...</span></div>';
+        const latentNodes = await window.computeLatentLayoutUMAP(files);
+        
+        // Store latent positions
+        latentNodes.forEach(n => {
+          navigatorState.latentPositions.set(n.id, { x: n.x, y: n.y });
+        });
+        
+        // Detect latent clusters
+        navigatorState.clusters = window.detectLatentClusters(latentNodes, links);
+        
+        // Re-render with both layouts available
+        window.renderNavigator(container, physicalNodes, links);
+        console.log('[NAVIGATOR] Latent embeddings complete');
+      } catch (error) {
+        console.warn('[NAVIGATOR] Latent embedding computation failed:', error.message);
+        // Continue with physical layout only - use physical as fallback for latent
+        physicalNodes.forEach(n => {
+          navigatorState.latentPositions.set(n.id, { x: n.x, y: n.y });
+        });
+        window.renderNavigator(container, physicalNodes, links);
+      }
+    };
+    
+    // Use requestIdleCallback if available, otherwise setTimeout
+    if (typeof requestIdleCallback !== 'undefined') {
+      requestIdleCallback(computeLatentAsync, { timeout: 2000 });
+    } else {
+      setTimeout(computeLatentAsync, 100);
+    }
     
     // Initialize transition speed display
     if (window.initializeTransitionSpeed) {

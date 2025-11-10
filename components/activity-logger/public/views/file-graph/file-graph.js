@@ -78,7 +78,8 @@ async function initializeD3FileGraph() {
       try {
         // Reduced limit for faster initial load - can fetch more on demand
         // Start with smaller limit, can increase if needed
-        response = await fetch(`${window.CONFIG.API_BASE}/api/file-contents?limit=1000`);
+        // Reduced from 1000 to 500 for faster loading
+        response = await fetch(`${window.CONFIG.API_BASE}/api/file-contents?limit=500`);
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }

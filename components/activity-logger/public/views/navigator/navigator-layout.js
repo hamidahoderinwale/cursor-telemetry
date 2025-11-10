@@ -64,14 +64,15 @@ function computePhysicalLayout(files) {
   
   // Use force simulation to compute positions
   const width = 800, height = 700;
-  const tempSimulation = d3.forceSimulation(files)
+  const tempSimulation = d3.forceSimulation(filesToCompare)
     .force('link', d3.forceLink(links).id(d => d.id).distance(100))
     .force('charge', d3.forceManyBody().strength(-300))
     .force('center', d3.forceCenter(width / 2, height / 2))
     .force('collision', d3.forceCollide().radius(30));
   
   // Run simulation to completion (reduced iterations for speed)
-  const simIterations = Math.min(100, files.length * 2); // Adaptive
+  // Further reduced for faster computation
+  const simIterations = Math.min(50, Math.max(20, filesToCompare.length)); // Reduced from 100
   console.log(`[LAYOUT] Running force simulation for ${simIterations} ticks...`);
   for (let i = 0; i < simIterations; i++) {
     tempSimulation.tick();
@@ -80,6 +81,8 @@ function computePhysicalLayout(files) {
   
   tempSimulation.stop();
   
+  // Return all files but only computed positions for subset
+  // Other files will use default positions
   return { nodes: files, links };
 }
 
@@ -92,8 +95,9 @@ async function buildKNN(vectors, k) {
   const n = vectors.length;
   
   // For large datasets, use sampling to speed up kNN
-  const useSampling = n > 500;
-  const sampleSize = useSampling ? Math.min(300, Math.floor(n * 0.3)) : n;
+  // More aggressive sampling for faster computation
+  const useSampling = n > 200; // Lower threshold for sampling
+  const sampleSize = useSampling ? Math.min(200, Math.floor(n * 0.25)) : n; // Smaller sample size
   
   for (let i = 0; i < n; i++) {
     const scores = [];
