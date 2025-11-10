@@ -1814,40 +1814,55 @@ function initializeWhenReady() {
 
   // Use optimized initialization with warm-start
   if (storage && synchronizer) {
-    // Initialize persistent storage
-    synchronizer.initialize().then(async (stats) => {
-      console.log('[DATA] Persistent storage ready:', stats);
-      
-      // Use new optimized initialization
-      state.connected = true;
-      updateConnectionStatus(true);
-      await (window.initializeDashboard || (() => { console.error('[ERROR] initializeDashboard not available'); }))();
-      
-      // Initialize search engine after data is loaded (defer to idle time)
-      if (typeof requestIdleCallback !== 'undefined') {
-        requestIdleCallback(() => {
-          if (typeof window.initializeSearch === 'function') {
-            window.initializeSearch().catch(err => {
-              console.warn('[SEARCH] Initial search initialization failed, will retry:', err);
-            });
-          }
-        }, { timeout: 2000 });
-      } else {
-        setTimeout(() => {
-          if (typeof window.initializeSearch === 'function') {
-            window.initializeSearch().catch(err => {
-              console.warn('[SEARCH] Initial search initialization failed, will retry:', err);
-            });
-          }
-        }, 2000);
-      }
-      
-      console.log('[SUCCESS] Dashboard initialized with warm-start');
-    }).catch(error => {
-      console.error('Persistence initialization failed:', error);
-      // Fall back to non-persistent mode
-      initializeNonPersistent();
+    // Start dashboard initialization immediately - don't wait for storage
+    state.connected = true;
+    updateConnectionStatus(true);
+    
+    // Initialize dashboard right away (will use cache if available)
+    (window.initializeDashboard || (() => { 
+      console.error('[ERROR] initializeDashboard not available'); 
+      return Promise.resolve();
+    }))().catch(err => {
+      console.error('[ERROR] Dashboard initialization failed:', err);
     });
+    
+    // Initialize storage and synchronizer in background (non-blocking)
+    Promise.resolve().then(async () => {
+      try {
+        await storage.init();
+        console.log('[DATA] Storage initialized');
+        
+        // Start synchronizer in background (non-blocking)
+        synchronizer.initialize().then((stats) => {
+          console.log('[DATA] Synchronizer ready:', stats);
+        }).catch(error => {
+          console.warn('Synchronizer initialization failed (non-critical):', error.message);
+        });
+      } catch (error) {
+        console.warn('[WARNING] Storage initialization failed (non-critical):', error.message);
+      }
+    });
+    
+    // Initialize search engine after data is loaded (defer to idle time)
+    if (typeof requestIdleCallback !== 'undefined') {
+      requestIdleCallback(() => {
+        if (typeof window.initializeSearch === 'function') {
+          window.initializeSearch().catch(err => {
+            console.warn('[SEARCH] Initial search initialization failed, will retry:', err);
+          });
+        }
+      }, { timeout: 2000 });
+    } else {
+      setTimeout(() => {
+        if (typeof window.initializeSearch === 'function') {
+          window.initializeSearch().catch(err => {
+            console.warn('[SEARCH] Initial search initialization failed, will retry:', err);
+          });
+        }
+      }, 2000);
+    }
+    
+    console.log('[SUCCESS] Dashboard initialized with warm-start');
     
     // Setup auto-refresh with debouncing to prevent excessive requests
     let refreshInProgress = false;

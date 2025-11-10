@@ -633,6 +633,8 @@
   <script src="utils/dashboard-helpers.js" defer></script>
   
   <!-- Config & Main Dashboard (must load last, synchronous) -->
+  <!-- Environment config (loads first, can be generated at build time) -->
+  <script src="config-env.js"></script>
   <script src="config.js"></script>
   <script src="dashboard.js"></script>
   

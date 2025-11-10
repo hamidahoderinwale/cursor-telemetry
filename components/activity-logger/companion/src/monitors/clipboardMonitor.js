@@ -1,5 +1,4 @@
-import clipboard from 'clipboardy';
-import { queue } from '../utils/queue.js';
+const { queue } = require('../utils/queue.js');
 
 // Simple in-memory database for prompt storage (replacing Dexie/IndexedDB)
 const db = {
@@ -34,6 +33,27 @@ class ClipboardMonitor {
     this.capturedPrompts = new Set(); // Track captured prompts to prevent duplicates
     this.lastCaptureTime = 0;
     this.minCaptureInterval = 30000; // Minimum 30 seconds between captures to reduce spam
+    this.clipboard = null; // Will be loaded dynamically
+    this.clipboardLoadPromise = null; // Cache the import promise
+  }
+
+  // Dynamically load clipboardy (ESM module)
+  async loadClipboard() {
+    if (this.clipboard) {
+      return this.clipboard;
+    }
+    if (this.clipboardLoadPromise) {
+      return this.clipboardLoadPromise;
+    }
+    this.clipboardLoadPromise = import('clipboardy').then(module => {
+      this.clipboard = module.default;
+      return this.clipboard;
+    }).catch(error => {
+      console.warn('[CLIPBOARD] Failed to load clipboardy:', error.message);
+      this.clipboardLoadPromise = null;
+      return null;
+    });
+    return this.clipboardLoadPromise;
   }
 
   start() {
@@ -47,6 +67,12 @@ class ClipboardMonitor {
 
     this.intervalId = setInterval(async () => {
       try {
+        // Load clipboard module if not already loaded
+        const clipboard = await this.loadClipboard();
+        if (!clipboard) {
+          return; // Skip if clipboard module failed to load
+        }
+        
         const text = (await clipboard.read()).trim();
         const now = Date.now();
         
@@ -147,4 +173,5 @@ class ClipboardMonitor {
   }
 }
 
-export const clipboardMonitor = new ClipboardMonitor();
+const clipboardMonitor = new ClipboardMonitor();
+module.exports = { clipboardMonitor };

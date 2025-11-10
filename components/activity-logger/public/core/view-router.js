@@ -148,11 +148,11 @@ async function renderCurrentView() {
       }
     }
   } else {
-    container.innerHTML = '<div class="empty-state">
+    container.innerHTML = `<div class="empty-state">
       <h3>View not found</h3>
       <p>The view "${viewName}" could not be loaded. It may not be available yet.</p>
       <button class="btn btn-primary" onclick="window.renderCurrentView()">Retry</button>
-    </div>';
+    </div>`;
     
     if (window.setLoading) {
       window.setLoading(viewName, false);

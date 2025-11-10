@@ -60,11 +60,26 @@ class DataSynchronizer {
       });
     }, 2000); // Delay 2 seconds to let UI render first
     
-    // Load from companion service (fast endpoints)
-    await this.syncCompanionService();
+    // Load from companion service (fast endpoints) - don't block on this, run in background
+    setTimeout(() => {
+      this.syncCompanionService().catch(err => {
+        // Suppress expected errors
+        const isExpectedError = err.name === 'AbortError' || 
+                               err.message?.includes('CORS') ||
+                               err.message?.includes('Failed to fetch') ||
+                               err.message?.includes('NetworkError');
+        if (!isExpectedError) {
+          console.warn('[WARNING] Companion service sync failed:', err.message);
+        }
+      });
+    }, 500); // Small delay to let UI render first
     
-    // Run initial aggregation
-    await this.aggregator.aggregateAll();
+    // Defer aggregation to background - don't block initialization
+    setTimeout(() => {
+      this.aggregator.aggregateAll().catch(err => {
+        console.warn('[WARNING] Initial aggregation failed:', err.message);
+      });
+    }, 1000);
     
     // Start periodic sync for live updates
     this.startPeriodicSync();
@@ -72,7 +87,7 @@ class DataSynchronizer {
     this.isInitialized = true;
     console.log('[SUCCESS] Data synchronizer initialized');
     
-    // Return stats
+    // Return stats immediately (don't wait for aggregation)
     return await this.storage.getStats();
   }
 
@@ -284,18 +299,30 @@ class DataSynchronizer {
           this.lastSync.events = eventsData.cursor || this.lastSync.events;
           this._saveLastSync(); // Persist to localStorage
           
-          // Reload events from storage to update state
+          // Update state with new events only (don't reload all) - much faster
           if (window.state && this.storage) {
-            const allEvents = await this.storage.getAllEvents(1000);
-            if (allEvents && allEvents.length > 0) {
-              window.state.data.events = allEvents;
-              // Trigger stats recalculation and view refresh
+            // Only add new events to state, don't reload everything
+            if (!window.state.data.events) {
+              window.state.data.events = [];
+            }
+            // Add new events to existing state
+            const existingIds = new Set((window.state.data.events || []).map(e => e.id));
+            const newEvents = eventsData.events.filter(e => !existingIds.has(e.id));
+            if (newEvents.length > 0) {
+              window.state.data.events = [...(window.state.data.events || []), ...newEvents].slice(0, 200); // Keep only recent 200
+              // Trigger stats recalculation in background
               if (window.calculateStats) {
-                window.calculateStats();
+                setTimeout(() => {
+                  if (typeof requestIdleCallback !== 'undefined') {
+                    requestIdleCallback(() => window.calculateStats(), { timeout: 1000 });
+                  } else {
+                    setTimeout(() => window.calculateStats(), 1000);
+                  }
+                }, 100);
               }
-              // Re-render charts if analytics view is active
+              // Re-render charts if analytics view is active (defer)
               if (window.state.currentView === 'analytics' && window.renderCurrentView) {
-                setTimeout(() => window.renderCurrentView(), 100);
+                setTimeout(() => window.renderCurrentView(), 500);
               }
             }
           }

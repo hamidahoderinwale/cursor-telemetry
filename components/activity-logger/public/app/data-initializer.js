@@ -133,8 +133,9 @@ async function initializeDashboard() {
             fetchOlderHistory();
             // Load more recent data to fill in gaps (up to 200 total for better performance)
             if (window.APIClient && window.state?.data?.events?.length < 200) {
-                const additionalLimit = 150; // Load 150 more (total 200)
-                window.APIClient.get(`/api/activity?limit=${additionalLimit}&offset=50`, {
+                const currentCount = window.state?.data?.events?.length || 0;
+                const additionalLimit = 200 - currentCount; // Load exactly what's needed
+                window.APIClient.get(`/api/activity?limit=${additionalLimit}&offset=${currentCount}`, {
                     timeout: 30000,
                     retries: 1,
                     silent: true
@@ -205,40 +206,60 @@ async function loadFromCache() {
     return;
   }
   
-  // Load minimal recent data (last 6 hours) for fastest startup
+  // Load minimal recent data (last 2 hours) for fastest startup
   const now = Date.now();
-  const sixHoursAgo = now - 6 * 60 * 60 * 1000; // Reduced from 24 hours for speed
+  const twoHoursAgo = now - 2 * 60 * 60 * 1000; // Reduced to 2 hours for even faster load
   
   try {
-    // Load only most recent events (limit to 50 for speed)
+    // Load only most recent events (limit to 30 for ultra-fast load)
     if (window.persistentStorage.getEventsSince) {
-      const recentEvents = await window.persistentStorage.getEventsSince(sixHoursAgo);
+      const recentEvents = await window.persistentStorage.getEventsSince(twoHoursAgo);
       if (recentEvents && recentEvents.length > 0) {
-        // Limit to 50 most recent for fastest load
-        window.state.data.events = recentEvents.slice(0, 50);
+        // Limit to 30 most recent for fastest load
+        window.state.data.events = recentEvents.slice(0, 30);
         console.log(`[SUCCESS] Loaded ${window.state.data.events.length} recent events from cache`);
+      } else {
+        // Fallback: try getting just the last 30 events directly
+        const lastEvents = await window.persistentStorage.getAllEvents(30);
+        if (lastEvents && lastEvents.length > 0) {
+          window.state.data.events = lastEvents;
+          console.log(`[SUCCESS] Loaded ${lastEvents.length} events from cache (fallback)`);
+        }
       }
     }
     
-    // Load only most recent prompts (limit to 50 for speed)
+    // Load only most recent prompts (limit to 30 for ultra-fast load)
     if (window.persistentStorage.getPromptsSince) {
-      const recentPrompts = await window.persistentStorage.getPromptsSince(sixHoursAgo);
+      const recentPrompts = await window.persistentStorage.getPromptsSince(twoHoursAgo);
       if (recentPrompts && recentPrompts.length > 0) {
-        // Limit to 50 most recent for fastest load
-        window.state.data.prompts = recentPrompts.slice(0, 50);
+        // Limit to 30 most recent for fastest load
+        window.state.data.prompts = recentPrompts.slice(0, 30);
         console.log(`[SUCCESS] Loaded ${window.state.data.prompts.length} recent prompts from cache`);
+      } else {
+        // Fallback: try getting just the last 30 prompts directly
+        const lastPrompts = await window.persistentStorage.getAllPrompts(30);
+        if (lastPrompts && lastPrompts.length > 0) {
+          window.state.data.prompts = lastPrompts;
+          console.log(`[SUCCESS] Loaded ${lastPrompts.length} prompts from cache (fallback)`);
+        }
       }
     }
     
     // Don't calculate stats or render here - let main initialization handle it
     // This makes cache loading faster and non-blocking
     
-    // Load older data in background (non-blocking)
+    // Load more data in background (non-blocking) - limit to 200 total
     if (typeof requestIdleCallback !== 'undefined') {
       requestIdleCallback(async () => {
         try {
-          const allEvents = await window.persistentStorage.getAllEvents();
-          const allPrompts = await window.persistentStorage.getAllPrompts();
+          // Only load up to 200 more events/prompts (not all)
+          const currentEventCount = (window.state.data.events || []).length;
+          const currentPromptCount = (window.state.data.prompts || []).length;
+          const neededEvents = Math.max(0, 200 - currentEventCount);
+          const neededPrompts = Math.max(0, 200 - currentPromptCount);
+          
+          const allEvents = neededEvents > 0 ? await window.persistentStorage.getAllEvents(neededEvents) : [];
+          const allPrompts = neededPrompts > 0 ? await window.persistentStorage.getAllPrompts(neededPrompts) : [];
           
           // Merge with recent data (avoid duplicates)
           const existingEventIds = new Set((window.state.data.events || []).map(e => e.id));
@@ -265,11 +286,16 @@ async function loadFromCache() {
         }
       }, { timeout: 3000 });
     } else {
-      // Fallback: load older data after a delay
+      // Fallback: load more data after a delay (limit to 200 total)
       setTimeout(async () => {
         try {
-          const allEvents = await window.persistentStorage.getAllEvents();
-          const allPrompts = await window.persistentStorage.getAllPrompts();
+          const currentEventCount = (window.state.data.events || []).length;
+          const currentPromptCount = (window.state.data.prompts || []).length;
+          const neededEvents = Math.max(0, 200 - currentEventCount);
+          const neededPrompts = Math.max(0, 200 - currentPromptCount);
+          
+          const allEvents = neededEvents > 0 ? await window.persistentStorage.getAllEvents(neededEvents) : [];
+          const allPrompts = neededPrompts > 0 ? await window.persistentStorage.getAllPrompts(neededPrompts) : [];
           
           const existingEventIds = new Set((window.state.data.events || []).map(e => e.id));
           const existingPromptIds = new Set((window.state.data.prompts || []).map(p => p.id || p.prompt_id));
@@ -355,7 +381,7 @@ async function fetchRecentData() {
     // console.log(`[SYNC] Fetching recent data (${windowLabel} window)...`);
   }
   
-  const pageSize = 50; // Minimal initial load for fastest startup (load more in background)
+  const pageSize = 30; // Ultra-minimal initial load for fastest startup (load more in background)
   
   try {
     // Fetch recent events in parallel for faster loading (cloud-optimized)

@@ -225,8 +225,8 @@ class PersistentStorage {
   async storeEvents(events) {
     if (!this.db) await this.init();
     
-    // First, get all existing events to check for duplicates
-    const existingEvents = await this.getAllEvents();
+    // Only check recent events for duplicates (last 1000) - much faster than loading all
+    const existingEvents = await this.getAllEvents(1000);
     const existingKeys = new Set(existingEvents.map(e => `${e.timestamp}_${e.type || 'unknown'}`));
     
     // Filter out duplicates
@@ -277,8 +277,8 @@ class PersistentStorage {
   async storePrompts(prompts) {
     if (!this.db) await this.init();
     
-    // First, get all existing prompts to check for duplicates
-    const existingPrompts = await this.getAllPrompts();
+    // Only check recent prompts for duplicates (last 1000) - much faster than loading all
+    const existingPrompts = await this.getAllPrompts(1000);
     const existingKeys = new Set(existingPrompts.map(p => {
       if (p.composerId) return `composer_${p.composerId}`;
       return `${p.timestamp}_${p.text?.substring(0, 50) || p.preview?.substring(0, 50) || 'unknown'}`;
