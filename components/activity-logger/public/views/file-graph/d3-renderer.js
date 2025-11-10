@@ -348,6 +348,7 @@ function renderD3FileGraph(container, nodes, links) {
   window.graphNodes = node;
   window.graphLinks = link;
   window.graphSimulation = simulation;
+  window.graphClusters = clusters; // Store clusters for tooltip access
   
   // Drag functions
   function dragstarted(event, d) {

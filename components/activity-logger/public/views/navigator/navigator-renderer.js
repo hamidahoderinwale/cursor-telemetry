@@ -849,6 +849,63 @@ function resetNavigatorView() {
 }
 
 /**
+ * Show file tooltip in navigator
+ */
+function showNavigatorFileTooltip(event, file) {
+  hideNavigatorFileTooltip();
+  
+  const tooltip = d3.select('body')
+    .append('div')
+    .attr('class', 'navigator-file-tooltip')
+    .style('position', 'absolute')
+    .style('background', 'var(--color-bg)')
+    .style('border', '1px solid var(--color-border)')
+    .style('border-radius', 'var(--radius-md)')
+    .style('padding', 'var(--space-sm)')
+    .style('box-shadow', '0 4px 12px rgba(0,0,0,0.15)')
+    .style('z-index', '10000')
+    .style('pointer-events', 'none')
+    .style('max-width', '300px')
+    .style('font-size', '12px');
+  
+  const parts = [
+    `<strong style="color: var(--color-primary);">${file.path || file.name}</strong>`,
+    file.ext ? `Type: <code>${file.ext}</code>` : '',
+    file.changes ? `Changes: ${file.changes}` : '',
+    file.size ? `Size: ${(file.size / 1024).toFixed(1)} KB` : '',
+  ].filter(Boolean);
+  
+  if (file.cluster && window.navigatorState) {
+    const cluster = window.navigatorState.clusters.find(c => c.id === file.cluster);
+    if (cluster) {
+      parts.push(`Cluster: <strong>${cluster.name}</strong>`);
+      if (cluster.description) {
+        parts.push(`<div style="margin-top: 4px; color: var(--color-text-muted); font-size: 11px;">${cluster.description.substring(0, 100)}${cluster.description.length > 100 ? '...' : ''}</div>`);
+      }
+    }
+  }
+  
+  tooltip.html(parts.join('<br>'));
+  
+  const [x, y] = d3.pointer(event);
+  tooltip
+    .style('left', `${x + 10}px`)
+    .style('top', `${y + 10}px`);
+  
+  window.navigatorFileTooltip = tooltip;
+}
+
+/**
+ * Hide file tooltip in navigator
+ */
+function hideNavigatorFileTooltip() {
+  if (window.navigatorFileTooltip) {
+    window.navigatorFileTooltip.remove();
+    window.navigatorFileTooltip = null;
+  }
+}
+
+/**
  * Toggle navigator labels visibility
  */
 function toggleNavigatorLabels() {
