@@ -28,17 +28,6 @@ function renderSystemViewTemplate(data) {
         </div>
       </div>
 
-      <!-- Resource Usage Distribution -->
-      <div class="card">
-        <div class="card-header">
-          <h3 class="card-title" title="Distribution of resource usage levels over time - shows how often your system operates at different resource utilization levels">Resource Usage Distribution</h3>
-          <p class="card-subtitle">Memory and CPU usage distribution patterns</p>
-        </div>
-        <div class="card-body">
-          <canvas id="resourceDistributionChart" style="max-height: 300px;"></canvas>
-        </div>
-      </div>
-
       <!-- System Performance Trends -->
       <div class="card">
         <div class="card-header">
@@ -47,6 +36,17 @@ function renderSystemViewTemplate(data) {
         </div>
         <div class="card-body">
           <div id="performanceTrends" style="min-height: 250px;"></div>
+        </div>
+      </div>
+
+      <!-- Resource Usage Distribution -->
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title" title="Distribution of resource usage levels over time - shows how often your system operates at different resource utilization levels">Resource Usage Distribution</h3>
+          <p class="card-subtitle">Memory and CPU usage distribution patterns</p>
+        </div>
+        <div class="card-body">
+          <canvas id="resourceDistributionChart" style="max-height: 300px;"></canvas>
         </div>
       </div>
     </div>
