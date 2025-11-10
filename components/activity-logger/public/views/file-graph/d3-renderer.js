@@ -23,22 +23,75 @@ function renderD3FileGraph(container, nodes, links) {
   let clusters = applyClustering(nodes, links, clusterAlgorithm);
   
   // Annotate clusters with AI-generated labels if cluster annotator is available
-  if (clusters.length > 0 && window.clusterAnnotator && (clusterAlgorithm === 'similarity' || clusterAlgorithm === 'community')) {
+  // Always annotate (will use rule-based fallback if semantic search disabled)
+  if (clusters.length > 0 && window.clusterAnnotator) {
     try {
-      // Annotate clusters asynchronously
-      window.clusterAnnotator.annotateClusters(clusters, { useLLM: true, useEmbeddings: true })
+      // Show loading indicator for annotations
+      const annotationStatus = document.getElementById('annotationStatus');
+      if (annotationStatus) {
+        annotationStatus.textContent = 'Generating cluster names...';
+        annotationStatus.style.display = 'block';
+      }
+      
+      // Annotate clusters asynchronously (always try, uses fallback if needed)
+      window.clusterAnnotator.annotateClusters(clusters, { 
+        useLLM: window.CONFIG?.ENABLE_SEMANTIC_SEARCH === true,
+        useEmbeddings: window.CONFIG?.ENABLE_SEMANTIC_SEARCH === true
+      })
         .then(annotatedClusters => {
           // Update cluster names in the visualization
           if (window.graphG) {
             const clusterLabels = window.graphG.selectAll('.cluster-labels text');
             clusterLabels.data(annotatedClusters)
-              .text(d => `${d.name || d.originalName || `Cluster ${d.id}`} (${d.nodes.length})`);
+              .text(d => `${d.name || d.originalName || `Cluster ${d.id}`} (${d.nodes.length})`)
+              .attr('title', d => {
+                // Rich tooltip with description, keywords, and category
+                const parts = [d.description || d.name || `Cluster ${d.id}`];
+                if (d.keywords && d.keywords.length > 0) {
+                  parts.push(`Keywords: ${d.keywords.slice(0, 5).join(', ')}`);
+                }
+                if (d.category && d.category !== 'unknown') {
+                  parts.push(`Category: ${d.category}`);
+                }
+                return parts.join('\n');
+              });
           }
+          
+          // Update cluster groups with descriptions for tooltips
+          if (window.graphG) {
+            window.graphG.selectAll('.cluster-group')
+              .data(annotatedClusters)
+              .attr('title', d => {
+                const parts = [d.description || d.name || `Cluster ${d.id}`];
+                if (d.keywords && d.keywords.length > 0) {
+                  parts.push(`Keywords: ${d.keywords.slice(0, 3).join(', ')}`);
+                }
+                return parts.join(' • ');
+              });
+          }
+          
+          // Dispatch event for UI updates
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('file-graph-clusters-annotated', { 
+              detail: { clusters: annotatedClusters } 
+            }));
+          }
+          
           // Update clusters array
           clusters = annotatedClusters;
+          
+          // Hide loading indicator
+          if (annotationStatus) {
+            annotationStatus.style.display = 'none';
+          }
+          
+          console.log('[FILE-GRAPH] Cluster annotations complete:', annotatedClusters.map(c => c.name));
         })
         .catch(err => {
           console.warn('[FILE-GRAPH] Failed to annotate clusters:', err.message);
+          if (annotationStatus) {
+            annotationStatus.style.display = 'none';
+          }
         });
     } catch (error) {
       console.warn('[FILE-GRAPH] Cluster annotation not available:', error.message);
@@ -81,18 +134,38 @@ function renderD3FileGraph(container, nodes, links) {
       .attr('stroke-width', 2)
       .attr('stroke-dasharray', '5,5');
     
-    // Add cluster labels
+    // Add cluster labels with tooltips
     const clusterLabels = g.append('g')
       .attr('class', 'cluster-labels')
       .selectAll('text')
       .data(clusters)
       .join('text')
-      .text(d => `${d.name} (${d.nodes.length})`)
+      .text(d => `${d.name || `Cluster ${d.id}`} (${d.nodes.length})`)
       .attr('font-size', '14px')
       .attr('font-weight', 'bold')
       .attr('fill', d => d.color)
       .attr('text-anchor', 'middle')
-      .style('pointer-events', 'none');
+      .attr('title', d => {
+        // Rich tooltip with description and keywords
+        const parts = [d.description || d.name || `Cluster ${d.id}`];
+        if (d.keywords && d.keywords.length > 0) {
+          parts.push(`Keywords: ${d.keywords.slice(0, 5).join(', ')}`);
+        }
+        if (d.category && d.category !== 'unknown') {
+          parts.push(`Category: ${d.category}`);
+        }
+        return parts.join('\n');
+      })
+      .style('pointer-events', 'none')
+      .style('cursor', 'help');
+    
+    // Store cluster groups for later annotation updates
+    const clusterGroups = g.append('g')
+      .attr('class', 'cluster-group')
+      .selectAll('g')
+      .data(clusters)
+      .join('g')
+      .attr('class', d => `cluster-group-${d.id}`);
   }
   
   // Get layout algorithm
@@ -174,13 +247,17 @@ function renderD3FileGraph(container, nodes, links) {
     .on('click', (event, d) => {
       event.stopPropagation();
       highlightConnections(d, node, link);
+      hideFileTooltip(); // Hide tooltip on click
       if (window.showFileInfo) window.showFileInfo(d);
     })
     .on('mouseenter', (event, d) => {
       highlightConnections(d, node, link);
+      // Show file details tooltip
+      showFileTooltip(event, d);
     })
     .on('mouseleave', () => {
       clearHighlights(node, link);
+      hideFileTooltip();
     })
     .style('cursor', 'pointer');
   
@@ -432,6 +509,68 @@ function applyClustering(nodes, links, algorithm) {
   }
   
   return clusters;
+}
+
+/**
+ * Show file tooltip with detailed information
+ */
+function showFileTooltip(event, file) {
+  // Remove existing tooltip
+  hideFileTooltip();
+  
+  // Create tooltip element
+  const tooltip = d3.select('body')
+    .append('div')
+    .attr('class', 'file-graph-tooltip')
+    .style('position', 'absolute')
+    .style('background', 'var(--color-bg)')
+    .style('border', '1px solid var(--color-border)')
+    .style('border-radius', 'var(--radius-md)')
+    .style('padding', 'var(--space-sm)')
+    .style('box-shadow', '0 4px 12px rgba(0,0,0,0.15)')
+    .style('z-index', '10000')
+    .style('pointer-events', 'none')
+    .style('max-width', '300px')
+    .style('font-size', '12px');
+  
+  // Build tooltip content
+  const parts = [
+    `<strong style="color: var(--color-primary);">${file.path || file.name}</strong>`,
+    file.ext ? `Type: <code>${file.ext}</code>` : '',
+    file.changes ? `Changes: ${file.changes}` : '',
+    file.size ? `Size: ${(file.size / 1024).toFixed(1)} KB` : '',
+  ].filter(Boolean);
+  
+  if (file.cluster) {
+    const cluster = window.graphClusters?.find(c => c.id === file.cluster);
+    if (cluster) {
+      parts.push(`Cluster: <strong>${cluster.name}</strong>`);
+      if (cluster.description) {
+        parts.push(`<div style="margin-top: 4px; color: var(--color-text-muted); font-size: 11px;">${cluster.description.substring(0, 100)}${cluster.description.length > 100 ? '...' : ''}</div>`);
+      }
+    }
+  }
+  
+  tooltip.html(parts.join('<br>'));
+  
+  // Position tooltip
+  const [x, y] = d3.pointer(event);
+  tooltip
+    .style('left', `${x + 10}px`)
+    .style('top', `${y + 10}px`);
+  
+  // Store reference for cleanup
+  window.fileGraphTooltip = tooltip;
+}
+
+/**
+ * Hide file tooltip
+ */
+function hideFileTooltip() {
+  if (window.fileGraphTooltip) {
+    window.fileGraphTooltip.remove();
+    window.fileGraphTooltip = null;
+  }
 }
 
 function kMeansClustering(nodes, links, k) {

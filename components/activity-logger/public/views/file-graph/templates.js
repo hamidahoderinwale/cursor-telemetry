@@ -88,9 +88,11 @@ function renderFileGraphViewTemplate(data) {
       
       <!-- Search & Navigation Panel -->
       <div class="graph-search-panel">
-        <input type="text" id="fileSearch" class="graph-search-input" placeholder="Search files by name..." 
-               oninput="filterGraphNodes(this.value)">
+        <input type="text" id="fileSearch" class="graph-search-input" placeholder="Search files by name or path..." 
+               oninput="filterGraphNodes(this.value)"
+               title="Search files by name, path, or extension. Results highlight matching files in the graph.">
         <div id="fileSearchResults" class="graph-search-results"></div>
+        <div id="annotationStatus" style="display: none; font-size: 12px; color: var(--color-text-muted); margin-top: 4px; font-style: italic;"></div>
       </div>
 
       <div class="graph-container" id="fileGraphContainer">

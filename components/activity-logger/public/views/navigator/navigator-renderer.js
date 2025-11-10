@@ -86,7 +86,25 @@ function renderNavigator(container, nodes, links) {
         window.showFileInfo(d);
       }
     })
-    .style('cursor', 'pointer');
+    .on('mouseenter', (event, d) => {
+      // Show file details on hover
+      showNavigatorFileTooltip(event, d);
+    })
+    .on('mouseleave', () => {
+      hideNavigatorFileTooltip();
+    })
+    .style('cursor', 'pointer')
+    .attr('title', d => {
+      // Rich tooltip with file info
+      const parts = [d.path || d.name];
+      if (d.changes) parts.push(`${d.changes} changes`);
+      if (d.size) parts.push(`${(d.size / 1024).toFixed(1)} KB`);
+      if (d.cluster) {
+        const cluster = navigatorState.clusters.find(c => c.id === d.cluster);
+        if (cluster) parts.push(`Cluster: ${cluster.name}`);
+      }
+      return parts.join(' • ');
+    });
   
   const getFileTypeColor = window.getFileTypeColor || (() => '#64748b');
   
@@ -462,14 +480,27 @@ function updateNavigatorStats() {
       div.textContent = str;
       return div.innerHTML;
     });
-    legend.innerHTML = navigatorState.clusters.map(cluster => `
-      <div class="cluster-legend-item" title="${escapeHtml(cluster.description || '')}">
+    legend.innerHTML = navigatorState.clusters.map(cluster => {
+      // Rich tooltip with description, keywords, and category
+      const tooltipParts = [cluster.description || cluster.name || `Cluster ${cluster.id}`];
+      if (cluster.keywords && cluster.keywords.length > 0) {
+        tooltipParts.push(`Keywords: ${cluster.keywords.slice(0, 5).join(', ')}`);
+      }
+      if (cluster.category && cluster.category !== 'unknown') {
+        tooltipParts.push(`Category: ${cluster.category}`);
+      }
+      const tooltip = escapeHtml(tooltipParts.join('\n'));
+      
+      return `
+      <div class="cluster-legend-item" title="${tooltip}" style="cursor: help;">
         <div class="cluster-legend-color" style="background: ${cluster.color};"></div>
-        <span class="cluster-legend-label">${escapeHtml(cluster.name)} (${cluster.nodes.length})</span>
+        <span class="cluster-legend-label">${escapeHtml(cluster.name || `Cluster ${cluster.id}`)} (${cluster.nodes.length})</span>
         ${cluster.category && cluster.category !== 'unknown' ? 
           `<span class="cluster-category-badge" style="font-size: 10px; opacity: 0.7; margin-left: 4px;">[${cluster.category}]</span>` : ''}
+        ${cluster.description ? `<div class="cluster-description" style="font-size: 11px; color: var(--color-text-muted); margin-top: 2px; line-height: 1.3;">${escapeHtml(cluster.description.substring(0, 80))}${cluster.description.length > 80 ? '...' : ''}</div>` : ''}
       </div>
-    `).join('');
+    `;
+    }).join('');
   }
 }
 
@@ -488,14 +519,27 @@ if (typeof window !== 'undefined') {
           div.textContent = str;
           return div.innerHTML;
         });
-        legend.innerHTML = navigatorState.clusters.map(cluster => `
-          <div class="cluster-legend-item" title="${escapeHtml(cluster.description || '')}">
+        legend.innerHTML = navigatorState.clusters.map(cluster => {
+          // Rich tooltip with description, keywords, and category
+          const tooltipParts = [cluster.description || cluster.name || `Cluster ${cluster.id}`];
+          if (cluster.keywords && cluster.keywords.length > 0) {
+            tooltipParts.push(`Keywords: ${cluster.keywords.slice(0, 5).join(', ')}`);
+          }
+          if (cluster.category && cluster.category !== 'unknown') {
+            tooltipParts.push(`Category: ${cluster.category}`);
+          }
+          const tooltip = escapeHtml(tooltipParts.join('\n'));
+          
+          return `
+          <div class="cluster-legend-item" title="${tooltip}" style="cursor: help;">
             <div class="cluster-legend-color" style="background: ${cluster.color};"></div>
-            <span class="cluster-legend-label">${escapeHtml(cluster.name)} (${cluster.nodes.length})</span>
+            <span class="cluster-legend-label">${escapeHtml(cluster.name || `Cluster ${cluster.id}`)} (${cluster.nodes.length})</span>
             ${cluster.category && cluster.category !== 'unknown' ? 
               `<span class="cluster-category-badge" style="font-size: 10px; opacity: 0.7; margin-left: 4px;">[${cluster.category}]</span>` : ''}
+            ${cluster.description ? `<div class="cluster-description" style="font-size: 11px; color: var(--color-text-muted); margin-top: 2px; line-height: 1.3;">${escapeHtml(cluster.description.substring(0, 80))}${cluster.description.length > 80 ? '...' : ''}</div>` : ''}
           </div>
-        `).join('');
+        `;
+        }).join('');
       }
     }
   });

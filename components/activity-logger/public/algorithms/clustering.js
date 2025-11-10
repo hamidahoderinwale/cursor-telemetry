@@ -115,6 +115,7 @@ export function applyClustering(nodes, links, algorithm) {
   }
   
   // Annotate clusters asynchronously (non-blocking)
+  // Always try to annotate - will use rule-based fallback if semantic search is disabled
   if (clusters.length > 0 && typeof window !== 'undefined' && window.clusterAnnotator) {
     window.clusterAnnotator.annotateClusters(clusters, {
       useLLM: window.CONFIG?.ENABLE_SEMANTIC_SEARCH === true,
