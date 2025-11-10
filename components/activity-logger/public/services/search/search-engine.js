@@ -1106,39 +1106,59 @@ class SearchEngine {
   }
 
   /**
-   * Extract relevant snippet with context
+   * Extract relevant snippet with context and query highlighting
    */
-  extractSnippet(content, query, maxLength = 200) {
-    if (!query || !content) return content.substring(0, maxLength);
+  extractSnippet(content, query, maxLength = 250) {
+    if (!content) return '';
+    if (!query) return content.substring(0, maxLength) + (content.length > maxLength ? '...' : '');
     
-    const queryTokens = this.tokenize(query);
-    const sentences = content.split(/[.!?]\s+/);
+    const queryTokens = this.tokenize(query).filter(t => t.length > 2); // Only meaningful tokens
+    if (queryTokens.length === 0) {
+      return content.substring(0, maxLength) + (content.length > maxLength ? '...' : '');
+    }
     
-    // Find sentence with most query tokens
-    let bestSentence = sentences[0] || '';
+    // Try to find the best context window around query terms
+    const contentLower = content.toLowerCase();
+    let bestStart = 0;
     let bestScore = 0;
+    const windowSize = maxLength;
     
-    sentences.forEach(sentence => {
-      const sentenceTokens = this.tokenize(sentence);
-      const score = queryTokens.filter(qt => sentenceTokens.includes(qt)).length;
+    // Find position with most query tokens
+    for (let i = 0; i < Math.min(content.length, 5000); i += 50) {
+      const window = content.substring(i, i + windowSize).toLowerCase();
+      const score = queryTokens.reduce((sum, token) => {
+        return sum + (window.includes(token) ? 1 : 0);
+      }, 0);
+      
       if (score > bestScore) {
         bestScore = score;
-        bestSentence = sentence;
-      }
-    });
-    
-    // Truncate if needed, keeping query terms in view
-    if (bestSentence.length > maxLength) {
-      const queryPos = bestSentence.toLowerCase().indexOf(queryTokens[0]);
-      if (queryPos > maxLength / 2) {
-        const start = Math.max(0, queryPos - maxLength / 2);
-        bestSentence = '...' + bestSentence.substring(start, start + maxLength);
-      } else {
-        bestSentence = bestSentence.substring(0, maxLength) + '...';
+        bestStart = i;
       }
     }
     
-    return bestSentence;
+    // Extract snippet around best position
+    let snippet = content.substring(bestStart, bestStart + windowSize);
+    
+    // Try to start at word boundary
+    if (bestStart > 0) {
+      const wordBoundary = snippet.search(/\s/);
+      if (wordBoundary > 0 && wordBoundary < 30) {
+        snippet = snippet.substring(wordBoundary + 1);
+      }
+      snippet = '...' + snippet;
+    }
+    
+    // Try to end at word boundary
+    if (snippet.length >= maxLength) {
+      const lastSpace = snippet.lastIndexOf(' ', maxLength);
+      if (lastSpace > maxLength * 0.8) {
+        snippet = snippet.substring(0, lastSpace) + '...';
+      } else {
+        snippet = snippet.substring(0, maxLength) + '...';
+      }
+    }
+    
+    return snippet.trim();
   }
 
   /**

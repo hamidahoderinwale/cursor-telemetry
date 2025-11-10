@@ -271,8 +271,11 @@ async function performSearch(query) {
   
   // Regular search
   try {
+    // Store current query for highlighting
+    window.currentSearchQuery = query;
+    
     // Search is now async (supports Hugging Face semantic search)
-    const results = await searchEngine.search(query, { limit: 20 });
+    const results = await searchEngine.search(query, { limit: 30 }); // Increased limit for better results
     searchResults = results;
     searchSelectedIndex = -1;
     renderSearchResults(results);
@@ -280,7 +283,7 @@ async function performSearch(query) {
     console.error('[ERROR] Search failed:', error);
     const resultsEl = document.getElementById('searchResults');
     if (resultsEl) {
-      resultsEl.innerHTML = '<div class="search-error">Search error: ' + error.message + '</div>';
+      resultsEl.innerHTML = '<div class="search-error" style="padding: var(--space-md); text-align: center; color: var(--color-error);">Search error: ' + error.message + '</div>';
     }
   }
 }
@@ -349,7 +352,20 @@ function renderSearchResults(results) {
   if (!resultsEl) return;
   
   if (results.length === 0) {
-    resultsEl.innerHTML = '<div class="search-empty">No results found<br><small>Try different keywords or filters</small></div>';
+    resultsEl.innerHTML = `
+      <div class="search-empty" style="
+        padding: var(--space-xl);
+        text-align: center;
+        color: var(--color-text-muted);
+      ">
+        <div style="font-size: 2rem; margin-bottom: var(--space-sm); opacity: 0.5;">🔍</div>
+        <div style="font-size: var(--text-md); font-weight: 500; margin-bottom: var(--space-xs); color: var(--color-text);">No results found</div>
+        <div style="font-size: var(--text-sm); margin-bottom: var(--space-md);">Try different keywords or use filters like <code>type:</code>, <code>workspace:</code>, or <code>date:</code></div>
+        <div style="font-size: var(--text-xs); color: var(--color-text-muted);">
+          Examples: <code>type:prompt authentication</code> | <code>workspace:my-project</code> | <code>date:today</code>
+        </div>
+      </div>
+    `;
     return;
   }
   
@@ -369,48 +385,172 @@ function renderSearchResults(results) {
     }
   });
   
-  const html = results.map((result, index) => {
-    // Check if result has annotation
-    const hasAnnotation = result.annotation || (result.payload && result.payload.annotation);
-    const annotation = result.annotation || (result.payload && result.payload.annotation);
-    const annotationIcon = hasAnnotation && window.renderAnnotationIcon ? 
-      window.renderAnnotationIcon(12, 'var(--color-text-secondary)') : '';
-    const type = result.type || 'unknown';
-    const title = result.title || result.content?.substring(0, 80) || 'Untitled';
-    const snippet = result.snippet || result.content?.substring(0, 150) || '';
-    const time = result.timestamp ? formatTimeAgo(result.timestamp) : '';
-    
-    return `
-      <div class="search-result-item ${index === searchSelectedIndex ? 'selected' : ''}" 
-           data-index="${index}" 
-           onclick="window.selectSearchResult(${index})"
-           onmouseenter="window.searchSelectedIndex = ${index}; window.renderSearchResults(window.searchResults)">
-        <div class="search-result-header">
-          <span class="search-result-type badge badge-${type}">${type}</span>
-          <span class="search-result-title">${escapeHtml(title)}</span>
-          ${time ? `<span class="search-result-time">${time}</span>` : ''}
-        </div>
-        ${snippet ? `<div class="search-result-snippet">${escapeHtml(snippet)}</div>` : ''}
-        ${hasAnnotation && annotation ? `
-          <div class="search-result-annotation" style="
-            margin-top: var(--space-xs);
-            padding: var(--space-xs) var(--space-sm);
-            background: var(--color-bg-alt);
-            border-left: 2px solid var(--color-primary);
-            border-radius: var(--radius-sm);
-            font-size: 0.85em;
-            color: var(--color-text-secondary);
-            font-style: italic;
-            display: flex;
-            align-items: center;
-            gap: 4px;
-          ">
-            ${annotationIcon}
-            <span>${escapeHtml(annotation)}</span>
-          </div>
-        ` : ''}
+  // Group results by type for better organization
+  const groupedResults = {};
+  results.forEach((result, index) => {
+    const type = result.type || 'other';
+    if (!groupedResults[type]) {
+      groupedResults[type] = [];
+    }
+    groupedResults[type].push({ ...result, originalIndex: index });
+  });
+  
+  // Helper to highlight query terms in text
+  const highlightQuery = (text, query) => {
+    if (!query || !text) return escapeHtml(text);
+    const escaped = escapeHtml(text);
+    const queryTerms = query.toLowerCase().split(/\s+/).filter(t => t.length > 2);
+    let highlighted = escaped;
+    queryTerms.forEach(term => {
+      const regex = new RegExp(`(${term})`, 'gi');
+      highlighted = highlighted.replace(regex, '<mark>$1</mark>');
+    });
+    return highlighted;
+  };
+  
+  // Helper to get type icon/color
+  const getTypeInfo = (type) => {
+    const types = {
+      event: { label: 'Event', color: '#3b82f6', icon: '📝' },
+      prompt: { label: 'Prompt', color: '#10b981', icon: '💬' },
+      conversation: { label: 'Conversation', color: '#8b5cf6', icon: '💭' },
+      terminal: { label: 'Terminal', color: '#f59e0b', icon: '⌨️' },
+      file: { label: 'File', color: '#ef4444', icon: '📄' },
+      other: { label: 'Other', color: '#64748b', icon: '📌' }
+    };
+    return types[type] || types.other;
+  };
+  
+  // Build HTML with grouping
+  const html = Object.entries(groupedResults).map(([type, typeResults]) => {
+    const typeInfo = getTypeInfo(type);
+    const typeHeader = Object.keys(groupedResults).length > 1 ? `
+      <div class="search-result-group-header" style="
+        padding: var(--space-sm) var(--space-md);
+        background: var(--color-bg-alt);
+        border-bottom: 1px solid var(--color-border);
+        font-size: var(--text-xs);
+        font-weight: 600;
+        color: var(--color-text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        display: flex;
+        align-items: center;
+        gap: var(--space-xs);
+      ">
+        <span>${typeInfo.icon}</span>
+        <span>${typeInfo.label} (${typeResults.length})</span>
       </div>
-    `;
+    ` : '';
+    
+    const itemsHtml = typeResults.map((result) => {
+      const index = result.originalIndex;
+      const hasAnnotation = result.annotation || (result.payload && result.payload.annotation);
+      const annotation = result.annotation || (result.payload && result.payload.annotation);
+      const annotationIcon = hasAnnotation && window.renderAnnotationIcon ? 
+        window.renderAnnotationIcon(14, 'var(--color-primary)') : '';
+      
+      const title = result.title || result.content?.substring(0, 100) || 'Untitled';
+      const snippet = result.snippet || result.content?.substring(0, 200) || '';
+      const time = result.timestamp ? formatTimeAgo(result.timestamp) : '';
+      
+      // Extract metadata
+      const workspace = result.workspace || result.workspace_path || result.workspacePath || '';
+      const filePath = result.file_path || result.filePath || '';
+      const mode = result.mode || result.model || '';
+      
+      return `
+        <div class="search-result-item ${index === searchSelectedIndex ? 'selected' : ''}" 
+             data-index="${index}" 
+             data-type="${type}"
+             onclick="window.selectSearchResult(${index})"
+             onmouseenter="window.searchSelectedIndex = ${index}; window.renderSearchResults(window.searchResults)"
+             style="
+               padding: var(--space-md);
+               border-bottom: 1px solid var(--color-border);
+               cursor: pointer;
+               transition: background-color 0.15s ease;
+             ">
+          <div class="search-result-header" style="
+            display: flex;
+            align-items: flex-start;
+            gap: var(--space-sm);
+            margin-bottom: var(--space-xs);
+          ">
+            <span class="search-result-type" style="
+              display: inline-flex;
+              align-items: center;
+              padding: 2px 8px;
+              background: ${typeInfo.color}15;
+              color: ${typeInfo.color};
+              border: 1px solid ${typeInfo.color}40;
+              border-radius: var(--radius-sm);
+              font-size: var(--text-xs);
+              font-weight: 600;
+              text-transform: uppercase;
+              letter-spacing: 0.3px;
+              white-space: nowrap;
+            ">${typeInfo.icon} ${typeInfo.label}</span>
+            <div style="flex: 1; min-width: 0;">
+              <div class="search-result-title" style="
+                font-weight: 600;
+                font-size: var(--text-sm);
+                color: var(--color-text);
+                margin-bottom: 2px;
+                line-height: 1.4;
+              ">${highlightQuery(title, window.currentSearchQuery || '')}</div>
+              <div class="search-result-meta" style="
+                display: flex;
+                align-items: center;
+                gap: var(--space-sm);
+                flex-wrap: wrap;
+                font-size: var(--text-xs);
+                color: var(--color-text-muted);
+                margin-top: 4px;
+              ">
+                ${time ? `<span style="display: flex; align-items: center; gap: 4px;">🕐 ${time}</span>` : ''}
+                ${workspace ? `<span style="display: flex; align-items: center; gap: 4px;" title="${escapeHtml(workspace)}">📁 ${escapeHtml(workspace.split('/').pop() || workspace)}</span>` : ''}
+                ${filePath ? `<span style="display: flex; align-items: center; gap: 4px;" title="${escapeHtml(filePath)}">📄 ${escapeHtml(filePath.split('/').pop() || filePath)}</span>` : ''}
+                ${mode ? `<span style="display: flex; align-items: center; gap: 4px;">🤖 ${escapeHtml(mode)}</span>` : ''}
+              </div>
+            </div>
+          </div>
+          ${snippet ? `
+            <div class="search-result-snippet" style="
+              margin-top: var(--space-xs);
+              padding: var(--space-sm);
+              background: var(--color-bg-alt);
+              border-radius: var(--radius-sm);
+              font-size: var(--text-xs);
+              color: var(--color-text-secondary);
+              line-height: 1.5;
+              border-left: 3px solid ${typeInfo.color}40;
+            ">
+              ${highlightQuery(snippet, window.currentSearchQuery || '')}
+            </div>
+          ` : ''}
+          ${hasAnnotation && annotation ? `
+            <div class="search-result-annotation" style="
+              margin-top: var(--space-xs);
+              padding: var(--space-xs) var(--space-sm);
+              background: var(--color-primary)10;
+              border-left: 3px solid var(--color-primary);
+              border-radius: var(--radius-sm);
+              font-size: var(--text-xs);
+              color: var(--color-text-secondary);
+              display: flex;
+              align-items: center;
+              gap: 6px;
+            ">
+              ${annotationIcon}
+              <span style="font-style: italic;">${escapeHtml(annotation)}</span>
+            </div>
+          ` : ''}
+        </div>
+      `;
+    }).join('');
+    
+    return typeHeader + itemsHtml;
   }).join('');
   
   resultsEl.innerHTML = html;
