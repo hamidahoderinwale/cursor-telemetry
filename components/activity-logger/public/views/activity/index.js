@@ -11,34 +11,52 @@ async function renderActivityView(container) {
   let prompts = window.state?.data?.prompts || [];
   let terminalCommands = window.state?.data?.terminalCommands || [];
   
-  // Apply workspace filter
+  // Apply workspace filter with proper normalization
   if (currentWorkspaceFilter !== 'all') {
+    // Normalize the filter value
+    const normalizeWorkspacePath = window.normalizeWorkspacePath || ((path) => {
+      if (!path) return '';
+      return path.toLowerCase().replace(/\/$/, '').trim();
+    });
+    const normalizedFilter = normalizeWorkspacePath(currentWorkspaceFilter);
+    
     events = events.filter(event => {
-      const eventWorkspace = event.workspace_path || event.workspacePath || event.workspace || '';
+      // Try multiple fields for workspace
+      const eventWorkspace = event.workspace_path || event.workspacePath || event.workspace || event.workspaceName || '';
       const details = typeof event.details === 'string' ? 
         (() => { try { return JSON.parse(event.details); } catch(e) { return {}; } })() : 
         event.details || {};
-      const detailsWorkspace = details.workspace_path || details.workspacePath || details.workspace || '';
-      const fullWorkspace = eventWorkspace || detailsWorkspace;
-      return fullWorkspace === currentWorkspaceFilter || 
-             fullWorkspace.includes(currentWorkspaceFilter) ||
-             currentWorkspaceFilter.includes(fullWorkspace);
+      const detailsWorkspace = details.workspace_path || details.workspacePath || details.workspace || details.workspaceName || '';
+      
+      // Also check user field (sometimes workspace is stored as user)
+      const userWorkspace = event.user || details.user || '';
+      
+      // Combine all possible workspace sources
+      const fullWorkspace = eventWorkspace || detailsWorkspace || userWorkspace;
+      const normalizedEventWorkspace = normalizeWorkspacePath(fullWorkspace);
+      
+      // Match if normalized paths are equal or one contains the other
+      return normalizedEventWorkspace === normalizedFilter || 
+             normalizedEventWorkspace.includes(normalizedFilter) ||
+             normalizedFilter.includes(normalizedEventWorkspace);
     });
     
     // Filter prompts by workspace
     prompts = prompts.filter(prompt => {
-      const promptWorkspace = prompt.workspace_path || prompt.workspacePath || prompt.workspaceName || prompt.workspaceId || '';
-      return promptWorkspace === currentWorkspaceFilter || 
-             promptWorkspace.includes(currentWorkspaceFilter) ||
-             currentWorkspaceFilter.includes(promptWorkspace);
+      const promptWorkspace = prompt.workspace_path || prompt.workspacePath || prompt.workspaceName || prompt.workspaceId || prompt.workspace || '';
+      const normalizedPromptWorkspace = normalizeWorkspacePath(promptWorkspace);
+      return normalizedPromptWorkspace === normalizedFilter || 
+             normalizedPromptWorkspace.includes(normalizedFilter) ||
+             normalizedFilter.includes(normalizedPromptWorkspace);
     });
     
     // Filter terminal commands by workspace
     terminalCommands = terminalCommands.filter(cmd => {
-      const cmdWorkspace = cmd.workspace_path || cmd.workspacePath || cmd.workspace || cmd.cwd || '';
-      return cmdWorkspace === currentWorkspaceFilter || 
-             cmdWorkspace.includes(currentWorkspaceFilter) ||
-             currentWorkspaceFilter.includes(cmdWorkspace);
+      const cmdWorkspace = cmd.workspace_path || cmd.workspacePath || cmd.workspace || cmd.cwd || cmd.user || '';
+      const normalizedCmdWorkspace = normalizeWorkspacePath(cmdWorkspace);
+      return normalizedCmdWorkspace === normalizedFilter || 
+             normalizedCmdWorkspace.includes(normalizedFilter) ||
+             normalizedFilter.includes(normalizedCmdWorkspace);
     });
   }
   
@@ -112,25 +130,65 @@ async function renderActivityView(container) {
   timelineItems = timelineItems.slice(0, 100);
   
   // Extract unique workspaces for filter dropdown
+  const normalizeWorkspacePath = window.normalizeWorkspacePath || ((path) => {
+    if (!path) return '';
+    return path.toLowerCase().replace(/\/$/, '').trim();
+  });
+  
   const workspaceMap = new Map();
+  
+  // Extract from events
   (window.state?.data?.events || []).forEach(event => {
-    const wsPath = event.workspace_path || event.workspacePath || event.workspace;
+    const eventWs = event.workspace_path || event.workspacePath || event.workspace || event.workspaceName || '';
+    const details = typeof event.details === 'string' ? 
+      (() => { try { return JSON.parse(event.details); } catch(e) { return {}; } })() : 
+      event.details || {};
+    const detailsWs = details.workspace_path || details.workspacePath || details.workspace || details.workspaceName || '';
+    const userWs = event.user || details.user || '';
+    
+    const wsPath = eventWs || detailsWs || userWs;
     if (wsPath) {
-      workspaceMap.set(wsPath, wsPath.split('/').pop() || wsPath);
+      const normalized = normalizeWorkspacePath(wsPath);
+      if (normalized) {
+        const displayName = wsPath.split('/').pop() || wsPath.split('\\').pop() || wsPath;
+        workspaceMap.set(normalized, displayName);
+      }
     }
   });
+  
+  // Extract from prompts
   (window.state?.data?.prompts || []).forEach(prompt => {
-    const wsPath = prompt.workspace_path || prompt.workspacePath || prompt.workspaceName || prompt.workspaceId;
+    const wsPath = prompt.workspace_path || prompt.workspacePath || prompt.workspaceName || prompt.workspaceId || prompt.workspace || '';
     if (wsPath) {
-      workspaceMap.set(wsPath, wsPath.split('/').pop() || wsPath);
+      const normalized = normalizeWorkspacePath(wsPath);
+      if (normalized) {
+        const displayName = wsPath.split('/').pop() || wsPath.split('\\').pop() || wsPath;
+        workspaceMap.set(normalized, displayName);
+      }
+    }
+  });
+  
+  // Extract from terminal commands
+  (window.state?.data?.terminalCommands || []).forEach(cmd => {
+    const wsPath = cmd.workspace_path || cmd.workspacePath || cmd.workspace || cmd.cwd || cmd.user || '';
+    if (wsPath) {
+      const normalized = normalizeWorkspacePath(wsPath);
+      if (normalized) {
+        const displayName = wsPath.split('/').pop() || wsPath.split('\\').pop() || wsPath;
+        workspaceMap.set(normalized, displayName);
+      }
     }
   });
   
   // Also use workspaces from state if available
   (window.state?.data?.workspaces || []).forEach(ws => {
-    const wsPath = ws.path || ws.id;
+    const wsPath = ws.path || ws.id || ws.name || '';
     if (wsPath) {
-      workspaceMap.set(wsPath, ws.name || ws.path?.split('/').pop() || wsPath);
+      const normalized = normalizeWorkspacePath(wsPath);
+      if (normalized) {
+        const displayName = ws.name || ws.path?.split('/').pop() || ws.path?.split('\\').pop() || wsPath;
+        workspaceMap.set(normalized, displayName);
+      }
     }
   });
   
@@ -166,11 +224,20 @@ async function renderActivityView(container) {
             ` : ''}
             <select class="select-input" id="workspaceFilter" onchange="filterActivityByWorkspace(this.value)" style="min-width: 180px;">
               <option value="all" ${currentWorkspaceFilter === 'all' ? 'selected' : ''}>All Workspaces</option>
-              ${uniqueWorkspaces.map(([path, name]) => `
-                <option value="${window.escapeHtml ? window.escapeHtml(path) : path}" ${currentWorkspaceFilter === path ? 'selected' : ''}>
-                  ${window.escapeHtml ? window.escapeHtml(name) : name}
-                </option>
-              `).join('')}
+              ${uniqueWorkspaces.map(([normalizedPath, displayName]) => {
+                // Compare normalized paths for selection
+                const normalizeForCompare = window.normalizeWorkspacePath || ((path) => {
+                  if (!path) return '';
+                  return path.toLowerCase().replace(/\/$/, '').trim();
+                });
+                const normalizedCurrent = normalizeForCompare(currentWorkspaceFilter);
+                const isSelected = normalizedCurrent === normalizedPath;
+                return `
+                  <option value="${window.escapeHtml ? window.escapeHtml(normalizedPath) : normalizedPath}" ${isSelected ? 'selected' : ''}>
+                    ${window.escapeHtml ? window.escapeHtml(displayName) : displayName}
+                  </option>
+                `;
+              }).join('')}
             </select>
             <select class="select-input" id="timeRangeFilter" onchange="filterActivityByTimeRange(this.value)">
               <option value="all" ${currentTimeRangeFilter === 'all' ? 'selected' : ''}>All Time</option>
