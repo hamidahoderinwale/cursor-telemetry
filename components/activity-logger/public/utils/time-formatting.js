@@ -4,8 +4,8 @@
  */
 
 function formatTimeAgo(timestamp) {
-  if (!timestamp || isNaN(timestamp)) {
-    return 'Unknown time';
+  if (!timestamp) {
+    return 'No data';
   }
   
   const now = Date.now();
@@ -21,8 +21,8 @@ function formatTimeAgo(timestamp) {
   }
   
   // Check if time is valid
-  if (isNaN(time)) {
-    return 'Unknown time';
+  if (isNaN(time) || time <= 0) {
+    return 'No data';
   }
   
   const diff = now - time;

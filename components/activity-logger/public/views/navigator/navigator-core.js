@@ -243,6 +243,29 @@ async function initializeNavigator() {
         // Get meaningful display name
         const displayName = getMeaningfulName(f);
         
+        // Calculate changes from events if not provided
+        const changes = relatedEvents.length > 0 ? relatedEvents.length : (f.changes || 0);
+        
+        // Calculate lastModified from most recent event if not provided
+        let lastModified = f.lastModified;
+        if (relatedEvents.length > 0) {
+          const eventTimestamps = relatedEvents
+            .map(e => {
+              const ts = e.timestamp;
+              if (!ts) return null;
+              const time = typeof ts === 'string' ? new Date(ts).getTime() : ts;
+              return isNaN(time) ? null : time;
+            })
+            .filter(Boolean);
+          if (eventTimestamps.length > 0) {
+            const maxEventTime = Math.max(...eventTimestamps);
+            // Use the most recent event time if file.lastModified is missing or older
+            if (!lastModified || (typeof lastModified === 'string' ? new Date(lastModified).getTime() : lastModified) < maxEventTime) {
+              lastModified = maxEventTime;
+            }
+          }
+        }
+        
         // Extract workspace from events if available
         let eventWorkspace = null;
         if (relatedEvents.length > 0) {
@@ -262,8 +285,8 @@ async function initializeNavigator() {
           originalName: f.name,  // Keep original for reference
           ext: f.ext,
           content: f.content,
-          changes: f.changes || 0,
-          lastModified: f.lastModified,
+          changes: changes,
+          lastModified: lastModified,
           size: f.size,
           events: relatedEvents,
           workspace: eventWorkspace || workspace,

@@ -49,11 +49,11 @@ function showFileInfo(file) {
           </div>
           <div class="file-info-row">
             <span class="file-info-label">Total Changes:</span>
-            <span class="file-info-value bold">${file.changes}</span>
+            <span class="file-info-value bold">${file.changes || file.events?.length || 0}</span>
           </div>
           <div class="file-info-row">
             <span class="file-info-label">Last Modified:</span>
-            <span class="file-info-value">${window.formatTimeAgo ? window.formatTimeAgo(file.lastModified) : new Date(file.lastModified).toLocaleString()}</span>
+            <span class="file-info-value">${file.lastModified ? (window.formatTimeAgo ? window.formatTimeAgo(file.lastModified) : new Date(file.lastModified).toLocaleString()) : (file.events && file.events.length > 0 ? (window.formatTimeAgo ? window.formatTimeAgo(file.events[file.events.length - 1].timestamp) : new Date(file.events[file.events.length - 1].timestamp).toLocaleString()) : 'No data')}</span>
           </div>
         </div>
       </div>
