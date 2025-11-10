@@ -48,6 +48,8 @@ class SchemaConfigView {
     const container = document.getElementById('schema-config-container');
     if (!container) return;
 
+    const viewMode = this.viewMode || 'ui'; // 'ui' or 'json'
+
     container.innerHTML = `
       <div class="schema-config-view">
         <div class="schema-header">
@@ -57,6 +59,18 @@ class SchemaConfigView {
             and manage field configurations. Schema-aware imports validate data compatibility before importing.
           </p>
           <div class="schema-header-actions">
+            <div class="view-mode-toggle" style="display: flex; gap: var(--space-sm); align-items: center;">
+              <button class="btn btn-sm ${viewMode === 'ui' ? 'btn-primary' : 'btn-secondary'}" 
+                      onclick="schemaConfigView.setViewMode('ui'); schemaConfigView.render();" 
+                      title="Form-based UI view">
+                UI View
+              </button>
+              <button class="btn btn-sm ${viewMode === 'json' ? 'btn-primary' : 'btn-secondary'}" 
+                      onclick="schemaConfigView.setViewMode('json'); schemaConfigView.render();" 
+                      title="JSON editor view">
+                JSON Editor
+              </button>
+            </div>
             <button class="btn btn-secondary" onclick="if(window.showImportModal) window.showImportModal(); else console.warn('Import handler not loaded');" title="Open a shared workspace or import workspace data">
               Open Shared Workspace
             </button>
@@ -64,21 +78,176 @@ class SchemaConfigView {
         </div>
 
         <div class="schema-content">
-          <div class="schema-sidebar">
-            <h3>Tables</h3>
-            <div class="table-list" id="table-list">
-              ${this.renderTableList()}
+          ${viewMode === 'json' ? this.renderJsonEditor() : `
+            <div class="schema-sidebar">
+              <h3>Tables</h3>
+              <div class="table-list" id="table-list">
+                ${this.renderTableList()}
+              </div>
             </div>
-          </div>
 
-          <div class="schema-main">
-            ${this.selectedTable ? this.renderTableDetails() : this.renderWelcome()}
-          </div>
+            <div class="schema-main">
+              ${this.selectedTable ? this.renderTableDetails() : this.renderWelcome()}
+            </div>
+          `}
         </div>
       </div>
     `;
 
-    this.attachEventListeners();
+    if (viewMode === 'json') {
+      this.attachJsonEditorListeners();
+    } else {
+      this.attachEventListeners();
+    }
+  }
+
+  setViewMode(mode) {
+    this.viewMode = mode;
+  }
+
+  renderJsonEditor() {
+    const schemaJson = this.schema ? JSON.stringify(this.schema, null, 2) : '{}';
+    const customFieldsJson = JSON.stringify(this.customFields, null, 2);
+    
+    return `
+      <div class="json-editor-view" style="display: flex; flex-direction: column; height: 100%; gap: var(--space-md);">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <h3>Schema JSON Editor</h3>
+            <p style="color: var(--color-text-muted); font-size: var(--text-sm); margin-top: var(--space-xs);">
+              Edit the database schema as JSON. Changes are validated before saving. 
+              <strong>Warning:</strong> Invalid JSON or schema changes may cause errors.
+            </p>
+          </div>
+          <div style="display: flex; gap: var(--space-sm);">
+            <button class="btn btn-secondary" onclick="schemaConfigView.loadSchemaFromApi()" title="Reload schema from API">
+              Reload
+            </button>
+            <button class="btn btn-primary" onclick="schemaConfigView.saveSchemaFromJson()" title="Save schema changes">
+              Save Schema
+            </button>
+          </div>
+        </div>
+        
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-md); height: calc(100% - 120px);">
+          <div style="display: flex; flex-direction: column; border: 1px solid var(--color-border); border-radius: var(--radius-md); overflow: hidden;">
+            <div style="padding: var(--space-sm); background: var(--color-bg-alt); border-bottom: 1px solid var(--color-border);">
+              <strong>Database Schema</strong>
+              <span style="color: var(--color-text-muted); font-size: var(--text-xs); margin-left: var(--space-sm);">
+                Tables, columns, types, constraints
+              </span>
+            </div>
+            <textarea id="schema-json-editor" 
+                      style="flex: 1; padding: var(--space-md); font-family: 'Monaco', 'Menlo', 'Courier New', monospace; font-size: 13px; line-height: 1.6; border: none; resize: none; background: var(--color-bg); color: var(--color-text);"
+                      spellcheck="false">${window.escapeHtml ? window.escapeHtml(schemaJson) : schemaJson}</textarea>
+          </div>
+          
+          <div style="display: flex; flex-direction: column; border: 1px solid var(--color-border); border-radius: var(--radius-md); overflow: hidden;">
+            <div style="padding: var(--space-sm); background: var(--color-bg-alt); border-bottom: 1px solid var(--color-border);">
+              <strong>Custom Field Configurations</strong>
+              <span style="color: var(--color-text-muted); font-size: var(--text-xs); margin-left: var(--space-sm);">
+                Field metadata and display settings
+              </span>
+            </div>
+            <textarea id="custom-fields-json-editor" 
+                      style="flex: 1; padding: var(--space-md); font-family: 'Monaco', 'Menlo', 'Courier New', monospace; font-size: 13px; line-height: 1.6; border: none; resize: none; background: var(--color-bg); color: var(--color-text);"
+                      spellcheck="false">${window.escapeHtml ? window.escapeHtml(customFieldsJson) : customFieldsJson}</textarea>
+          </div>
+        </div>
+        
+        <div id="json-editor-status" style="padding: var(--space-sm); background: var(--color-bg-alt); border-radius: var(--radius-sm); font-size: var(--text-sm);"></div>
+      </div>
+    `;
+  }
+
+  attachJsonEditorListeners() {
+    const schemaEditor = document.getElementById('schema-json-editor');
+    const customFieldsEditor = document.getElementById('custom-fields-json-editor');
+    
+    if (schemaEditor) {
+      schemaEditor.addEventListener('input', () => {
+        this.validateJson(schemaEditor.value, 'schema');
+      });
+    }
+    
+    if (customFieldsEditor) {
+      customFieldsEditor.addEventListener('input', () => {
+        this.validateJson(customFieldsEditor.value, 'customFields');
+      });
+    }
+  }
+
+  validateJson(jsonString, type) {
+    const statusEl = document.getElementById('json-editor-status');
+    if (!statusEl) return;
+    
+    try {
+      const parsed = JSON.parse(jsonString);
+      statusEl.innerHTML = `<span style="color: var(--color-success);">✓ Valid JSON (${type})</span>`;
+      statusEl.style.color = 'var(--color-success)';
+      return true;
+    } catch (error) {
+      statusEl.innerHTML = `<span style="color: var(--color-error);">✗ Invalid JSON (${type}): ${error.message}</span>`;
+      statusEl.style.color = 'var(--color-error)';
+      return false;
+    }
+  }
+
+  async loadSchemaFromApi() {
+    await this.loadSchema();
+    await this.loadCustomFields();
+    this.render();
+    this.showNotification('Schema reloaded from database', 'success');
+  }
+
+  async saveSchemaFromJson() {
+    const schemaEditor = document.getElementById('schema-json-editor');
+    const customFieldsEditor = document.getElementById('custom-fields-json-editor');
+    
+    if (!schemaEditor || !customFieldsEditor) {
+      this.showNotification('Editors not found', 'error');
+      return;
+    }
+    
+    // Validate JSON
+    let schemaData, customFieldsData;
+    try {
+      schemaData = JSON.parse(schemaEditor.value);
+    } catch (error) {
+      this.showNotification(`Invalid schema JSON: ${error.message}`, 'error');
+      return;
+    }
+    
+    try {
+      customFieldsData = JSON.parse(customFieldsEditor.value);
+    } catch (error) {
+      this.showNotification(`Invalid custom fields JSON: ${error.message}`, 'error');
+      return;
+    }
+    
+    // Save custom fields (schema changes require migrations, so we only save custom field configs)
+    try {
+      for (const field of customFieldsData) {
+        const response = await fetch(`${this.apiBase}/api/schema/config/fields`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(field)
+        });
+        
+        if (!response.ok) {
+          const result = await response.json();
+          throw new Error(result.error || 'Failed to save field');
+        }
+      }
+      
+      await this.loadCustomFields();
+      this.showNotification('Custom field configurations saved successfully', 'success');
+      
+      // Note: Schema changes require database migrations
+      this.showNotification('Note: Schema structure changes require database migrations. Use the UI view to add columns.', 'info');
+    } catch (error) {
+      this.showNotification(`Error saving: ${error.message}`, 'error');
+    }
   }
 
   renderTableList() {
