@@ -115,3 +115,4 @@ class WebWorkerHelper {
 window.WebWorkerHelper = WebWorkerHelper;
 window.webWorkerHelper = new WebWorkerHelper();
 
+

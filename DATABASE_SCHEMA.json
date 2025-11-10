@@ -1,0 +1,1096 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Cursor Telemetry Database Schema",
+  "description": "Complete schema documentation for the Cursor Telemetry SQLite database",
+  "version": "1.3.0",
+  "database": {
+    "type": "SQLite",
+    "file": "companion/data/companion.db",
+    "encoding": "UTF-8"
+  },
+  "tables": {
+    "entries": {
+      "description": "File change entries - tracks code modifications and file changes",
+      "primaryKey": "id",
+      "columns": {
+        "id": {
+          "type": "INTEGER",
+          "primaryKey": true,
+          "autoIncrement": true,
+          "description": "Unique identifier for the entry"
+        },
+        "session_id": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "Session identifier linking related entries"
+        },
+        "workspace_path": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "Path to the workspace root"
+        },
+        "file_path": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "Path to the modified file"
+        },
+        "source": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "Source of the change (e.g., 'file_watcher', 'cursor_db')"
+        },
+        "before_code": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "File content before the change"
+        },
+        "after_code": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "File content after the change"
+        },
+        "notes": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "Additional notes or metadata about the change"
+        },
+        "timestamp": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "ISO timestamp of when the change occurred"
+        },
+        "tags": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "Comma-separated tags for categorization"
+        },
+        "prompt_id": {
+          "type": "INTEGER",
+          "nullable": true,
+          "foreignKey": "prompts.id",
+          "description": "Reference to the prompt that triggered this change"
+        },
+        "modelInfo": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "JSON string containing model information"
+        },
+        "type": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "Type of entry (e.g., 'file_change', 'code_change')"
+        }
+      }
+    },
+    "prompts": {
+      "description": "AI prompts and interactions - tracks all AI prompts sent to Cursor",
+      "primaryKey": "id",
+      "columns": {
+        "id": {
+          "type": "INTEGER",
+          "primaryKey": true,
+          "autoIncrement": true,
+          "description": "Unique identifier for the prompt"
+        },
+        "timestamp": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "ISO timestamp of when the prompt was sent"
+        },
+        "text": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "The prompt text content"
+        },
+        "status": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "Status of the prompt (e.g., 'completed', 'pending')"
+        },
+        "linked_entry_id": {
+          "type": "INTEGER",
+          "nullable": true,
+          "foreignKey": "entries.id",
+          "description": "Reference to the entry created by this prompt"
+        },
+        "source": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "Source of the prompt (e.g., 'cursor_db', 'composer')"
+        },
+        "workspace_id": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "Workspace identifier"
+        },
+        "workspace_path": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "Path to the workspace root"
+        },
+        "workspace_name": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "Name of the workspace"
+        },
+        "composer_id": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "Composer session identifier"
+        },
+        "subtitle": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "Subtitle or summary of the prompt"
+        },
+        "lines_added": {
+          "type": "INTEGER",
+          "default": 0,
+          "description": "Number of lines added by this prompt"
+        },
+        "lines_removed": {
+          "type": "INTEGER",
+          "default": 0,
+          "description": "Number of lines removed by this prompt"
+        },
+        "context_usage": {
+          "type": "REAL",
+          "default": 0,
+          "description": "Context window usage percentage (0-100)"
+        },
+        "mode": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "Prompt mode (e.g., 'chat', 'edit', 'compose')"
+        },
+        "model_type": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "Type of AI model used"
+        },
+        "model_name": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "Name of the AI model used"
+        },
+        "force_mode": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "Forced mode setting"
+        },
+        "is_auto": {
+          "type": "INTEGER",
+          "default": 0,
+          "description": "Whether this was an auto-generated prompt (0 or 1)"
+        },
+        "type": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "Type of prompt"
+        },
+        "confidence": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "Confidence level or score"
+        },
+        "added_from_database": {
+          "type": "INTEGER",
+          "default": 0,
+          "description": "Whether this prompt was imported from Cursor database (0 or 1)"
+        },
+        "context_files_json": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "JSON array of context files included in the prompt"
+        },
+        "context_file_count": {
+          "type": "INTEGER",
+          "default": 0,
+          "description": "Total number of context files"
+        },
+        "context_file_count_explicit": {
+          "type": "INTEGER",
+          "default": 0,
+          "description": "Number of explicitly mentioned context files"
+        },
+        "context_file_count_tabs": {
+          "type": "INTEGER",
+          "default": 0,
+          "description": "Number of context files from open tabs"
+        },
+        "context_file_count_auto": {
+          "type": "INTEGER",
+          "default": 0,
+          "description": "Number of auto-included context files"
+        },
+        "thinking_time": {
+          "type": "INTEGER",
+          "default": 0,
+          "description": "Thinking time in milliseconds"
+        },
+        "thinking_time_seconds": {
+          "type": "REAL",
+          "default": 0,
+          "description": "Thinking time in seconds"
+        },
+        "terminal_blocks_json": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "JSON array of terminal output blocks included"
+        },
+        "terminal_block_count": {
+          "type": "INTEGER",
+          "default": 0,
+          "description": "Number of terminal output blocks"
+        },
+        "has_attachments": {
+          "type": "INTEGER",
+          "default": 0,
+          "description": "Whether the prompt has attachments (0 or 1)"
+        },
+        "attachment_count": {
+          "type": "INTEGER",
+          "default": 0,
+          "description": "Number of attachments"
+        },
+        "conversation_id": {
+          "type": "TEXT",
+          "nullable": true,
+          "foreignKey": "conversations.id",
+          "description": "Reference to the conversation this prompt belongs to"
+        },
+        "conversation_index": {
+          "type": "INTEGER",
+          "nullable": true,
+          "description": "Index of this prompt within the conversation"
+        },
+        "conversation_title": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "Title of the conversation"
+        },
+        "message_role": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "Role of the message (e.g., 'user', 'assistant')"
+        },
+        "parent_conversation_id": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "Parent conversation identifier for threaded conversations"
+        }
+      },
+      "indexes": [
+        "idx_prompts_conversation ON prompts(conversation_id)",
+        "idx_prompts_workspace_conversation ON prompts(workspace_id, conversation_id)"
+      ]
+    },
+    "conversations": {
+      "description": "Conversation entities - groups related prompts together",
+      "primaryKey": "id",
+      "columns": {
+        "id": {
+          "type": "TEXT",
+          "primaryKey": true,
+          "description": "Unique conversation identifier"
+        },
+        "workspace_id": {
+          "type": "TEXT",
+          "required": true,
+          "description": "Workspace identifier"
+        },
+        "workspace_path": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "Path to the workspace root"
+        },
+        "title": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "Conversation title"
+        },
+        "status": {
+          "type": "TEXT",
+          "default": "active",
+          "description": "Conversation status (e.g., 'active', 'archived')"
+        },
+        "tags": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "Comma-separated tags"
+        },
+        "metadata": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "JSON metadata"
+        },
+        "created_at": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "ISO timestamp of creation"
+        },
+        "updated_at": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "ISO timestamp of last update"
+        },
+        "last_message_at": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "ISO timestamp of last message"
+        },
+        "message_count": {
+          "type": "INTEGER",
+          "default": 0,
+          "description": "Number of messages in the conversation"
+        }
+      },
+      "indexes": [
+        "idx_conversations_workspace ON conversations(workspace_id)",
+        "idx_conversations_status ON conversations(status)"
+      ]
+    },
+    "events": {
+      "description": "Detailed event tracking - captures various development events",
+      "primaryKey": "id",
+      "columns": {
+        "id": {
+          "type": "TEXT",
+          "primaryKey": true,
+          "description": "Unique event identifier"
+        },
+        "session_id": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "Session identifier"
+        },
+        "workspace_path": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "Path to the workspace root"
+        },
+        "timestamp": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "ISO timestamp of the event"
+        },
+        "type": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "Event type (e.g., 'file_change', 'code_change', 'prompt_sent')"
+        },
+        "details": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "JSON string with event details"
+        },
+        "annotation": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "AI-generated annotation describing the event"
+        },
+        "intent": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "Classified intent (e.g., 'feature', 'bug-fix', 'refactor')"
+        },
+        "tags": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "Comma-separated tags"
+        },
+        "ai_generated": {
+          "type": "INTEGER",
+          "default": 0,
+          "description": "Whether this event was AI-generated (0 or 1)"
+        }
+      }
+    },
+    "context_snapshots": {
+      "description": "Context window snapshots - captures context state at specific prompts",
+      "primaryKey": "id",
+      "columns": {
+        "id": {
+          "type": "INTEGER",
+          "primaryKey": true,
+          "autoIncrement": true,
+          "description": "Unique snapshot identifier"
+        },
+        "prompt_id": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "Reference to the prompt this snapshot belongs to"
+        },
+        "timestamp": {
+          "type": "INTEGER",
+          "nullable": true,
+          "description": "Unix timestamp in milliseconds"
+        },
+        "file_count": {
+          "type": "INTEGER",
+          "default": 0,
+          "description": "Number of files in context"
+        },
+        "token_estimate": {
+          "type": "INTEGER",
+          "default": 0,
+          "description": "Estimated token count"
+        },
+        "truncated": {
+          "type": "INTEGER",
+          "default": 0,
+          "description": "Whether context was truncated (0 or 1)"
+        },
+        "utilization_percent": {
+          "type": "REAL",
+          "default": 0,
+          "description": "Context window utilization percentage"
+        },
+        "context_files": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "JSON array of context file paths"
+        },
+        "at_mentions": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "JSON array of @ mentioned files"
+        },
+        "created_at": {
+          "type": "TEXT",
+          "default": "CURRENT_TIMESTAMP",
+          "description": "ISO timestamp of creation"
+        }
+      }
+    },
+    "context_changes": {
+      "description": "Context change tracking - tracks when files are added/removed from context",
+      "primaryKey": "id",
+      "columns": {
+        "id": {
+          "type": "TEXT",
+          "primaryKey": true,
+          "description": "Unique change identifier"
+        },
+        "prompt_id": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "Reference to the prompt"
+        },
+        "event_id": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "Reference to the related event"
+        },
+        "task_id": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "Task identifier"
+        },
+        "session_id": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "Session identifier"
+        },
+        "timestamp": {
+          "type": "INTEGER",
+          "required": true,
+          "description": "Unix timestamp in milliseconds"
+        },
+        "previous_file_count": {
+          "type": "INTEGER",
+          "default": 0,
+          "description": "Number of files in context before change"
+        },
+        "current_file_count": {
+          "type": "INTEGER",
+          "default": 0,
+          "description": "Number of files in context after change"
+        },
+        "added_files": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "JSON array of added file paths"
+        },
+        "removed_files": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "JSON array of removed file paths"
+        },
+        "unchanged_files": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "JSON array of unchanged file paths"
+        },
+        "net_change": {
+          "type": "INTEGER",
+          "default": 0,
+          "description": "Net change in file count"
+        },
+        "metadata": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "JSON metadata"
+        },
+        "created_at": {
+          "type": "TEXT",
+          "default": "CURRENT_TIMESTAMP",
+          "description": "ISO timestamp of creation"
+        }
+      },
+      "indexes": [
+        "idx_context_changes_prompt ON context_changes(prompt_id)",
+        "idx_context_changes_event ON context_changes(event_id)",
+        "idx_context_changes_task ON context_changes(task_id)",
+        "idx_context_changes_timestamp ON context_changes(timestamp)"
+      ]
+    },
+    "audit_log": {
+      "description": "Audit log for import/export operations and system events",
+      "primaryKey": "id",
+      "columns": {
+        "id": {
+          "type": "INTEGER",
+          "primaryKey": true,
+          "autoIncrement": true,
+          "description": "Unique log entry identifier"
+        },
+        "operation": {
+          "type": "TEXT",
+          "required": true,
+          "description": "Operation name"
+        },
+        "operation_type": {
+          "type": "TEXT",
+          "required": true,
+          "description": "Type of operation (e.g., 'import', 'export', 'delete')"
+        },
+        "target_type": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "Type of target (e.g., 'workspace', 'entry', 'prompt')"
+        },
+        "target_id": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "Identifier of the target"
+        },
+        "workspace_id": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "Workspace identifier"
+        },
+        "user_id": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "User identifier"
+        },
+        "details": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "JSON string with operation details"
+        },
+        "status": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "Operation status (e.g., 'success', 'failed')"
+        },
+        "error_message": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "Error message if operation failed"
+        },
+        "created_at": {
+          "type": "TEXT",
+          "default": "CURRENT_TIMESTAMP",
+          "description": "ISO timestamp of creation"
+        }
+      },
+      "indexes": [
+        "idx_audit_operation ON audit_log(operation_type)",
+        "idx_audit_workspace ON audit_log(workspace_id)",
+        "idx_audit_created ON audit_log(created_at)"
+      ]
+    },
+    "terminal_commands": {
+      "description": "Terminal command history - tracks executed terminal commands",
+      "primaryKey": "id",
+      "columns": {
+        "id": {
+          "type": "TEXT",
+          "primaryKey": true,
+          "description": "Unique command identifier"
+        },
+        "command": {
+          "type": "TEXT",
+          "required": true,
+          "description": "The command that was executed"
+        },
+        "shell": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "Shell type (e.g., 'bash', 'zsh')"
+        },
+        "source": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "Source of the command"
+        },
+        "timestamp": {
+          "type": "INTEGER",
+          "required": true,
+          "description": "Unix timestamp in milliseconds"
+        },
+        "workspace": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "Workspace path"
+        },
+        "output": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "Command output"
+        },
+        "exit_code": {
+          "type": "INTEGER",
+          "nullable": true,
+          "description": "Command exit code"
+        },
+        "duration": {
+          "type": "INTEGER",
+          "nullable": true,
+          "description": "Command duration in milliseconds"
+        },
+        "error": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "Error message if command failed"
+        },
+        "linked_entry_id": {
+          "type": "INTEGER",
+          "nullable": true,
+          "foreignKey": "entries.id",
+          "description": "Reference to related entry"
+        },
+        "linked_prompt_id": {
+          "type": "INTEGER",
+          "nullable": true,
+          "foreignKey": "prompts.id",
+          "description": "Reference to related prompt"
+        },
+        "session_id": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "Session identifier"
+        }
+      }
+    },
+    "share_links": {
+      "description": "Shareable links for workspace data sharing",
+      "primaryKey": "id",
+      "columns": {
+        "id": {
+          "type": "TEXT",
+          "primaryKey": true,
+          "description": "Unique link identifier"
+        },
+        "share_id": {
+          "type": "TEXT",
+          "unique": true,
+          "required": true,
+          "description": "Public share identifier"
+        },
+        "workspaces": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "JSON array of workspace identifiers"
+        },
+        "abstraction_level": {
+          "type": "INTEGER",
+          "default": 1,
+          "description": "Abstraction level for shared data"
+        },
+        "filters": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "JSON object with filter criteria"
+        },
+        "created_at": {
+          "type": "INTEGER",
+          "required": true,
+          "description": "Unix timestamp in milliseconds"
+        },
+        "expires_at": {
+          "type": "INTEGER",
+          "required": true,
+          "description": "Unix timestamp when link expires"
+        },
+        "access_count": {
+          "type": "INTEGER",
+          "default": 0,
+          "description": "Number of times link was accessed"
+        },
+        "last_accessed": {
+          "type": "INTEGER",
+          "nullable": true,
+          "description": "Unix timestamp of last access"
+        },
+        "metadata": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "JSON metadata"
+        }
+      },
+      "indexes": [
+        "idx_share_links_expires ON share_links(expires_at)",
+        "idx_share_links_created ON share_links(created_at)"
+      ]
+    },
+    "prompt_attachments": {
+      "description": "Attachments associated with prompts (images, files, etc.)",
+      "primaryKey": "id",
+      "columns": {
+        "id": {
+          "type": "INTEGER",
+          "primaryKey": true,
+          "autoIncrement": true,
+          "description": "Unique attachment identifier"
+        },
+        "prompt_id": {
+          "type": "INTEGER",
+          "required": true,
+          "foreignKey": "prompts.id",
+          "description": "Reference to the prompt"
+        },
+        "type": {
+          "type": "TEXT",
+          "required": true,
+          "description": "Attachment type (e.g., 'image', 'file')"
+        },
+        "format": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "File format (e.g., 'png', 'jpg')"
+        },
+        "filename": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "Original filename"
+        },
+        "data": {
+          "type": "BLOB",
+          "nullable": true,
+          "description": "Binary attachment data"
+        },
+        "thumbnail": {
+          "type": "BLOB",
+          "nullable": true,
+          "description": "Thumbnail image data"
+        },
+        "size": {
+          "type": "INTEGER",
+          "nullable": true,
+          "description": "File size in bytes"
+        },
+        "width": {
+          "type": "INTEGER",
+          "nullable": true,
+          "description": "Image width in pixels"
+        },
+        "height": {
+          "type": "INTEGER",
+          "nullable": true,
+          "description": "Image height in pixels"
+        },
+        "timestamp": {
+          "type": "INTEGER",
+          "nullable": true,
+          "description": "Unix timestamp in milliseconds"
+        }
+      },
+      "indexes": [
+        "idx_attachments_prompt_id ON prompt_attachments(prompt_id)"
+      ]
+    },
+    "todos": {
+      "description": "TODO items tracked during development",
+      "primaryKey": "id",
+      "columns": {
+        "id": {
+          "type": "INTEGER",
+          "primaryKey": true,
+          "autoIncrement": true,
+          "description": "Unique TODO identifier"
+        },
+        "content": {
+          "type": "TEXT",
+          "required": true,
+          "description": "TODO content/text"
+        },
+        "status": {
+          "type": "TEXT",
+          "default": "pending",
+          "description": "TODO status (e.g., 'pending', 'in_progress', 'completed')"
+        },
+        "created_at": {
+          "type": "INTEGER",
+          "required": true,
+          "description": "Unix timestamp of creation"
+        },
+        "started_at": {
+          "type": "INTEGER",
+          "nullable": true,
+          "description": "Unix timestamp when work started"
+        },
+        "completed_at": {
+          "type": "INTEGER",
+          "nullable": true,
+          "description": "Unix timestamp when completed"
+        },
+        "order_index": {
+          "type": "INTEGER",
+          "default": 0,
+          "description": "Display order index"
+        },
+        "session_id": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "Session identifier"
+        },
+        "prompts_while_active": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "JSON array of prompt IDs active during this TODO"
+        },
+        "files_modified": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "JSON array of file paths modified"
+        }
+      },
+      "indexes": [
+        "idx_todos_status ON todos(status)",
+        "idx_todos_session ON todos(session_id)"
+      ]
+    },
+    "todo_events": {
+      "description": "Events associated with TODO items",
+      "primaryKey": "id",
+      "columns": {
+        "id": {
+          "type": "INTEGER",
+          "primaryKey": true,
+          "autoIncrement": true,
+          "description": "Unique event identifier"
+        },
+        "todo_id": {
+          "type": "INTEGER",
+          "required": true,
+          "foreignKey": "todos.id",
+          "description": "Reference to the TODO"
+        },
+        "event_type": {
+          "type": "TEXT",
+          "required": true,
+          "description": "Type of event"
+        },
+        "event_id": {
+          "type": "INTEGER",
+          "nullable": true,
+          "description": "Reference to related event"
+        },
+        "timestamp": {
+          "type": "INTEGER",
+          "required": true,
+          "description": "Unix timestamp in milliseconds"
+        }
+      },
+      "indexes": [
+        "idx_todo_events_todo_id ON todo_events(todo_id)"
+      ]
+    },
+    "schema_config": {
+      "description": "Custom field configurations for schema customization",
+      "primaryKey": "id",
+      "columns": {
+        "id": {
+          "type": "INTEGER",
+          "primaryKey": true,
+          "autoIncrement": true,
+          "description": "Unique configuration identifier"
+        },
+        "table_name": {
+          "type": "TEXT",
+          "required": true,
+          "description": "Name of the table"
+        },
+        "field_name": {
+          "type": "TEXT",
+          "required": true,
+          "description": "Name of the field"
+        },
+        "field_type": {
+          "type": "TEXT",
+          "required": true,
+          "description": "Type of the field"
+        },
+        "display_name": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "Display name for the field"
+        },
+        "description": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "Field description"
+        },
+        "enabled": {
+          "type": "INTEGER",
+          "default": 1,
+          "description": "Whether the field is enabled (0 or 1)"
+        },
+        "config_json": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "JSON configuration for the field"
+        },
+        "workspace_id": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "Workspace identifier"
+        },
+        "workspace_path": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "Path to the workspace root"
+        },
+        "created_at": {
+          "type": "TEXT",
+          "default": "CURRENT_TIMESTAMP",
+          "description": "ISO timestamp of creation"
+        },
+        "updated_at": {
+          "type": "TEXT",
+          "default": "CURRENT_TIMESTAMP",
+          "description": "ISO timestamp of last update"
+        }
+      },
+      "uniqueConstraints": [
+        "(table_name, field_name, workspace_id)"
+      ]
+    },
+    "whiteboards": {
+      "description": "Saved whiteboard configurations",
+      "primaryKey": "id",
+      "columns": {
+        "id": {
+          "type": "TEXT",
+          "primaryKey": true,
+          "description": "Unique whiteboard identifier"
+        },
+        "name": {
+          "type": "TEXT",
+          "required": true,
+          "description": "Whiteboard name"
+        },
+        "description": {
+          "type": "TEXT",
+          "nullable": true,
+          "description": "Whiteboard description"
+        },
+        "data": {
+          "type": "TEXT",
+          "required": true,
+          "description": "JSON string with whiteboard data"
+        },
+        "created_at": {
+          "type": "TEXT",
+          "default": "CURRENT_TIMESTAMP",
+          "description": "ISO timestamp of creation"
+        },
+        "updated_at": {
+          "type": "TEXT",
+          "default": "CURRENT_TIMESTAMP",
+          "description": "ISO timestamp of last update"
+        }
+      }
+    },
+    "schema_versions": {
+      "description": "Schema version tracking for migrations",
+      "primaryKey": "id",
+      "columns": {
+        "id": {
+          "type": "INTEGER",
+          "primaryKey": true,
+          "autoIncrement": true,
+          "description": "Unique version record identifier"
+        },
+        "version": {
+          "type": "TEXT",
+          "required": true,
+          "description": "Schema version (semver format, e.g., '1.3.0')"
+        },
+        "applied_at": {
+          "type": "TEXT",
+          "default": "CURRENT_TIMESTAMP",
+          "description": "ISO timestamp when version was applied"
+        }
+      }
+    }
+  },
+  "relationships": {
+    "entries_to_prompts": {
+      "type": "many-to-one",
+      "from": "entries.prompt_id",
+      "to": "prompts.id",
+      "description": "Entries can be linked to prompts that triggered them"
+    },
+    "prompts_to_conversations": {
+      "type": "many-to-one",
+      "from": "prompts.conversation_id",
+      "to": "conversations.id",
+      "description": "Prompts belong to conversations"
+    },
+    "prompts_to_entries": {
+      "type": "one-to-many",
+      "from": "prompts.id",
+      "to": "entries.linked_entry_id",
+      "description": "Prompts can create multiple entries"
+    },
+    "attachments_to_prompts": {
+      "type": "many-to-one",
+      "from": "prompt_attachments.prompt_id",
+      "to": "prompts.id",
+      "description": "Attachments belong to prompts"
+    },
+    "todo_events_to_todos": {
+      "type": "many-to-one",
+      "from": "todo_events.todo_id",
+      "to": "todos.id",
+      "description": "Events are associated with TODOs"
+    },
+    "terminal_commands_to_entries": {
+      "type": "many-to-one",
+      "from": "terminal_commands.linked_entry_id",
+      "to": "entries.id",
+      "description": "Terminal commands can be linked to entries"
+    },
+    "terminal_commands_to_prompts": {
+      "type": "many-to-one",
+      "from": "terminal_commands.linked_prompt_id",
+      "to": "prompts.id",
+      "description": "Terminal commands can be linked to prompts"
+    }
+  },
+  "notes": {
+    "timestampFormats": {
+      "TEXT": "ISO 8601 format (e.g., '2024-01-15T10:30:00.000Z')",
+      "INTEGER": "Unix timestamp in milliseconds"
+    },
+    "booleanValues": "SQLite uses INTEGER: 0 = false, 1 = true",
+    "jsonFields": "Fields marked as JSON should contain valid JSON strings",
+    "foreignKeys": "Foreign key relationships are logical - SQLite doesn't enforce them by default",
+    "indexes": "Indexes are created for frequently queried columns to improve performance"
+  }
+}
+

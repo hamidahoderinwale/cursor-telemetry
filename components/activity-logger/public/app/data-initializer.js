@@ -92,25 +92,31 @@ async function initializeDashboard() {
       window.initProgress.update('data', 100);
     }
     
-    // Step 3: Render initial UI with cached/recent data (defer heavy rendering)
+    // Step 3: Render initial UI immediately (defer stats calculation)
     window.initProgress.update('render', 0);
-    if (window.calculateStats) {
-      // Use requestIdleCallback for stats calculation if available
-      if (typeof requestIdleCallback !== 'undefined') {
-        requestIdleCallback(() => {
-          window.calculateStats();
-        }, { timeout: 100 });
-      } else {
-        // Yield to event loop before calculating stats
-        await new Promise(resolve => setTimeout(resolve, 0));
-        window.calculateStats();
-      }
-    }
+    
+    // Show UI first, then calculate stats in background
     if (window.renderCurrentView) {
-      // Yield to browser for initial render
-      await new Promise(resolve => requestAnimationFrame(resolve));
+      // Render immediately without waiting for stats
       await window.renderCurrentView();
     }
+    
+    // Calculate stats in background after UI is visible
+    if (window.calculateStats) {
+      // Defer stats to background - don't block UI
+      setTimeout(() => {
+        if (typeof requestIdleCallback !== 'undefined') {
+          requestIdleCallback(() => {
+            window.calculateStats().catch(err => console.warn('[STATS] Stats calculation error:', err));
+          }, { timeout: 1000 });
+        } else {
+          setTimeout(() => {
+            window.calculateStats().catch(err => console.warn('[STATS] Stats calculation error:', err));
+          }, 1000);
+        }
+      }, 100); // Small delay to let UI render first
+    }
+    
     window.initProgress.update('render', 100);
     
     // Mark as complete with final status
@@ -120,11 +126,37 @@ async function initializeDashboard() {
       window.initProgress.complete('Offline - using cached data');
     }
     
-    // Step 4: Background: fetch older history if needed
+    // Step 4: Background: fetch more data after initial render (cloud optimization)
     if (isConnected) {
-      setTimeout(() => {
-        fetchOlderHistory();
-      }, 3000);
+        // Load additional data in background after UI is interactive
+        setTimeout(() => {
+            fetchOlderHistory();
+            // Load more recent data to fill in gaps (up to 200 total for better performance)
+            if (window.APIClient && window.state?.data?.events?.length < 200) {
+                const additionalLimit = 150; // Load 150 more (total 200)
+                window.APIClient.get(`/api/activity?limit=${additionalLimit}&offset=50`, {
+                    timeout: 30000,
+                    retries: 1,
+                    silent: true
+                }).then(response => {
+                    if (response?.data && Array.isArray(response.data)) {
+                        // Merge with existing events, avoiding duplicates
+                        const existingIds = new Set((window.state.data.events || []).map(e => e.id));
+                        const newEvents = response.data.filter(e => !existingIds.has(e.id));
+                        if (newEvents.length > 0) {
+                            window.state.data.events = [...(window.state.data.events || []), ...newEvents];
+                            console.log(`[BACKGROUND] Loaded ${newEvents.length} additional events`);
+                            // Optionally update UI if needed
+                            if (window.calculateStats) {
+                                window.calculateStats();
+                            }
+                        }
+                    }
+                }).catch(err => {
+                    // Silently fail - this is background loading
+                });
+            }
+        }, 2000); // Start after 2 seconds (UI should be interactive by then)
     }
     
     // Step 5: Heavy analytics will be loaded on-demand via analyticsManager
@@ -173,41 +205,33 @@ async function loadFromCache() {
     return;
   }
   
-  // Load recent data first (last 24 hours) for instant UI
+  // Load minimal recent data (last 6 hours) for fastest startup
   const now = Date.now();
-  const oneDayAgo = now - 24 * 60 * 60 * 1000;
+  const sixHoursAgo = now - 6 * 60 * 60 * 1000; // Reduced from 24 hours for speed
   
   try {
-    // Load recent events first (faster)
+    // Load only most recent events (limit to 50 for speed)
     if (window.persistentStorage.getEventsSince) {
-      const recentEvents = await window.persistentStorage.getEventsSince(oneDayAgo);
+      const recentEvents = await window.persistentStorage.getEventsSince(sixHoursAgo);
       if (recentEvents && recentEvents.length > 0) {
-        window.state.data.events = recentEvents;
-        console.log(`[SUCCESS] Loaded ${recentEvents.length} recent events from cache`);
+        // Limit to 50 most recent for fastest load
+        window.state.data.events = recentEvents.slice(0, 50);
+        console.log(`[SUCCESS] Loaded ${window.state.data.events.length} recent events from cache`);
       }
     }
     
-    // Load recent prompts first
+    // Load only most recent prompts (limit to 50 for speed)
     if (window.persistentStorage.getPromptsSince) {
-      const recentPrompts = await window.persistentStorage.getPromptsSince(oneDayAgo);
+      const recentPrompts = await window.persistentStorage.getPromptsSince(sixHoursAgo);
       if (recentPrompts && recentPrompts.length > 0) {
-        window.state.data.prompts = recentPrompts;
-        console.log(`[SUCCESS] Loaded ${recentPrompts.length} recent prompts from cache`);
+        // Limit to 50 most recent for fastest load
+        window.state.data.prompts = recentPrompts.slice(0, 50);
+        console.log(`[SUCCESS] Loaded ${window.state.data.prompts.length} recent prompts from cache`);
       }
     }
     
-    // Render with recent cached data immediately
-    if ((window.state.data.events && window.state.data.events.length > 0) || 
-        (window.state.data.prompts && window.state.data.prompts.length > 0)) {
-      if (window.calculateStats) {
-        await window.calculateStats();
-      }
-      if (window.renderCurrentView) {
-        // Use requestAnimationFrame to yield to browser for initial render
-        await new Promise(resolve => requestAnimationFrame(resolve));
-        await window.renderCurrentView();
-      }
-    }
+    // Don't calculate stats or render here - let main initialization handle it
+    // This makes cache loading faster and non-blocking
     
     // Load older data in background (non-blocking)
     if (typeof requestIdleCallback !== 'undefined') {
@@ -331,61 +355,68 @@ async function fetchRecentData() {
     // console.log(`[SYNC] Fetching recent data (${windowLabel} window)...`);
   }
   
-  const pageSize = 500; // Optimized limit for performance
+  const pageSize = 50; // Minimal initial load for fastest startup (load more in background)
   
   try {
-    // Fetch recent events only (cached data provides full history)
+    // Fetch recent events in parallel for faster loading (cloud-optimized)
     // Use longer timeout for slow endpoints (cursor database queries)
-    // Fetch sequentially with delay to avoid overwhelming the companion service
-    const activity = await window.APIClient.get(`/api/activity?limit=${pageSize}`, { 
-      timeout: 30000,  // 30 seconds for database queries
-      retries: 1,
-      silent: true  // Suppress error logging for expected offline scenarios
-    }).catch(err => {
-      // Only log if it's not a network/CORS error (expected when offline)
-      const isNetworkError = err.message?.includes('CORS') || 
-                             err.message?.includes('NetworkError') || 
-                             err.message?.includes('Failed to fetch');
-      if (!isNetworkError) {
-        console.warn('[WARNING] Activity fetch failed, using cache:', err.message);
-      }
-      return { data: window.state.data.events || [] };
-    });
+    const [activityResult, promptsResult, workspacesResult] = await Promise.allSettled([
+      window.APIClient.get(`/api/activity?limit=${pageSize}`, { 
+        timeout: 30000,  // 30 seconds for database queries
+        retries: 1,
+        silent: true  // Suppress error logging for expected offline scenarios
+      }),
+      window.APIClient.get(`/entries?limit=${pageSize}`, { 
+        timeout: 30000,  // 30 seconds for database queries
+        retries: 1,
+        silent: true  // Suppress error logging for expected offline scenarios
+      }),
+      window.APIClient.get('/api/workspaces', { 
+        timeout: 30000,  // 30 seconds for workspace queries
+        retries: 1,
+        silent: true  // Suppress error logging for expected offline scenarios
+      })
+    ]);
     
-    // Small delay between requests to reduce server load
-    await new Promise(resolve => setTimeout(resolve, 100));
+    // Process results with fallbacks
+    const activity = activityResult.status === 'fulfilled' 
+      ? activityResult.value 
+      : (() => {
+          const err = activityResult.reason;
+          const isNetworkError = err?.message?.includes('CORS') || 
+                                 err?.message?.includes('NetworkError') || 
+                                 err?.message?.includes('Failed to fetch');
+          if (!isNetworkError) {
+            console.warn('[WARNING] Activity fetch failed, using cache:', err?.message);
+          }
+          return { data: window.state.data.events || [] };
+        })();
     
-    const prompts = await window.APIClient.get(`/entries?limit=${pageSize}`, { 
-      timeout: 30000,  // 30 seconds for database queries
-      retries: 1,
-      silent: true  // Suppress error logging for expected offline scenarios
-    }).catch(err => {
-      // Only log if it's not a network/CORS error (expected when offline)
-      const isNetworkError = err.message?.includes('CORS') || 
-                             err.message?.includes('NetworkError') || 
-                             err.message?.includes('Failed to fetch');
-      if (!isNetworkError) {
-        console.warn('[WARNING] Prompts fetch failed, using cache:', err.message);
-      }
-      return { entries: window.state.data.prompts || [] };
-    });
+    const prompts = promptsResult.status === 'fulfilled'
+      ? promptsResult.value
+      : (() => {
+          const err = promptsResult.reason;
+          const isNetworkError = err?.message?.includes('CORS') || 
+                                 err?.message?.includes('NetworkError') || 
+                                 err?.message?.includes('Failed to fetch');
+          if (!isNetworkError) {
+            console.warn('[WARNING] Prompts fetch failed, using cache:', err?.message);
+          }
+          return { entries: window.state.data.prompts || [] };
+        })();
     
-    await new Promise(resolve => setTimeout(resolve, 100));
-    
-    const workspaces = await window.APIClient.get('/api/workspaces', { 
-      timeout: 30000,  // 30 seconds for workspace queries
-      retries: 1,
-      silent: true  // Suppress error logging for expected offline scenarios
-    }).catch(err => {
-      // Only log if it's not a network/CORS error (expected when offline)
-      const isNetworkError = err.message?.includes('CORS') || 
-                             err.message?.includes('NetworkError') || 
-                             err.message?.includes('Failed to fetch');
-      if (!isNetworkError) {
-        console.warn('[WARNING] Workspaces fetch failed, using cache:', err.message);
-      }
-      return window.state.data.workspaces || [];
-    });
+    const workspaces = workspacesResult.status === 'fulfilled'
+      ? workspacesResult.value
+      : (() => {
+          const err = workspacesResult.reason;
+          const isNetworkError = err?.message?.includes('CORS') || 
+                                 err?.message?.includes('NetworkError') || 
+                                 err?.message?.includes('Failed to fetch');
+          if (!isNetworkError) {
+            console.warn('[WARNING] Workspaces fetch failed, using cache:', err?.message);
+          }
+          return window.state.data.workspaces || [];
+        })();
     
     // Process activity
     // Only log debug info if not in offline mode (to reduce spam)

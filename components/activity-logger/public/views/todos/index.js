@@ -117,3 +117,4 @@ function escapeHtml(text) {
 window.renderTodoView = renderTodoView;
 window.toggleTodo = toggleTodo;
 
+

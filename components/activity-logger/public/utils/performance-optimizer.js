@@ -203,3 +203,4 @@ window.throttle = (fn, delay) => window.performanceOptimizer.throttle(fn, delay)
 window.batchDOMUpdates = (updates) => window.performanceOptimizer.batchDOMUpdates(updates);
 window.batchRequests = (requests, batchSize) => window.performanceOptimizer.batchRequests(requests, batchSize);
 
+

@@ -240,8 +240,9 @@ function renderAnalyticsView(container) {
     </div>
   `;
 
-  // Render charts after DOM is ready (300ms delay to ensure all modules loaded)
-  setTimeout(() => {
+  // Render charts immediately with available data (fast loading)
+  // Use requestAnimationFrame for immediate render, then load heavy analytics progressively
+  requestAnimationFrame(() => {
     // Check if analytics view is still active
     const viewContainer = document.getElementById('viewContainer');
     if (!viewContainer || !viewContainer.innerHTML.includes('analytics-view')) {
@@ -256,18 +257,7 @@ function renderAnalyticsView(container) {
     console.log('[CHART] Rendering analytics charts with data:', {
       events: events.length,
       prompts: prompts.length,
-      stateAvailable: !!window.state,
-      chartsAvailable: {
-        renderAIActivityChart: !!window.renderAIActivityChart,
-        renderPromptTokensChart: !!window.renderPromptTokensChart,
-        renderFileTypesChart: !!window.renderFileTypesChart,
-        renderHourlyChart: !!window.renderHourlyChart,
-        renderModelUsageAnalytics: !!window.renderModelUsageAnalytics,
-        renderEnhancedContextAnalytics: !!window.renderEnhancedContextAnalytics,
-        renderProductivityInsights: !!window.renderProductivityInsights,
-        renderContextFileAnalytics: !!window.renderContextFileAnalytics,
-        createChart: !!window.createChart
-      }
+      stateAvailable: !!window.state
     });
     
     if (!window.createChart) {
@@ -275,6 +265,28 @@ function renderAnalyticsView(container) {
       return;
     }
     
+    // PHASE 1: Render fast charts immediately with available data
+    renderFastCharts(events, prompts);
+    
+    // PHASE 2: Load more data and render heavy analytics progressively
+    if (events.length < 200 || prompts.length < 200) {
+      // Load more data in background for complete analytics
+      loadMoreDataForAnalytics().then(() => {
+        const updatedEvents = window.state?.data?.events || [];
+        const updatedPrompts = window.state?.data?.prompts || [];
+        renderHeavyAnalytics(updatedEvents, updatedPrompts);
+      });
+    } else {
+      // Already have enough data, render heavy analytics
+      setTimeout(() => renderHeavyAnalytics(events, prompts), 100);
+    }
+  });
+  
+  // Fast charts that render immediately (with minimal data)
+  function renderFastCharts(events, prompts) {
+    console.log('[ANALYTICS] Rendering fast charts with', events.length, 'events and', prompts.length, 'prompts');
+    
+    // Render basic charts immediately - these are fast
     if (window.renderAIActivityChart) {
       try {
         // Auto-detect and set initial time scale button
@@ -349,15 +361,31 @@ function renderAnalyticsView(container) {
       console.warn('[CHART] renderHourlyChart not available');
     }
     
+    console.log('[ANALYTICS] Fast charts rendered');
+  }
+  
+  // Heavy analytics that load progressively
+  function renderHeavyAnalytics(events, prompts) {
+    console.log('[ANALYTICS] Rendering heavy analytics with', events.length, 'events and', prompts.length, 'prompts');
+    
+    // Defer heavy analytics to avoid blocking
+    if (typeof requestIdleCallback !== 'undefined') {
+      requestIdleCallback(() => {
+        renderHeavyAnalyticsInternal(events, prompts);
+      }, { timeout: 1000 });
+    } else {
+      setTimeout(() => renderHeavyAnalyticsInternal(events, prompts), 500);
+    }
+  }
+  
+  function renderHeavyAnalyticsInternal(events, prompts) {
     if (window.renderContextFileAnalytics) {
       window.renderContextFileAnalytics().catch(err => {
-        // Only log if it's not a missing element error
         if (!err.message || !err.message.includes('not found')) {
           console.warn('[INFO] Context file analytics not available:', err.message);
         }
       });
     }
-    // Note: renderContextFileAnalytics may not be available if analytics-renderers.js is not loaded (ES module)
     
     if (window.renderModelUsageAnalytics) {
       try {
@@ -366,27 +394,22 @@ function renderAnalyticsView(container) {
         console.error('[CHART] Error rendering Model Usage Analytics:', err);
       }
     }
-    // Note: renderModelUsageAnalytics may not be available if analytics-renderers.js is not loaded (ES module)
     
     if (window.renderEnhancedContextAnalytics) {
       window.renderEnhancedContextAnalytics().catch(err => {
-        // Only log if it's not a missing element error
         if (!err.message || !err.message.includes('not found')) {
           console.warn('[INFO] Context analytics not available:', err.message);
         }
       });
     }
-    // Note: renderEnhancedContextAnalytics may not be available if analytics-renderers.js is not loaded (ES module)
     
     if (window.renderProductivityInsights) {
       window.renderProductivityInsights().catch(err => {
-        // Only log if it's not a missing element error
         if (!err.message || !err.message.includes('not found')) {
           console.warn('[INFO] Productivity insights not available:', err.message);
         }
       });
     }
-    // Note: renderProductivityInsights may not be available if analytics-renderers.js is not loaded (ES module)
     
     if (window.renderPromptEffectiveness) {
       try {
@@ -394,8 +417,6 @@ function renderAnalyticsView(container) {
       } catch (err) {
         console.error('[CHART] Error rendering Prompt Effectiveness:', err);
       }
-    } else {
-      console.warn('[CHART] renderPromptEffectiveness not available');
     }
     
     // Advanced visualizations - lazy load with intersection observer
@@ -433,13 +454,61 @@ function renderAnalyticsView(container) {
       }
     };
     
-    // Use requestIdleCallback for non-critical visualizations
-    if (typeof requestIdleCallback !== 'undefined') {
-      requestIdleCallback(lazyLoadVisualizations, { timeout: 2000 });
-    } else {
-      setTimeout(lazyLoadVisualizations, 500);
+    // Use requestIdleCallback for non-critical visualizations (already in idle callback)
+    lazyLoadVisualizations();
+  }
+  
+  // Load more data for analytics if needed
+  async function loadMoreDataForAnalytics() {
+    if (!window.APIClient) return;
+    
+    try {
+      // Load up to 200 items for better analytics
+      const currentEvents = window.state?.data?.events?.length || 0;
+      const currentPrompts = window.state?.data?.prompts?.length || 0;
+      
+      if (currentEvents < 200) {
+        const needed = 200 - currentEvents;
+        const response = await window.APIClient.get(`/api/activity?limit=${needed}&offset=${currentEvents}`, {
+          timeout: 10000,
+          retries: 1,
+          silent: true
+        });
+        
+        if (response?.data && Array.isArray(response.data)) {
+          const existingIds = new Set((window.state.data.events || []).map(e => e.id));
+          const newEvents = response.data.filter(e => !existingIds.has(e.id));
+          if (newEvents.length > 0) {
+            window.state.data.events = [...(window.state.data.events || []), ...newEvents];
+            console.log(`[ANALYTICS] Loaded ${newEvents.length} additional events`);
+          }
+        }
+      }
+      
+      if (currentPrompts < 200) {
+        const needed = 200 - currentPrompts;
+        const response = await window.APIClient.get(`/entries?limit=${needed}&offset=${currentPrompts}`, {
+          timeout: 10000,
+          retries: 1,
+          silent: true
+        });
+        
+        if (response?.entries && Array.isArray(response.entries)) {
+          const existingIds = new Set((window.state.data.prompts || []).map(p => p.id || p.prompt_id));
+          const newPrompts = response.entries.filter(p => {
+            const id = p.id || p.prompt_id;
+            return id && !existingIds.has(id);
+          });
+          if (newPrompts.length > 0) {
+            window.state.data.prompts = [...(window.state.data.prompts || []), ...newPrompts];
+            console.log(`[ANALYTICS] Loaded ${newPrompts.length} additional prompts`);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[ANALYTICS] Failed to load additional data:', err.message);
     }
-  }, 300);
+  }
 }
 
 // Export to window for global access

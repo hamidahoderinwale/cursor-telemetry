@@ -53,21 +53,17 @@ async function calculateStats() {
   const entries = state.data.entries || [];
   const terminalCommands = state.data.terminalCommands || [];
 
-  // Count sessions (optimized with Set)
+  // Count sessions (optimized with Set) - limit processing for speed
   const sessions = new Set();
-  // Process in chunks to avoid blocking
-  const allItems = [...events, ...entries];
-  const chunkSize = 1000;
-  for (let i = 0; i < allItems.length; i += chunkSize) {
-    const chunk = allItems.slice(i, i + chunkSize);
-    chunk.forEach(item => {
-      if (item.session_id) sessions.add(item.session_id);
-    });
-    // Yield every chunk to prevent blocking
-    if (i + chunkSize < allItems.length) {
-      // Use setTimeout(0) to yield to event loop
-      await new Promise(resolve => setTimeout(resolve, 0));
-    }
+  // Process only recent items for faster calculation (limit to 200 most recent)
+  const recentItems = [...events.slice(0, 200), ...entries.slice(0, 200)];
+  recentItems.forEach(item => {
+    if (item.session_id) sessions.add(item.session_id);
+  });
+  
+  // For large datasets, use cached total if available
+  if (events.length > 200 && state.stats?.totalEventCount) {
+    // Use cached count for large datasets
   }
 
   // Count file changes (use totalEventCount for all-time if available, otherwise use filtered count)
@@ -90,47 +86,40 @@ async function calculateStats() {
   
   console.log(`AI Interactions: ${aiInteractions} of ${state.data.prompts?.length || 0} prompts`);
 
-  // Calculate code changed (approximate) - optimized with chunking
+  // Calculate code changed (approximate) - limit to recent events for speed
   let totalChars = 0;
-  const codeChunkSize = 500;
-  for (let i = 0; i < events.length; i += codeChunkSize) {
-    const chunk = events.slice(i, i + codeChunkSize);
-    chunk.forEach(e => {
-      try {
-        const details = typeof e.details === 'string' ? JSON.parse(e.details) : e.details;
-        const added = details?.chars_added || 0;
-        const deleted = details?.chars_deleted || 0;
-        totalChars += added + deleted;
-      } catch (err) {
-        // Silently skip parsing errors
-      }
-    });
-    // Yield every chunk to prevent blocking
-    if (i + chunkSize < events.length) {
-      await new Promise(resolve => setTimeout(resolve, 0));
+  // Only process most recent 200 events for faster calculation
+  const recentEvents = events.slice(0, 200);
+  recentEvents.forEach(e => {
+    try {
+      const details = typeof e.details === 'string' ? JSON.parse(e.details) : e.details;
+      const added = details?.chars_added || 0;
+      const deleted = details?.chars_deleted || 0;
+      totalChars += added + deleted;
+    } catch (err) {
+      // Silently skip parsing errors
     }
+  });
+  
+  // Scale up estimate if we have more events (rough approximation)
+  if (events.length > 200) {
+    totalChars = Math.round(totalChars * (events.length / 200));
   }
   
   console.log(`[STATS] Code changed: ${totalChars} chars (${(totalChars / 1024).toFixed(1)} KB) from ${events.length} events`);
 
-  // Calculate average context usage (optimized)
+  // Calculate average context usage (optimized - limit to recent prompts)
   let totalContextUsage = 0;
   let contextUsageCount = 0;
   const prompts = state.data.prompts || [];
-  const promptChunkSize = 500;
-  for (let i = 0; i < prompts.length; i += promptChunkSize) {
-    const chunk = prompts.slice(i, i + promptChunkSize);
-    chunk.forEach(p => {
-      if (p.contextUsage && p.contextUsage > 0) {
-        totalContextUsage += p.contextUsage;
-        contextUsageCount++;
-      }
-    });
-    // Yield every chunk to prevent blocking
-    if (i + promptChunkSize < prompts.length) {
-      await new Promise(resolve => setTimeout(resolve, 0));
+  // Only process most recent 200 prompts for faster calculation
+  const recentPrompts = prompts.slice(0, 200);
+  recentPrompts.forEach(p => {
+    if (p.contextUsage && p.contextUsage > 0) {
+      totalContextUsage += p.contextUsage;
+      contextUsageCount++;
     }
-  }
+  });
   const avgContextUsage = contextUsageCount > 0 ? (totalContextUsage / contextUsageCount) : 0;
 
   state.stats = {

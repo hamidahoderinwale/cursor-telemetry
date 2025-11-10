@@ -21,7 +21,14 @@
     X-Frame-Options = "SAMEORIGIN"
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
-    Cache-Control = "public, max-age=3600"
+    Cache-Control = "public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800"
+
+# API routes - shorter cache for dynamic data
+[[headers]]
+  for = "/api/*"
+  [headers.values]
+    Cache-Control = "public, max-age=30, s-maxage=60, stale-while-revalidate=300"
+    Vary = "Accept-Encoding"
 
 # Cache static assets
 [[headers]]

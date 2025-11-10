@@ -29,9 +29,11 @@ function createActivityRoutes(deps) {
       const limit = Math.min(parseInt(req.query.limit) || 100, 500); // Max 500 at a time
       const offset = parseInt(req.query.offset) || 0;
       
-      // Add cache control headers (30 seconds)
-      res.set('Cache-Control', 'public, max-age=30, must-revalidate');
+      // Enhanced cache control headers for cloud/CDN optimization
+      // Use stale-while-revalidate pattern for better performance
+      res.set('Cache-Control', 'public, max-age=30, s-maxage=60, stale-while-revalidate=300');
       res.set('ETag', `W/"activity-${sequence}-${limit}-${offset}"`);
+      res.set('Vary', 'Accept-Encoding'); // Cache different versions for different encodings
       
       // Cache key based on params
       const cacheKey = `activity_${limit}_${offset}_${sequence}`;
