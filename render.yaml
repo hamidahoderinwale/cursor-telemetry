@@ -1,3 +1,11 @@
+# Render.com deployment configuration for Cursor Telemetry Companion Service
+# 
+# Note: PORT is automatically set by Render - do not override
+# Optional environment variables to add via Render dashboard:
+#   - OPENROUTER_API_KEY: For AI features (semantic search, embeddings)
+#   - REQUIRE_AUTH: Set to 'true' for API security (requires API_KEYS)
+#   - API_KEYS: Comma-separated API keys for authentication
+
 services:
   - type: web
     name: cursor-telemetry-companion
