@@ -137,6 +137,8 @@ function openSearchPalette() {
     if (input) {
       input.focus();
       input.select();
+      // Add input listener for clear button
+      input.addEventListener('input', updateClearButton);
     }
     searchSelectedIndex = -1;
     searchResults = [];
@@ -146,12 +148,6 @@ function openSearchPalette() {
     updateSemanticStatus();
     updateRecentSearches();
     updateClearButton();
-    
-    // Add input listener for clear button
-    const input = document.getElementById('searchInput');
-    if (input) {
-      input.addEventListener('input', updateClearButton);
-    }
   }
 }
 
