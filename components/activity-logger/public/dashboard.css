@@ -183,7 +183,7 @@ body {
   font-weight: 400;
   font-style: normal;
   font-size: var(--text-sm);
-  line-height: 1.6;
+  line-height: 1.5; /* More compact */
   color: var(--color-text);
   background: var(--color-bg);
   overflow-x: hidden;
@@ -191,7 +191,7 @@ body {
 
 /* Improved readability with better line height for body text */
 p, li, td, th {
-  line-height: 1.7;
+  line-height: 1.5; /* More compact */
 }
 
 /* Better contrast for links */
