@@ -106,11 +106,18 @@ Control your development workflow with natural language commands:
 - **Overview** - Real-time activity stats and recent changes
 - **Activity** - Timeline of all code changes and AI interactions with annotations
 - **Analytics** - Context usage, errors, productivity metrics
-- **File Graph** - Interactive visualization of file dependencies
+- **File Graph** - Interactive visualization of file dependencies with precomputed similarities for instant loading
 - **States** - Visual state management with graph and list views
 - **Navigator** - Explore workspace structure
 - **System** - Resource usage and IDE state
 - **API Docs** - Complete API reference
+
+### Performance Optimizations
+
+- **Background Preloading**: File graph data and similarities are precomputed in the background for instant rendering
+- **Smart Caching**: Precomputed similarities cached in `sessionStorage` (10-minute expiry) for fast subsequent views
+- **Progressive Rendering**: Heavy analytics load progressively while basic UI renders immediately
+- **Optimized Algorithms**: Barnes-Hut optimization for force-directed layouts, kNN sampling for large datasets
 
 ## System Architecture
 
