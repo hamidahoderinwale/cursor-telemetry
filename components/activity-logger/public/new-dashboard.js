@@ -2550,11 +2550,18 @@ async function initializeD3FileGraph() {
 
     if (files.length === 0) {
       container.innerHTML = `
-        <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--color-text-muted);">
-          <div style="text-align: center;">
-            <div style="font-size: 48px; margin-bottom: 16px;">[FILE]</div>
-            <div style="font-size: 18px; margin-bottom: 8px;">No file data available</div>
-            <div style="font-size: 14px;">Make some code changes to see file relationships</div>
+        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: var(--color-text-muted); padding: 2rem; text-align: center;">
+          <div style="font-size: 48px; margin-bottom: 16px; opacity: 0.5;">[FILE]</div>
+          <div style="font-size: 18px; margin-bottom: 8px; color: var(--color-text);">No file data available</div>
+          <div style="font-size: 14px; margin-bottom: 16px;">Make some code changes to see file relationships</div>
+          <div style="font-size: 12px; opacity: 0.7; max-width: 500px; margin-top: 16px; padding: 12px; background: var(--color-bg-secondary, rgba(0,0,0,0.05)); border-radius: 6px;">
+            <strong>Tip:</strong> The file graph visualizes relationships between files based on:
+            <ul style="text-align: left; margin: 8px 0; padding-left: 20px;">
+              <li>Files modified together in the same sessions</li>
+              <li>Semantic similarity (TF-IDF analysis)</li>
+              <li>Co-occurrence in AI prompts</li>
+            </ul>
+            Start editing files to see relationships appear!
           </div>
         </div>
       `;

@@ -123,9 +123,92 @@ async function initializeD3FileGraph() {
       }
     }
     
+    // If no file contents, try to build graph from events data
     if (!data.files || data.files.length === 0) {
-      container.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--color-text-muted);">No file data available for analysis</div>';
-      return;
+      console.log('[FILE] No file contents available, attempting to build graph from events...');
+      const allEvents = window.state?.data?.events || [];
+      
+      if (allEvents.length === 0) {
+        container.innerHTML = `
+          <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: var(--color-text-muted); padding: 2rem; text-align: center;">
+            <div style="font-size: 48px; margin-bottom: 16px; opacity: 0.5;">[FILE]</div>
+            <div style="font-size: 18px; margin-bottom: 8px; color: var(--color-text);">No file data available</div>
+            <div style="font-size: 14px; margin-bottom: 16px;">Make some code changes to see file relationships</div>
+            <div style="font-size: 12px; opacity: 0.7; max-width: 500px; margin-top: 16px; padding: 12px; background: var(--color-bg-secondary, rgba(0,0,0,0.05)); border-radius: 6px;">
+              <strong>Tip:</strong> The file graph visualizes relationships between files based on:
+              <ul style="text-align: left; margin: 8px 0; padding-left: 20px;">
+                <li>Files modified together in the same sessions</li>
+                <li>Semantic similarity (TF-IDF analysis)</li>
+                <li>Co-occurrence in AI prompts</li>
+              </ul>
+              Start editing files to see relationships appear!
+            </div>
+          </div>
+        `;
+        return;
+      }
+      
+      // Build file list from events
+      const fileMap = new Map();
+      allEvents.forEach(event => {
+        try {
+          const details = typeof event.details === 'string' ? JSON.parse(event.details) : event.details;
+          const filePath = details?.file_path || event.file_path || '';
+          if (!filePath || filePath.includes('.git/')) return;
+          
+          if (!fileMap.has(filePath)) {
+            const pathParts = filePath.split('/');
+            const fileName = pathParts[pathParts.length - 1];
+            const ext = fileName.includes('.') ? fileName.split('.').pop() : '';
+            
+            fileMap.set(filePath, {
+              path: filePath,
+              name: fileName,
+              ext: ext,
+              changes: 0,
+              events: [],
+              content: details?.after_content || details?.after_code || '',
+              timestamp: event.timestamp
+            });
+          }
+          
+          const file = fileMap.get(filePath);
+          file.changes++;
+          file.events.push(event);
+          if (event.timestamp > file.timestamp) {
+            file.timestamp = event.timestamp;
+            file.content = details?.after_content || details?.after_code || file.content;
+          }
+        } catch (e) {
+          // Skip invalid events
+        }
+      });
+      
+      // Convert map to array format expected by the rest of the code
+      data.files = Array.from(fileMap.values());
+      data.totalSize = data.files.reduce((sum, f) => sum + (f.content?.length || 0), 0);
+      
+      console.log(`[FILE] Built file list from ${allEvents.length} events: ${data.files.length} unique files`);
+      
+      if (data.files.length === 0) {
+        container.innerHTML = `
+          <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: var(--color-text-muted); padding: 2rem; text-align: center;">
+            <div style="font-size: 48px; margin-bottom: 16px; opacity: 0.5;">[FILE]</div>
+            <div style="font-size: 18px; margin-bottom: 8px; color: var(--color-text);">No file data available</div>
+            <div style="font-size: 14px; margin-bottom: 16px;">Make some code changes to see file relationships</div>
+            <div style="font-size: 12px; opacity: 0.7; max-width: 500px; margin-top: 16px; padding: 12px; background: var(--color-bg-secondary, rgba(0,0,0,0.05)); border-radius: 6px;">
+              <strong>Tip:</strong> The file graph visualizes relationships between files based on:
+              <ul style="text-align: left; margin: 8px 0; padding-left: 20px;">
+                <li>Files modified together in the same sessions</li>
+                <li>Semantic similarity (TF-IDF analysis)</li>
+                <li>Co-occurrence in AI prompts</li>
+              </ul>
+              Start editing files to see relationships appear!
+            </div>
+          </div>
+        `;
+        return;
+      }
     }
     
     console.log(`[DATA] Loaded ${data.files.length} files (${(data.totalSize / 1024 / 1024).toFixed(2)} MB) from database`);

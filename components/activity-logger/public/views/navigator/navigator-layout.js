@@ -294,10 +294,13 @@ async function computeLatentLayoutUMAP(files) {
   const width = 800, height = 700;
   const padding = 100;
   
-  // Create feature vectors with progress updates
+  // Create feature vectors with progress updates and cache them on nodes
   const vectors = [];
   for (let i = 0; i < files.length; i++) {
-    vectors.push(createFeatureVector(files[i]));
+    const vector = createFeatureVector(files[i]);
+    vectors.push(vector);
+    // Cache feature vector on node for use in sub-clustering
+    files[i].featureVector = vector;
     // Yield every 100 files
     if (i % 100 === 0 && i > 0) {
       await new Promise(resolve => {
@@ -405,61 +408,218 @@ async function computeLatentLayoutUMAP(files) {
  * Enhanced with workspace and directory awareness
  */
 function detectLatentClusters(nodes, links) {
-  // First, try workspace/directory-based clustering
-  const workspaceClusters = new Map();
-  const directoryClusters = new Map();
-  
-  nodes.forEach(node => {
-    // Group by workspace
-    if (node.workspace) {
-      if (!workspaceClusters.has(node.workspace)) {
-        workspaceClusters.set(node.workspace, []);
+  // Helper function for semantic k-means sub-clustering using content similarity
+  function kMeansClustering(nodes, links, k) {
+    if (nodes.length === 0 || k <= 0) return nodes.map(() => 0);
+    if (k >= nodes.length) return nodes.map((_, i) => i);
+    
+    // Create feature vectors from file content for semantic clustering
+    const vectors = nodes.map(node => {
+      if (node.featureVector) {
+        return node.featureVector; // Use cached vector if available
       }
-      workspaceClusters.get(node.workspace).push(node);
+      // Create feature vector from file content
+      return createFeatureVector(node);
+    });
+    
+    // Compute cosine similarity helper
+    const cosineSimilarity = (vec1, vec2) => {
+      let dotProduct = 0;
+      let mag1 = 0;
+      let mag2 = 0;
+      for (let i = 0; i < Math.min(vec1.length, vec2.length); i++) {
+        dotProduct += vec1[i] * vec2[i];
+        mag1 += vec1[i] * vec1[i];
+        mag2 += vec2[i] * vec2[i];
+      }
+      const magnitude = Math.sqrt(mag1) * Math.sqrt(mag2);
+      return magnitude > 0 ? dotProduct / magnitude : 0;
+    };
+    
+    // Initialize centroids using feature vectors (not just spatial positions)
+    const centroids = [];
+    const used = new Set();
+    for (let i = 0; i < k; i++) {
+      let idx;
+      do {
+        idx = Math.floor(Math.random() * nodes.length);
+      } while (used.has(idx) && used.size < nodes.length);
+      used.add(idx);
+      // Store both feature vector and spatial position for centroid
+      centroids.push({
+        vector: [...vectors[idx]], // Copy feature vector
+        x: nodes[idx].x,
+        y: nodes[idx].y
+      });
     }
     
-    // Group by top-level directory
-    if (node.topLevelDir && node.topLevelDir !== '/') {
-      if (!directoryClusters.has(node.topLevelDir)) {
-        directoryClusters.set(node.topLevelDir, []);
+    // Run k-means with content-based similarity
+    for (let iter = 0; iter < 5; iter++) {
+      const assignments = nodes.map((node, idx) => {
+        let maxSimilarity = -Infinity;
+        let cluster = 0;
+        centroids.forEach((c, i) => {
+          // Use both content similarity (70%) and spatial proximity (30%)
+          const contentSim = cosineSimilarity(vectors[idx], c.vector);
+          const spatialDist = Math.sqrt((node.x - c.x) ** 2 + (node.y - c.y) ** 2);
+          const spatialSim = 1 / (1 + spatialDist); // Convert distance to similarity
+          const combined = 0.7 * contentSim + 0.3 * spatialSim;
+          if (combined > maxSimilarity) {
+            maxSimilarity = combined;
+            cluster = i;
+          }
+        });
+        return cluster;
+      });
+      
+      // Update centroids (average feature vectors and positions)
+      for (let i = 0; i < k; i++) {
+        const clusterNodes = nodes.filter((_, idx) => assignments[idx] === i);
+        if (clusterNodes.length > 0) {
+          // Average feature vectors
+          const avgVector = new Array(vectors[0].length).fill(0);
+          clusterNodes.forEach((node, idx) => {
+            const nodeIdx = nodes.indexOf(node);
+            vectors[nodeIdx].forEach((val, j) => {
+              avgVector[j] += val;
+            });
+          });
+          avgVector.forEach((val, j) => {
+            avgVector[j] = val / clusterNodes.length;
+          });
+          
+          centroids[i] = {
+            vector: avgVector,
+            x: d3.mean(clusterNodes, d => d.x),
+            y: d3.mean(clusterNodes, d => d.y)
+          };
+        }
       }
-      directoryClusters.get(node.topLevelDir).push(node);
     }
+    
+    // Final assignment using content + spatial similarity
+    return nodes.map((node, idx) => {
+      let maxSimilarity = -Infinity;
+      let cluster = 0;
+      centroids.forEach((c, i) => {
+        const contentSim = cosineSimilarity(vectors[idx], c.vector);
+        const spatialDist = Math.sqrt((node.x - c.x) ** 2 + (node.y - c.y) ** 2);
+        const spatialSim = 1 / (1 + spatialDist);
+        const combined = 0.7 * contentSim + 0.3 * spatialSim;
+        if (combined > maxSimilarity) {
+          maxSimilarity = combined;
+          cluster = i;
+        }
+      });
+      return cluster;
+    });
+  }
+  
+  // Create hierarchical clusters: Workspace -> Directory -> Semantic sub-clusters
+  const workspaceClusters = new Map();
+  
+  // First pass: Group nodes by workspace
+  nodes.forEach(node => {
+    const workspace = node.workspace || 'unknown';
+    if (!workspaceClusters.has(workspace)) {
+      workspaceClusters.set(workspace, new Map());
+    }
+    
+    // Group by directory within workspace
+    const directory = node.topLevelDir || node.path?.split('/').slice(0, -1).join('/') || 'root';
+    if (!workspaceClusters.get(workspace).has(directory)) {
+      workspaceClusters.get(workspace).set(directory, []);
+    }
+    workspaceClusters.get(workspace).get(directory).push(node);
   });
   
-  // If we have good workspace/directory groupings, use those
-  if (workspaceClusters.size > 0 && workspaceClusters.size <= 10) {
-    const clusters = [];
-    const clusterColors = [
-      '#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', 
-      '#10b981', '#3b82f6', '#ef4444', '#14b8a6', '#f97316', '#06b6d4'
-    ];
+  // Build hierarchical cluster structure
+  const clusters = [];
+  const clusterColors = [
+    '#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', 
+    '#10b981', '#3b82f6', '#ef4444', '#14b8a6', '#f97316', '#06b6d4'
+  ];
+  const subClusterColors = [
+    '#a78bfa', '#c084fc', '#f472b6', '#fb923c',
+    '#34d399', '#60a5fa', '#f87171', '#22d3ee'
+  ];
+  
+  let colorIndex = 0;
+  workspaceClusters.forEach((directoryMap, workspace) => {
+    const workspaceNodes = [];
+    const subClusters = [];
     
-    let colorIndex = 0;
-    workspaceClusters.forEach((clusterNodes, workspace) => {
-      if (clusterNodes.length > 0) {
-        clusterNodes.forEach(n => n.cluster = `workspace-${workspace}`);
-        const centroid = {
-          x: d3.mean(clusterNodes, d => d.x),
-          y: d3.mean(clusterNodes, d => d.y)
-        };
-        clusters.push({
-          id: `workspace-${workspace}`,
-          name: `Workspace: ${workspace.split('/').pop()}`,
-          nodes: clusterNodes,
-          color: clusterColors[colorIndex % clusterColors.length],
-          centroid: centroid,
-          type: 'workspace',
-          workspace: workspace
-        });
-        colorIndex++;
+    directoryMap.forEach((dirNodes, directory) => {
+      if (dirNodes.length > 0) {
+        workspaceNodes.push(...dirNodes);
+        
+        // For directories with many files, create semantic sub-clusters
+        if (dirNodes.length > 5) {
+          const subK = Math.min(3, Math.max(2, Math.ceil(dirNodes.length / 8)));
+          const subAssignments = kMeansClustering(dirNodes, links, subK);
+          
+          for (let i = 0; i < subK; i++) {
+            const subClusterNodes = dirNodes.filter((_, idx) => subAssignments[idx] === i);
+            if (subClusterNodes.length > 0) {
+              subClusterNodes.forEach(n => {
+                n.cluster = `workspace-${workspace}`;
+                n.subCluster = `dir-${directory}-sub-${i}`;
+              });
+              subClusters.push({
+                id: `dir-${directory}-sub-${i}`,
+                name: `${directory.split('/').pop() || 'root'} - Sub ${i + 1}`,
+                nodes: subClusterNodes,
+                color: subClusterColors[i % subClusterColors.length],
+                parent: `workspace-${workspace}`,
+                type: 'sub-cluster',
+                directory: directory
+              });
+            }
+          }
+        } else {
+          // Small directories: assign all nodes directly
+          dirNodes.forEach(n => {
+            n.cluster = `workspace-${workspace}`;
+            n.subCluster = `dir-${directory}`;
+          });
+          subClusters.push({
+            id: `dir-${directory}`,
+            name: directory.split('/').pop() || 'root',
+            nodes: dirNodes,
+            color: subClusterColors[0],
+            parent: `workspace-${workspace}`,
+            type: 'directory',
+            directory: directory
+          });
+        }
       }
     });
     
-    if (clusters.length > 0) {
-      console.log(`[CLUSTER] Using workspace-based clustering: ${clusters.length} clusters`);
-      return clusters;
+    if (workspaceNodes.length > 0) {
+      workspaceNodes.forEach(n => n.cluster = `workspace-${workspace}`);
+      const centroid = {
+        x: d3.mean(workspaceNodes, d => d.x),
+        y: d3.mean(workspaceNodes, d => d.y)
+      };
+      
+      clusters.push({
+        id: `workspace-${workspace}`,
+        name: `Workspace: ${workspace.split('/').pop() || workspace}`,
+        nodes: workspaceNodes,
+        color: clusterColors[colorIndex % clusterColors.length],
+        centroid: centroid,
+        type: 'workspace',
+        workspace: workspace,
+        children: subClusters,
+        expanded: true
+      });
+      colorIndex++;
     }
+  });
+  
+  if (clusters.length > 0) {
+    console.log(`[CLUSTER] Using hierarchical clustering: ${clusters.length} workspace clusters with ${clusters.reduce((sum, c) => sum + (c.children?.length || 0), 0)} sub-clusters`);
+    return clusters;
   }
   
   // Fall back to k-means on latent positions
