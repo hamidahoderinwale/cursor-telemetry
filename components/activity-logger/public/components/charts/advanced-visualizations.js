@@ -809,8 +809,8 @@ class AdvancedVisualizations {
               </div>
             </div>
             <div class="stat-card">
-              <div class="stat-label">Current Branch</div>
-              <div class="stat-value" style="font-size: var(--text-md);">${gitData[gitData.length - 1]?.branch || 'Unknown'}</div>
+              <div class="stat-label" style="margin-bottom: var(--space-xs);">Current Branch</div>
+              <div class="stat-value" style="font-size: var(--text-md); margin-top: var(--space-xs);">${gitData[gitData.length - 1]?.branch || 'Unknown'}</div>
             </div>
           </div>
         </div>
