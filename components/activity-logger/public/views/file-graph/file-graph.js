@@ -59,6 +59,22 @@ async function initializeD3FileGraph() {
     const cached = sessionStorage.getItem(cacheKey);
     let data;
     
+    // Also check for precomputed similarities
+    const similaritiesCacheKey = 'fileGraphSimilarities';
+    let precomputedSimilarities = null;
+    try {
+      const similaritiesCache = sessionStorage.getItem(similaritiesCacheKey);
+      if (similaritiesCache) {
+        const similaritiesData = JSON.parse(similaritiesCache);
+        if (Date.now() - similaritiesData.timestamp < 10 * 60 * 1000) { // 10 minute expiry
+          precomputedSimilarities = similaritiesData.similarities;
+          console.log(`[GRAPH] Found ${precomputedSimilarities.length} precomputed similarities`);
+        }
+      }
+    } catch (e) {
+      // Cache invalid, continue
+    }
+    
     if (cached) {
       try {
         const cachedData = JSON.parse(cached);
@@ -436,42 +452,6 @@ async function initializeD3FileGraph() {
     const links = [];
     const threshold = parseFloat(document.getElementById('similarityThreshold')?.value || '0.2');
     
-    // Build file-to-prompts mapping from context files
-    const filePromptMap = new Map();
-    const prompts = window.state.data.prompts || [];
-    
-    prompts.forEach(prompt => {
-      if (prompt.contextFiles && Array.isArray(prompt.contextFiles)) {
-        prompt.contextFiles.forEach(cf => {
-          const filePath = cf.path || cf.filePath || cf.file;
-          if (filePath) {
-            if (!filePromptMap.has(filePath)) {
-              filePromptMap.set(filePath, new Set());
-            }
-            filePromptMap.get(filePath).add(prompt.id || prompt.timestamp);
-          }
-        });
-      }
-      
-      // Also check for file changes in the prompt
-      if (prompt.file_path || prompt.filePath) {
-        const filePath = prompt.file_path || prompt.filePath;
-        if (!filePromptMap.has(filePath)) {
-          filePromptMap.set(filePath, new Set());
-        }
-        filePromptMap.get(filePath).add(prompt.id || prompt.timestamp);
-      }
-    });
-    
-    console.log(`[GRAPH] Built file-to-prompt map with ${filePromptMap.size} files`);
-    
-    // Pre-build session sets for files (optimization to avoid repeated computation)
-    const fileSessionMap = new Map();
-    files.forEach(file => {
-      const sessions = new Set((file.events || []).map(e => e.session_id).filter(Boolean));
-      fileSessionMap.set(file.id, sessions);
-    });
-    
     // Limit files for performance (O(n²) computation)
     const MAX_FILES_FOR_GRAPH = 500; // Limit to prevent timeout
     const filesForGraph = files.length > MAX_FILES_FOR_GRAPH 
@@ -482,94 +462,168 @@ async function initializeD3FileGraph() {
       console.log(`[GRAPH] Limiting to ${MAX_FILES_FOR_GRAPH} files (of ${files.length}) to prevent timeout`);
     }
     
-    // Compute co-occurrence between files (optimized with early termination)
-    const MAX_LINKS = 3000; // Reduced limit to prevent UI slowdown
-    let linkCount = 0;
+    // Build file ID to file object map for quick lookup
+    const fileMap = new Map();
+    filesForGraph.forEach(file => {
+      fileMap.set(file.id, file);
+      fileMap.set(file.path, file);
+    });
     
-    // Process in chunks with yield points
-    const CHUNK_SIZE = 50;
-    for (let chunkStart = 0; chunkStart < filesForGraph.length && linkCount < MAX_LINKS; chunkStart += CHUNK_SIZE) {
-      const chunkEnd = Math.min(chunkStart + CHUNK_SIZE, filesForGraph.length);
+    // If we have precomputed similarities, use them (MUCH faster!)
+    if (precomputedSimilarities && precomputedSimilarities.length > 0) {
+      console.log(`[GRAPH] Using ${precomputedSimilarities.length} precomputed similarities (fast path)`);
+      const MAX_LINKS = 3000;
+      let linkCount = 0;
       
-      for (let i = chunkStart; i < chunkEnd && linkCount < MAX_LINKS; i++) {
-        for (let j = i + 1; j < filesForGraph.length && linkCount < MAX_LINKS; j++) {
-          const file1 = filesForGraph[i];
-          const file2 = filesForGraph[j];
-          
-            // Get prompts that reference each file (from pre-built map)
-          const prompts1 = filePromptMap.get(file1.id) || new Set();
-          const prompts2 = filePromptMap.get(file2.id) || new Set();
-          
-          // Get sessions from pre-built map (optimization)
-          const sessions1 = fileSessionMap.get(file1.id) || new Set();
-          const sessions2 = fileSessionMap.get(file2.id) || new Set();
-          
-          // Quick check: skip if no overlap at all (optimization)
-          const hasPromptOverlap = prompts1.size > 0 && prompts2.size > 0 && 
-                                   [...prompts1].some(p => prompts2.has(p));
-          const hasSessionOverlap = sessions1.size > 0 && sessions2.size > 0 && 
-                                    [...sessions1].some(s => sessions2.has(s));
-          
-          if (!hasPromptOverlap && !hasSessionOverlap) {
-            continue; // Skip files with no relationship
-          }
-          
-          // Combine both prompt co-occurrence and session co-occurrence
-          const promptIntersection = new Set([...prompts1].filter(x => prompts2.has(x)));
-          const sessionIntersection = new Set([...sessions1].filter(x => sessions2.has(x)));
-          
-          const promptUnion = new Set([...prompts1, ...prompts2]);
-          const sessionUnion = new Set([...sessions1, ...sessions2]);
-          
-          // Calculate multiple similarity metrics
-          // 1. Jaccard similarity for prompts (intersection / union)
-          const promptSim = promptUnion.size > 0 ? promptIntersection.size / promptUnion.size : 0;
-          
-          // 2. Jaccard similarity for sessions
-          const sessionSim = sessionUnion.size > 0 ? sessionIntersection.size / sessionUnion.size : 0;
-          
-          // 3. File path similarity (common directory structure)
-          const path1 = file1.path || file1.name || '';
-          const path2 = file2.path || file2.name || '';
-          const pathSim = calculatePathSimilarity(path1, path2);
-          
-          // 4. Temporal proximity (files modified close in time)
-          const timeSim = calculateTemporalSimilarity(file1, file2);
-          
-          // 5. Change frequency similarity (files with similar change patterns)
-          const changeSim = calculateChangeSimilarity(file1, file2);
-          
-          // Weighted combination: prompts (40%), sessions (25%), path (15%), temporal (10%), changes (10%)
-          const similarity = (promptSim * 0.4) + 
-                            (sessionSim * 0.25) + 
-                            (pathSim * 0.15) + 
-                            (timeSim * 0.1) + 
-                            (changeSim * 0.1);
-          
-          if (similarity > threshold) {
-            links.push({
-              source: file1.id,
-              target: file2.id,
-              similarity: similarity,
-              sharedPrompts: promptIntersection.size,
-              sharedSessions: sessionIntersection.size
-            });
-            linkCount++;
-          }
+      for (const sim of precomputedSimilarities) {
+        if (linkCount >= MAX_LINKS) break;
+        
+        // Find files by path or name
+        const file1 = fileMap.get(sim.file1) || filesForGraph.find(f => f.path === sim.file1 || f.name === sim.file1);
+        const file2 = fileMap.get(sim.file2) || filesForGraph.find(f => f.path === sim.file2 || f.name === sim.file2);
+        
+        if (file1 && file2 && file1.id !== file2.id && sim.similarity > threshold) {
+          links.push({
+            source: file1.id,
+            target: file2.id,
+            similarity: sim.similarity,
+            sharedPrompts: 0, // Not computed in precomputed version
+            sharedSessions: 0
+          });
+          linkCount++;
         }
       }
       
-      // Yield to event loop periodically to prevent timeout
-      if (chunkStart + CHUNK_SIZE < filesForGraph.length) {
-        await new Promise(resolve => setTimeout(resolve, 0));
+      console.log(`[GRAPH] Created ${links.length} connections from precomputed similarities (threshold: ${threshold})`);
+    } else {
+      // Fallback: compute similarities on-the-fly (slower)
+      console.log('[GRAPH] Computing similarities on-the-fly (no precomputed cache found)');
+      
+      // Build file-to-prompts mapping from context files
+      const filePromptMap = new Map();
+      const prompts = window.state.data.prompts || [];
+      
+      prompts.forEach(prompt => {
+        if (prompt.contextFiles && Array.isArray(prompt.contextFiles)) {
+          prompt.contextFiles.forEach(cf => {
+            const filePath = cf.path || cf.filePath || cf.file;
+            if (filePath) {
+              if (!filePromptMap.has(filePath)) {
+                filePromptMap.set(filePath, new Set());
+              }
+              filePromptMap.get(filePath).add(prompt.id || prompt.timestamp);
+            }
+          });
+        }
+        
+        // Also check for file changes in the prompt
+        if (prompt.file_path || prompt.filePath) {
+          const filePath = prompt.file_path || prompt.filePath;
+          if (!filePromptMap.has(filePath)) {
+            filePromptMap.set(filePath, new Set());
+          }
+          filePromptMap.get(filePath).add(prompt.id || prompt.timestamp);
+        }
+      });
+      
+      console.log(`[GRAPH] Built file-to-prompt map with ${filePromptMap.size} files`);
+      
+      // Pre-build session sets for files (optimization to avoid repeated computation)
+      const fileSessionMap = new Map();
+      filesForGraph.forEach(file => {
+        const sessions = new Set((file.events || []).map(e => e.session_id).filter(Boolean));
+        fileSessionMap.set(file.id, sessions);
+      });
+      
+      // Compute co-occurrence between files (optimized with early termination)
+      const MAX_LINKS = 3000; // Reduced limit to prevent UI slowdown
+      let linkCount = 0;
+      
+      // Process in chunks with yield points
+      const CHUNK_SIZE = 50;
+      for (let chunkStart = 0; chunkStart < filesForGraph.length && linkCount < MAX_LINKS; chunkStart += CHUNK_SIZE) {
+        const chunkEnd = Math.min(chunkStart + CHUNK_SIZE, filesForGraph.length);
+        
+        for (let i = chunkStart; i < chunkEnd && linkCount < MAX_LINKS; i++) {
+          for (let j = i + 1; j < filesForGraph.length && linkCount < MAX_LINKS; j++) {
+            const file1 = filesForGraph[i];
+            const file2 = filesForGraph[j];
+            
+            // Get prompts that reference each file (from pre-built map)
+            const prompts1 = filePromptMap.get(file1.id) || new Set();
+            const prompts2 = filePromptMap.get(file2.id) || new Set();
+            
+            // Get sessions from pre-built map (optimization)
+            const sessions1 = fileSessionMap.get(file1.id) || new Set();
+            const sessions2 = fileSessionMap.get(file2.id) || new Set();
+            
+            // Quick check: skip if no overlap at all (optimization)
+            const hasPromptOverlap = prompts1.size > 0 && prompts2.size > 0 && 
+                                     [...prompts1].some(p => prompts2.has(p));
+            const hasSessionOverlap = sessions1.size > 0 && sessions2.size > 0 && 
+                                      [...sessions1].some(s => sessions2.has(s));
+            
+            if (!hasPromptOverlap && !hasSessionOverlap) {
+              continue; // Skip files with no relationship
+            }
+            
+            // Combine both prompt co-occurrence and session co-occurrence
+            const promptIntersection = new Set([...prompts1].filter(x => prompts2.has(x)));
+            const sessionIntersection = new Set([...sessions1].filter(x => sessions2.has(x)));
+            
+            const promptUnion = new Set([...prompts1, ...prompts2]);
+            const sessionUnion = new Set([...sessions1, ...sessions2]);
+            
+            // Calculate multiple similarity metrics
+            // 1. Jaccard similarity for prompts (intersection / union)
+            const promptSim = promptUnion.size > 0 ? promptIntersection.size / promptUnion.size : 0;
+            
+            // 2. Jaccard similarity for sessions
+            const sessionSim = sessionUnion.size > 0 ? sessionIntersection.size / sessionUnion.size : 0;
+            
+            // 3. File path similarity (common directory structure)
+            const path1 = file1.path || file1.name || '';
+            const path2 = file2.path || file2.name || '';
+            const pathSim = calculatePathSimilarity(path1, path2);
+            
+            // 4. Temporal proximity (files modified close in time)
+            const timeSim = calculateTemporalSimilarity(file1, file2);
+            
+            // 5. Change frequency similarity (files with similar change patterns)
+            const changeSim = calculateChangeSimilarity(file1, file2);
+            
+            // Weighted combination: prompts (40%), sessions (25%), path (15%), temporal (10%), changes (10%)
+            const similarity = (promptSim * 0.4) + 
+                              (sessionSim * 0.25) + 
+                              (pathSim * 0.15) + 
+                              (timeSim * 0.1) + 
+                              (changeSim * 0.1);
+            
+            if (similarity > threshold) {
+              links.push({
+                source: file1.id,
+                target: file2.id,
+                similarity: similarity,
+                sharedPrompts: promptIntersection.size,
+                sharedSessions: sessionIntersection.size
+              });
+              linkCount++;
+            }
+          }
+        }
+        
+        // Yield to event loop periodically to prevent timeout
+        if (chunkStart + CHUNK_SIZE < filesForGraph.length) {
+          await new Promise(resolve => setTimeout(resolve, 0));
+        }
       }
+      
+      if (linkCount >= MAX_LINKS) {
+        console.warn(`[GRAPH] Link limit reached (${MAX_LINKS}), some connections may be missing`);
+      }
+      
+      console.log(`[GRAPH] Created ${links.length} connections between files (threshold: ${threshold})`);
     }
-    
-    if (linkCount >= MAX_LINKS) {
-      console.warn(`[GRAPH] Link limit reached (${MAX_LINKS}), some connections may be missing`);
-    }
-    
-    console.log(`[GRAPH] Created ${links.length} connections between files (threshold: ${threshold})`);
     
     // Store basic data immediately for rendering
     window.fileGraphData = { nodes: files, links: links, tfidfStats: null, similarities: null };

@@ -624,6 +624,288 @@ async function fetchRecentData() {
 }
 
 /**
+ * Precompute file similarities in background
+ * This allows the file graph to render instantly with precomputed similarities
+ */
+async function precomputeFileSimilarities(files) {
+  if (!files || files.length === 0) return;
+  
+  // Limit to reasonable number for performance
+  const MAX_FILES_FOR_PRECOMPUTE = 500;
+  const filesToProcess = files.length > MAX_FILES_FOR_PRECOMPUTE 
+    ? files.slice(0, MAX_FILES_FOR_PRECOMPUTE)
+    : files;
+  
+  if (files.length > MAX_FILES_FOR_PRECOMPUTE) {
+    console.log(`[GRAPH] Limiting similarity precomputation to ${MAX_FILES_FOR_PRECOMPUTE} files (of ${files.length})`);
+  }
+  
+  // Check if we need to recompute (cache expiry: 10 minutes)
+  const cacheKey = 'fileGraphSimilarities';
+  const cacheExpiry = 10 * 60 * 1000; // 10 minutes
+  
+  try {
+    const cached = sessionStorage.getItem(cacheKey);
+    if (cached) {
+      const cachedData = JSON.parse(cached);
+      if (Date.now() - cachedData.timestamp < cacheExpiry && 
+          cachedData.fileCount === filesToProcess.length) {
+        console.log('[GRAPH] Similarities already cached, skipping precomputation');
+        return;
+      }
+    }
+  } catch (e) {
+    // Cache invalid, continue
+  }
+  
+  console.log('[GRAPH] Precomputing file similarities in background...');
+  
+  // Use requestIdleCallback to compute when browser is idle
+  if (typeof requestIdleCallback !== 'undefined') {
+    requestIdleCallback(async () => {
+      try {
+        // Get events from state (needed for co-occurrence similarity)
+        const events = window.state?.data?.events || [];
+        
+        // Build a simplified similarity computation
+        // Focus on co-occurrence and path similarity (faster than full TF-IDF)
+        const similarities = [];
+        const MAX_SIMILARITIES = 2000; // Limit total similarities
+        let computed = 0;
+        
+        // Build event lookup map
+        const eventsByFilePath = new Map();
+        events.forEach(event => {
+          try {
+            const details = typeof event.details === 'string' ? JSON.parse(event.details) : event.details;
+            const filePath = details?.file_path || event.file_path || '';
+            if (filePath) {
+              const normalized = filePath.toLowerCase();
+              if (!eventsByFilePath.has(normalized)) {
+                eventsByFilePath.set(normalized, []);
+              }
+              eventsByFilePath.get(normalized).push(event);
+            }
+          } catch (e) {
+            // Skip invalid events
+          }
+        });
+        
+        // Compute similarities in chunks with yielding
+        const CHUNK_SIZE = 50;
+        for (let i = 0; i < filesToProcess.length && computed < MAX_SIMILARITIES; i += CHUNK_SIZE) {
+          const chunk = filesToProcess.slice(i, Math.min(i + CHUNK_SIZE, filesToProcess.length));
+          
+          for (const file1 of chunk) {
+            if (computed >= MAX_SIMILARITIES) break;
+            
+            const events1 = eventsByFilePath.get((file1.path || '').toLowerCase()) || [];
+            const sessions1 = new Set(events1.map(e => e.session_id).filter(Boolean));
+            const prompts1 = new Set(events1.map(e => {
+              const details = typeof e.details === 'string' ? JSON.parse(e.details) : e.details;
+              return details?.prompt_id || e.prompt_id;
+            }).filter(Boolean));
+            
+            for (let j = i + 1; j < filesToProcess.length && computed < MAX_SIMILARITIES; j++) {
+              const file2 = filesToProcess[j];
+              
+              // Quick path similarity (fast)
+              const path1 = (file1.path || '').toLowerCase();
+              const path2 = (file2.path || '').toLowerCase();
+              let pathSim = 0;
+              if (path1 && path2) {
+                const parts1 = path1.split('/');
+                const parts2 = path2.split('/');
+                let common = 0;
+                for (let k = 0; k < Math.min(parts1.length, parts2.length); k++) {
+                  if (parts1[k] === parts2[k]) common++;
+                  else break;
+                }
+                pathSim = common / Math.max(parts1.length, parts2.length);
+              }
+              
+              // Quick co-occurrence check (only if path similarity is decent)
+              let cooccurSim = 0;
+              if (pathSim > 0.1) {
+                const events2 = eventsByFilePath.get(path2) || [];
+                const sessions2 = new Set(events2.map(e => e.session_id).filter(Boolean));
+                const prompts2 = new Set(events2.map(e => {
+                  const details = typeof e.details === 'string' ? JSON.parse(e.details) : e.details;
+                  return details?.prompt_id || e.prompt_id;
+                }).filter(Boolean));
+                
+                const sessionIntersection = new Set([...sessions1].filter(s => sessions2.has(s)));
+                const sessionUnion = new Set([...sessions1, ...sessions2]);
+                const promptIntersection = new Set([...prompts1].filter(p => prompts2.has(p)));
+                const promptUnion = new Set([...prompts1, ...prompts2]);
+                
+                const sessionSim = sessionUnion.size > 0 ? sessionIntersection.size / sessionUnion.size : 0;
+                const promptSim = promptUnion.size > 0 ? promptIntersection.size / promptUnion.size : 0;
+                cooccurSim = (sessionSim * 0.5) + (promptSim * 0.5);
+              }
+              
+              // Combined similarity
+              const similarity = (pathSim * 0.3) + (cooccurSim * 0.7);
+              
+              if (similarity > 0.15) { // Only store meaningful similarities
+                similarities.push({
+                  file1: file1.path || file1.name,
+                  file2: file2.path || file2.name,
+                  similarity: similarity,
+                  pathSim: pathSim,
+                  cooccurSim: cooccurSim
+                });
+                computed++;
+              }
+            }
+          }
+          
+          // Yield to event loop every chunk
+          if (i + CHUNK_SIZE < filesToProcess.length) {
+            await new Promise(resolve => setTimeout(resolve, 0));
+          }
+        }
+        
+        // Cache the similarities
+        try {
+          sessionStorage.setItem(cacheKey, JSON.stringify({
+            similarities: similarities,
+            fileCount: filesToProcess.length,
+            timestamp: Date.now()
+          }));
+          console.log(`[GRAPH] Precomputed ${similarities.length} file similarities (cached)`);
+        } catch (e) {
+          console.warn('[GRAPH] Failed to cache similarities:', e.message);
+        }
+      } catch (error) {
+        console.warn('[GRAPH] Similarity precomputation error:', error.message);
+      }
+    }, { timeout: 30000 }); // Wait up to 30 seconds for idle time
+  } else {
+    // Fallback: compute after a delay (for browsers without requestIdleCallback)
+    setTimeout(async () => {
+      try {
+        // Get events from state (needed for co-occurrence similarity)
+        const events = window.state?.data?.events || [];
+        
+        // Build a simplified similarity computation
+        // Focus on co-occurrence and path similarity (faster than full TF-IDF)
+        const similarities = [];
+        const MAX_SIMILARITIES = 2000; // Limit total similarities
+        let computed = 0;
+        
+        // Build event lookup map
+        const eventsByFilePath = new Map();
+        events.forEach(event => {
+          try {
+            const details = typeof event.details === 'string' ? JSON.parse(event.details) : event.details;
+            const filePath = details?.file_path || event.file_path || '';
+            if (filePath) {
+              const normalized = filePath.toLowerCase();
+              if (!eventsByFilePath.has(normalized)) {
+                eventsByFilePath.set(normalized, []);
+              }
+              eventsByFilePath.get(normalized).push(event);
+            }
+          } catch (e) {
+            // Skip invalid events
+          }
+        });
+        
+        // Compute similarities in chunks with yielding
+        const CHUNK_SIZE = 50;
+        for (let i = 0; i < filesToProcess.length && computed < MAX_SIMILARITIES; i += CHUNK_SIZE) {
+          const chunk = filesToProcess.slice(i, Math.min(i + CHUNK_SIZE, filesToProcess.length));
+          
+          for (const file1 of chunk) {
+            if (computed >= MAX_SIMILARITIES) break;
+            
+            const events1 = eventsByFilePath.get((file1.path || '').toLowerCase()) || [];
+            const sessions1 = new Set(events1.map(e => e.session_id).filter(Boolean));
+            const prompts1 = new Set(events1.map(e => {
+              const details = typeof e.details === 'string' ? JSON.parse(e.details) : e.details;
+              return details?.prompt_id || e.prompt_id;
+            }).filter(Boolean));
+            
+            for (let j = i + 1; j < filesToProcess.length && computed < MAX_SIMILARITIES; j++) {
+              const file2 = filesToProcess[j];
+              
+              // Quick path similarity (fast)
+              const path1 = (file1.path || '').toLowerCase();
+              const path2 = (file2.path || '').toLowerCase();
+              let pathSim = 0;
+              if (path1 && path2) {
+                const parts1 = path1.split('/');
+                const parts2 = path2.split('/');
+                let common = 0;
+                for (let k = 0; k < Math.min(parts1.length, parts2.length); k++) {
+                  if (parts1[k] === parts2[k]) common++;
+                  else break;
+                }
+                pathSim = common / Math.max(parts1.length, parts2.length);
+              }
+              
+              // Quick co-occurrence check (only if path similarity is decent)
+              let cooccurSim = 0;
+              if (pathSim > 0.1) {
+                const events2 = eventsByFilePath.get(path2) || [];
+                const sessions2 = new Set(events2.map(e => e.session_id).filter(Boolean));
+                const prompts2 = new Set(events2.map(e => {
+                  const details = typeof e.details === 'string' ? JSON.parse(e.details) : e.details;
+                  return details?.prompt_id || e.prompt_id;
+                }).filter(Boolean));
+                
+                const sessionIntersection = new Set([...sessions1].filter(s => sessions2.has(s)));
+                const sessionUnion = new Set([...sessions1, ...sessions2]);
+                const promptIntersection = new Set([...prompts1].filter(p => prompts2.has(p)));
+                const promptUnion = new Set([...prompts1, ...prompts2]);
+                
+                const sessionSim = sessionUnion.size > 0 ? sessionIntersection.size / sessionUnion.size : 0;
+                const promptSim = promptUnion.size > 0 ? promptIntersection.size / promptUnion.size : 0;
+                cooccurSim = (sessionSim * 0.5) + (promptSim * 0.5);
+              }
+              
+              // Combined similarity
+              const similarity = (pathSim * 0.3) + (cooccurSim * 0.7);
+              
+              if (similarity > 0.15) { // Only store meaningful similarities
+                similarities.push({
+                  file1: file1.path || file1.name,
+                  file2: file2.path || file2.name,
+                  similarity: similarity,
+                  pathSim: pathSim,
+                  cooccurSim: cooccurSim
+                });
+                computed++;
+              }
+            }
+          }
+          
+          // Yield to event loop every chunk
+          if (i + CHUNK_SIZE < filesToProcess.length) {
+            await new Promise(resolve => setTimeout(resolve, 0));
+          }
+        }
+        
+        // Cache the similarities
+        try {
+          sessionStorage.setItem(cacheKey, JSON.stringify({
+            similarities: similarities,
+            fileCount: filesToProcess.length,
+            timestamp: Date.now()
+          }));
+          console.log(`[GRAPH] Precomputed ${similarities.length} file similarities (cached)`);
+        } catch (e) {
+          console.warn('[GRAPH] Failed to cache similarities:', e.message);
+        }
+      } catch (error) {
+        console.warn('[GRAPH] Similarity precomputation error:', error.message);
+      }
+    }, 5000);
+  }
+}
+
+/**
  * Preload file graph data in background (non-blocking)
  * This allows the file graph to render instantly when opened
  */
@@ -676,6 +958,15 @@ async function preloadFileGraphData() {
             timestamp: Date.now()
           }));
           console.log(`[GRAPH] Preloaded ${data.files.length} files for file graph (cached)`);
+          
+          // Precompute similarities in background (non-blocking)
+          // This allows the file graph to render instantly with precomputed similarities
+          precomputeFileSimilarities(data.files).catch(err => {
+            // Silently fail - this is background computation
+            if (!err.message?.includes('NetworkError') && !err.message?.includes('CORS')) {
+              console.warn('[GRAPH] Similarity precomputation failed:', err.message);
+            }
+          });
         } catch (e) {
           // Cache storage failed (quota exceeded), continue anyway
           console.warn('[GRAPH] Failed to cache file graph data:', e.message);
