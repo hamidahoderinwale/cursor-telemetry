@@ -1,7 +1,5 @@
 # Cursor Telemetry Dashboard
 
-An intelligent development workflow monitoring and state management platform for AI-assisted development. Captures file changes, AI prompts, and code modifications with AI-powered annotations, natural language state management, and comprehensive analytics.
-
 ## Overview
 
 The Cursor Telemetry Dashboard is an intelligent monitoring platform that captures and analyzes your complete development workflow in Cursor IDE. It automatically tracks file changes, mines AI prompts from Cursor's internal database, and provides AI-powered insights through natural language interfaces and visual state management.
