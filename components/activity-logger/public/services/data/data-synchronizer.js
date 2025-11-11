@@ -293,9 +293,6 @@ class DataSynchronizer {
         
         if (eventsData.events && eventsData.events.length > 0) {
           const stored = await this.storage.storeEvents(eventsData.events);
-          if (!isOffline) {
-            console.log(`  Stored ${stored} new events`);
-          }
           this.lastSync.events = eventsData.cursor || this.lastSync.events;
           this._saveLastSync(); // Persist to localStorage
           
@@ -310,15 +307,9 @@ class DataSynchronizer {
             const newEvents = eventsData.events.filter(e => !existingIds.has(e.id));
             if (newEvents.length > 0) {
               window.state.data.events = [...(window.state.data.events || []), ...newEvents].slice(0, 200); // Keep only recent 200
-              // Trigger stats recalculation in background
+              // Trigger stats recalculation (debounced internally)
               if (window.calculateStats) {
-                setTimeout(() => {
-                  if (typeof requestIdleCallback !== 'undefined') {
-                    requestIdleCallback(() => window.calculateStats(), { timeout: 1000 });
-                  } else {
-                    setTimeout(() => window.calculateStats(), 1000);
-                  }
-                }, 100);
+                window.calculateStats(); // Debounced, will batch with other calls
               }
               // Re-render charts if analytics view is active (defer)
               if (window.state.currentView === 'analytics' && window.renderCurrentView) {
