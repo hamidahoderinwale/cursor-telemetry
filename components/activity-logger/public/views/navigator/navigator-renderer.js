@@ -472,7 +472,7 @@ function updateNavigatorStats() {
     coherenceEl.textContent = `${coherence.toFixed(0)}%`;
   }
   
-  // Update cluster legend
+  // Update cluster legend with hierarchical support
   const legend = document.getElementById('clusterLegend');
   if (legend) {
     const escapeHtml = window.escapeHtml || ((str) => {
@@ -480,8 +480,14 @@ function updateNavigatorStats() {
       div.textContent = str;
       return div.innerHTML;
     });
-    legend.innerHTML = navigatorState.clusters.map(cluster => {
-      // Rich tooltip with description, keywords, and category
+    
+    // Recursive function to render hierarchical clusters
+    const renderCluster = (cluster, level = 0) => {
+      const indent = level * 16;
+      const hasChildren = cluster.children && cluster.children.length > 0;
+      const isExpanded = cluster.expanded !== false;
+      const clusterId = `cluster-${cluster.id}`;
+      
       const tooltipParts = [cluster.description || cluster.name || `Cluster ${cluster.id}`];
       if (cluster.keywords && cluster.keywords.length > 0) {
         tooltipParts.push(`Keywords: ${cluster.keywords.slice(0, 5).join(', ')}`);
@@ -491,16 +497,46 @@ function updateNavigatorStats() {
       }
       const tooltip = escapeHtml(tooltipParts.join('\n'));
       
-      return `
-      <div class="cluster-legend-item" title="${tooltip}" style="cursor: help;">
-        <div class="cluster-legend-color" style="background: ${cluster.color};"></div>
-        <span class="cluster-legend-label">${escapeHtml(cluster.name || `Cluster ${cluster.id}`)} (${cluster.nodes.length})</span>
-        ${cluster.category && cluster.category !== 'unknown' ? 
-          `<span class="cluster-category-badge" style="font-size: 10px; opacity: 0.7; margin-left: 4px;">[${cluster.category}]</span>` : ''}
-        ${cluster.description ? `<div class="cluster-description" style="font-size: 11px; color: var(--color-text-muted); margin-top: 2px; line-height: 1.3;">${escapeHtml(cluster.description.substring(0, 80))}${cluster.description.length > 80 ? '...' : ''}</div>` : ''}
+      let html = `
+      <div class="cluster-legend-item" data-cluster-id="${cluster.id}" style="margin-left: ${indent}px; ${level > 0 ? 'margin-top: 4px;' : ''}">
+        <div style="display: flex; align-items: center; gap: 6px;">
+          ${hasChildren ? `
+            <button class="cluster-expand-btn" onclick="toggleClusterExpand('${cluster.id}')" 
+                    style="background: none; border: none; cursor: pointer; padding: 2px 4px; color: var(--color-text-muted); font-size: 10px; width: 16px; height: 16px; display: flex; align-items: center; justify-content: center;">
+              ${isExpanded ? '▼' : '▶'}
+            </button>
+          ` : '<span style="width: 16px;"></span>'}
+          <div class="cluster-legend-color" style="background: ${cluster.color}; width: 12px; height: 12px; border-radius: 2px; flex-shrink: 0;"></div>
+          <span class="cluster-legend-label" title="${tooltip}" style="cursor: help; flex: 1;">
+            ${escapeHtml(cluster.name || `Cluster ${cluster.id}`)} 
+            <span style="color: var(--color-text-muted); font-size: 11px;">(${cluster.nodes.length})</span>
+          </span>
+        </div>
+        ${cluster.description && level === 0 ? `<div class="cluster-description" style="font-size: 11px; color: var(--color-text-muted); margin-top: 2px; margin-left: 24px; line-height: 1.3;">${escapeHtml(cluster.description.substring(0, 80))}${cluster.description.length > 80 ? '...' : ''}</div>` : ''}
+        ${hasChildren && isExpanded ? `
+          <div class="cluster-children" id="children-${cluster.id}" style="margin-top: 4px;">
+            ${cluster.children.map(child => renderCluster(child, level + 1)).join('')}
+          </div>
+        ` : ''}
       </div>
     `;
-    }).join('');
+      return html;
+    };
+    
+    legend.innerHTML = navigatorState.clusters.map(cluster => renderCluster(cluster)).join('');
+  }
+  
+  // Add toggle function to window if not exists
+  if (!window.toggleClusterExpand) {
+    window.toggleClusterExpand = function(clusterId) {
+      if (!window.navigatorState || !window.navigatorState.clusters) return;
+      
+      const cluster = window.navigatorState.clusters.find(c => c.id === clusterId);
+      if (cluster) {
+        cluster.expanded = !cluster.expanded;
+        window.updateNavigatorStats(); // Re-render
+      }
+    };
   }
 }
 
@@ -519,8 +555,12 @@ if (typeof window !== 'undefined') {
           div.textContent = str;
           return div.innerHTML;
         });
-        legend.innerHTML = navigatorState.clusters.map(cluster => {
-          // Rich tooltip with description, keywords, and category
+        // Recursive function to render hierarchical clusters
+        const renderCluster = (cluster, level = 0) => {
+          const indent = level * 16;
+          const hasChildren = cluster.children && cluster.children.length > 0;
+          const isExpanded = cluster.expanded !== false;
+          
           const tooltipParts = [cluster.description || cluster.name || `Cluster ${cluster.id}`];
           if (cluster.keywords && cluster.keywords.length > 0) {
             tooltipParts.push(`Keywords: ${cluster.keywords.slice(0, 5).join(', ')}`);
@@ -531,15 +571,31 @@ if (typeof window !== 'undefined') {
           const tooltip = escapeHtml(tooltipParts.join('\n'));
           
           return `
-          <div class="cluster-legend-item" title="${tooltip}" style="cursor: help;">
-            <div class="cluster-legend-color" style="background: ${cluster.color};"></div>
-            <span class="cluster-legend-label">${escapeHtml(cluster.name || `Cluster ${cluster.id}`)} (${cluster.nodes.length})</span>
-            ${cluster.category && cluster.category !== 'unknown' ? 
-              `<span class="cluster-category-badge" style="font-size: 10px; opacity: 0.7; margin-left: 4px;">[${cluster.category}]</span>` : ''}
-            ${cluster.description ? `<div class="cluster-description" style="font-size: 11px; color: var(--color-text-muted); margin-top: 2px; line-height: 1.3;">${escapeHtml(cluster.description.substring(0, 80))}${cluster.description.length > 80 ? '...' : ''}</div>` : ''}
+          <div class="cluster-legend-item" data-cluster-id="${cluster.id}" style="margin-left: ${indent}px; ${level > 0 ? 'margin-top: 4px;' : ''}">
+            <div style="display: flex; align-items: center; gap: 6px;">
+              ${hasChildren ? `
+                <button class="cluster-expand-btn" onclick="toggleClusterExpand('${cluster.id}')" 
+                        style="background: none; border: none; cursor: pointer; padding: 2px 4px; color: var(--color-text-muted); font-size: 10px; width: 16px; height: 16px; display: flex; align-items: center; justify-content: center;">
+                  ${isExpanded ? '▼' : '▶'}
+                </button>
+              ` : '<span style="width: 16px;"></span>'}
+              <div class="cluster-legend-color" style="background: ${cluster.color}; width: 12px; height: 12px; border-radius: 2px; flex-shrink: 0;"></div>
+              <span class="cluster-legend-label" title="${tooltip}" style="cursor: help; flex: 1;">
+                ${escapeHtml(cluster.name || `Cluster ${cluster.id}`)} 
+                <span style="color: var(--color-text-muted); font-size: 11px;">(${cluster.nodes.length})</span>
+              </span>
+            </div>
+            ${cluster.description && level === 0 ? `<div class="cluster-description" style="font-size: 11px; color: var(--color-text-muted); margin-top: 2px; margin-left: 24px; line-height: 1.3;">${escapeHtml(cluster.description.substring(0, 80))}${cluster.description.length > 80 ? '...' : ''}</div>` : ''}
+            ${hasChildren && isExpanded ? `
+              <div class="cluster-children" id="children-${cluster.id}" style="margin-top: 4px;">
+                ${cluster.children.map(child => renderCluster(child, level + 1)).join('')}
+              </div>
+            ` : ''}
           </div>
         `;
-        }).join('');
+        };
+        
+        legend.innerHTML = navigatorState.clusters.map(cluster => renderCluster(cluster)).join('');
       }
     }
   });

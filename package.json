@@ -6,7 +6,7 @@
   "scripts": {
     "start": "cd components/activity-logger/companion && node src/index.js",
     "start-companion": "cd components/activity-logger/companion && node src/index.js",
-    "start-all": "./start-dashboard.sh",
+    "start-all": "./scripts/start-dashboard.sh",
     "postinstall": "cd components/activity-logger/companion && npm install",
     "dev": "cd components/activity-logger/companion && nodemon src/index.js",
     "test": "node smoke-test.js",

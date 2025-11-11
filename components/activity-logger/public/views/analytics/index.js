@@ -77,7 +77,11 @@ function renderAnalyticsView(container) {
         </div>
       `}
       
-      <!-- AI Activity & Code Output -->
+      <!-- Split Pane Layout: Charts on Left, DB Preview on Right -->
+      <div class="analytics-split-view">
+        <!-- Left Panel: Charts -->
+        <div class="analytics-charts-panel">
+          <!-- AI Activity & Code Output -->
       <div class="card">
         <div class="card-header">
           <div class="chart-header-controls">
@@ -237,8 +241,133 @@ function renderAnalyticsView(container) {
         </div>
       </div>
 
+      <!-- Quick Wins Section -->
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title" title="Quick insights into your development patterns - fast metrics that help you understand your coding habits and AI usage">Quick Wins</h3>
+          <p class="card-subtitle">Fast insights into your development patterns</p>
+        </div>
+        <div class="card-body">
+          <div class="quick-wins-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: var(--space-lg);">
+            
+            <!-- Prompt Success Rate -->
+            <div class="quick-win-card" style="padding: var(--space-md); background: var(--color-bg-alt, #f5f5f5); border-radius: var(--radius-md, 8px);">
+              <h4 class="quick-win-title" style="margin: 0 0 var(--space-sm) 0; font-size: var(--text-sm, 14px); color: var(--color-text); font-weight: 600;" title="Percentage of prompts that resulted in code changes. Higher is better - indicates effective AI usage.">
+                Prompt Success Rate
+              </h4>
+              <div id="promptSuccessRate" class="quick-win-value" style="font-size: var(--text-2xl, 32px); font-weight: 700; color: var(--color-primary, #3b82f6); margin: var(--space-xs) 0;">
+                Calculating...
+              </div>
+              <div class="quick-win-description" style="font-size: var(--text-xs, 12px); color: var(--color-text-muted); margin-top: var(--space-xs);">
+                Prompts with code changes / Total prompts
+              </div>
+            </div>
+
+            <!-- Context Efficiency Score -->
+            <div class="quick-win-card" style="padding: var(--space-md); background: var(--color-bg-alt, #f5f5f5); border-radius: var(--radius-md, 8px);">
+              <h4 class="quick-win-title" style="margin: 0 0 var(--space-sm) 0; font-size: var(--text-sm, 14px); color: var(--color-text); font-weight: 600;" title="Average lines of code added per context file. Higher values indicate more efficient context usage - fewer files needed for better results.">
+                Context Efficiency Score
+              </h4>
+              <div id="contextEfficiencyScore" class="quick-win-value" style="font-size: var(--text-2xl, 32px); font-weight: 700; color: var(--color-accent, #10b981); margin: var(--space-xs) 0;">
+                Calculating...
+              </div>
+              <div class="quick-win-description" style="font-size: var(--text-xs, 12px); color: var(--color-text-muted); margin-top: var(--space-xs);">
+                Lines added / Context files used
+              </div>
+            </div>
+
+            <!-- Model Usage Distribution -->
+            <div class="quick-win-card" style="padding: var(--space-md); background: var(--color-bg-alt, #f5f5f5); border-radius: var(--radius-md, 8px);">
+              <h4 class="quick-win-title" style="margin: 0 0 var(--space-sm) 0; font-size: var(--text-sm, 14px); color: var(--color-text); font-weight: 600;" title="Distribution of AI models used across all prompts. Shows which models you use most frequently.">
+                Model Usage Distribution
+              </h4>
+              <div id="modelUsageChart" style="min-height: 200px; margin-top: var(--space-sm);">
+                <canvas id="modelUsagePieChart"></canvas>
+              </div>
+            </div>
+
+            <!-- Context File Frequency -->
+            <div class="quick-win-card" style="padding: var(--space-md); background: var(--color-bg-alt, #f5f5f5); border-radius: var(--radius-md, 8px);">
+              <h4 class="quick-win-title" style="margin: 0 0 var(--space-sm) 0; font-size: var(--text-sm, 14px); color: var(--color-text); font-weight: 600;" title="Most frequently used context files. Files that appear often in your prompts are likely important dependencies or core files.">
+                Most Used Context Files
+              </h4>
+              <div id="contextFileFrequency" style="min-height: 200px; margin-top: var(--space-sm);">
+                <canvas id="contextFileChart"></canvas>
+              </div>
+            </div>
+
+            <!-- Thinking Time Distribution -->
+            <div class="quick-win-card" style="padding: var(--space-md); background: var(--color-bg-alt, #f5f5f5); border-radius: var(--radius-md, 8px);">
+              <h4 class="quick-win-title" style="margin: 0 0 var(--space-sm) 0; font-size: var(--text-sm, 14px); color: var(--color-text); font-weight: 600;" title="Distribution of AI response times (thinking time). Shows how long models take to respond - useful for performance analysis.">
+                Thinking Time Distribution
+              </h4>
+              <div id="thinkingTimeChart" style="min-height: 200px; margin-top: var(--space-sm);">
+                <canvas id="thinkingTimeHistogram"></canvas>
+              </div>
+            </div>
+
+            <!-- Time-of-Day Activity -->
+            <div class="quick-win-card" style="padding: var(--space-md); background: var(--color-bg-alt, #f5f5f5); border-radius: var(--radius-md, 8px);">
+              <h4 class="quick-win-title" style="margin: 0 0 var(--space-sm) 0; font-size: var(--text-sm, 14px); color: var(--color-text); font-weight: 600;" title="Activity patterns throughout the day. Shows when you're most productive - helps identify peak coding hours.">
+                24-Hour Activity Pattern
+              </h4>
+              <div id="timeOfDayChart" style="min-height: 200px; margin-top: var(--space-sm);">
+                <canvas id="timeOfDayBarChart"></canvas>
+              </div>
+            </div>
+
+            <!-- Conversation Length Distribution -->
+            <div class="quick-win-card" style="padding: var(--space-md); background: var(--color-bg-alt, #f5f5f5); border-radius: var(--radius-md, 8px);">
+              <h4 class="quick-win-title" style="margin: 0 0 var(--space-sm) 0; font-size: var(--text-sm, 14px); color: var(--color-text); font-weight: 600;" title="Distribution of conversation lengths (message counts). Shows whether you have many short conversations or fewer long ones.">
+                Conversation Length Distribution
+              </h4>
+              <div id="conversationLengthChart" style="min-height: 200px; margin-top: var(--space-sm);">
+                <canvas id="conversationLengthHistogram"></canvas>
+              </div>
+            </div>
+
+            <!-- Intent Distribution -->
+            <div class="quick-win-card" style="padding: var(--space-md); background: var(--color-bg-alt, #f5f5f5); border-radius: var(--radius-md, 8px);">
+              <h4 class="quick-win-title" style="margin: 0 0 var(--space-sm) 0; font-size: var(--text-sm, 14px); color: var(--color-text); font-weight: 600;" title="Distribution of development intents (feature, bug-fix, refactor, etc.). Shows what types of work you do most often.">
+                Intent Distribution
+              </h4>
+              <div id="intentDistribution" style="min-height: 200px; margin-top: var(--space-sm);">
+                <canvas id="intentTagCloud"></canvas>
+              </div>
+            </div>
+
+          </div>
+        </div>
+        </div>
+        
+        <!-- Right Panel: Database Preview -->
+        <div class="analytics-db-panel">
+          <div id="analyticsDbPreview"></div>
+        </div>
+      </div>
+
     </div>
   `;
+  
+  // Initialize database preview and split pane
+  setTimeout(() => {
+    if (window.dbPreview) {
+      const dbPreviewContainer = document.getElementById('analyticsDbPreview');
+      if (dbPreviewContainer) {
+        window.dbPreview.render(dbPreviewContainer);
+      }
+    }
+    
+    // Initialize split pane resizer
+    if (window.initializeAnalyticsSplitPane) {
+      window.initializeAnalyticsSplitPane();
+    }
+    
+    // Dispatch event for other components
+    window.dispatchEvent(new CustomEvent('view-rendered', { 
+      detail: { view: 'analytics' } 
+    }));
+  }, 100);
 
   // Render charts immediately with available data (fast loading)
   // Use requestAnimationFrame for immediate render, then load heavy analytics progressively
@@ -267,6 +396,9 @@ function renderAnalyticsView(container) {
     
     // PHASE 1: Render fast charts immediately with available data
     renderFastCharts(events, prompts);
+    
+    // PHASE 1.5: Render quick wins immediately
+    renderQuickWins(events, prompts);
     
     // PHASE 2: Load more data and render heavy analytics progressively
     if (events.length < 200 || prompts.length < 200) {
@@ -508,6 +640,471 @@ function renderAnalyticsView(container) {
     } catch (err) {
       console.warn('[ANALYTICS] Failed to load additional data:', err.message);
     }
+  }
+  
+  /**
+   * Render Quick Wins metrics
+   */
+  function renderQuickWins(events, prompts) {
+    console.log('[QUICK-WINS] Rendering quick wins with', events.length, 'events and', prompts.length, 'prompts');
+    
+    // 1. Prompt Success Rate
+    renderPromptSuccessRate(prompts);
+    
+    // 2. Context Efficiency Score
+    renderContextEfficiencyScore(prompts);
+    
+    // 3. Model Usage Distribution
+    renderModelUsageDistribution(prompts);
+    
+    // 4. Context File Frequency
+    renderContextFileFrequency(prompts);
+    
+    // 5. Thinking Time Distribution
+    renderThinkingTimeDistribution(prompts);
+    
+    // 6. Time-of-Day Activity
+    renderTimeOfDayActivity(events, prompts);
+    
+    // 7. Conversation Length Distribution
+    renderConversationLengthDistribution(prompts);
+    
+    // 8. Intent Distribution
+    renderIntentDistribution(events);
+  }
+
+  /**
+   * 1. Prompt Success Rate
+   */
+  function renderPromptSuccessRate(prompts) {
+    const el = document.getElementById('promptSuccessRate');
+    if (!el) return;
+    
+    if (prompts.length === 0) {
+      el.textContent = 'N/A';
+      return;
+    }
+    
+    // Count prompts with code changes
+    const promptsWithChanges = prompts.filter(p => {
+      const linesAdded = p.lines_added || p.linesAdded || 0;
+      const linesRemoved = p.lines_removed || p.linesRemoved || 0;
+      return linesAdded > 0 || linesRemoved > 0;
+    }).length;
+    
+    const successRate = ((promptsWithChanges / prompts.length) * 100).toFixed(1);
+    el.textContent = `${successRate}%`;
+    el.title = `${promptsWithChanges} of ${prompts.length} prompts resulted in code changes`;
+  }
+
+  /**
+   * 2. Context Efficiency Score
+   */
+  function renderContextEfficiencyScore(prompts) {
+    const el = document.getElementById('contextEfficiencyScore');
+    if (!el) return;
+    
+    const promptsWithContext = prompts.filter(p => {
+      const contextCount = p.context_file_count || p.contextFileCount || 0;
+      const linesAdded = p.lines_added || p.linesAdded || 0;
+      return contextCount > 0 && linesAdded > 0;
+    });
+    
+    if (promptsWithContext.length === 0) {
+      el.textContent = 'N/A';
+      return;
+    }
+    
+    const totalLines = promptsWithContext.reduce((sum, p) => sum + (p.lines_added || p.linesAdded || 0), 0);
+    const totalContext = promptsWithContext.reduce((sum, p) => sum + (p.context_file_count || p.contextFileCount || 0), 0);
+    
+    const efficiency = totalContext > 0 ? (totalLines / totalContext).toFixed(1) : 0;
+    el.textContent = efficiency;
+    el.title = `Average ${efficiency} lines added per context file`;
+  }
+
+  /**
+   * 3. Model Usage Distribution
+   */
+  function renderModelUsageDistribution(prompts) {
+    const ctx = document.getElementById('modelUsagePieChart');
+    if (!ctx || !window.createChart) return;
+    
+    if (prompts.length === 0) {
+      ctx.parentElement.innerHTML = '<div style="padding: var(--space-md); text-align: center; color: var(--color-text-muted);">No prompt data</div>';
+      return;
+    }
+    
+    const modelCounts = {};
+    prompts.forEach(p => {
+      const model = p.model_name || p.modelName || p.model || 'Unknown';
+      modelCounts[model] = (modelCounts[model] || 0) + 1;
+    });
+    
+    const labels = Object.keys(modelCounts).slice(0, 8);
+    const data = labels.map(label => modelCounts[label]);
+    const colors = getChartColors();
+    
+    window.createChart('modelUsagePieChart', {
+      type: 'doughnut',
+      data: {
+        labels: labels,
+        datasets: [{
+          data: data,
+          backgroundColor: [
+            colors.primary, colors.secondary, colors.accent, colors.success, colors.warning,
+            '#ef4444', '#06b6d4', '#a855f7'
+          ]
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        plugins: {
+          legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } },
+          tooltip: { callbacks: { label: (ctx) => `${ctx.label}: ${ctx.parsed} prompts (${((ctx.parsed / prompts.length) * 100).toFixed(1)}%)` } }
+        }
+      }
+    });
+  }
+
+  /**
+   * 4. Context File Frequency
+   */
+  function renderContextFileFrequency(prompts) {
+    const ctx = document.getElementById('contextFileChart');
+    if (!ctx || !window.createChart) return;
+    
+    if (prompts.length === 0) {
+      ctx.parentElement.innerHTML = '<div style="padding: var(--space-md); text-align: center; color: var(--color-text-muted);">No prompt data</div>';
+      return;
+    }
+    
+    const fileCounts = {};
+    prompts.forEach(p => {
+      try {
+        const contextFiles = p.context_files || p.contextFiles;
+        let files = [];
+        
+        if (typeof contextFiles === 'string') {
+          files = JSON.parse(contextFiles);
+        } else if (Array.isArray(contextFiles)) {
+          files = contextFiles;
+        }
+        
+        files.forEach(file => {
+          if (file && typeof file === 'string') {
+            const fileName = file.split('/').pop() || file;
+            fileCounts[fileName] = (fileCounts[fileName] || 0) + 1;
+          }
+        });
+      } catch (e) {
+        // Skip invalid context_files
+      }
+    });
+    
+    const sorted = Object.entries(fileCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10);
+    
+    if (sorted.length === 0) {
+      ctx.parentElement.innerHTML = '<div style="padding: var(--space-md); text-align: center; color: var(--color-text-muted);">No context file data</div>';
+      return;
+    }
+    
+    const labels = sorted.map(([file]) => file.length > 20 ? file.substring(0, 20) + '...' : file);
+    const data = sorted.map(([, count]) => count);
+    const colors = getChartColors();
+    
+    window.createChart('contextFileChart', {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: 'Usage Count',
+          data: data,
+          backgroundColor: colors.primary
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        indexAxis: 'y',
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: (ctx) => `${ctx.parsed.x} uses` } }
+        },
+        scales: {
+          x: { beginAtZero: true, ticks: { precision: 0 } },
+          y: { ticks: { font: { size: 10 } } }
+        }
+      }
+    });
+  }
+
+  /**
+   * 5. Thinking Time Distribution
+   */
+  function renderThinkingTimeDistribution(prompts) {
+    const ctx = document.getElementById('thinkingTimeHistogram');
+    if (!ctx || !window.createChart) return;
+    
+    const thinkingTimes = prompts
+      .map(p => p.thinking_time_seconds || p.thinkingTimeSeconds || p.thinking_time || null)
+      .filter(t => t !== null && t > 0 && t < 300); // Filter outliers
+    
+    if (thinkingTimes.length === 0) {
+      ctx.parentElement.innerHTML = '<div style="padding: var(--space-md); text-align: center; color: var(--color-text-muted);">No thinking time data</div>';
+      return;
+    }
+    
+    // Create bins: 0-5s, 5-10s, 10-20s, 20-30s, 30-60s, 60+
+    const bins = [0, 5, 10, 20, 30, 60, Infinity];
+    const binLabels = ['0-5s', '5-10s', '10-20s', '20-30s', '30-60s', '60s+'];
+    const binCounts = new Array(bins.length - 1).fill(0);
+    
+    thinkingTimes.forEach(time => {
+      for (let i = 0; i < bins.length - 1; i++) {
+        if (time >= bins[i] && time < bins[i + 1]) {
+          binCounts[i]++;
+          break;
+        }
+      }
+    });
+    
+    const colors = getChartColors();
+    
+    window.createChart('thinkingTimeHistogram', {
+      type: 'bar',
+      data: {
+        labels: binLabels,
+        datasets: [{
+          label: 'Prompts',
+          data: binCounts,
+          backgroundColor: colors.accent
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: (ctx) => `${ctx.parsed.y} prompts (${((ctx.parsed.y / thinkingTimes.length) * 100).toFixed(1)}%)` } }
+        },
+        scales: {
+          y: { beginAtZero: true, ticks: { precision: 0 } },
+          x: { ticks: { font: { size: 10 } } }
+        }
+      }
+    });
+  }
+
+  /**
+   * 6. Time-of-Day Activity
+   */
+  function renderTimeOfDayActivity(events, prompts) {
+    const ctx = document.getElementById('timeOfDayBarChart');
+    if (!ctx || !window.createChart) return;
+    
+    const hourCounts = new Array(24).fill(0);
+    
+    [...events, ...prompts].forEach(item => {
+      if (item.timestamp) {
+        const date = new Date(item.timestamp);
+        const hour = date.getHours();
+        hourCounts[hour]++;
+      }
+    });
+    
+    if (hourCounts.every(count => count === 0)) {
+      ctx.parentElement.innerHTML = '<div style="padding: var(--space-md); text-align: center; color: var(--color-text-muted);">No activity data</div>';
+      return;
+    }
+    
+    const labels = Array.from({ length: 24 }, (_, i) => {
+      const hour = i % 12 || 12;
+      const period = i < 12 ? 'AM' : 'PM';
+      return `${hour}${period}`;
+    });
+    
+    const colors = getChartColors();
+    
+    window.createChart('timeOfDayBarChart', {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: 'Activity',
+          data: hourCounts,
+          backgroundColor: colors.secondary
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: (ctx) => `${ctx.parsed.y} activities` } }
+        },
+        scales: {
+          y: { beginAtZero: true, ticks: { precision: 0 } },
+          x: { ticks: { font: { size: 9 }, maxRotation: 45 } }
+        }
+      }
+    });
+  }
+
+  /**
+   * 7. Conversation Length Distribution
+   */
+  function renderConversationLengthDistribution(prompts) {
+    const ctx = document.getElementById('conversationLengthHistogram');
+    if (!ctx || !window.createChart) return;
+    
+    const conversationLengths = {};
+    prompts.forEach(p => {
+      const convId = p.conversation_id || p.conversationId;
+      if (convId) {
+        conversationLengths[convId] = (conversationLengths[convId] || 0) + 1;
+      }
+    });
+    
+    const lengths = Object.values(conversationLengths);
+    if (lengths.length === 0) {
+      ctx.parentElement.innerHTML = '<div style="padding: var(--space-md); text-align: center; color: var(--color-text-muted);">No conversation data</div>';
+      return;
+    }
+    
+    // Create bins: 1, 2-5, 6-10, 11-20, 21-50, 50+
+    const bins = [1, 2, 6, 11, 21, 51, Infinity];
+    const binLabels = ['1', '2-5', '6-10', '11-20', '21-50', '50+'];
+    const binCounts = new Array(bins.length - 1).fill(0);
+    
+    lengths.forEach(length => {
+      for (let i = 0; i < bins.length - 1; i++) {
+        if (length >= bins[i] && length < bins[i + 1]) {
+          binCounts[i]++;
+          break;
+        }
+      }
+    });
+    
+    const colors = getChartColors();
+    
+    window.createChart('conversationLengthHistogram', {
+      type: 'bar',
+      data: {
+        labels: binLabels,
+        datasets: [{
+          label: 'Conversations',
+          data: binCounts,
+          backgroundColor: colors.warning
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: (ctx) => `${ctx.parsed.y} conversations (${((ctx.parsed.y / lengths.length) * 100).toFixed(1)}%)` } }
+        },
+        scales: {
+          y: { beginAtZero: true, ticks: { precision: 0 } },
+          x: { ticks: { font: { size: 10 } } }
+        }
+      }
+    });
+  }
+
+  /**
+   * 8. Intent Distribution
+   */
+  function renderIntentDistribution(events) {
+    const ctx = document.getElementById('intentTagCloud');
+    if (!ctx || !window.createChart) return;
+    
+    const intentCounts = {};
+    events.forEach(e => {
+      const intent = e.intent || 'unknown';
+      intentCounts[intent] = (intentCounts[intent] || 0) + 1;
+    });
+    
+    // Also check tags
+    events.forEach(e => {
+      const tags = e.tags;
+      if (tags) {
+        // Handle both string and array tags, and other types
+        let tagArray = [];
+        if (typeof tags === 'string') {
+          tagArray = tags.split(',').filter(t => t.trim());
+        } else if (Array.isArray(tags)) {
+          tagArray = tags;
+        } else if (tags != null) {
+          // Handle other types (numbers, objects, etc.)
+          tagArray = [String(tags)];
+        }
+        
+        tagArray.forEach(tag => {
+          const trimmed = (typeof tag === 'string' ? tag : String(tag)).trim().toLowerCase();
+          if (trimmed) {
+            intentCounts[trimmed] = (intentCounts[trimmed] || 0) + 1;
+          }
+        });
+      }
+    });
+    
+    const sorted = Object.entries(intentCounts)
+      .filter(([intent]) => intent !== 'unknown' && intent !== '')
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10);
+    
+    if (sorted.length === 0) {
+      ctx.parentElement.innerHTML = '<div style="padding: var(--space-md); text-align: center; color: var(--color-text-muted);">No intent data</div>';
+      return;
+    }
+    
+    const labels = sorted.map(([intent]) => intent.charAt(0).toUpperCase() + intent.slice(1));
+    const data = sorted.map(([, count]) => count);
+    const colors = getChartColors();
+    
+    window.createChart('intentTagCloud', {
+      type: 'doughnut',
+      data: {
+        labels: labels,
+        datasets: [{
+          data: data,
+          backgroundColor: [
+            colors.primary, colors.secondary, colors.accent, colors.success, colors.warning,
+            '#ef4444', '#06b6d4', '#a855f7', '#f97316', '#84cc16'
+          ]
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        plugins: {
+          legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } },
+          tooltip: { callbacks: { label: (ctx) => `${ctx.label}: ${ctx.parsed} events (${((ctx.parsed / events.length) * 100).toFixed(1)}%)` } }
+        }
+      }
+    });
+  }
+
+  // Helper function to get chart colors
+  function getChartColors() {
+    return (window.CONFIG && window.CONFIG.CHART_COLORS) ? {
+      primary: window.CONFIG.CHART_COLORS.primary,
+      secondary: window.CONFIG.CHART_COLORS.secondary,
+      accent: window.CONFIG.CHART_COLORS.accent,
+      success: window.CONFIG.CHART_COLORS.success,
+      warning: window.CONFIG.CHART_COLORS.warning
+    } : {
+      primary: '#3b82f6',
+      secondary: '#8b5cf6',
+      accent: '#10b981',
+      success: '#22c55e',
+      warning: '#f59e0b'
+    };
   }
 }
 

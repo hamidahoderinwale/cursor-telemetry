@@ -112,6 +112,7 @@ class FileMetricsVisualizations {
     });
 
     // Combine co-occurrence and temporal dependencies
+    // Store both the strength and the breakdown counts
     const dependencies = new Map();
     const allFiles = new Set([
       ...Array.from(coOccurrence.keys()),
@@ -120,23 +121,42 @@ class FileMetricsVisualizations {
 
     allFiles.forEach(file => {
       const deps = new Map();
+      const depDetails = new Map(); // Store breakdown: { coOccurrenceCount, temporalCount }
       
       // Add co-occurrence dependencies
       if (coOccurrence.has(file)) {
         coOccurrence.get(file).forEach((count, otherFile) => {
-          deps.set(otherFile, (deps.get(otherFile) || 0) + count * 2); // Weight co-occurrence higher
+          const currentStrength = deps.get(otherFile) || 0;
+          deps.set(otherFile, currentStrength + count * 2); // Weight co-occurrence higher
+          
+          // Track breakdown
+          if (!depDetails.has(otherFile)) {
+            depDetails.set(otherFile, { coOccurrenceCount: 0, temporalCount: 0 });
+          }
+          depDetails.get(otherFile).coOccurrenceCount += count;
         });
       }
       
       // Add temporal dependencies
       if (temporalDeps.has(file)) {
         temporalDeps.get(file).forEach((count, otherFile) => {
-          deps.set(otherFile, (deps.get(otherFile) || 0) + count);
+          const currentStrength = deps.get(otherFile) || 0;
+          deps.set(otherFile, currentStrength + count);
+          
+          // Track breakdown
+          if (!depDetails.has(otherFile)) {
+            depDetails.set(otherFile, { coOccurrenceCount: 0, temporalCount: 0 });
+          }
+          depDetails.get(otherFile).temporalCount += count;
         });
       }
       
       if (deps.size > 0) {
-        dependencies.set(file, deps);
+        // Store both strength map and details map
+        dependencies.set(file, {
+          strengths: deps,
+          details: depDetails
+        });
       }
     });
 
@@ -165,14 +185,34 @@ class FileMetricsVisualizations {
 
       // Calculate strongest dependencies
       const allDeps = [];
-      dependencies.forEach((deps, file) => {
-        deps.forEach((strength, otherFile) => {
-          allDeps.push({
-            file1: file,
-            file2: otherFile,
-            strength
+      dependencies.forEach((depData, file) => {
+        const strengths = depData.strengths || depData; // Backward compatibility
+        const details = depData.details || new Map();
+        
+        // Handle both new format (with details) and old format (just Map of strengths)
+        if (strengths instanceof Map) {
+          strengths.forEach((strength, otherFile) => {
+            const detail = details.get && details.get(otherFile) ? details.get(otherFile) : {};
+            allDeps.push({
+              file1: file,
+              file2: otherFile,
+              strength,
+              coOccurrenceCount: detail.coOccurrenceCount || 0,
+              temporalCount: detail.temporalCount || 0
+            });
           });
-        });
+        } else {
+          // Old format - just iterate over the Map directly
+          depData.forEach((strength, otherFile) => {
+            allDeps.push({
+              file1: file,
+              file2: otherFile,
+              strength,
+              coOccurrenceCount: 0,
+              temporalCount: 0
+            });
+          });
+        }
       });
 
       // Sort by strength
@@ -237,18 +277,18 @@ class FileMetricsVisualizations {
       container.innerHTML = `
         <div style="margin-bottom: var(--space-lg);">
           <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--space-md);">
-            <div class="stat-card">
-              <div class="stat-label">Total Dependencies</div>
+            <div class="stat-card" title="Total number of file dependency relationships found. Each relationship indicates files that are frequently worked on together (co-occur in prompts or edited close in time).">
+              <div class="stat-label" title="Total number of file dependency relationships found">Total Dependencies</div>
               <div class="stat-value">${allDeps.length}</div>
               <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">
                 Between ${dependencies.size} files
               </div>
             </div>
-            <div class="stat-card">
-              <div class="stat-label">Avg Strength</div>
+            <div class="stat-card" title="Average dependency strength across all relationships. Strength combines co-occurrence in prompts (weighted 2x) and temporal proximity (weighted 1x). Higher values indicate stronger relationships.">
+              <div class="stat-label" title="Average dependency strength across all relationships">Avg Strength</div>
               <div class="stat-value">${avgStrength.toFixed(1)}</div>
               <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">
-                Max: ${maxStrength}
+                Max: ${maxStrength.toFixed(1)}
               </div>
             </div>
           </div>
@@ -263,11 +303,20 @@ class FileMetricsVisualizations {
               const file1Formatted = formatFilePath(dep.file1);
               const file2Formatted = formatFilePath(dep.file2);
               
+              // Calculate breakdown for tooltip
+              const coOccurrenceCount = dep.coOccurrenceCount || 0;
+              const temporalCount = dep.temporalCount || 0;
+              const strengthTooltip = `Dependency Strength: ${dep.strength.toFixed(1)}
+              
+This score combines:
+• Co-occurrence in prompts: ${coOccurrenceCount} time${coOccurrenceCount !== 1 ? 's' : ''} (weighted 2x)
+• Temporal proximity: ${temporalCount} time${temporalCount !== 1 ? 's' : ''} edited within 5 minutes (weighted 1x)
+
+Higher scores indicate files that are frequently worked on together.`;
+              
               return `
-                <div style="padding: var(--space-sm) var(--space-md); background: var(--color-bg); border-radius: var(--radius-md); border-left: 4px solid ${color}; display: flex; align-items: center; gap: var(--space-md); transition: background 0.2s;" 
-                     onmouseover="this.style.background='var(--color-bg-alt, #f5f5f5)'" 
-                     onmouseout="this.style.background='var(--color-bg)'"
-                     title="${index + 1}. ${getFullPath(dep.file1)} → ${getFullPath(dep.file2)} (Strength: ${dep.strength})">
+                <div class="dependency-item" style="padding: var(--space-sm) var(--space-md); background: var(--color-bg); border-radius: var(--radius-md); border-left: 4px solid ${color}; display: flex; align-items: center; gap: var(--space-md); transition: background 0.2s;"
+                     title="${index + 1}. ${getFullPath(dep.file1)} → ${getFullPath(dep.file2)}">
                   <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px;">
                     <div style="font-size: var(--text-sm); color: var(--color-text); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${getFullPath(dep.file1)}">
                       ${this.escapeHtml(file1Formatted)}
@@ -278,10 +327,12 @@ class FileMetricsVisualizations {
                     </div>
                   </div>
                   <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex-shrink: 0; min-width: 80px;">
-                    <div style="font-size: var(--text-base); color: var(--color-text); font-weight: 700; line-height: 1.2;">
-                      ${dep.strength}
+                    <div style="font-size: var(--text-base); color: var(--color-text); font-weight: 700; line-height: 1.2; cursor: help;" 
+                         title="${strengthTooltip.replace(/\n/g, ' ').trim()}">
+                      ${dep.strength.toFixed(1)}
                     </div>
-                    <div style="width: 70px; height: 4px; background: var(--color-bg-alt); border-radius: 2px; overflow: hidden;">
+                    <div style="width: 70px; height: 4px; background: var(--color-bg-alt); border-radius: 2px; overflow: hidden;" 
+                         title="Visual indicator: ${intensity.toFixed(0)}% of maximum strength">
                       <div style="width: ${intensity}%; height: 100%; background: ${color}; border-radius: 2px; transition: width 0.3s;"></div>
                     </div>
                   </div>
@@ -576,9 +627,7 @@ class FileMetricsVisualizations {
               const fileDir = trend.file.substring(0, trend.file.length - fileName.length);
               
               return `
-                <div style="padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md); border-left: 3px solid ${color}; transition: background 0.2s;"
-                     onmouseover="this.style.background='var(--color-bg-alt, #f5f5f5)'" 
-                     onmouseout="this.style.background='var(--color-bg)'"
+                <div class="complexity-file-item" style="padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-md); border-left: 3px solid ${color}; transition: background 0.2s;"
                      title="${this.escapeHtml(trend.file)}">
                   <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: var(--space-xs);">
                     <div style="flex: 1; min-width: 0;">

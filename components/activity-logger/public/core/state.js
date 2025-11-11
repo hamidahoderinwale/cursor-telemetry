@@ -92,12 +92,57 @@ function notify(type, oldValue, newValue) {
 }
 
 /**
+ * Safe deep clone that handles circular references
+ */
+function safeDeepClone(obj) {
+  const seen = new WeakSet();
+  
+  function clone(value) {
+    // Handle primitives
+    if (value === null || typeof value !== 'object') {
+      return value;
+    }
+    
+    // Handle circular references
+    if (seen.has(value)) {
+      return undefined; // Skip circular references
+    }
+    
+    // Handle arrays
+    if (Array.isArray(value)) {
+      seen.add(value);
+      const cloned = value.map(item => clone(item));
+      seen.delete(value);
+      return cloned;
+    }
+    
+    // Handle objects
+    seen.add(value);
+    const cloned = {};
+    for (const key in value) {
+      if (value.hasOwnProperty(key)) {
+        try {
+          cloned[key] = clone(value[key]);
+        } catch (e) {
+          // Skip properties that can't be cloned (functions, DOM elements, etc.)
+          continue;
+        }
+      }
+    }
+    seen.delete(value);
+    return cloned;
+  }
+  
+  return clone(obj);
+}
+
+/**
  * Update state with reactive notifications
  * @param {Object} updates - State updates
  * @param {boolean} silent - If true, don't notify listeners
  */
 function updateState(updates, silent = false) {
-  const oldState = JSON.parse(JSON.stringify(state));
+  const oldState = safeDeepClone(state);
   
   // Deep merge updates
   Object.keys(updates).forEach(key => {

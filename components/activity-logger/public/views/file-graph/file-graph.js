@@ -313,8 +313,11 @@ async function initializeD3FileGraph() {
       const path = (file.path || '').toLowerCase();
       const name = (file.name || '').toLowerCase();
       
-      // Filter out files with no changes/events
-      if ((file.changes || 0) === 0 && (!file.events || file.events.length === 0)) {
+      // Filter out files with no content, changes, or events
+      const hasContent = file.content && file.content.length > 0;
+      const hasChanges = (file.changes || 0) > 0;
+      const hasEvents = file.events && file.events.length > 0;
+      if (!hasContent && !hasChanges && !hasEvents) {
         return true;
       }
       
@@ -478,9 +481,14 @@ async function initializeD3FileGraph() {
           }
         }
         
-        // Skip files with no events/changes after processing
-        if (relatedEvents.length === 0 && changes === 0) {
-          return null;
+        // Include files if they have content, events, or changes
+        // Don't skip files just because they don't have events - they might have content for TF-IDF
+        const hasContent = f.content && f.content.length > 0;
+        const hasEvents = relatedEvents.length > 0;
+        const hasChanges = changes > 0;
+        
+        if (!hasContent && !hasEvents && !hasChanges) {
+          return null; // Only skip if file has nothing useful
         }
         
         return {
@@ -489,10 +497,10 @@ async function initializeD3FileGraph() {
           name: displayName,  // Use meaningful name instead of hash
           originalName: f.name,  // Keep original for reference
           ext: f.ext,
-          content: f.content,
+          content: f.content || '',
           changes: changes,
           lastModified: lastModified,
-          size: f.size,
+          size: f.size || (f.content ? f.content.length : 0),
           events: relatedEvents,
           workspace: workspace,
           directory: directory
@@ -509,10 +517,17 @@ async function initializeD3FileGraph() {
       }
     }
     
-    // Filter out null entries and files with no events/changes
-    const validFiles = files.filter(f => f !== null && f !== undefined && (f.changes > 0 || (f.events && f.events.length > 0)));
+    // Filter out null entries - include files with content, events, or changes
+    const validFiles = files.filter(f => {
+      if (!f || f === null || f === undefined) return false;
+      // Include if file has content (for TF-IDF), events, or changes
+      const hasContent = f.content && f.content.length > 0;
+      const hasEvents = f.events && f.events.length > 0;
+      const hasChanges = f.changes > 0;
+      return hasContent || hasEvents || hasChanges;
+    });
     
-    console.log(`[DATA] Filtered to ${validFiles.length} files with allowed extensions (excluded ${files.length - validFiles.length} files with no changes)`);
+    console.log(`[DATA] Filtered to ${validFiles.length} files with allowed extensions (excluded ${files.length - validFiles.length} files with no content/events/changes)`);
     
     // Replace files array with filtered results
     files.length = 0;
@@ -534,6 +549,9 @@ async function initializeD3FileGraph() {
     // Compute similarity based on context files from prompts (more accurate than session-based)
     const links = [];
     const threshold = parseFloat(document.getElementById('similarityThreshold')?.value || '0.2');
+    
+    // Define prompts early so it's available in all code paths
+    const prompts = window.state?.data?.prompts || [];
     
     // Limit files for performance (O(n²) computation)
     const MAX_FILES_FOR_GRAPH = 500; // Limit to prevent timeout
@@ -583,10 +601,27 @@ async function initializeD3FileGraph() {
       console.log('[GRAPH] Computing similarities on-the-fly (no precomputed cache found)');
       
       // Build file-to-prompts mapping from context files
+      // Also build conversation-to-files mapping for enhanced relationships
       const filePromptMap = new Map();
-      const prompts = window.state.data.prompts || [];
+      const fileConversationMap = new Map(); // file -> Set of conversationIds
+      // prompts is already defined above
+      
+      // Build conversation hierarchy if available
+      let hierarchy = null;
+      if (window.ConversationHierarchyBuilder) {
+        try {
+          const hierarchyBuilder = new window.ConversationHierarchyBuilder();
+          hierarchy = hierarchyBuilder.buildHierarchy(prompts, []);
+          console.log(`[GRAPH] Built conversation hierarchy: ${hierarchy.metadata.totalConversations} conversations`);
+        } catch (error) {
+          console.warn('[GRAPH] Failed to build conversation hierarchy:', error);
+        }
+      }
       
       prompts.forEach(prompt => {
+        const conversationId = prompt.conversation_id || prompt.conversationId || 
+                             prompt.composer_id || prompt.composerId;
+        
         if (prompt.contextFiles && Array.isArray(prompt.contextFiles)) {
           prompt.contextFiles.forEach(cf => {
             const filePath = cf.path || cf.filePath || cf.file;
@@ -595,6 +630,14 @@ async function initializeD3FileGraph() {
                 filePromptMap.set(filePath, new Set());
               }
               filePromptMap.get(filePath).add(prompt.id || prompt.timestamp);
+              
+              // Track conversations for this file
+              if (conversationId) {
+                if (!fileConversationMap.has(filePath)) {
+                  fileConversationMap.set(filePath, new Set());
+                }
+                fileConversationMap.get(filePath).add(conversationId);
+              }
             }
           });
         }
@@ -606,8 +649,19 @@ async function initializeD3FileGraph() {
             filePromptMap.set(filePath, new Set());
           }
           filePromptMap.get(filePath).add(prompt.id || prompt.timestamp);
+          
+          // Track conversations for this file
+          if (conversationId) {
+            if (!fileConversationMap.has(filePath)) {
+              fileConversationMap.set(filePath, new Set());
+            }
+            fileConversationMap.get(filePath).add(conversationId);
+          }
         }
       });
+      
+      // Boost similarity for files in same conversation
+      const conversationBoost = 0.15; // 15% boost for files in same conversation
       
       console.log(`[GRAPH] Built file-to-prompt map with ${filePromptMap.size} files`);
       
@@ -664,23 +718,32 @@ async function initializeD3FileGraph() {
             // 2. Jaccard similarity for sessions
             const sessionSim = sessionUnion.size > 0 ? sessionIntersection.size / sessionUnion.size : 0;
             
-            // 3. File path similarity (common directory structure)
+            // 3. Conversation-based similarity boost
+            const conversations1 = fileConversationMap.get(file1.id) || new Set();
+            const conversations2 = fileConversationMap.get(file2.id) || new Set();
+            const conversationIntersection = new Set([...conversations1].filter(x => conversations2.has(x)));
+            // Boost similarity if files appear in same conversations (scales with number of shared conversations)
+            const conversationSim = conversationIntersection.size > 0 ? 
+              Math.min(0.3, conversationIntersection.size * 0.1) : 0;
+            
+            // 4. File path similarity (common directory structure)
             const path1 = file1.path || file1.name || '';
             const path2 = file2.path || file2.name || '';
             const pathSim = calculatePathSimilarity(path1, path2);
             
-            // 4. Temporal proximity (files modified close in time)
+            // 5. Temporal proximity (files modified close in time)
             const timeSim = calculateTemporalSimilarity(file1, file2);
             
-            // 5. Change frequency similarity (files with similar change patterns)
+            // 6. Change frequency similarity (files with similar change patterns)
             const changeSim = calculateChangeSimilarity(file1, file2);
             
-            // Weighted combination: prompts (40%), sessions (25%), path (15%), temporal (10%), changes (10%)
-            const similarity = (promptSim * 0.4) + 
+            // Weighted combination: prompts (35%), sessions (25%), path (15%), temporal (10%), changes (10%), conversations (5%)
+            const similarity = (promptSim * 0.35) + 
                               (sessionSim * 0.25) + 
                               (pathSim * 0.15) + 
                               (timeSim * 0.1) + 
-                              (changeSim * 0.1);
+                              (changeSim * 0.1) +
+                              (conversationSim * 0.05);
             
             if (similarity > threshold) {
               links.push({
@@ -744,6 +807,9 @@ async function initializeD3FileGraph() {
     const linkCountEl = document.getElementById('graphLinkCount');
     const promptCountEl = document.getElementById('graphPromptCount');
     const avgSimEl = document.getElementById('graphAvgSimilarity');
+    
+    // Ensure prompts is defined (it should be from line 554, but add defensive check)
+    const prompts = window.state?.data?.prompts || [];
     
     if (nodeCountEl) nodeCountEl.textContent = files.length;
     if (linkCountEl) linkCountEl.textContent = links.length;

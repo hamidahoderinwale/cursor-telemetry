@@ -94,6 +94,13 @@ class CursorDatabaseParser {
         `sqlite3 "${dbPath}" "${genQuery}"`
       ).catch(() => ({ stdout: '' }));
 
+      // Extract additional metadata that might contain context usage and model info
+      // Query for keys that might contain context/token information
+      const metadataQuery = `SELECT key, value FROM ItemTable WHERE key LIKE 'aiService.%' AND (key LIKE '%context%' OR key LIKE '%token%' OR key LIKE '%model%' OR key LIKE '%usage%')`;
+      const { stdout: metadataData } = await execAsync(
+        `sqlite3 "${dbPath}" "${metadataQuery}"`
+      ).catch(() => ({ stdout: '' }));
+
       // Try to extract conversation metadata if it exists
       // Query for all conversation-related keys and merge them
       const conversationQuery = `SELECT key, value FROM ItemTable WHERE key LIKE 'aiService.conversations%' OR key LIKE 'conversations%'`;
@@ -217,6 +224,32 @@ class CursorDatabaseParser {
         }
       }
 
+      // Parse additional metadata for context usage and model info
+      const metadataMap = new Map();
+      if (metadataData.trim()) {
+        try {
+          const lines = metadataData.trim().split('\n');
+          for (const line of lines) {
+            if (!line) continue;
+            const tabIndex = line.indexOf('\t');
+            if (tabIndex === -1) continue;
+            
+            const key = line.substring(0, tabIndex);
+            const value = line.substring(tabIndex + 1);
+            
+            try {
+              const parsed = JSON.parse(value);
+              metadataMap.set(key, parsed);
+            } catch (e) {
+              // Store raw value if not JSON
+              metadataMap.set(key, value);
+            }
+          }
+        } catch (e) {
+          console.warn('Error parsing metadata:', e.message);
+        }
+      }
+
       // Parse AI generations
       if (genData.trim()) {
         try {
@@ -225,13 +258,50 @@ class CursorDatabaseParser {
             genArray.forEach((item, idx) => {
               const text = item.text || item.textDescription || item.content || item.message;
               if (text && text.trim()) {
+                // Extract model information - check for actual model used vs "auto"
+                const model = item.model || item.model_name || item.assistant_model || null;
+                const actualModel = item.actual_model || item.resolved_model || item.selected_model || model;
+                const isAuto = !model || model.toLowerCase() === 'auto' || model.toLowerCase().includes('auto');
+                
+                // Extract context usage from various possible fields
+                const contextUsage = item.context_usage || 
+                                    item.contextUsage || 
+                                    item.context_usage_percent ||
+                                    item.token_usage?.context_percent ||
+                                    item.usage?.context_percent ||
+                                    null;
+                
+                // Calculate context usage from token counts if available
+                let calculatedContextUsage = null;
+                if (!contextUsage && (item.prompt_tokens || item.total_tokens || item.token_count)) {
+                  const promptTokens = item.prompt_tokens || item.token_count || 0;
+                  const totalTokens = item.total_tokens || item.max_tokens || 0;
+                  // Common context window sizes: 128k, 200k, 1M tokens
+                  // Estimate based on prompt tokens (assuming 200k default)
+                  const contextWindowSize = item.context_window_size || 200000;
+                  if (promptTokens > 0 && contextWindowSize > 0) {
+                    calculatedContextUsage = Math.min(100, (promptTokens / contextWindowSize) * 100);
+                  }
+                }
+                
                 generations.push({
                   text: text.trim(),
                   type: item.type || 'unknown',
                   timestamp: item.timestamp,
                   generationUUID: item.uuid || item.generationUUID,
-                  model: item.model,
+                  model: actualModel || model || 'Unknown',
+                  originalModel: model, // Store original (might be "auto")
+                  isAuto: isAuto,
                   finishReason: item.finishReason,
+                  // Context usage information
+                  contextUsage: contextUsage || calculatedContextUsage,
+                  promptTokens: item.prompt_tokens || item.token_count || null,
+                  completionTokens: item.completion_tokens || null,
+                  totalTokens: item.total_tokens || null,
+                  contextWindowSize: item.context_window_size || null,
+                  // Additional metadata
+                  temperature: item.temperature,
+                  maxTokens: item.max_tokens,
                   index: idx,
                   messageRole: 'assistant',
                   source: 'aiService'
@@ -244,7 +314,7 @@ class CursorDatabaseParser {
         }
       }
 
-      return { prompts, generations, conversationMetadata };
+      return { prompts, generations, conversationMetadata, metadata: Object.fromEntries(metadataMap) };
     } catch (error) {
       console.warn('Error extracting AI service data:', error.message);
       return { prompts: [], generations: [], conversationMetadata: {} };
@@ -608,6 +678,18 @@ class CursorDatabaseParser {
         }
       }
 
+      // Extract model and context info from corresponding generation
+      const modelInfo = correspondingGen ? {
+        model: correspondingGen.model,
+        originalModel: correspondingGen.originalModel,
+        isAuto: correspondingGen.isAuto,
+        contextUsage: correspondingGen.contextUsage,
+        promptTokens: correspondingGen.promptTokens,
+        completionTokens: correspondingGen.completionTokens,
+        totalTokens: correspondingGen.totalTokens,
+        contextWindowSize: correspondingGen.contextWindowSize
+      } : {};
+
       // Add user message
       const isConversationThread = prompt.type === 'composer';
       threaded.push({
@@ -626,6 +708,12 @@ class CursorDatabaseParser {
         // Don't set parentConversationId for thread initiators (so dashboard can identify them as threads)
         parentConversationId: isConversationThread ? undefined : conversationId,
         conversationTitle: conversationTitle,
+        // Include model and context info from generation (for user prompt, this is the model that will be used)
+        modelName: modelInfo.model || null,
+        originalModel: modelInfo.originalModel || null,
+        isAuto: modelInfo.isAuto || false,
+        contextUsage: modelInfo.contextUsage || null,
+        promptTokens: modelInfo.promptTokens || null,
         confidence: 'high',
         status: 'captured'
       });
@@ -648,8 +736,18 @@ class CursorDatabaseParser {
           messageRole: 'assistant',
           parentConversationId: conversationId,
           conversationTitle: conversationTitle,
+          // Model information - use actual model if available, otherwise original
           model: correspondingGen.model,
+          modelName: correspondingGen.model, // Alias for consistency
+          originalModel: correspondingGen.originalModel || correspondingGen.model,
+          isAuto: correspondingGen.isAuto || false,
           finishReason: correspondingGen.finishReason,
+          // Context usage information
+          contextUsage: correspondingGen.contextUsage || null,
+          promptTokens: correspondingGen.promptTokens || null,
+          completionTokens: correspondingGen.completionTokens || null,
+          totalTokens: correspondingGen.totalTokens || null,
+          contextWindowSize: correspondingGen.contextWindowSize || null,
           thinkingTimeSeconds: correspondingGen.timestamp && timestamp 
             ? ((correspondingGen.timestamp - timestamp) / 1000).toFixed(2)
             : null,

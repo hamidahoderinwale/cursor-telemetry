@@ -5,3 +5,22 @@
 /favicon.svg
   Content-Type: image/svg+xml
   Cache-Control: public, max-age=86400
+
+# JavaScript files - ensure proper MIME type
+# Note: Netlify should serve .js files with correct MIME type by default
+# These explicit headers ensure proper Content-Type even if files are missing
+/components/split-pane-resizer.js
+  Content-Type: application/javascript
+  Cache-Control: public, max-age=31536000, immutable
+
+/services/openrouter-embedding-service.js
+  Content-Type: application/javascript
+  Cache-Control: public, max-age=31536000, immutable
+
+/services/analytics/conversation-flow-analyzer.js
+  Content-Type: application/javascript
+  Cache-Control: public, max-age=31536000, immutable
+
+/services/conversation-hierarchy-builder.js
+  Content-Type: application/javascript
+  Cache-Control: public, max-age=31536000, immutable

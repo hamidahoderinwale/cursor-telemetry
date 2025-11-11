@@ -587,6 +587,7 @@ function detectLatentClusters(nodes, links) {
   
   // Build hierarchical cluster structure
   const clusters = [];
+  // Define cluster colors at function scope to avoid redeclaration
   const clusterColors = [
     '#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', 
     '#10b981', '#3b82f6', '#ef4444', '#14b8a6', '#f97316', '#06b6d4'
@@ -704,10 +705,8 @@ function detectLatentClusters(nodes, links) {
     centroids.push({ x: nodes[idx].x, y: nodes[idx].y });
   }
   
-  const clusterColors = [
-    '#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', 
-    '#10b981', '#3b82f6', '#ef4444', '#14b8a6'
-  ];
+  // Use the clusterColors already defined at function scope (line 590)
+  // No need to redeclare - reuse the existing array
   
   // Run k-means iterations
   for (let iter = 0; iter < 10; iter++) {

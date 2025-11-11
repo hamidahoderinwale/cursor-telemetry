@@ -34,6 +34,43 @@ async function renderEmbeddingsVisualization() {
   try {
     console.log(`[EMBEDDINGS] Starting analysis: method=${method}, dims=${dimensions}, components=${numComponents}`);
     
+    // Build conversation hierarchy if available
+    let hierarchy = null;
+    let conversationMap = new Map(); // conversationId -> { title, workspace, color }
+    let conversationColors = new Map();
+    
+    if (window.ConversationHierarchyBuilder) {
+      try {
+        const hierarchyBuilder = new window.ConversationHierarchyBuilder();
+        hierarchy = hierarchyBuilder.buildHierarchy(prompts, []);
+        
+        // Generate colors for conversations
+        let colorIndex = 0;
+        const colorPalette = [
+          '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6',
+          '#06b6d4', '#ec4899', '#84cc16', '#f97316', '#6366f1'
+        ];
+        
+        hierarchy.workspaces.forEach(workspace => {
+          workspace.conversations.forEach(conv => {
+            const color = colorPalette[colorIndex % colorPalette.length];
+            conversationMap.set(conv.id, {
+              title: conv.title,
+              workspace: workspace.name,
+              color: color,
+              promptCount: conv.allPrompts.length
+            });
+            conversationColors.set(conv.id, color);
+            colorIndex++;
+          });
+        });
+        
+        console.log(`[EMBEDDINGS] Built hierarchy: ${hierarchy.metadata.totalConversations} conversations across ${hierarchy.metadata.totalWorkspaces} workspaces`);
+      } catch (error) {
+        console.warn('[EMBEDDINGS] Failed to build conversation hierarchy:', error);
+      }
+    }
+    
     // Filter out JSON metadata, composer conversations (which are just names), and prepare actual prompt texts
     let validPrompts = prompts.filter(p => {
       const text = p.text || p.prompt || p.preview || p.content || '';
@@ -125,6 +162,11 @@ async function renderEmbeddingsVisualization() {
       
       vectors.push(vector);
       
+      // Get conversation info for this prompt
+      const conversationId = prompt.conversation_id || prompt.conversationId || 
+                            prompt.composer_id || prompt.composerId;
+      const conversationInfo = conversationId ? conversationMap.get(conversationId) : null;
+      
       // Create label (truncated prompt text)
       const text = promptTexts[i];
       const label = text.length > 40 ? text.substring(0, 40) + '...' : text;
@@ -135,8 +177,11 @@ async function renderEmbeddingsVisualization() {
         id: prompt.id,
         text: text,
         timestamp: prompt.timestamp,
-        workspaceName: prompt.workspaceName || 'Unknown',
-        source: prompt.source || 'cursor'
+        workspaceName: prompt.workspaceName || conversationInfo?.workspace || 'Unknown',
+        source: prompt.source || 'cursor',
+        conversationId: conversationId,
+        conversationTitle: conversationInfo?.title || null,
+        conversationColor: conversationInfo?.color || null
       });
     }
     
@@ -469,7 +514,10 @@ function renderEmbeddings2D(container, vectors, labels, metadata) {
     .attr('cx', (d, i) => xScale(d[0]))
     .attr('cy', (d, i) => yScale(d[1]))
     .attr('r', 6)
-    .attr('fill', (d, i) => colorScale(new Date(metadata[i].timestamp).getTime()))
+    .attr('fill', (d, i) => {
+      // Use conversation color if available, otherwise use time-based color
+      return metadata[i].conversationColor || colorScale(new Date(metadata[i].timestamp).getTime());
+    })
     .attr('opacity', 0.7)
     .attr('stroke', '#fff')
     .attr('stroke-width', 1.5)

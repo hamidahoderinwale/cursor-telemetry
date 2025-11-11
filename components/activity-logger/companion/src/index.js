@@ -808,12 +808,15 @@ async function syncPromptsFromCursorDB() {
         workspaceName: prompt.workspaceName,
         composerId: prompt.composerId,
         subtitle: prompt.subtitle,
-        contextUsage: prompt.contextUsage || 0,
+        // Context usage - prefer direct value, then calculated
+        contextUsage: prompt.contextUsage || prompt.context_usage || 0,
+        // Model information - prefer actual model over original
         mode: prompt.mode,
         modelType: prompt.modelType,
-        modelName: prompt.modelName,
+        modelName: prompt.modelName || prompt.model || prompt.originalModel || null,
+        originalModel: prompt.originalModel || prompt.model || null, // Store original (might be "auto")
+        isAuto: prompt.isAuto !== undefined ? prompt.isAuto : (prompt.modelName?.toLowerCase().includes('auto') || prompt.model?.toLowerCase().includes('auto')),
         forceMode: prompt.forceMode,
-        isAuto: prompt.isAuto || false,
         type: prompt.type || 'unknown',
         confidence: prompt.confidence || 'high',
         added_from_database: true,
@@ -823,6 +826,11 @@ async function syncPromptsFromCursorDB() {
         parentConversationId: prompt.parentConversationId,
         // Thinking time
         thinkingTimeSeconds: prompt.thinkingTimeSeconds,
+        // Token information
+        promptTokens: prompt.promptTokens || null,
+        completionTokens: prompt.completionTokens || null,
+        totalTokens: prompt.totalTokens || null,
+        contextWindowSize: prompt.contextWindowSize || null,
         // Context data
         contextFiles: prompt.contextFiles || prompt.context?.contextFiles,
         terminalBlocks: prompt.terminalBlocks || [],

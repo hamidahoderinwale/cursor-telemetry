@@ -1009,6 +1009,174 @@ function createExportImportRoutes(deps) {
         },
         
         // ============================================
+        // CONVERSATION HIERARCHY - Full workspace → conversation → tabs → prompts structure
+        // ============================================
+        conversationHierarchy: (() => {
+          // Build hierarchy: Workspace → Conversation → Tabs/Threads → Prompts
+          const workspaceMap = new Map();
+          
+          filteredPrompts.forEach(prompt => {
+            const workspaceId = prompt.workspace_id || prompt.workspaceId || 
+                               prompt.workspace_path || prompt.workspacePath || 
+                               'unknown';
+            const workspaceName = prompt.workspace_name || prompt.workspaceName || 
+                                 (workspaceId.split('/').pop() || 'Unknown');
+            
+            if (!workspaceMap.has(workspaceId)) {
+              workspaceMap.set(workspaceId, {
+                id: workspaceId,
+                name: workspaceName,
+                path: prompt.workspace_path || prompt.workspacePath || workspaceId,
+                conversations: new Map(),
+                metadata: {
+                  totalPrompts: 0,
+                  totalConversations: 0,
+                  lastActivity: null
+                }
+              });
+            }
+            
+            const workspace = workspaceMap.get(workspaceId);
+            workspace.metadata.totalPrompts++;
+            
+            if (!workspace.metadata.lastActivity || 
+                new Date(prompt.timestamp) > new Date(workspace.metadata.lastActivity)) {
+              workspace.metadata.lastActivity = prompt.timestamp;
+            }
+            
+            // Group by conversation
+            const conversationId = prompt.conversation_id || 
+                                   prompt.conversationId || 
+                                   prompt.composer_id ||
+                                   prompt.composerId ||
+                                   `${workspaceId}_${(prompt.id || Date.now())}`;
+            
+            const parentConversationId = prompt.parent_conversation_id || 
+                                        prompt.parentConversationId || 
+                                        null;
+            
+            if (!workspace.conversations.has(conversationId)) {
+              workspace.conversations.set(conversationId, {
+                id: conversationId,
+                title: prompt.conversation_title || 
+                       prompt.conversationTitle || 
+                       'Untitled Conversation',
+                workspaceId: workspaceId,
+                workspaceName: workspace.name,
+                tabs: new Map(),
+                rootPrompts: [],
+                allPrompts: [],
+                metadata: {
+                  messageCount: 0,
+                  userMessageCount: 0,
+                  assistantMessageCount: 0,
+                  firstMessage: null,
+                  lastMessage: null,
+                  duration: null,
+                  models: new Set(),
+                  contextFiles: new Set()
+                }
+              });
+            }
+            
+            const conversation = workspace.conversations.get(conversationId);
+            conversation.allPrompts.push(prompt);
+            
+            // Handle tabs/threads
+            if (parentConversationId && parentConversationId !== conversationId) {
+              if (!conversation.tabs.has(parentConversationId)) {
+                conversation.tabs.set(parentConversationId, {
+                  id: parentConversationId,
+                  title: `Tab ${parentConversationId.substring(0, 8)}`,
+                  prompts: [],
+                  metadata: {
+                    messageCount: 0,
+                    firstMessage: null,
+                    lastMessage: null
+                  }
+                });
+              }
+              const tab = conversation.tabs.get(parentConversationId);
+              tab.prompts.push(prompt);
+              tab.metadata.messageCount++;
+              
+              if (!tab.metadata.firstMessage || 
+                  new Date(prompt.timestamp) < new Date(tab.metadata.firstMessage)) {
+                tab.metadata.firstMessage = prompt.timestamp;
+              }
+              if (!tab.metadata.lastMessage || 
+                  new Date(prompt.timestamp) > new Date(tab.metadata.lastMessage)) {
+                tab.metadata.lastMessage = prompt.timestamp;
+              }
+            } else {
+              conversation.rootPrompts.push(prompt);
+            }
+            
+            // Update conversation metadata
+            conversation.metadata.messageCount++;
+            if (prompt.message_role === 'user' || !prompt.message_role) {
+              conversation.metadata.userMessageCount++;
+            } else if (prompt.message_role === 'assistant') {
+              conversation.metadata.assistantMessageCount++;
+            }
+            
+            if (!conversation.metadata.firstMessage || 
+                new Date(prompt.timestamp) < new Date(conversation.metadata.firstMessage)) {
+              conversation.metadata.firstMessage = prompt.timestamp;
+            }
+            if (!conversation.metadata.lastMessage || 
+                new Date(prompt.timestamp) > new Date(conversation.metadata.lastMessage)) {
+              conversation.metadata.lastMessage = prompt.timestamp;
+            }
+            
+            if (prompt.model_name || prompt.modelName) {
+              conversation.metadata.models.add(prompt.model_name || prompt.modelName);
+            }
+          });
+          
+          // Calculate durations and convert Sets to Arrays
+          workspaceMap.forEach(workspace => {
+            workspace.conversations.forEach(conv => {
+              if (conv.metadata.firstMessage && conv.metadata.lastMessage) {
+                const start = new Date(conv.metadata.firstMessage).getTime();
+                const end = new Date(conv.metadata.lastMessage).getTime();
+                conv.metadata.duration = end - start;
+              }
+              conv.metadata.models = Array.from(conv.metadata.models);
+              conv.metadata.contextFiles = Array.from(conv.metadata.contextFiles);
+              workspace.metadata.totalConversations++;
+            });
+          });
+          
+          // Convert to serializable structure
+          return Array.from(workspaceMap.values()).map(ws => ({
+            id: ws.id,
+            name: ws.name,
+            path: ws.path,
+            conversations: Array.from(ws.conversations.values()).map(conv => ({
+              id: conv.id,
+              title: conv.title,
+              workspaceId: conv.workspaceId,
+              workspaceName: conv.workspaceName,
+              tabs: Array.from(conv.tabs.values()).map(tab => ({
+                id: tab.id,
+                title: tab.title,
+                promptIds: tab.prompts.map(p => p.id),
+                metadata: tab.metadata
+              })),
+              rootPromptIds: conv.rootPrompts.map(p => p.id),
+              allPromptIds: conv.allPrompts.map(p => p.id),
+              metadata: {
+                ...conv.metadata,
+                models: conv.metadata.models,
+                contextFiles: conv.metadata.contextFiles
+              }
+            })),
+            metadata: ws.metadata
+          }));
+        })(),
+        
+        // ============================================
         // TEMPORAL ORGANIZATION - Time-grouped activity
         // Groups related activity by time windows
         // ============================================

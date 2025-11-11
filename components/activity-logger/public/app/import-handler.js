@@ -17,7 +17,7 @@ async function showImportModal() {
   modal.id = 'importModal';
   modal.className = 'modal-overlay';
   modal.innerHTML = `
-    <div class="modal-content export-modal-content">
+    <div class="modal-content export-modal-content" style="max-width: 1200px;">
       <div class="modal-header">
         <h2>Open Shared Workspace</h2>
         <button class="modal-close" onclick="closeImportModal()">&times;</button>

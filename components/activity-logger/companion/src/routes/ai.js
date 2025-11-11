@@ -13,14 +13,19 @@ function createAIRoutes(deps) {
   
   // Clean API key extraction - accept any non-empty value from .env
   const openRouterKey = (process.env.OPENROUTER_API_KEY || '').trim();
+  const hfToken = (process.env.HF_TOKEN || process.env.HUGGINGFACE_API_KEY || process.env.HF_API_KEY || '').trim();
   const openRouterEndpoint = 'https://openrouter.ai/api/v1';
   
   // Use free models by default - no API key required
   // These work without authentication via OpenRouter's free tier
-  const embeddingModel = process.env.OPENROUTER_EMBEDDING_MODEL || 'Xenova/all-MiniLM-L6-v2';
+  // Note: Xenova models are for Transformers.js (browser), not OpenRouter
+  // For OpenRouter, use models like: openai/text-embedding-3-small, intfloat/e5-small-v2
+  const embeddingModel = process.env.OPENROUTER_EMBEDDING_MODEL || 'openai/text-embedding-3-small';
   // Use a valid OpenRouter chat model - fallback to rule-based if not available
   // Try free models first, but they may be rate-limited - fallback handles this gracefully
   const chatModel = process.env.OPENROUTER_CHAT_MODEL || 'google/gemini-flash-1.5:free';
+  const hfModel = process.env.HF_MODEL || 'meta-llama/Meta-Llama-3.1-8B-Instruct';
+  const hfEndpoint = process.env.HF_ENDPOINT || 'https://api-inference.huggingface.co/models/meta-llama/Meta-Llama-3.1-8B-Instruct';
 
   // Log status on startup
   if (openRouterKey && openRouterKey.length > 0) {
@@ -31,6 +36,15 @@ function createAIRoutes(deps) {
   } else {
     console.log('[AI] ℹ OpenRouter API key not set - using free local models');
     console.log('[AI]   Free models: Transformers.js (local, no API key needed)');
+  }
+  
+  if (hfToken && hfToken.length > 0) {
+    console.log('[AI] ✓ Hugging Face token found - reasoning engine available');
+    console.log(`[AI]   Model: ${hfModel}`);
+    console.log(`[AI]   Endpoint: ${hfEndpoint}`);
+    console.log(`[AI]   Token length: ${hfToken.length} characters`);
+  } else {
+    console.log('[AI] ℹ Hugging Face token not set - reasoning engine will use fallback');
   }
 
   /**
@@ -226,20 +240,32 @@ function createAIRoutes(deps) {
    * Check if AI services are available
    */
   app.get('/api/ai/status', (req, res) => {
-    const hasValidKey = !!openRouterKey;
+    const hasOpenRouterKey = !!openRouterKey;
+    const hasHfToken = !!hfToken;
     
     res.json({
       success: true,
-      available: hasValidKey,
+      available: hasOpenRouterKey,
       embeddingModel: embeddingModel,
       chatModel: chatModel,
-      hasApiKey: hasValidKey,
+      hasApiKey: hasOpenRouterKey,
+      // Hugging Face Inference API status
+      huggingFace: {
+        available: hasHfToken,
+        hasToken: hasHfToken,
+        model: hfModel,
+        endpoint: hfEndpoint,
+        useCase: 'Advanced reasoning and temporal analysis'
+      },
       // Always available via Transformers.js in browser
       localAvailable: true,
       localModel: 'Xenova/all-MiniLM-L6-v2',
-      message: hasValidKey 
+      message: hasOpenRouterKey 
         ? 'OpenRouter API configured - using premium models'
-        : 'Using free local models (Transformers.js) - set OPENROUTER_API_KEY for better quality'
+        : 'Using free local models (Transformers.js) - set OPENROUTER_API_KEY for better quality',
+      reasoningEngine: hasHfToken
+        ? `Hugging Face Inference API available (${hfModel})`
+        : 'Hugging Face token not set - set HF_TOKEN in .env for reasoning engine'
     });
   });
 }

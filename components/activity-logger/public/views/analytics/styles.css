@@ -5,8 +5,10 @@
 
 /* Analytics View Container */
 .analytics-view {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: var(--space-xl);
+  height: 100%;
 }
 
 /* Data Status Alert */
@@ -140,11 +142,17 @@
 
 /* Chart Containers */
 .chart-container {
-  max-height: 300px;
+  max-height: 400px;
+  min-height: 300px;
+  position: relative;
+  margin: var(--space-md) 0;
 }
 
 .chart-container-small {
-  max-height: 250px;
+  max-height: 300px;
+  min-height: 200px;
+  position: relative;
+  margin: var(--space-md) 0;
 }
 
 /* Timescale Buttons */
@@ -178,22 +186,26 @@
 /* Analytics Grid Layout */
 .analytics-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: var(--space-lg);
+  grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+  gap: var(--space-xl);
+  margin: var(--space-lg) 0;
 }
 
 .analytics-grid-2col {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
-  gap: var(--space-lg);
+  grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
+  gap: var(--space-xl);
+  margin: var(--space-lg) 0;
 }
 
 /* Chart Header Controls */
 .chart-header-controls {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  margin-bottom: var(--space-sm);
+  align-items: flex-start;
+  margin-bottom: var(--space-md);
+  gap: var(--space-md);
+  flex-wrap: wrap;
 }
 
 .chart-header-controls h3,

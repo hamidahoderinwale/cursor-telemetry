@@ -301,12 +301,12 @@ function renderOverviewView(container) {
         <!-- Productivity Pulse -->
         <div class="card">
           <div class="card-header">
-            <h3 class="card-title">Productivity Pulse</h3>
-            <p class="card-subtitle">Today vs. weekly average</p>
+            <h3 class="card-title" title="Compares today's activity (file changes + AI prompts) to your weekly average. Shows how productive today is relative to your typical day.">Productivity Pulse</h3>
+            <p class="card-subtitle">Today vs. weekly average (interactions: file changes + AI prompts)</p>
           </div>
           <div class="card-body">
               <div class="productivity-pulse">
-              <div class="pulse-gauge">
+              <div class="pulse-gauge" title="Today is ${productivityPulse.toFixed(0)}% of your weekly daily average. ${productivityPulse >= 100 ? 'Above' : 'Below'} average productivity.">
                 <svg viewBox="0 0 200 120" class="pulse-svg">
                   <path d="M 20 100 A 80 80 0 0 1 180 100" 
                         fill="none" 
@@ -325,13 +325,21 @@ function renderOverviewView(container) {
                 </svg>
               </div>
               <div class="pulse-stats">
-                <div class="pulse-stat-item">
+                <div class="pulse-stat-item" title="Total interactions today: ${todayEvents} file changes + ${todayPrompts} AI prompts = ${currentActivity} interactions">
                   <span class="pulse-stat-label">Today</span>
                   <span class="pulse-stat-value">${currentActivity}</span>
+                  <span class="pulse-stat-unit" style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: 2px;">interactions</span>
+                  <span class="pulse-stat-breakdown" style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: 2px; text-align: center;">
+                    ${todayEvents} events + ${todayPrompts} prompts
+                  </span>
                 </div>
-                <div class="pulse-stat-item">
+                <div class="pulse-stat-item" title="Average daily interactions over the last 7 days: ${Math.round(weekEvents / 7)} file changes + ${Math.round(weekPrompts / 7)} AI prompts per day">
                   <span class="pulse-stat-label">Daily Avg</span>
                   <span class="pulse-stat-value">${avgDailyActivity.toFixed(1)}</span>
+                  <span class="pulse-stat-unit" style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: 2px;">interactions/day</span>
+                  <span class="pulse-stat-breakdown" style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: 2px; text-align: center;">
+                    ${Math.round(weekEvents / 7)} events + ${Math.round(weekPrompts / 7)} prompts
+                  </span>
                 </div>
               </div>
             </div>

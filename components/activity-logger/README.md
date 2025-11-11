@@ -313,13 +313,210 @@ Templates are in dedicated files:
 
 ## Data Sources
 
-The dashboard connects to the companion service (port 43917) and displays:
+The dashboard connects to the companion service (port 43917) and displays data collected from multiple sources. Here's how each data point is sourced:
 
-1. **File Changes** - Complete before/after code with file paths
-2. **AI Prompts** - Prompts from Cursor's database with conversation metadata
-3. **Terminal Commands** - Command history with exit codes
-4. **System Events** - Logging and status events
-5. **Context Snapshots** - Context window usage analytics
+### 1. File Changes
+**Source**: File system monitoring via Chokidar file watcher
+
+**Collection Method**:
+- Monitors workspace directories for file changes (create, modify, delete)
+- Uses Chokidar library for efficient file system watching
+- Calculates diffs between file versions using `diff` library
+- Captures complete before/after code content
+- Extracts file paths, line counts, and change statistics
+
+**Data Captured**:
+- File path and workspace
+- Before/after code content
+- Lines added/removed
+- Change type (create, modify, delete)
+- Timestamp of change
+- Session ID for correlation
+
+**Location**: `companion/src/services/file-watcher-service.js`, `companion/src/monitors/fileWatcher.js`
+
+---
+
+### 2. AI Prompts
+**Source**: Cursor's internal SQLite databases
+
+**Collection Method**:
+- Parses Cursor's workspace storage databases (`state.vscdb` files)
+- Extracts from `aiService.prompts` and `aiService.generations` tables
+- Syncs every 30 seconds via `syncPromptsFromCursorDB()`
+- Links prompts to generations by UUID
+- Threads conversations by conversation ID
+
+**Database Locations** (macOS):
+- `~/Library/Application Support/Cursor/User/workspaceStorage/{workspaceId}/state.vscdb`
+- `~/Library/Application Support/Cursor/User/globalStorage/`
+
+**Data Captured**:
+- Prompt text and AI responses
+- Model name and type
+- Context files (`context_files`, `at_files`)
+- Context file count
+- Lines added/removed (from linked code changes)
+- Thinking time (response latency)
+- Conversation ID and metadata
+- Message role (user/assistant)
+- Finish reason
+- Timestamp
+
+**Location**: `companion/src/database/cursor-db-parser.js`, `companion/src/index.js` (syncPromptsFromCursorDB)
+
+---
+
+### 3. Terminal Commands
+**Source**: Terminal process monitoring and shell history
+
+**Collection Method**:
+- Monitors terminal processes via process inspection
+- Captures command execution with exit codes
+- Tracks command duration
+- Links commands to workspace directories
+- Monitors Cursor's integrated terminal
+
+**Data Captured**:
+- Command text
+- Exit code
+- Execution duration
+- Working directory (workspace)
+- Timestamp
+- Process ID
+
+**Location**: `companion/src/monitors/terminal-monitor.js`
+
+---
+
+### 4. System Events & Metrics
+**Source**: Multiple system monitoring services
+
+**Collection Methods**:
+
+**a) System Resources** (every 5 seconds):
+- CPU usage and load average
+- Memory usage (total, used, free)
+- System uptime
+- Process count
+
+**b) Git Status** (every 30 seconds):
+- Current branch
+- Commit hash
+- Uncommitted changes
+- Repository status
+
+**c) IDE State** (every 2 seconds via AppleScript):
+- Active file in editor
+- Cursor position
+- Open tabs
+- Editor state
+
+**d) Status Messages** (every 2 seconds):
+- Cursor status bar messages
+- File read notifications
+- Context change indicators
+
+**e) Log Data** (every 60 seconds):
+- Cursor application logs
+- Error logs
+- System logs
+
+**Location**: `companion/src/services/data-capture.js`, `companion/src/monitors/ide-state-capture.js`, `companion/src/monitors/status-message-tracker.js`
+
+---
+
+### 5. Context Snapshots
+**Source**: IDE state capture and prompt context extraction
+
+**Collection Method**:
+- Captures context window state from IDE
+- Extracts context files from prompts (`context_files`, `at_files`)
+- Tracks context changes over time
+- Links context to file reads and prompts
+
+**Data Captured**:
+- Context file lists
+- @ referenced files
+- Context file count
+- Context window size
+- Context change timestamps
+- File read events
+
+**Location**: `companion/src/monitors/ide-state-capture.js`, `companion/src/analytics/context-analyzer.js`
+
+---
+
+### 6. Additional Data Sources
+
+**Screenshots** (optional):
+- Captures screenshots near events
+- Stored locally, served via image proxy
+- Location: `companion/src/monitors/screenshot-monitor.js`
+
+**Clipboard** (optional):
+- Monitors clipboard for prompt text
+- Captures when clipboard contains code/prompts
+- Location: `companion/src/monitors/clipboardMonitor.js`
+
+**MCP (Model Context Protocol)** (optional):
+- External data collection via JSON-RPC
+- Custom event logging
+- Location: `companion/src/routes/mcp.js`
+
+---
+
+### Data Flow
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    Data Sources                         │
+├─────────────────────────────────────────────────────────┤
+│                                                         │
+│  File System → Chokidar Watcher → File Changes         │
+│  Cursor DB → SQLite Parser → AI Prompts                │
+│  Terminal → Process Monitor → Commands                  │
+│  System → OS APIs → Resources/Metrics                   │
+│  IDE → AppleScript/Status → Context/State              │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
+                          ↓
+┌─────────────────────────────────────────────────────────┐
+│              Companion Service (Port 43917)              │
+├─────────────────────────────────────────────────────────┤
+│                                                         │
+│  • Data Capture Services                                │
+│  • SQLite Database (companion.db)                       │
+│  • API Routes                                           │
+│  • WebSocket Server                                     │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
+                          ↓
+┌─────────────────────────────────────────────────────────┐
+│                  Dashboard (Browser)                    │
+├─────────────────────────────────────────────────────────┤
+│                                                         │
+│  • REST API Calls                                       │
+│  • WebSocket Updates                                    │
+│  • IndexedDB Caching                                    │
+│  • Real-time Visualizations                             │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Data Storage
+
+All data is stored locally in:
+- **SQLite Database**: `companion/data/companion.db`
+- **IndexedDB** (browser): `CursorTelemetryDB` (for caching)
+- **File System**: Screenshots and exports
+
+### Privacy & Security
+
+- **All data stays local** - No cloud communication by default
+- **Read-only access** - Companion service only reads Cursor's databases, never modifies them
+- **User home directory only** - File watcher respects workspace boundaries
+- **Optional authentication** - Can be enabled for production deployments
 
 ## Data Export Features
 

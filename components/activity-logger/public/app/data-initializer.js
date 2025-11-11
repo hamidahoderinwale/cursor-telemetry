@@ -210,6 +210,14 @@ async function loadFromCache() {
     return;
   }
   
+  // Ensure database is initialized before accessing it
+  try {
+    await window.persistentStorage.init();
+  } catch (initError) {
+    console.warn('[WARNING] Failed to initialize database:', initError.message);
+    return;
+  }
+  
   // Load minimal recent data (last 1 hour) for fastest startup
   const now = Date.now();
   const oneHourAgo = now - 60 * 60 * 1000; // Reduced to 1 hour for even faster load

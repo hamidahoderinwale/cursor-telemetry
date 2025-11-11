@@ -25,7 +25,7 @@ class ClusterAnnotator {
   }
 
   async _doInitialize() {
-    // Try OpenRouter API first if available (optional - better quality)
+    // Try OpenRouter API first if available (preferred for better quality insights)
     try {
       const statusResponse = await fetch(`${this.apiBase}/api/ai/status`);
       if (statusResponse.ok) {
@@ -33,13 +33,14 @@ class ClusterAnnotator {
         if (status.available && status.hasApiKey) {
           this.useOpenRouter = true;
           this.isInitialized = true;
-          console.log('[CLUSTER-ANNOTATOR] ✓ Using OpenRouter API (premium)');
-          console.log(`[CLUSTER-ANNOTATOR]   Model: ${status.chatModel || 'qwen/qwen-2.5-0.5b-instruct:free'}`);
+          console.log('[CLUSTER-ANNOTATOR] ✓ Using OpenRouter API for cluster insights');
+          console.log(`[CLUSTER-ANNOTATOR]   Chat Model: ${status.chatModel || 'google/gemini-flash-1.5:free'}`);
+          console.log(`[CLUSTER-ANNOTATOR]   Embedding Model: ${status.embeddingModel || 'openai/text-embedding-3-small'}`);
           return;
         }
       }
     } catch (apiError) {
-      // Silently fall through to local models
+      console.debug('[CLUSTER-ANNOTATOR] OpenRouter API check failed, will use local models:', apiError.message);
     }
 
     // Primary option: Use Transformers.js (free, local, no API key needed)
@@ -224,14 +225,9 @@ class ClusterAnnotator {
 
   /**
    * Annotate cluster using embeddings to find common themes
+   * Uses OpenRouter API if available, otherwise falls back to local Transformers.js
    */
   async _annotateWithEmbeddings(features, modelName) {
-    if (!this.transformers || !this.isInitialized) {
-      throw new Error('Transformers.js not initialized');
-    }
-
-    const { pipeline } = this.transformers;
-    
     // Create embeddings for file names and paths
     const texts = [
       ...features.fileNames.slice(0, 10),
@@ -242,33 +238,70 @@ class ClusterAnnotator {
       return { name: 'Unknown Cluster', keywords: [] };
     }
 
+    // Try OpenRouter API first if available (better quality embeddings)
+    if (this.useOpenRouter && window.OpenRouterEmbeddingService) {
+      try {
+        const embeddingService = window.OpenRouterEmbeddingService;
+        const available = await embeddingService.checkAvailability();
+        
+        if (available) {
+          const embeddings = await embeddingService.generateEmbeddings(texts);
+          if (embeddings && embeddings.length > 0 && embeddings[0]) {
+            // Use OpenRouter embeddings for semantic analysis
+            return this._analyzeEmbeddingsForCluster(texts, embeddings, features);
+          }
+        }
+      } catch (error) {
+        console.debug('[CLUSTER-ANNOTATOR] OpenRouter embeddings failed, using local model:', error.message);
+      }
+    }
+
+    // Fallback to local Transformers.js
+    if (!this.transformers || !this.isInitialized) {
+      throw new Error('No embedding service available');
+    }
+
+    const { pipeline } = this.transformers;
+
     try {
       // Use feature-extraction pipeline for embeddings
       const extractor = await pipeline('feature-extraction', modelName, {
         quantized: true // Use quantized model for faster inference
       });
 
-      // Generate embeddings
-      const embeddings = await extractor(texts, { pooling: 'mean', normalize: true });
+      // Generate embeddings (Transformers.js returns tensor, convert to array)
+      const embeddingsTensor = await extractor(texts, { pooling: 'mean', normalize: true });
+      const embeddings = Array.isArray(embeddingsTensor) 
+        ? embeddingsTensor 
+        : embeddingsTensor.tolist ? embeddingsTensor.tolist() : Array.from(embeddingsTensor.data);
       
-      // Find most common words/patterns
-      const keywords = this._extractKeywordsFromTexts(texts);
-      
-      // Determine category based on file extensions and paths
-      const category = this._categorizeCluster(features);
-      
-      // Generate name from keywords (async if using OpenRouter)
-      const name = await this._generateNameFromKeywords(keywords, category, features);
-
-      return {
-        name,
-        keywords: keywords.slice(0, 5),
-        category
-      };
+      // Use shared analysis method
+      return this._analyzeEmbeddingsForCluster(texts, embeddings, features);
     } catch (error) {
       console.warn('[CLUSTER-ANNOTATOR] Embedding extraction failed:', error.message);
       throw error;
     }
+  }
+
+  /**
+   * Analyze embeddings to extract cluster name, keywords, and category
+   * Works with both OpenRouter embeddings (arrays) and Transformers.js embeddings (tensors/arrays)
+   */
+  async _analyzeEmbeddingsForCluster(texts, embeddings, features) {
+    // Find most common words/patterns
+    const keywords = this._extractKeywordsFromTexts(texts);
+    
+    // Determine category based on file extensions and paths
+    const category = this._categorizeCluster(features);
+    
+    // Generate name from keywords (async if using OpenRouter)
+    const name = await this._generateNameFromKeywords(keywords, category, features);
+
+    return {
+      name,
+      keywords: keywords.slice(0, 5),
+      category
+    };
   }
 
   /**
