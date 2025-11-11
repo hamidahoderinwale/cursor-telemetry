@@ -5,15 +5,12 @@
 // Use external config (from config.js) if available, otherwise use defaults
 const EXTERNAL_CONFIG = window.CONFIG || {};
 
-// TODO: Replace 'YOUR_HEROKU_URL_HERE' with your actual Heroku backend URL
-// Example: 'https://your-app.herokuapp.com'
-const HEROKU_BACKEND_URL = 'YOUR_HEROKU_URL_HERE'; // Set your Heroku URL here
+// Render backend URL
+const RENDER_BACKEND_URL = 'https://cursor-telemetry.onrender.com';
 
 const DASHBOARD_CONFIG = {
-  API_BASE: EXTERNAL_CONFIG.API_BASE_URL || (HEROKU_BACKEND_URL !== 'YOUR_HEROKU_URL_HERE' ? HEROKU_BACKEND_URL : 'http://localhost:43917'),
-  WS_URL: EXTERNAL_CONFIG.WS_URL || (HEROKU_BACKEND_URL !== 'YOUR_HEROKU_URL_HERE' 
-    ? HEROKU_BACKEND_URL.replace('https://', 'wss://').replace('http://', 'ws://')
-    : 'ws://localhost:43917'),
+  API_BASE: EXTERNAL_CONFIG.API_BASE_URL || RENDER_BACKEND_URL,
+  WS_URL: EXTERNAL_CONFIG.WS_URL || RENDER_BACKEND_URL.replace('https://', 'wss://').replace('http://', 'ws://'),
   REFRESH_INTERVAL: 120000,  // 2 minutes to prevent request overload (down from 30s)
   ENABLE_TF_IDF: false, // Disable TF-IDF by default to save memory
   ENABLE_SEMANTIC_SEARCH: false, // Disable semantic analysis by default - MUST be false

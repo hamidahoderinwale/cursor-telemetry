@@ -70,30 +70,36 @@ EOF
         echo "   Your dashboard is now live on Vercel"
         ;;
     
-    heroku)
-        echo "📦 Deploying backend to Heroku..."
+    render)
+        echo "📦 Deploying backend to Render..."
         echo ""
-        echo "Heroku deployment steps:"
-        echo "1. Install Heroku CLI: brew install heroku"
-        echo "2. Login: heroku login"
-        echo "3. Create app: heroku create your-app-name"
-        echo "4. Set environment variables:"
-        echo "   heroku config:set HOST=0.0.0.0"
-        echo "   heroku config:set NODE_ENV=production"
-        echo "5. Deploy: git push heroku master"
+        echo "Render deployment steps:"
+        echo "1. Go to https://render.com"
+        echo "2. Sign up/login and create a new Web Service"
+        echo "3. Connect your GitHub repository"
+        echo "4. Configure:"
+        echo "   - Name: cursor-telemetry-companion"
+        echo "   - Environment: Node"
+        echo "   - Build Command: cd components/activity-logger/companion && npm install"
+        echo "   - Start Command: cd components/activity-logger/companion && node src/index.js"
+        echo "   - Environment Variables:"
+        echo "     HOST=0.0.0.0"
+        echo "     NODE_ENV=production"
+        echo "     PORT=43917 (or let Render set it automatically)"
+        echo "5. Deploy (Render will auto-deploy from GitHub)"
         echo ""
-        echo "After deployment, update frontend API URL to your Heroku URL"
+        echo "After deployment, update frontend API URL to your Render URL"
         ;;
     
     *)
-        echo "Usage: ./deploy.sh [netlify|vercel|heroku] [api-url]"
+        echo "Usage: ./deploy.sh [netlify|vercel|render] [api-url]"
         echo ""
         echo "Examples:"
         echo "  ./deploy.sh netlify"
-        echo "  ./deploy.sh netlify https://my-api.herokuapp.com"
-        echo "  ./deploy.sh vercel https://my-api.herokuapp.com"
+        echo "  ./deploy.sh netlify https://my-api.onrender.com"
+        echo "  ./deploy.sh vercel https://my-api.onrender.com"
         echo ""
-        echo "For Heroku backend deployment, see README.md"
+        echo "For Render backend deployment, see README.md"
         exit 1
         ;;
 esac

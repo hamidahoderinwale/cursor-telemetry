@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: cursor-telemetry-companion
+    env: node
+    buildCommand: cd components/activity-logger/companion && npm install
+    startCommand: cd components/activity-logger/companion && node src/index.js
+    envVars:
+      - key: HOST
+        value: 0.0.0.0
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 43917
+    healthCheckPath: /health
+    plan: free
+
