@@ -266,11 +266,9 @@ async function loadFromCache() {
           if (olderEvents.length > 0 || olderPrompts.length > 0) {
             window.state.data.events = [...(window.state.data.events || []), ...olderEvents];
             window.state.data.prompts = [...(window.state.data.prompts || []), ...olderPrompts];
-            console.log(`[BACKGROUND] Loaded ${olderEvents.length} older events and ${olderPrompts.length} older prompts`);
-            
-            // Recalculate stats with full dataset (deferred)
+            // Recalculate stats with full dataset (debounced, will batch)
             if (window.calculateStats) {
-              setTimeout(() => window.calculateStats(), 100);
+              window.calculateStats(); // Debounced internally
             }
           }
         }
@@ -410,17 +408,11 @@ async function fetchRecentData() {
         })();
     
     // Process activity
-    // Only log debug info if not in offline mode (to reduce spam)
-    if (!isOffline) {
-      console.log('[DEBUG] Activity response:', { hasActivity: !!activity, hasData: !!activity?.data, isArray: Array.isArray(activity?.data), length: activity?.data?.length });
-    }
-    
     if (activity && activity.data && Array.isArray(activity.data)) {
       // Store total count for all-time stats
       if (activity.pagination?.total) {
         if (!window.state.stats) window.state.stats = {};
         window.state.stats.totalEventCount = activity.pagination.total;
-        console.log(`[STATS] Total events in database: ${activity.pagination.total}`);
       }
       
       // No need to filter - API already returns recent data
@@ -432,24 +424,16 @@ async function fetchRecentData() {
       }
       
       window.state.data.events = recentEvents;
-      if (!isOffline) {
-        console.log(`[DATA] Loaded ${recentEvents.length} recent events (of ${activity.pagination?.total || 'unknown'} total)`);
-      }
       
       // Store in cache
       if (window.persistentStorage) {
         await window.persistentStorage.storeEvents(recentEvents);
       }
     } else {
-      console.warn('[WARNING] Activity data not in expected format:', activity);
       window.state.data.events = [];
     }
     
     // Process prompts
-    // Only log debug info if not in offline mode (to reduce spam)
-    if (!isOffline) {
-      console.log('[DEBUG] Prompts response:', { hasEntries: !!prompts.entries, isArray: Array.isArray(prompts.entries), length: prompts.entries?.length, keys: Object.keys(prompts) });
-    }
     
     if (prompts.entries && Array.isArray(prompts.entries)) {
       // Map API fields to match dashboard expectations
@@ -475,16 +459,12 @@ async function fetchRecentData() {
       
       // No need to filter - API already returns recent data
       window.state.data.prompts = mappedPrompts;
-      if (!isOffline) {
-        console.log(`[DATA] Loaded ${mappedPrompts.length} recent prompts`);
-      }
       
       // Store in cache
       if (window.persistentStorage) {
         await window.persistentStorage.storePrompts(mappedPrompts);
       }
     } else {
-      console.warn('[WARNING] Prompts data not in expected format:', prompts);
       window.state.data.prompts = [];
     }
     
@@ -553,12 +533,18 @@ async function fetchRecentData() {
       // System resources are optional, don't fail if unavailable
     }
     
-    // Calculate stats after fetching data
+    // Calculate stats after fetching data (debounced, will batch multiple calls)
     if (!isOffline) {
-      console.log(`[SYNC] Fetch complete. Events: ${window.state.data.events.length}, Prompts: ${window.state.data.prompts.length}`);
+      // Only log if significant data change
+      const eventCount = window.state.data.events.length;
+      const promptCount = window.state.data.prompts.length;
+      if (eventCount > 0 || promptCount > 0) {
+        // Log less frequently - only on significant updates
+        console.log(`[SYNC] Data updated. Events: ${eventCount}, Prompts: ${promptCount}`);
+      }
     }
     if (window.calculateStats) {
-      window.calculateStats();
+      window.calculateStats(); // Debounced internally
     }
     
     // FIX: Re-render current view to update charts with fresh data

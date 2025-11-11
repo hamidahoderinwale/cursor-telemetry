@@ -48,91 +48,128 @@ if (!window.CONFIG || !window.state || !window.APIClient) {
 // IMPORTANT: Do NOT define local functions with the same names - this causes infinite recursion!
 // Always use window.initializeDashboard, window.fetchRecentData, etc. directly.
 
-async function calculateStats() {
+// Debounce stats calculation to prevent excessive recalculations
+let statsCalculationTimeout = null;
+let statsCalculationPending = false;
+let lastStatsDataHash = null;
+
+function getDataHash() {
   const events = state.data.events || [];
-  const entries = state.data.entries || [];
-  const terminalCommands = state.data.terminalCommands || [];
-
-  // Count sessions (optimized with Set) - limit processing for speed
-  const sessions = new Set();
-  // Process only recent items for faster calculation (limit to 200 most recent)
-  const recentItems = [...events.slice(0, 200), ...entries.slice(0, 200)];
-  recentItems.forEach(item => {
-    if (item.session_id) sessions.add(item.session_id);
-  });
-  
-  // For large datasets, use cached total if available
-  if (events.length > 200 && state.stats?.totalEventCount) {
-    // Use cached count for large datasets
-  }
-
-  // Count file changes (use totalEventCount for all-time if available, otherwise use filtered count)
-  const fileChanges = state.stats?.totalEventCount || events.filter(e => 
-    e.type === 'file_change' || e.type === 'code_change'
-  ).length;
-  
-  // Count terminal commands
-  state.stats.terminalCommands = terminalCommands.length;
-
-  // Count AI interactions - prompts with meaningful content
-  // Uses helper function to check all possible text field names
-  const aiInteractions = (state.data.prompts || []).filter(p => {
-    return window.hasPromptContent ? window.hasPromptContent(p, 5) : 
-           (() => {
-             const text = p.text || p.prompt || p.preview || p.content || '';
-             return text && text.length > 5;
-           })();
-  }).length;
-  
-  console.log(`AI Interactions: ${aiInteractions} of ${state.data.prompts?.length || 0} prompts`);
-
-  // Calculate code changed (approximate) - limit to recent events for speed
-  let totalChars = 0;
-  // Only process most recent 200 events for faster calculation
-  const recentEvents = events.slice(0, 200);
-  recentEvents.forEach(e => {
-    try {
-      const details = typeof e.details === 'string' ? JSON.parse(e.details) : e.details;
-      const added = details?.chars_added || 0;
-      const deleted = details?.chars_deleted || 0;
-      totalChars += added + deleted;
-    } catch (err) {
-      // Silently skip parsing errors
-    }
-  });
-  
-  // Scale up estimate if we have more events (rough approximation)
-  if (events.length > 200) {
-    totalChars = Math.round(totalChars * (events.length / 200));
-  }
-  
-  console.log(`[STATS] Code changed: ${totalChars} chars (${(totalChars / 1024).toFixed(1)} KB) from ${events.length} events`);
-
-  // Calculate average context usage (optimized - limit to recent prompts)
-  let totalContextUsage = 0;
-  let contextUsageCount = 0;
   const prompts = state.data.prompts || [];
-  // Only process most recent 200 prompts for faster calculation
-  const recentPrompts = prompts.slice(0, 200);
-  recentPrompts.forEach(p => {
-    if (p.contextUsage && p.contextUsage > 0) {
-      totalContextUsage += p.contextUsage;
-      contextUsageCount++;
-    }
-  });
-  const avgContextUsage = contextUsageCount > 0 ? (totalContextUsage / contextUsageCount) : 0;
+  // Create a simple hash based on data length and last item timestamp
+  const lastEventTime = events.length > 0 ? (events[0].timestamp || events[0].id || '') : '';
+  const lastPromptTime = prompts.length > 0 ? (prompts[0].timestamp || prompts[0].id || '') : '';
+  return `${events.length}-${prompts.length}-${lastEventTime}-${lastPromptTime}`;
+}
 
-  state.stats = {
-    sessions: sessions.size,
-    fileChanges: fileChanges,
-    aiInteractions: aiInteractions,
-    codeChanged: (totalChars / 1024).toFixed(1), // KB
-    avgContext: avgContextUsage.toFixed(1) // percentage
-  };
+async function calculateStats() {
+  // Debounce: if called multiple times quickly, only run once
+  if (statsCalculationPending) {
+    return; // Already calculating, skip
+  }
   
-  console.log('[STATS] Final stats:', state.stats);
+  const dataHash = getDataHash();
+  if (dataHash === lastStatsDataHash) {
+    return; // Data hasn't changed, skip recalculation
+  }
+  
+  // Clear any pending timeout
+  if (statsCalculationTimeout) {
+    clearTimeout(statsCalculationTimeout);
+  }
+  
+  // Debounce: wait 200ms before calculating (batch multiple calls)
+  statsCalculationTimeout = setTimeout(() => {
+    _calculateStatsInternal();
+  }, 200);
+}
 
-  updateStatsDisplay();
+async function _calculateStatsInternal() {
+  if (statsCalculationPending) return;
+  statsCalculationPending = true;
+  
+  try {
+    const events = state.data.events || [];
+    const entries = state.data.entries || [];
+    const terminalCommands = state.data.terminalCommands || [];
+
+    // Count sessions (optimized with Set) - limit processing for speed
+    const sessions = new Set();
+    // Process only recent items for faster calculation (limit to 200 most recent)
+    const recentItems = [...events.slice(0, 200), ...entries.slice(0, 200)];
+    recentItems.forEach(item => {
+      if (item.session_id) sessions.add(item.session_id);
+    });
+
+    // Count file changes (use totalEventCount for all-time if available, otherwise use filtered count)
+    const fileChanges = state.stats?.totalEventCount || events.filter(e => 
+      e.type === 'file_change' || e.type === 'code_change'
+    ).length;
+    
+    // Count terminal commands
+    state.stats = state.stats || {};
+    state.stats.terminalCommands = terminalCommands.length;
+
+    // Count AI interactions - prompts with meaningful content
+    // Uses helper function to check all possible text field names
+    const aiInteractions = (state.data.prompts || []).filter(p => {
+      return window.hasPromptContent ? window.hasPromptContent(p, 5) : 
+             (() => {
+               const text = p.text || p.prompt || p.preview || p.content || '';
+               return text && text.length > 5;
+             })();
+    }).length;
+
+    // Calculate code changed (approximate) - limit to recent events for speed
+    let totalChars = 0;
+    // Only process most recent 200 events for faster calculation
+    const recentEvents = events.slice(0, 200);
+    recentEvents.forEach(e => {
+      try {
+        const details = typeof e.details === 'string' ? JSON.parse(e.details) : e.details;
+        const added = details?.chars_added || 0;
+        const deleted = details?.chars_deleted || 0;
+        totalChars += added + deleted;
+      } catch (err) {
+        // Silently skip parsing errors
+      }
+    });
+    
+    // Scale up estimate if we have more events (rough approximation)
+    if (events.length > 200) {
+      totalChars = Math.round(totalChars * (events.length / 200));
+    }
+
+    // Calculate average context usage (optimized - limit to recent prompts)
+    let totalContextUsage = 0;
+    let contextUsageCount = 0;
+    const prompts = state.data.prompts || [];
+    // Only process most recent 200 prompts for faster calculation
+    const recentPrompts = prompts.slice(0, 200);
+    recentPrompts.forEach(p => {
+      if (p.contextUsage && p.contextUsage > 0) {
+        totalContextUsage += p.contextUsage;
+        contextUsageCount++;
+      }
+    });
+    const avgContextUsage = contextUsageCount > 0 ? (totalContextUsage / contextUsageCount) : 0;
+
+    state.stats = {
+      ...state.stats,
+      sessions: sessions.size,
+      fileChanges: fileChanges,
+      aiInteractions: aiInteractions,
+      codeChanged: (totalChars / 1024).toFixed(1), // KB
+      avgContext: avgContextUsage.toFixed(1) // percentage
+    };
+    
+    // Update hash to prevent redundant recalculations
+    lastStatsDataHash = getDataHash();
+
+    updateStatsDisplay();
+  } finally {
+    statsCalculationPending = false;
+  }
 }
 
 function handleRealtimeUpdate(data) {
