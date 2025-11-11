@@ -76,13 +76,86 @@ function groupIntoTemporalThreads(items, timeWindowMs = 15 * 60 * 1000) {
  * Render unified timeline with alternating layout (events left, prompts right)
  */
 function renderUnifiedTimeline(items) {
-  // First: Group prompts by conversation for threading
-  const conversationMap = new Map();
-  const standalonePrompts = [];
-  const nonPromptItems = [];
+  // Build full hierarchy: Workspace → Conversation → Tabs → Prompts
+  const hierarchyBuilder = window.ConversationHierarchyBuilder ? 
+    new window.ConversationHierarchyBuilder() : null;
   
-  items.forEach(item => {
-    if (item.itemType === 'prompt') {
+  const prompts = items.filter(item => item.itemType === 'prompt');
+  const events = items.filter(item => item.itemType !== 'prompt');
+  
+  // Build hierarchy if builder is available
+  let hierarchy = null;
+  if (hierarchyBuilder && prompts.length > 0) {
+    try {
+      hierarchy = hierarchyBuilder.buildHierarchy(prompts, events);
+    } catch (error) {
+      console.warn('[TIMELINE] Failed to build hierarchy, using fallback:', error);
+    }
+  }
+  
+  // Group by workspace → conversation → tabs
+  const workspaceMap = new Map();
+  const standalonePrompts = [];
+  const nonPromptItems = events;
+  
+  if (hierarchy) {
+    // Use hierarchy structure
+    hierarchy.workspaces.forEach(workspace => {
+      workspace.conversations.forEach(conversation => {
+        const workspaceId = workspace.id;
+        const conversationId = conversation.id;
+        
+        if (!workspaceMap.has(workspaceId)) {
+          workspaceMap.set(workspaceId, {
+            id: workspaceId,
+            name: workspace.name,
+            path: workspace.path,
+            conversations: new Map()
+          });
+        }
+        
+        const ws = workspaceMap.get(workspaceId);
+        if (!ws.conversations.has(conversationId)) {
+          ws.conversations.set(conversationId, {
+            id: conversationId,
+            title: conversation.title,
+            workspaceId: workspaceId,
+            workspaceName: workspace.name,
+            tabs: new Map(),
+            rootPrompts: [],
+            allPrompts: conversation.allPrompts || [],
+            metadata: conversation.metadata,
+            timestamp: conversation.metadata?.firstMessage || Date.now()
+          });
+        }
+        
+        const conv = ws.conversations.get(conversationId);
+        
+        // Add tabs
+        if (conversation.tabs && conversation.tabs.length > 0) {
+          conversation.tabs.forEach(tab => {
+            if (!conv.tabs.has(tab.id)) {
+              conv.tabs.set(tab.id, {
+                id: tab.id,
+                title: tab.title,
+                prompts: tab.promptIds ? 
+                  prompts.filter(p => tab.promptIds.includes(p.id || p.timestamp)) : []
+              });
+            }
+          });
+        }
+        
+        // Add root prompts
+        if (conversation.rootPromptIds && conversation.rootPromptIds.length > 0) {
+          conv.rootPrompts = prompts.filter(p => 
+            conversation.rootPromptIds.includes(p.id || p.timestamp)
+          );
+        }
+      });
+    });
+  } else {
+    // Fallback: Group prompts by conversation for threading
+    prompts.forEach(item => {
       // Check if this is a conversation thread or a message
       const isThread = item.type === 'conversation-thread' && !item.parentConversationId;
       const conversationId = isThread ? item.composerId : (item.parentConversationId || item.composerId);
@@ -90,58 +163,89 @@ function renderUnifiedTimeline(items) {
       // Only group prompts that are part of conversations
       // Standalone prompts (no conversationId) should be rendered individually
       if (conversationId) {
-        if (!conversationMap.has(conversationId)) {
-          conversationMap.set(conversationId, {
-            thread: isThread ? item : null,
-            messages: [],
+        const workspaceId = item.workspace_id || item.workspaceId || 
+                           item.workspace_path || item.workspacePath || 
+                           'unknown';
+        
+        if (!workspaceMap.has(workspaceId)) {
+          workspaceMap.set(workspaceId, {
+            id: workspaceId,
+            name: item.workspace_name || item.workspaceName || workspaceId.split('/').pop(),
+            path: item.workspace_path || item.workspacePath || workspaceId,
+            conversations: new Map()
+          });
+        }
+        
+        const ws = workspaceMap.get(workspaceId);
+        if (!ws.conversations.has(conversationId)) {
+          ws.conversations.set(conversationId, {
+            id: conversationId,
+            title: item.conversationTitle || item.conversation_title || 'Untitled Conversation',
+            workspaceId: workspaceId,
+            workspaceName: ws.name,
+            tabs: new Map(),
+            rootPrompts: [],
+            allPrompts: [],
             timestamp: item.sortTime
           });
         }
         
-        const conv = conversationMap.get(conversationId);
-        if (isThread) {
-          conv.thread = item;
-        } else {
-          conv.messages.push(item);
-        }
-        conv.timestamp = Math.max(conv.timestamp, item.sortTime);
+        const conv = ws.conversations.get(conversationId);
+        conv.allPrompts.push(item);
         
-        // If no thread set yet but this item has a title, use it as thread
-        if (!conv.thread && (item.conversationTitle || item.text || item.prompt || item.content)) {
-          conv.thread = item;
+        // Check if this is a tab/thread
+        const parentId = item.parent_conversation_id || item.parentConversationId;
+        if (parentId && parentId !== conversationId) {
+          if (!conv.tabs.has(parentId)) {
+            conv.tabs.set(parentId, {
+              id: parentId,
+              title: `Tab ${parentId.substring(0, 8)}`,
+              prompts: []
+            });
+          }
+          conv.tabs.get(parentId).prompts.push(item);
+        } else {
+          conv.rootPrompts.push(item);
         }
+        
+        conv.timestamp = Math.max(conv.timestamp || 0, item.sortTime);
       } else {
         // This is a standalone prompt, not part of a conversation
         standalonePrompts.push(item);
       }
-    } else if (item.itemType === 'status') {
-      // Status messages go on the left side
-      nonPromptItems.push(item);
-    } else {
-      nonPromptItems.push(item);
-    }
-  });
-  
-  // Convert conversations to timeline items
-  // If a conversation has only 1 message, treat it as a standalone prompt instead
-  const conversationItems = Array.from(conversationMap.values())
-    .filter(conv => conv.messages.length > 0 || conv.thread) // Only include if has messages or thread
-    .map(conv => {
-      // If only 1 message and no thread, render as standalone prompt
-      if (conv.messages.length === 1 && !conv.thread) {
-        return {
-          ...conv.messages[0],
-          itemType: 'prompt',
-          sortTime: conv.messages[0].sortTime || conv.timestamp
-        };
-      }
-      // Otherwise, render as conversation
-      return {
-        itemType: 'conversation',
-        conversation: conv,
-        sortTime: conv.timestamp
-      };
     });
+  }
+  
+  // Convert workspace conversations to timeline items
+  const conversationItems = [];
+  workspaceMap.forEach((workspace, workspaceId) => {
+    workspace.conversations.forEach((conversation, conversationId) => {
+      // Only include if has prompts
+      if (conversation.allPrompts.length > 0 || conversation.rootPrompts.length > 0) {
+        // If only 1 root prompt and no tabs, treat as standalone prompt
+        if (conversation.rootPrompts.length === 1 && conversation.tabs.size === 0) {
+          conversationItems.push({
+            ...conversation.rootPrompts[0],
+            itemType: 'prompt',
+            sortTime: conversation.rootPrompts[0].sortTime || conversation.timestamp,
+            workspaceId: workspaceId,
+            workspaceName: workspace.name
+          });
+        } else {
+          // Render as conversation with hierarchy
+          conversationItems.push({
+            itemType: 'conversation',
+            conversation: {
+              ...conversation,
+              workspace: workspace,
+              tabs: Array.from(conversation.tabs.values())
+            },
+            sortTime: conversation.timestamp
+          });
+        }
+      }
+    });
+  });
   
   // Merge all items (conversations, standalone prompts, and other items)
   const allItems = [...conversationItems, ...standalonePrompts, ...nonPromptItems]
@@ -150,6 +254,43 @@ function renderUnifiedTimeline(items) {
       const bTime = b.sortTime || 0;
       return bTime - aTime;
     });
+  
+  // Analyze conversation flow if analyzer is available
+  let conversationAnalytics = {};
+  // Build a flat conversation map for the analyzer (backward compatibility)
+  const conversationMapForAnalyzer = new Map();
+  if (workspaceMap && workspaceMap.size > 0) {
+    workspaceMap.forEach((workspace, workspaceId) => {
+      if (workspace && workspace.conversations) {
+        workspace.conversations.forEach((conversation, conversationId) => {
+          if (conversation) {
+            conversationMapForAnalyzer.set(conversationId, {
+              thread: conversation.rootPrompts?.[0] || null,
+              messages: conversation.allPrompts || [],
+              timestamp: conversation.timestamp
+            });
+          }
+        });
+      }
+    });
+  }
+  
+  // Also create an alias for backward compatibility (in case any code references conversationMap)
+  const conversationMap = conversationMapForAnalyzer;
+  
+  if (window.ConversationFlowAnalyzer && conversationMapForAnalyzer.size > 0) {
+    try {
+      const analyzer = new window.ConversationFlowAnalyzer();
+      conversationAnalytics = analyzer.analyzeConversationFlow(conversationMapForAnalyzer);
+      // Store analytics for use in rendering
+      window._conversationAnalytics = conversationAnalytics;
+    } catch (error) {
+      console.warn('[TIMELINE] Conversation flow analysis failed:', error);
+      window._conversationAnalytics = {};
+    }
+  } else {
+    window._conversationAnalytics = {};
+  }
   
   // Apply temporal threading to group items by time windows
   // Use shorter window for conversations to avoid grouping too many together
@@ -245,7 +386,28 @@ function extractConversationTitle(conversation) {
 }
 
 function renderConversationThread(conversation, side = 'right') {
-  const { thread, messages } = conversation;
+  // Support both old structure (thread, messages) and new hierarchy structure
+  const isHierarchy = conversation.workspace || conversation.tabs || conversation.rootPrompts;
+  
+  let thread, messages, workspace, tabs, rootPrompts, allPrompts;
+  
+  if (isHierarchy) {
+    // New hierarchy structure
+    workspace = conversation.workspace || {};
+    tabs = conversation.tabs || [];
+    rootPrompts = conversation.rootPrompts || [];
+    allPrompts = conversation.allPrompts || [];
+    messages = allPrompts;
+    thread = rootPrompts[0] || allPrompts[0] || null;
+  } else {
+    // Old structure (backward compatibility)
+    thread = conversation.thread;
+    messages = conversation.messages || [];
+    workspace = null;
+    tabs = [];
+    rootPrompts = [];
+    allPrompts = messages;
+  }
   
   /**
    * Extract meaningful text from a message/prompt object
@@ -418,12 +580,92 @@ function renderConversationThread(conversation, side = 'right') {
     title = `${title} (${contextInfo})`;
   }
   
-  const time = window.formatTimeAgo(thread?.timestamp || conversation.timestamp);
-  const messageCount = messages.length;
-  const threadId = thread?.composerId || `conv-${Date.now()}`;
+  const time = window.formatTimeAgo(thread?.timestamp || conversation.timestamp || conversation.metadata?.firstMessage);
+  const messageCount = allPrompts.length || messages.length;
+  const threadId = thread?.composerId || thread?.conversationId || conversation.id || `conv-${Date.now()}`;
   
   // Sort messages chronologically
-  const sortedMessages = messages.sort((a, b) => a.sortTime - b.sortTime);
+  const sortedMessages = allPrompts.length > 0 
+    ? [...allPrompts].sort((a, b) => (a.sortTime || a.timestamp || 0) - (b.sortTime || b.timestamp || 0))
+    : [...messages].sort((a, b) => (a.sortTime || a.timestamp || 0) - (b.sortTime || b.timestamp || 0));
+  
+  // Get conversation analytics if available
+  const conversationId = thread?.composerId || thread?.conversationId || conversation.timestamp;
+  const analytics = window._conversationAnalytics?.[conversationId] || null;
+  
+  // Build flow indicators from analytics
+  let flowIndicators = '';
+  if (analytics) {
+    const indicators = [];
+    
+    // Pattern badge
+    if (analytics.turnPattern && analytics.turnPattern !== 'single') {
+      const patternLabel = analytics.turnPattern.charAt(0).toUpperCase() + analytics.turnPattern.slice(1);
+      const patternClass = window.ConversationFlowAnalyzer ? 
+        (new window.ConversationFlowAnalyzer()).getPatternBadgeClass(analytics.turnPattern) : 
+        'timeline-badge-muted';
+      indicators.push(`<span class="timeline-badge ${patternClass}" title="Turn pattern: ${patternLabel}">${patternLabel}</span>`);
+    }
+    
+    // Conversation type badge
+    if (analytics.conversationType && analytics.conversationType !== 'linear') {
+      const typeLabel = analytics.conversationType.charAt(0).toUpperCase() + analytics.conversationType.slice(1);
+      const typeClass = window.ConversationFlowAnalyzer ? 
+        (new window.ConversationFlowAnalyzer()).getTypeBadgeClass(analytics.conversationType) : 
+        'timeline-badge-muted';
+      indicators.push(`<span class="timeline-badge ${typeClass}" title="Conversation type: ${typeLabel}">${typeLabel}</span>`);
+    }
+    
+    // Health status badge
+    if (analytics.health && analytics.health.status) {
+      const healthLabel = analytics.health.status.charAt(0).toUpperCase() + analytics.health.status.slice(1);
+      const healthClass = window.ConversationFlowAnalyzer ? 
+        (new window.ConversationFlowAnalyzer()).getHealthBadgeClass(analytics.health.status) : 
+        'timeline-badge-muted';
+      indicators.push(`<span class="timeline-badge ${healthClass}" title="Status: ${healthLabel}">${healthLabel}</span>`);
+    }
+    
+    // Depth indicator
+    if (analytics.depth > 0) {
+      indicators.push(`<span class="timeline-badge timeline-badge-muted" title="Conversation depth: ${analytics.depth} levels">Depth: ${analytics.depth}</span>`);
+    }
+    
+    // Branching indicator
+    if (analytics.relationships && analytics.relationships.childCount > 0) {
+      indicators.push(`<span class="timeline-badge timeline-badge-accent" title="${analytics.relationships.childCount} child conversation(s)">${analytics.relationships.childCount} branch${analytics.relationships.childCount !== 1 ? 'es' : ''}</span>`);
+    }
+    
+    // Sibling indicator
+    if (analytics.relationships && analytics.relationships.siblingCount > 0) {
+      indicators.push(`<span class="timeline-badge timeline-badge-muted" title="${analytics.relationships.siblingCount} sibling conversation(s)">${analytics.relationships.siblingCount} sibling${analytics.relationships.siblingCount !== 1 ? 's' : ''}</span>`);
+    }
+    
+    if (indicators.length > 0) {
+      flowIndicators = `<div style="display: flex; gap: var(--space-xs); flex-wrap: wrap; margin-top: var(--space-xs);">${indicators.join('')}</div>`;
+    }
+  }
+  
+  // Build metadata row with flow analytics
+  let metadataRow = '';
+  if (analytics) {
+    const metadataItems = [];
+    
+    if (analytics.responseTime && analytics.responseTime.averageSeconds) {
+      metadataItems.push(`<span class="timeline-metadata-item">Avg response: ${analytics.responseTime.averageSeconds}s</span>`);
+    }
+    
+    if (analytics.messageRatio) {
+      metadataItems.push(`<span class="timeline-metadata-item">Ratio: ${analytics.messageRatio}</span>`);
+    }
+    
+    if (analytics.relationships && analytics.relationships.parentConversationId) {
+      metadataItems.push(`<span class="timeline-metadata-item" title="Parent conversation">Part of thread</span>`);
+    }
+    
+    if (metadataItems.length > 0) {
+      metadataRow = `<div class="timeline-metadata-row">${metadataItems.join('<span class="timeline-metadata-separator">•</span>')}</div>`;
+    }
+  }
   
   return `
     <div class="timeline-item timeline-item-${side} conversation-timeline-item">
@@ -438,12 +680,14 @@ function renderConversationThread(conversation, side = 'right') {
         </div>
         <div class="timeline-description">
           <span class="badge badge-prompt">Conversation</span>
-          ${thread?.workspaceName ? `<span class="badge">${window.escapeHtml(thread.workspaceName)}</span>` : ''}
+          ${workspace?.name ? `<span class="badge" style="background: var(--color-success); color: white;" title="Workspace: ${window.escapeHtml(workspace.path || workspace.name)}">📁 ${window.escapeHtml(workspace.name)}</span>` : 
+            (thread?.workspaceName ? `<span class="badge">${window.escapeHtml(thread.workspaceName)}</span>` : '')}
           ${thread?.mode ? `<span class="badge" style="background: var(--color-primary); color: white;">${window.escapeHtml(thread.mode)}</span>` : ''}
-          ${messages.length > 0 ? (() => {
+          ${tabs && tabs.length > 0 ? `<span class="badge" style="background: var(--color-accent); color: white;" title="${tabs.length} tab${tabs.length !== 1 ? 's' : ''} in this conversation">${tabs.length} tab${tabs.length !== 1 ? 's' : ''}</span>` : ''}
+          ${allPrompts.length > 0 ? (() => {
             // Show file indicators if any messages reference files
             const filePaths = new Set();
-            messages.forEach(m => {
+            allPrompts.forEach(m => {
               const filePath = m.file_path || m.context?.file_path;
               if (filePath) {
                 const fileName = filePath.split('/').pop();
@@ -452,16 +696,64 @@ function renderConversationThread(conversation, side = 'right') {
             });
             if (filePaths.size > 0) {
               const files = Array.from(filePaths).slice(0, 2);
-              return `<span class="badge" style="background: var(--color-accent); color: white;" title="${Array.from(filePaths).join(', ')}">[File] ${files.join(', ')}${filePaths.size > 2 ? '...' : ''}</span>`;
+              return `<span class="badge" style="background: var(--color-accent); color: white;">${window.escapeHtml(files.join(', '))}${filePaths.size > 2 ? '...' : ''}</span>`;
             }
             return '';
           })() : ''}
+          ${flowIndicators}
         </div>
         
-        <!-- Messages (expanded by default) -->
-        <div id="conv-messages-${threadId}" class="conversation-messages visible">
+        <!-- Tabs/Threads (if any) -->
+        ${tabs && tabs.length > 0 ? `
+          <div class="conversation-tabs" style="margin-top: var(--space-sm); padding: var(--space-sm); background: var(--color-bg-alt, #f5f5f5); border-radius: var(--radius-sm); border-left: 3px solid var(--color-accent);">
+            <div style="font-size: var(--text-xs); font-weight: 600; color: var(--color-text); margin-bottom: var(--space-xs);">
+              Tabs/Threads (${tabs.length})
+            </div>
+            ${tabs.slice(0, 5).map(tab => {
+              const tabPrompts = tab.prompts || [];
+              const tabTitle = tab.title || `Tab ${tab.id.substring(0, 8)}`;
+              return `
+                <div class="conversation-tab-item" style="margin-bottom: var(--space-xs); padding: var(--space-xs); background: var(--color-bg, #ffffff); border-radius: var(--radius-sm); cursor: pointer;"
+                     onclick="event.stopPropagation(); toggleTabMessages('${threadId}-tab-${tab.id}')"
+                     onmouseover="this.style.background='var(--color-bg-alt, #f5f5f5)'"
+                     onmouseout="this.style.background='var(--color-bg, #ffffff)'">
+                  <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span style="font-size: var(--text-xs); color: var(--color-text);">
+                      <span id="tab-icon-${threadId}-tab-${tab.id}" style="display: inline-block; margin-right: 4px; transform: rotate(0deg);">▶</span>
+                      ${window.escapeHtml(tabTitle)} 
+                      <span style="color: var(--color-text-muted);">(${tabPrompts.length} messages)</span>
+                    </span>
+                  </div>
+                  <div id="tab-messages-${threadId}-tab-${tab.id}" class="tab-messages" style="display: none; margin-top: var(--space-xs); padding-left: var(--space-md);">
+                    ${tabPrompts.length > 0 ? tabPrompts
+                      .sort((a, b) => (a.sortTime || a.timestamp || 0) - (b.sortTime || b.timestamp || 0))
+                      .map(msg => window.renderConversationMessage(msg)).join('') : 
+                      '<div style="font-size: var(--text-xs); color: var(--color-text-muted);">No messages in this tab</div>'}
+                  </div>
+                </div>
+              `;
+            }).join('')}
+            ${tabs.length > 5 ? `<div style="font-size: var(--text-xs); color: var(--color-text-muted); font-style: italic; margin-top: var(--space-xs);">+${tabs.length - 5} more tabs</div>` : ''}
+          </div>
+        ` : ''}
+        
+        <!-- Root Prompts (if any, and no tabs) -->
+        ${rootPrompts && rootPrompts.length > 0 && (!tabs || tabs.length === 0) ? `
+          <div class="conversation-root-prompts" style="margin-top: var(--space-sm);">
+            <div style="font-size: var(--text-xs); font-weight: 600; color: var(--color-text); margin-bottom: var(--space-xs);">
+              Root Messages (${rootPrompts.length})
+            </div>
+            ${rootPrompts
+              .sort((a, b) => (a.sortTime || a.timestamp || 0) - (b.sortTime || b.timestamp || 0))
+              .map(msg => window.renderConversationMessage(msg)).join('')}
+          </div>
+        ` : ''}
+        
+        <!-- Messages (expanded by default, or if no tabs/root prompts) -->
+        <div id="conv-messages-${threadId}" class="conversation-messages ${tabs && tabs.length > 0 ? '' : 'visible'}" style="${tabs && tabs.length > 0 ? 'display: none;' : ''}">
           ${sortedMessages.length > 0 ? sortedMessages.map(msg => window.renderConversationMessage(msg)).join('') : '<div class="conversation-empty">No messages in this conversation yet</div>'}
         </div>
+        ${metadataRow || ''}
       </div>
     </div>
   `;
@@ -492,16 +784,37 @@ function toggleConversationMessages(threadId) {
   const icon = document.getElementById(`conv-icon-${threadId}`);
   
   if (messagesDiv && icon) {
-    const isHidden = !messagesDiv.classList.contains('visible');
+    const isHidden = !messagesDiv.classList.contains('visible') || messagesDiv.style.display === 'none';
     if (isHidden) {
       messagesDiv.classList.add('visible');
+      messagesDiv.style.display = 'block';
       icon.style.transform = 'rotate(90deg)';
     } else {
       messagesDiv.classList.remove('visible');
+      messagesDiv.style.display = 'none';
       icon.style.transform = 'rotate(0deg)';
     }
   }
 }
+
+function toggleTabMessages(tabId) {
+  const messagesDiv = document.getElementById(`tab-messages-${tabId}`);
+  const icon = document.getElementById(`tab-icon-${tabId}`);
+  
+  if (messagesDiv && icon) {
+    const isHidden = messagesDiv.style.display === 'none' || !messagesDiv.style.display;
+    if (isHidden) {
+      messagesDiv.style.display = 'block';
+      icon.style.transform = 'rotate(90deg)';
+    } else {
+      messagesDiv.style.display = 'none';
+      icon.style.transform = 'rotate(0deg)';
+    }
+  }
+}
+
+// Export for use in onclick handlers
+window.toggleTabMessages = toggleTabMessages;
 
 function toggleTemporalThread(threadId) {
   const itemsDiv = document.getElementById(`thread-items-${threadId}`);
@@ -1175,14 +1488,21 @@ function renderTerminalTimelineItem(cmd, side = 'left', timelineItems = null) {
 function renderTimelineItem(event, side = 'left', timelineItems = null) {
   const time = new Date(event.timestamp).toLocaleTimeString();
   const title = window.getEventTitle(event);
-  const desc = window.getEventDescription(event);
+  let desc = window.getEventDescription(event);
   
   // Get enhanced file information with workspace and directory
   const fileInfo = window.getEnhancedFileInfo ? window.getEnhancedFileInfo(event) : {
     fileName: title,
     workspacePath: event.workspace_path || '',
-    badges: ''
+    badges: '',
+    displayTitle: title
   };
+  
+  // Don't show description if it's just "Code modified" or similar generic text
+  // and we already have a meaningful title
+  if (desc && (desc === 'Code modified' || desc === 'File modification detected' || desc === title)) {
+    desc = ''; // Hide redundant description
+  }
   
   // Auto-tag the event
   let eventTags = [];
@@ -1291,6 +1611,33 @@ function renderTimelineItem(event, side = 'left', timelineItems = null) {
       // Ignore
     }
     
+    // Extract context files from related prompts
+    let contextFilesFromPrompts = [];
+    let atFilesFromPrompts = [];
+    
+    // Collect context files from linked prompt
+    if (event.prompt_id && window.state.data.prompts) {
+      const linkedPrompt = window.state.data.prompts.find(p => 
+        p.id === event.prompt_id || p.id === parseInt(event.prompt_id)
+      );
+      if (linkedPrompt) {
+        contextFilesFromPrompts.push(...extractContextFiles(linkedPrompt));
+        atFilesFromPrompts.push(...extractAtFiles(linkedPrompt));
+      }
+    }
+    
+    // Collect context files from related prompts
+    if (relatedPrompts && relatedPrompts.length > 0) {
+      relatedPrompts.forEach(prompt => {
+        contextFilesFromPrompts.push(...extractContextFiles(prompt));
+        atFilesFromPrompts.push(...extractAtFiles(prompt));
+      });
+    }
+    
+    // Deduplicate files
+    const uniqueContextFiles = [...new Set(contextFilesFromPrompts)];
+    const uniqueAtFiles = [...new Set(atFilesFromPrompts)];
+    
     // Add context file indicators
     if (event.context) {
       const badges = [];
@@ -1314,6 +1661,82 @@ function renderTimelineItem(event, side = 'left', timelineItems = null) {
       
       contextIndicators = badges.join('');
     }
+    
+    // Add context files from prompts if available
+    if (uniqueContextFiles.length > 0 || uniqueAtFiles.length > 0) {
+      const contextFileId = `context-files-${event.id || event.timestamp}`;
+      const totalFiles = uniqueContextFiles.length + uniqueAtFiles.length;
+      
+      contextIndicators += `
+        <span class="context-indicator context-files" 
+              style="cursor: pointer;"
+              onclick="event.stopPropagation(); toggleContextFiles('${contextFileId}')"
+              title="Click to view ${totalFiles} context files from related prompts">
+          📁 ${totalFiles} context file${totalFiles !== 1 ? 's' : ''}
+        </span>
+      `;
+      
+      // Add expandable context files section
+      const contextFilesHtml = `
+        <div id="${contextFileId}" class="context-files-list" style="display: none; margin-top: var(--space-sm); padding: var(--space-sm); background: var(--color-bg-alt, #f5f5f5); border-radius: var(--radius-sm); border-left: 3px solid var(--color-accent);">
+          ${uniqueContextFiles.length > 0 ? `
+            <div style="margin-bottom: var(--space-xs);">
+              <div style="font-size: var(--text-xs); font-weight: 600; color: var(--color-text); margin-bottom: var(--space-xs);">
+                Context Files (${uniqueContextFiles.length})
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 2px;">
+                ${uniqueContextFiles.slice(0, 10).map(file => {
+                  const fileName = file.split('/').pop() || file;
+                  return `
+                    <div style="font-size: var(--text-xs); color: var(--color-text); padding: 2px 4px; border-radius: 2px; cursor: pointer;"
+                         onclick="event.stopPropagation(); highlightFileInGraph('${file.replace(/'/g, "\\'")}')"
+                         onmouseover="this.style.background='var(--color-bg, #ffffff)'"
+                         onmouseout="this.style.background='transparent'"
+                         title="${file}">
+                      📄 ${window.escapeHtml(fileName)}
+                    </div>
+                  `;
+                }).join('')}
+                ${uniqueContextFiles.length > 10 ? `
+                  <div style="font-size: var(--text-xs); color: var(--color-text-muted); font-style: italic; margin-top: 2px;">
+                    +${uniqueContextFiles.length - 10} more
+                  </div>
+                ` : ''}
+              </div>
+            </div>
+          ` : ''}
+          ${uniqueAtFiles.length > 0 ? `
+            <div>
+              <div style="font-size: var(--text-xs); font-weight: 600; color: var(--color-text); margin-bottom: var(--space-xs);">
+                @ Referenced Files (${uniqueAtFiles.length})
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 2px;">
+                ${uniqueAtFiles.slice(0, 10).map(file => {
+                  const fileName = file.split('/').pop() || file;
+                  return `
+                    <div style="font-size: var(--text-xs); color: var(--color-text); padding: 2px 4px; border-radius: 2px; cursor: pointer;"
+                         onclick="event.stopPropagation(); highlightFileInGraph('${file.replace(/'/g, "\\'")}')"
+                         onmouseover="this.style.background='var(--color-bg, #ffffff)'"
+                         onmouseout="this.style.background='transparent'"
+                         title="${file}">
+                      @ ${window.escapeHtml(fileName)}
+                    </div>
+                  `;
+                }).join('')}
+                ${uniqueAtFiles.length > 10 ? `
+                  <div style="font-size: var(--text-xs); color: var(--color-text-muted); font-style: italic; margin-top: 2px;">
+                    +${uniqueAtFiles.length - 10} more
+                  </div>
+                ` : ''}
+              </div>
+            </div>
+          ` : ''}
+        </div>
+      `;
+      
+      // Store context files HTML to be inserted after related prompts
+      event._contextFilesHtml = contextFilesHtml;
+    }
   } catch (e) {
     // Ignore errors in badge display
   }
@@ -1330,15 +1753,16 @@ function renderTimelineItem(event, side = 'left', timelineItems = null) {
         <div class="timeline-header">
           <div class="timeline-title">
             ${stateEventIcon ? `<span style="margin-right: 4px; font-size: 1.2em;">${stateEventIcon}</span>` : ''}
-            ${fileInfo.badges || title}
+            ${fileInfo.displayTitle || fileInfo.badges || title}
+            ${fileInfo.badges ? ` ${fileInfo.badges}` : ''}
             ${diffStats}
           </div>
           <div class="timeline-meta">${time}</div>
         </div>
         <div class="timeline-description">
-          ${desc}
+          ${desc ? `<div style="color: var(--color-text-muted); font-size: var(--text-sm);">${window.escapeHtml ? window.escapeHtml(desc) : desc}</div>` : ''}
           ${event.annotation ? `<div class="ai-annotation" style="margin-top: 4px; font-style: italic; color: var(--color-text-secondary); font-size: 0.9em; display: flex; align-items: center; gap: 4px;">${window.renderAnnotationIcon ? window.renderAnnotationIcon(14, 'var(--color-text-secondary)') : '<span>✨</span>'} ${window.escapeHtml(event.annotation)}</div>` : ''}
-          ${event.intent ? `<span class="badge" style="background: var(--color-primary); margin-top: 4px; display: inline-block;">${window.escapeHtml(event.intent)}</span>` : ''}
+          ${event.intent ? `<span class="timeline-badge timeline-badge-primary" style="margin-top: 4px; display: inline-block;">${window.escapeHtml(event.intent)}</span>` : ''}
           ${tagsHtml ? `<div style="display: flex; gap: var(--space-xs); flex-wrap: wrap; margin-top: var(--space-xs); align-items: center;">${tagsHtml}</div>` : ''}
           ${linkedPromptIndicator || contextIndicators ? `
             <div style="display: flex; gap: var(--space-xs); flex-wrap: wrap; margin-top: var(--space-xs); align-items: center;">
@@ -1348,10 +1772,97 @@ function renderTimelineItem(event, side = 'left', timelineItems = null) {
           ` : ''}
         </div>
         ${relatedPromptsIndicator}
+        ${event._contextFilesHtml || ''}
       </div>
     </div>
   `;
 }
+
+/**
+ * Extract context files from a prompt
+ */
+function extractContextFiles(prompt) {
+  const files = [];
+  try {
+    const contextFiles = prompt.context_files || prompt.contextFiles;
+    if (contextFiles) {
+      if (typeof contextFiles === 'string') {
+        const parsed = JSON.parse(contextFiles);
+        if (Array.isArray(parsed)) {
+          files.push(...parsed.filter(f => f && typeof f === 'string'));
+        }
+      } else if (Array.isArray(contextFiles)) {
+        files.push(...contextFiles.filter(f => f && typeof f === 'string'));
+      }
+    }
+  } catch (e) {
+    // Ignore parse errors
+  }
+  return files;
+}
+
+/**
+ * Extract @ files from a prompt
+ */
+function extractAtFiles(prompt) {
+  const files = [];
+  try {
+    const atFiles = prompt.at_files || prompt.atFiles;
+    if (atFiles) {
+      if (typeof atFiles === 'string') {
+        const parsed = JSON.parse(atFiles);
+        if (Array.isArray(parsed)) {
+          files.push(...parsed.filter(f => f && typeof f === 'string'));
+        }
+      } else if (Array.isArray(atFiles)) {
+        files.push(...atFiles.filter(f => f && typeof f === 'string'));
+      }
+    }
+  } catch (e) {
+    // Ignore parse errors
+  }
+  return files;
+}
+
+/**
+ * Toggle context files visibility
+ */
+function toggleContextFiles(contextFileId) {
+  const element = document.getElementById(contextFileId);
+  if (element) {
+    const isHidden = element.style.display === 'none' || !element.classList.contains('visible');
+    if (isHidden) {
+      element.style.display = 'block';
+      element.classList.add('visible');
+    } else {
+      element.style.display = 'none';
+      element.classList.remove('visible');
+    }
+  }
+}
+
+/**
+ * Highlight file in file graph (if available)
+ */
+function highlightFileInGraph(filePath) {
+  // Try to highlight in file graph if it's open
+  if (window.highlightFileInGraph) {
+    window.highlightFileInGraph(filePath);
+  } else if (window.filterGraphNodes) {
+    // Fallback: try to filter/search in graph
+    const fileName = filePath.split('/').pop();
+    window.filterGraphNodes(fileName);
+  }
+  // Could also navigate to file graph view
+  if (window.switchView && window.switchView === 'function') {
+    // Optionally switch to file graph view
+    // window.switchView('file-graph');
+  }
+}
+
+// Export functions
+window.toggleContextFiles = toggleContextFiles;
+window.highlightFileInGraph = highlightFileInGraph;
 
 function getEventTitle(event) {
   if (event.type === 'file_change' || event.type === 'code_change') {
@@ -1397,20 +1908,30 @@ function getEnhancedFileInfo(event) {
         directory: '',
         workspacePath: workspacePath,
         fullPath: '',
-        badges: workspacePath ? window.createWorkspaceBadge ? window.createWorkspaceBadge(workspacePath) : '' : ''
+        badges: workspacePath ? window.createWorkspaceBadge ? window.createWorkspaceBadge(workspacePath) : '' : '',
+        displayTitle: event.type || 'Activity'
       };
     }
     
-    const fileName = filePath.split('/').pop() || '';
-    const directory = window.getDirectoryPath ? window.getDirectoryPath(filePath) : '';
-    const formattedPath = window.formatFilePathWithDirectory ? window.formatFilePathWithDirectory(filePath, 2) : fileName;
+    const fileName = filePath.split('/').pop() || filePath.split('\\').pop() || '';
     
-    // Create badges
+    // Format directory path (show last 2 segments for context)
+    const pathParts = filePath.split('/').filter(p => p) || filePath.split('\\').filter(p => p);
+    const directory = pathParts.length > 1 ? pathParts.slice(0, -1).join('/') : '';
+    const shortDirectory = directory ? (directory.split('/').slice(-2).join('/') || directory.split('\\').slice(-2).join('\\')) : '';
+    
+    // Create a cleaner display title: filename with optional directory context
+    let displayTitle = fileName;
+    if (shortDirectory && fileName) {
+      displayTitle = `<span style="color: var(--color-text-muted); font-size: 0.9em;">${window.escapeHtml ? window.escapeHtml(shortDirectory) : shortDirectory}/</span>${window.escapeHtml ? window.escapeHtml(fileName) : fileName}`;
+    } else if (fileName) {
+      displayTitle = window.escapeHtml ? window.escapeHtml(fileName) : fileName;
+    }
+    
+    // Create badges (workspace badge only, file path is in title)
     let badges = '';
-    if (window.createFilePathBadge) {
-      badges = window.createFilePathBadge(filePath, workspacePath);
-    } else if (workspacePath && window.createWorkspaceBadge) {
-      badges = window.createWorkspaceBadge(workspacePath);
+    if (workspacePath && window.createWorkspaceBadge) {
+      badges = window.createWorkspaceBadge(workspacePath, 'sm');
     }
     
     return {
@@ -1418,8 +1939,9 @@ function getEnhancedFileInfo(event) {
       directory,
       workspacePath,
       fullPath: filePath,
-      formattedPath,
-      badges
+      formattedPath: shortDirectory ? `${shortDirectory}/${fileName}` : fileName,
+      badges,
+      displayTitle
     };
   } catch (e) {
     return {
@@ -1427,7 +1949,8 @@ function getEnhancedFileInfo(event) {
       directory: '',
       workspacePath: '',
       fullPath: '',
-      badges: ''
+      badges: '',
+      displayTitle: event.type || 'Activity'
     };
   }
 }
@@ -1438,13 +1961,44 @@ function getEventDescription(event) {
     return event.annotation;
   }
   
-  // Fallback to original logic
+  // Fallback to improved logic
   try {
     const details = typeof event.details === 'string' ? JSON.parse(event.details) : event.details;
-    const added = details?.chars_added || 0;
-    const deleted = details?.chars_deleted || 0;
-    if (added || deleted) {
-      return `+${added} / -${deleted} characters`;
+    
+    // Prefer lines over characters for better readability
+    const linesAdded = details?.lines_added || details?.added_lines || 0;
+    const linesDeleted = details?.lines_deleted || details?.deleted_lines || 0;
+    const charsAdded = details?.chars_added || 0;
+    const charsDeleted = details?.chars_deleted || 0;
+    
+    // Use lines if available, otherwise fall back to characters
+    if (linesAdded || linesDeleted) {
+      if (linesAdded && linesDeleted) {
+        return `+${linesAdded.toLocaleString()} / -${linesDeleted.toLocaleString()} lines`;
+      } else if (linesAdded) {
+        return `+${linesAdded.toLocaleString()} lines`;
+      } else if (linesDeleted) {
+        return `-${linesDeleted.toLocaleString()} lines`;
+      }
+    } else if (charsAdded || charsDeleted) {
+      // Format large character counts better
+      const formatChars = (num) => {
+        if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
+        return num.toLocaleString();
+      };
+      if (charsAdded && charsDeleted) {
+        return `+${formatChars(charsAdded)} / -${formatChars(charsDeleted)} chars`;
+      } else if (charsAdded) {
+        return `+${formatChars(charsAdded)} chars`;
+      } else if (charsDeleted) {
+        return `-${formatChars(charsDeleted)} chars`;
+      }
+    }
+    
+    // Show change type if available
+    const changeType = details?.change_type || event.change_type;
+    if (changeType) {
+      return changeType.charAt(0).toUpperCase() + changeType.slice(1);
     }
   } catch {}
   return 'File modification detected';

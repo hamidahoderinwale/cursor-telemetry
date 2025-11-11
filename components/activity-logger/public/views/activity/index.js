@@ -101,9 +101,35 @@ async function renderActivityView(container) {
     events = events.filter(event => new Date(event.timestamp).getTime() >= cutoffTime);
   }
   
+  // Filter out git internal files from events
+  const isGitInternalFile = window.isGitInternalFile || ((path) => {
+    if (!path) return false;
+    if (path.includes('/.git/') || path.includes('\\.git\\')) return true;
+    if (path.startsWith('.git/') || path.startsWith('.git\\')) return true;
+    if (/^[a-f0-9]{40}$/i.test(path)) return true;
+    if (/objects\/[a-f0-9]{2}\/[a-f0-9]{38}/i.test(path)) return true;
+    const fileName = path.split('/').pop() || path.split('\\').pop() || '';
+    if (/^[a-f0-9]{32,}$/i.test(fileName) && (path.includes('objects/') || path.includes('objects\\'))) return true;
+    return false;
+  });
+  
+  // Filter events to exclude git internal files
+  const filteredEvents = events.filter(event => {
+    if (event.type === 'file_change' || event.type === 'code_change') {
+      try {
+        const details = typeof event.details === 'string' ? JSON.parse(event.details) : event.details;
+        const path = details?.file_path || event.file_path || event.path || '';
+        return !isGitInternalFile(path);
+      } catch {
+        return true; // Keep if we can't parse
+      }
+    }
+    return true; // Keep non-file-change events
+  });
+  
   // Merge events, prompts, and terminal commands into unified timeline
   let timelineItems = [
-    ...events.map(event => ({
+    ...filteredEvents.map(event => ({
       ...event,
       itemType: 'event',
       sortTime: new Date(event.timestamp).getTime()
@@ -217,7 +243,7 @@ async function renderActivityView(container) {
         <div class="card-header">
           <div>
             <h3 class="card-title" title="Chronological timeline of all your development activity including file changes, AI prompts, and terminal commands. Items are displayed in chronological order with the most recent first. Use filters to narrow down by workspace, time range, or grouping">Activity Timeline</h3>
-            <p class="card-subtitle">${timelineItems.length} items (${events.length} file changes, ${prompts.length} AI prompts, ${terminalCommands.length} terminal commands)</p>
+            <p class="card-subtitle">${timelineItems.length} items (${filteredEvents.length} file changes, ${prompts.length} AI prompts, ${terminalCommands.length} terminal commands)</p>
           </div>
           <div class="activity-header-controls" style="display: flex; gap: var(--space-sm); align-items: center; flex-wrap: wrap;">
             ${currentWorkspaceFilter !== 'all' ? `
