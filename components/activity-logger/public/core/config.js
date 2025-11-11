@@ -5,14 +5,14 @@
 // Use external config (from config.js) if available, otherwise use defaults
 const EXTERNAL_CONFIG = window.CONFIG || {};
 
-// TODO: Replace 'YOUR_RAILWAY_URL_HERE' with your actual Railway backend URL
-// Example: 'https://your-app.up.railway.app'
-const RAILWAY_BACKEND_URL = 'YOUR_RAILWAY_URL_HERE'; // Set your Railway URL here
+// TODO: Replace 'YOUR_HEROKU_URL_HERE' with your actual Heroku backend URL
+// Example: 'https://your-app.herokuapp.com'
+const HEROKU_BACKEND_URL = 'YOUR_HEROKU_URL_HERE'; // Set your Heroku URL here
 
 const DASHBOARD_CONFIG = {
-  API_BASE: EXTERNAL_CONFIG.API_BASE_URL || (RAILWAY_BACKEND_URL !== 'YOUR_RAILWAY_URL_HERE' ? RAILWAY_BACKEND_URL : 'http://localhost:43917'),
-  WS_URL: EXTERNAL_CONFIG.WS_URL || (RAILWAY_BACKEND_URL !== 'YOUR_RAILWAY_URL_HERE' 
-    ? RAILWAY_BACKEND_URL.replace('https://', 'wss://').replace('http://', 'ws://')
+  API_BASE: EXTERNAL_CONFIG.API_BASE_URL || (HEROKU_BACKEND_URL !== 'YOUR_HEROKU_URL_HERE' ? HEROKU_BACKEND_URL : 'http://localhost:43917'),
+  WS_URL: EXTERNAL_CONFIG.WS_URL || (HEROKU_BACKEND_URL !== 'YOUR_HEROKU_URL_HERE' 
+    ? HEROKU_BACKEND_URL.replace('https://', 'wss://').replace('http://', 'ws://')
     : 'ws://localhost:43917'),
   REFRESH_INTERVAL: 120000,  // 2 minutes to prevent request overload (down from 30s)
   ENABLE_TF_IDF: false, // Disable TF-IDF by default to save memory

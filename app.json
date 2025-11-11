@@ -1,0 +1,34 @@
+{
+  "name": "Cursor Telemetry Companion",
+  "description": "Companion service for Cursor Activity Logger - file watcher, diff engine, and MCP server",
+  "repository": "https://github.com/hamidahoderinwale/cursor-telemetry",
+  "logo": "https://node-js-sample.herokuapp.com/node.png",
+  "keywords": ["cursor", "telemetry", "file-watcher", "mcp"],
+  "image": "heroku/nodejs",
+  "buildpacks": [
+    {
+      "url": "heroku/nodejs"
+    }
+  ],
+  "formation": {
+    "web": {
+      "quantity": 1,
+      "size": "basic"
+    }
+  },
+  "env": {
+    "HOST": {
+      "description": "Host to bind to (use 0.0.0.0 for Heroku)",
+      "value": "0.0.0.0"
+    },
+    "PORT": {
+      "description": "Port to listen on (Heroku sets this automatically)",
+      "value": "43917"
+    },
+    "NODE_ENV": {
+      "description": "Node environment",
+      "value": "production"
+    }
+  }
+}
+

@@ -5,8 +5,9 @@
   "main": "dashboard-server.js",
   "scripts": {
     "start": "node dashboard-server.js",
-    "start-companion": "cd cursor-activity-logger/companion && node src/index.js",
+    "start-companion": "cd components/activity-logger/companion && node src/index.js",
     "start-all": "./start-dashboard.sh",
+    "postinstall": "cd components/activity-logger/companion && npm install",
     "dev": "nodemon dashboard-server.js",
     "test": "node smoke-test.js",
     "health": "make health",

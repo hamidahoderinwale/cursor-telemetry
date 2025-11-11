@@ -70,32 +70,30 @@ EOF
         echo "   Your dashboard is now live on Vercel"
         ;;
     
-    railway)
-        echo "📦 Deploying backend to Railway..."
+    heroku)
+        echo "📦 Deploying backend to Heroku..."
         echo ""
-        echo "Railway deployment steps:"
-        echo "1. Go to https://railway.app"
-        echo "2. Create new project from GitHub"
-        echo "3. Configure:"
-        echo "   - Root Directory: cursor-telemetry/components/activity-logger/companion"
-        echo "   - Start Command: node src/index.js"
-        echo "   - Environment Variables:"
-        echo "     PORT=43917"
-        echo "     HOST=0.0.0.0"
-        echo "     NODE_ENV=production"
+        echo "Heroku deployment steps:"
+        echo "1. Install Heroku CLI: brew install heroku"
+        echo "2. Login: heroku login"
+        echo "3. Create app: heroku create your-app-name"
+        echo "4. Set environment variables:"
+        echo "   heroku config:set HOST=0.0.0.0"
+        echo "   heroku config:set NODE_ENV=production"
+        echo "5. Deploy: git push heroku master"
         echo ""
-        echo "After deployment, update frontend API URL to your Railway URL"
+        echo "After deployment, update frontend API URL to your Heroku URL"
         ;;
     
     *)
-        echo "Usage: ./deploy.sh [netlify|vercel|railway] [api-url]"
+        echo "Usage: ./deploy.sh [netlify|vercel|heroku] [api-url]"
         echo ""
         echo "Examples:"
         echo "  ./deploy.sh netlify"
-        echo "  ./deploy.sh netlify https://my-api.railway.app"
-        echo "  ./deploy.sh vercel https://my-api.railway.app"
+        echo "  ./deploy.sh netlify https://my-api.herokuapp.com"
+        echo "  ./deploy.sh vercel https://my-api.herokuapp.com"
         echo ""
-        echo "For Railway backend deployment, see HOSTING_GUIDE.md"
+        echo "For Heroku backend deployment, see README.md"
         exit 1
         ;;
 esac
