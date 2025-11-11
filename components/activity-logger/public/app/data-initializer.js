@@ -160,7 +160,13 @@ async function initializeDashboard() {
         }, 2000); // Start after 2 seconds (UI should be interactive by then)
     }
     
-    // Step 5: Heavy analytics will be loaded on-demand via analyticsManager
+    // Step 5: Preload file graph data in background (non-blocking)
+    // This allows the file graph to render instantly when the view is opened
+    if (isConnected) {
+      preloadFileGraphData();
+    }
+    
+    // Step 6: Heavy analytics will be loaded on-demand via analyticsManager
     console.log('Heavy analytics deferred until idle/tab focus');
     
   } catch (error) {
@@ -618,6 +624,88 @@ async function fetchRecentData() {
 }
 
 /**
+ * Preload file graph data in background (non-blocking)
+ * This allows the file graph to render instantly when opened
+ */
+async function preloadFileGraphData() {
+  // Use requestIdleCallback to defer until browser is idle
+  const loadFileGraphData = async () => {
+    try {
+      const cacheKey = 'fileGraphData';
+      const cacheExpiry = 5 * 60 * 1000; // 5 minutes
+      
+      // Check if we already have valid cached data
+      const cached = sessionStorage.getItem(cacheKey);
+      if (cached) {
+        try {
+          const cachedData = JSON.parse(cached);
+          if (Date.now() - cachedData.timestamp < cacheExpiry) {
+            console.log('[GRAPH] File graph data already cached, skipping preload');
+            return;
+          }
+        } catch (e) {
+          // Cache invalid, continue to fetch
+        }
+      }
+      
+      // Fetch file graph data in background
+      const apiBase = window.CONFIG?.API_BASE || window.DASHBOARD_CONFIG?.API_BASE || 'http://localhost:43917';
+      console.log('[GRAPH] Preloading file graph data in background...');
+      
+      // Use AbortController for timeout (more compatible than AbortSignal.timeout)
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+      
+      const response = await fetch(`${apiBase}/api/file-contents?limit=500`, {
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      
+      // Cache the data for instant loading when view opens
+      if (data.files && data.files.length > 0) {
+        try {
+          sessionStorage.setItem(cacheKey, JSON.stringify({
+            data: data,
+            timestamp: Date.now()
+          }));
+          console.log(`[GRAPH] Preloaded ${data.files.length} files for file graph (cached)`);
+        } catch (e) {
+          // Cache storage failed (quota exceeded), continue anyway
+          console.warn('[GRAPH] Failed to cache file graph data:', e.message);
+        }
+      }
+    } catch (error) {
+      // Silently fail - this is background preloading, don't spam console
+      // Only log if it's not a network error (expected when offline)
+      const isNetworkError = error.message?.includes('CORS') || 
+                             error.message?.includes('NetworkError') || 
+                             error.message?.includes('Failed to fetch') ||
+                             error.name === 'NetworkError' ||
+                             error.name === 'TypeError' ||
+                             error.name === 'AbortError';
+      if (!isNetworkError) {
+        console.warn('[GRAPH] File graph preload failed:', error.message);
+      }
+    }
+  };
+  
+  // Defer until after critical operations complete
+  if (typeof requestIdleCallback !== 'undefined') {
+    requestIdleCallback(loadFileGraphData, { timeout: 5000 });
+  } else {
+    // Fallback: wait 3 seconds after initialization
+    setTimeout(loadFileGraphData, 3000);
+  }
+}
+
+/**
  * Fetch older history in the background (non-blocking)
  */
 async function fetchOlderHistory() {
@@ -674,6 +762,7 @@ window.loadFromCache = loadFromCache;
 window.fetchRecentData = fetchRecentData;
 window.fetchOlderHistory = fetchOlderHistory;
 window.fetchAllData = fetchAllData;
+window.preloadFileGraphData = preloadFileGraphData;
 window.checkForShareLink = checkForShareLink;
 
 // Check for share link after a short delay to ensure sharing handler is loaded

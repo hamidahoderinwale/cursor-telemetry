@@ -306,6 +306,7 @@
 .query-status.error {
   background: var(--color-error, #ef4444);
   color: white;
+  font-weight: 600;
 }
 
 .query-status.ready {
@@ -456,8 +457,13 @@
 
 .results-count {
   font-size: var(--text-sm, 0.875rem);
-  color: var(--color-text-muted, #666);
+  color: var(--color-text, #F1F5F9);
   font-weight: 600;
+  padding: var(--space-xs, 0.25rem) var(--space-sm, 0.5rem);
+  background: var(--color-surface, #1E293B);
+  border-radius: var(--radius-sm, 4px);
+  display: inline-block;
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.1));
 }
 
 .results-actions {
@@ -519,7 +525,10 @@
 .chart-loading {
   padding: var(--space-xl, 2rem);
   text-align: center;
-  color: var(--color-text-muted, #666);
+  color: var(--color-text, #F1F5F9);
+  background: var(--color-surface, #1E293B);
+  border-radius: var(--radius-md, 6px);
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.1));
 }
 
 .chart-loading {
@@ -528,16 +537,35 @@
 
 .error-message {
   padding: var(--space-md, 1rem);
-  background: #fee;
-  color: #c33;
-  border-radius: var(--radius-md, 4px);
-  border: 1px solid #fcc;
+  background: var(--color-surface, #1E293B);
+  color: var(--color-error, #EF4444);
+  border-radius: var(--radius-md, 6px);
+  border: 1px solid var(--color-error, #EF4444);
+  font-family: var(--font-mono, 'Monaco', 'Menlo', 'Courier New', monospace);
+  font-size: var(--text-sm, 0.875rem);
+  line-height: 1.6;
+  margin: var(--space-sm, 0.5rem) 0;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-sm, 0.5rem);
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.2);
+}
+
+.error-message::before {
+  content: '⚠';
+  font-size: 1.2em;
+  flex-shrink: 0;
+  color: var(--color-error, #EF4444);
 }
 
 .empty-results {
   padding: var(--space-xl, 2rem);
   text-align: center;
-  color: var(--color-text-muted, #666);
+  color: var(--color-text-muted, #94A3B8);
+  background: var(--color-surface, #1E293B);
+  border-radius: var(--radius-md, 6px);
+  border: 1px dashed var(--color-border, rgba(255, 255, 255, 0.1));
+  font-size: var(--text-sm, 0.875rem);
 }
 
 /* Buttons */
