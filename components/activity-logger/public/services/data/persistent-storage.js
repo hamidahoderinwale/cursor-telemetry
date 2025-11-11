@@ -14,7 +14,7 @@ class PersistentStorage {
     }
 
     this.dbName = 'CursorTelemetryDB';
-    this.version = 2;  // Incremented for new metadata store
+    this.version = 3;  // Incremented for computed data cache store
     this.db = null;
     this.stores = {
       events: 'events',
@@ -24,7 +24,8 @@ class PersistentStorage {
       fileChanges: 'fileChanges',
       sessions: 'sessions',
       cursorDatabase: 'cursorDatabase',
-      metadata: 'metadata'  // New: for versioning and cache control
+      metadata: 'metadata',  // New: for versioning and cache control
+      computed: 'computed'  // New: for caching processed data (stats, clusters, layouts)
     };
     this.maxTimeSeriesPoints = 1000; // Limit time series to 1000 points max
     this.cacheKey = 'snapshot_version';
@@ -240,6 +241,17 @@ class PersistentStorage {
             keyPath: 'key'
           });
           metadataStore.createIndex('lastUpdated', 'lastUpdated', { unique: false });
+        }
+
+        // Computed data store - for caching processed results (stats, clusters, layouts)
+        if (!db.objectStoreNames.contains(this.stores.computed)) {
+          console.log('[DATA] Creating computed store (new in v2)...');
+          const computedStore = db.createObjectStore(this.stores.computed, { 
+            keyPath: 'key'
+          });
+          computedStore.createIndex('type', 'type', { unique: false });
+          computedStore.createIndex('dataHash', 'dataHash', { unique: false });
+          computedStore.createIndex('timestamp', 'timestamp', { unique: false });
         }
 
         console.log('[SUCCESS] Database schema upgrade complete');
@@ -772,6 +784,96 @@ class PersistentStorage {
    */
   async getLastSyncTime() {
     return await this.getMetadata('last_sync');
+  }
+
+  /**
+   * Cache computed data (stats, clusters, layouts, etc.)
+   * @param {string} key - Cache key (e.g., 'stats', 'clusters', 'layout-physical')
+   * @param {any} data - Data to cache
+   * @param {string} dataHash - Hash of source data to detect changes
+   * @param {string} type - Type of computed data (e.g., 'stats', 'clusters', 'layout')
+   */
+  async cacheComputed(key, data, dataHash, type = 'unknown') {
+    if (!this.db) await this.init();
+    
+    return new Promise((resolve, reject) => {
+      const transaction = this.db.transaction([this.stores.computed], 'readwrite');
+      const store = transaction.objectStore(this.stores.computed);
+      
+      const cacheEntry = {
+        key,
+        data,
+        dataHash,
+        type,
+        timestamp: Date.now()
+      };
+      
+      const request = store.put(cacheEntry);
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  /**
+   * Get cached computed data
+   * @param {string} key - Cache key
+   * @param {string} dataHash - Current data hash to verify cache is still valid
+   * @returns {Promise<any|null>} Cached data if valid, null otherwise
+   */
+  async getCachedComputed(key, dataHash) {
+    if (!this.db) await this.init();
+    
+    return new Promise((resolve, reject) => {
+      const transaction = this.db.transaction([this.stores.computed], 'readonly');
+      const store = transaction.objectStore(this.stores.computed);
+      const request = store.get(key);
+      
+      request.onsuccess = () => {
+        const cached = request.result;
+        if (cached && cached.dataHash === dataHash) {
+          // Cache is valid - return data
+          resolve(cached.data);
+        } else {
+          // Cache is stale or doesn't exist
+          resolve(null);
+        }
+      };
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  /**
+   * Clear cached computed data by type or all
+   * @param {string} type - Type to clear, or null to clear all
+   */
+  async clearComputedCache(type = null) {
+    if (!this.db) await this.init();
+    
+    return new Promise((resolve, reject) => {
+      const transaction = this.db.transaction([this.stores.computed], 'readwrite');
+      const store = transaction.objectStore(this.stores.computed);
+      
+      if (type) {
+        // Clear by type
+        const index = store.index('type');
+        const request = index.openCursor(IDBKeyRange.only(type));
+        request.onsuccess = (event) => {
+          const cursor = event.target.result;
+          if (cursor) {
+            cursor.delete();
+            cursor.continue();
+          } else {
+            resolve();
+          }
+        };
+        request.onerror = () => reject(request.error);
+      } else {
+        // Clear all
+        const request = store.clear();
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(request.error);
+      }
+    });
   }
 }
 

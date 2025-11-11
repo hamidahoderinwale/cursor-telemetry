@@ -89,6 +89,27 @@ async function _calculateStatsInternal() {
   statsCalculationPending = true;
   
   try {
+    const dataHash = getDataHash();
+    
+    // Try to load from cache first (if persistentStorage is available)
+    if (window.persistentStorage && window.persistentStorage.getCachedComputed) {
+      try {
+        const cachedStats = await window.persistentStorage.getCachedComputed('stats', dataHash);
+        if (cachedStats) {
+          // Cache hit - use cached stats
+          state.stats = { ...state.stats, ...cachedStats };
+          lastStatsDataHash = dataHash;
+          updateStatsDisplay();
+          statsCalculationPending = false;
+          return;
+        }
+      } catch (cacheError) {
+        // Cache miss or error - continue with calculation
+        console.debug('[STATS] Cache miss, calculating:', cacheError.message);
+      }
+    }
+
+    // Cache miss - calculate stats
     const events = state.data.events || [];
     const entries = state.data.entries || [];
     const terminalCommands = state.data.terminalCommands || [];
@@ -154,17 +175,32 @@ async function _calculateStatsInternal() {
     });
     const avgContextUsage = contextUsageCount > 0 ? (totalContextUsage / contextUsageCount) : 0;
 
-    state.stats = {
-      ...state.stats,
+    const calculatedStats = {
       sessions: sessions.size,
       fileChanges: fileChanges,
       aiInteractions: aiInteractions,
       codeChanged: (totalChars / 1024).toFixed(1), // KB
-      avgContext: avgContextUsage.toFixed(1) // percentage
+      avgContext: avgContextUsage.toFixed(1), // percentage
+      terminalCommands: terminalCommands.length
+    };
+
+    state.stats = {
+      ...state.stats,
+      ...calculatedStats
     };
     
     // Update hash to prevent redundant recalculations
-    lastStatsDataHash = getDataHash();
+    lastStatsDataHash = dataHash;
+
+    // Cache the calculated stats for next time
+    if (window.persistentStorage && window.persistentStorage.cacheComputed) {
+      try {
+        await window.persistentStorage.cacheComputed('stats', calculatedStats, dataHash, 'stats');
+      } catch (cacheError) {
+        // Silently fail - caching is optional
+        console.debug('[STATS] Failed to cache stats:', cacheError.message);
+      }
+    }
 
     updateStatsDisplay();
   } finally {
