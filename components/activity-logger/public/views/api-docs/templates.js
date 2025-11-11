@@ -4,6 +4,11 @@
  */
 
 function renderAPIDocsViewTemplate(data) {
+  // Get API base URL from config (falls back to localhost for local development)
+  const apiBase = window.CONFIG?.API_BASE || window.DASHBOARD_CONFIG?.API_BASE || 'http://localhost:43917';
+  const wsUrl = window.CONFIG?.WS_URL || window.DASHBOARD_CONFIG?.WS_URL || 'ws://localhost:43917';
+  const isLocal = apiBase.includes('localhost') || apiBase.includes('127.0.0.1');
+  
   return `
     <div style="max-width: 1200px; margin: 0 auto;">
       <div class="page-header">
@@ -19,24 +24,24 @@ function renderAPIDocsViewTemplate(data) {
             <h3 class="card-title">Overview</h3>
           </div>
           <div class="card-body">
-            <p><strong>Base URL:</strong> <code>http://localhost:43917</code></p>
+            <p><strong>Base URL:</strong> <code>${apiBase}</code></p>
             <p><strong>Total Endpoints:</strong> <strong style="color: var(--color-primary);">49+</strong> REST endpoints</p>
             <p><strong>Content-Type:</strong> <code>application/json</code></p>
             <p><strong>CORS:</strong> Enabled for all origins</p>
-            <p><strong>Authentication:</strong> None (local development service)</p>
+            <p><strong>Authentication:</strong> ${isLocal ? 'None (local development service)' : 'None (public API)'}</p>
             
             <div style="margin-top: var(--space-lg); display: grid; gap: var(--space-sm);">
               <div style="padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md); border-left: 3px solid var(--color-info);">
                 <strong>Quick Health Check:</strong><br>
-                <code>curl http://localhost:43917/health</code>
+                <code>curl ${apiBase}/health</code>
               </div>
               <div style="padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md); border-left: 3px solid var(--color-success);">
                 <strong>Get Recent Activity:</strong><br>
-                <code>curl http://localhost:43917/api/activity?limit=10</code>
+                <code>curl ${apiBase}/api/activity?limit=10</code>
               </div>
               <div style="padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md); border-left: 3px solid var(--color-accent);">
                 <strong>Search Prompts:</strong><br>
-                <code>curl "http://localhost:43917/api/search?q=authentication"</code>
+                <code>curl "${apiBase}/api/search?q=authentication"</code>
               </div>
             </div>
           </div>
@@ -687,7 +692,7 @@ function renderAPIDocsViewTemplate(data) {
               <p>Server-Sent Events stream for real-time activity</p>
               <details>
                 <summary>Usage</summary>
-                <pre><code>const eventSource = new EventSource('http://localhost:43917/api/activity/stream');
+                <pre><code>const eventSource = new EventSource('${apiBase}/api/activity/stream');
 eventSource.onmessage = (event) => {
   console.log(JSON.parse(event.data));
 };</code></pre>
@@ -764,7 +769,7 @@ eventSource.onmessage = (event) => {
             <h3 class="card-title">WebSocket (Real-time Updates)</h3>
           </div>
           <div class="card-body">
-            <p><strong>URL:</strong> <code>ws://localhost:43917</code></p>
+            <p><strong>URL:</strong> <code>${wsUrl}</code></p>
             <p>Connect via Socket.IO for real-time activity updates</p>
             <details>
               <summary>Events</summary>
@@ -776,7 +781,7 @@ eventSource.onmessage = (event) => {
             </details>
             <details>
               <summary>Example (Socket.IO Client)</summary>
-              <pre><code>const socket = io('http://localhost:43917');
+              <pre><code>const socket = io('${apiBase}');
 socket.on('activity', (event) => {
   console.log('New activity:', event);
 });</code></pre>
