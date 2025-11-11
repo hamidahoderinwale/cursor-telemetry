@@ -5,11 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Cursor Telemetry Dashboard</title>
   
-  <!-- Favicon (favicon.io format) -->
-  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
-  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
-  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
-  <link rel="manifest" href="/site.webmanifest">
+  <!-- Favicon (Seedling emoji 🌱) -->
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="apple-touch-icon" href="/favicon.svg">
   <link rel="icon" type="image/x-icon" href="/favicon.ico">
   
   <!-- Fonts -->
@@ -41,6 +39,7 @@
   
   <!-- Critical CSS (inline or load immediately) -->
   <link rel="stylesheet" href="dashboard.css">
+  <link rel="stylesheet" href="styles/split-pane.css">
   
   <!-- View-specific Styles (load asynchronously) -->
   <link rel="preload" href="views/overview/styles.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
@@ -60,6 +59,7 @@
   <link rel="stylesheet" href="views/workspace-comparison/styles.css" media="print" onload="this.media='all'">
   <link rel="stylesheet" href="views/activity/context-visualization.css" media="print" onload="this.media='all'">
   <link rel="stylesheet" href="views/activity/status-message-visualization.css" media="print" onload="this.media='all'">
+  <link rel="stylesheet" href="components/db-preview.css" media="print" onload="this.media='all'">
   
   <!-- Service Worker Registration -->
   <script>
@@ -67,32 +67,55 @@
     // Set to true to disable (useful for debugging OpaqueResponseBlocking errors)
     const DISABLE_SERVICE_WORKER = false;
     
-    if (!DISABLE_SERVICE_WORKER && 'serviceWorker' in navigator) {
+    // Prevent multiple registrations
+    if (!window._serviceWorkerRegistered && !DISABLE_SERVICE_WORKER && 'serviceWorker' in navigator) {
+      window._serviceWorkerRegistered = true;
+      
       window.addEventListener('load', () => {
-        // Unregister any existing service workers first
-        navigator.serviceWorker.getRegistrations().then(registrations => {
-          registrations.forEach(registration => {
-            registration.unregister().then(() => {
-              console.log('[SW] Unregistered old service worker');
-            });
-          });
-        });
-        
-        // Register new service worker (only works over HTTP, not file://)
+        // Only register if we're on HTTP/HTTPS
         if (window.location.protocol === 'http:' || window.location.protocol === 'https:') {
-          navigator.serviceWorker.register('/sw.js')
-            .then(reg => {
-              console.log('[SW] Registered:', reg.scope);
-              // Check for updates
-              reg.addEventListener('updatefound', () => {
-                console.log('[SW] Update found, reloading...');
-                window.location.reload();
+          // Check for existing registration first
+          navigator.serviceWorker.getRegistration().then(existingReg => {
+            if (existingReg) {
+              console.log('[SW] Already registered:', existingReg.scope);
+              // Only listen for updates, don't reload immediately
+              existingReg.addEventListener('updatefound', () => {
+                const newWorker = existingReg.installing;
+                if (newWorker) {
+                  newWorker.addEventListener('statechange', () => {
+                    if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                      // New service worker available, but don't auto-reload
+                      console.log('[SW] New service worker available. Refresh to update.');
+                    }
+                  });
+                }
               });
-            })
-            .catch(err => {
-              console.warn('[SW] Registration failed:', err);
-              console.warn('[SW] If you see OpaqueResponseBlocking errors, set DISABLE_SERVICE_WORKER = true');
-            });
+            } else {
+              // Register new service worker
+              navigator.serviceWorker.register('/sw.js')
+                .then(reg => {
+                  console.log('[SW] Registered:', reg.scope);
+                  // Listen for updates but don't auto-reload
+                  reg.addEventListener('updatefound', () => {
+                    const newWorker = reg.installing;
+                    if (newWorker) {
+                      newWorker.addEventListener('statechange', () => {
+                        if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                          console.log('[SW] New service worker available. Refresh to update.');
+                        }
+                      });
+                    }
+                  });
+                })
+                .catch(err => {
+                  console.warn('[SW] Registration failed:', err);
+                  window._serviceWorkerRegistered = false; // Allow retry
+                });
+            }
+          }).catch(err => {
+            console.warn('[SW] Error checking registration:', err);
+            window._serviceWorkerRegistered = false;
+          });
         } else {
           console.warn('[SW] Service worker requires HTTP server. Access dashboard at http://localhost:43917/dashboard.html');
         }
@@ -728,6 +751,8 @@
   <!-- <script type="module" src="components/charts/analytics-renderers.js"></script> -->
   <script src="components/charts/advanced-visualizations.js" defer></script>
   <script src="components/charts/file-metrics-visualizations.js" defer></script>
+  <script src="components/db-preview.js" defer></script>
+  <script src="components/split-pane-resizer.js" defer></script>
   
   <!-- Services: Data (defer - loaded after initial render) -->
   <script src="services/data/persistent-storage.js" defer></script>
@@ -737,6 +762,7 @@
   <script src="services/search/search-engine.js" defer></script>
   <script src="services/search/semantic-analysis-engine.js" defer></script>
   <script src="services/search/huggingface-semantic-search.js" defer></script>
+  <script src="services/openrouter-embedding-service.js" defer></script>
   <script src="services/clustering/cluster-annotator.js" defer></script>
   <script src="services/annotation-service.js" defer></script>
   <script src="services/state-service.js" defer></script>
@@ -746,6 +772,8 @@
   <script src="services/analytics/analytics-manager.js" defer></script>
   <script src="services/analytics/analytics-aggregator.js" defer></script>
   <script src="services/analytics/prompt-analytics-engine.js" defer></script>
+  <script src="services/analytics/conversation-flow-analyzer.js" defer></script>
+  <script src="services/conversation-hierarchy-builder.js" defer></script>
   
   <!-- App Modules (defer - loaded after core) -->
   <script src="app/progress-tracker.js" defer></script>

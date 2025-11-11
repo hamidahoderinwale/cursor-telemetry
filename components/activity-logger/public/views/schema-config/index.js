@@ -49,40 +49,82 @@ class SchemaConfigView {
     if (!container) return;
 
     const viewMode = this.viewMode || 'ui'; // 'ui' or 'json'
+    const activeTab = this.activeTab || 'configure'; // 'configure' or 'export-import'
+
+    // Calculate statistics for overview
+    const totalFields = this.schema?.tables?.reduce((sum, table) => sum + table.columns.length, 0) || 0;
+    const enabledFields = this.customFields.filter(f => f.enabled).length;
+    const disabledFields = this.customFields.filter(f => !f.enabled).length;
+    const configuredFields = enabledFields + disabledFields;
 
     container.innerHTML = `
       <div class="schema-config-view">
+        <!-- Header Section -->
         <div class="schema-header">
-          <h2>Export Field Configuration</h2>
-          <p class="schema-description" style="background: var(--color-bg-alt); padding: var(--space-md); border-radius: var(--radius-md); border-left: 3px solid var(--color-primary);">
-            <strong>Purpose:</strong> Configure which fields are included in database exports. 
-            Enable/disable fields to control what data is exported. Disabled fields are excluded from exports for privacy and file size control.
-            <br><br>
-            <strong>Note:</strong> This does not modify the database schema structure. It only controls which fields appear in exported JSON files.
-          </p>
-          <div class="schema-header-actions">
-            <div class="view-mode-toggle" style="display: flex; gap: var(--space-sm); align-items: center;">
-              <button class="btn btn-sm ${viewMode === 'ui' ? 'btn-primary' : 'btn-secondary'}" 
-                      onclick="schemaConfigView.setViewMode('ui'); schemaConfigView.render();" 
-                      title="Form-based UI view">
-                UI View
-              </button>
-              <button class="btn btn-sm ${viewMode === 'json' ? 'btn-primary' : 'btn-secondary'}" 
-                      onclick="schemaConfigView.setViewMode('json'); schemaConfigView.render();" 
-                      title="JSON editor view">
-                JSON Editor
-              </button>
+          <div class="header-content">
+            <h2>Export Field Configuration</h2>
+            <p class="schema-description">
+              Control which database fields are included in exports. Configure field visibility to manage privacy, reduce file size, and customize exported data.
+            </p>
+          </div>
+          
+          <!-- Quick Stats -->
+          <div class="header-stats">
+            <div class="stat-item">
+              <div class="stat-value">${configuredFields}</div>
+              <div class="stat-label">Configured</div>
             </div>
-            <button class="btn btn-secondary" onclick="if(window.showImportModal) window.showImportModal(); else console.warn('Import handler not loaded');" title="Open a shared workspace or import workspace data">
-              Open Shared Workspace
-            </button>
+            <div class="stat-item stat-success">
+              <div class="stat-value">${enabledFields}</div>
+              <div class="stat-label">Enabled</div>
+            </div>
+            <div class="stat-item stat-muted">
+              <div class="stat-value">${disabledFields}</div>
+              <div class="stat-label">Disabled</div>
+            </div>
+            <div class="stat-item stat-info">
+              <div class="stat-value">${totalFields - configuredFields}</div>
+              <div class="stat-label">Default</div>
+            </div>
           </div>
         </div>
 
+        <!-- Tab Navigation -->
+        <div class="schema-tabs">
+          <button class="tab-button ${activeTab === 'configure' ? 'active' : ''}" 
+                  onclick="schemaConfigView.activeTab = 'configure'; schemaConfigView.render();">
+            <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor">
+              <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/>
+              <path fill-rule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clip-rule="evenodd"/>
+            </svg>
+            Configure Fields
+          </button>
+          <button class="tab-button ${activeTab === 'export-import' ? 'active' : ''}" 
+                  onclick="schemaConfigView.activeTab = 'export-import'; schemaConfigView.render();">
+            <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd"/>
+            </svg>
+            Export & Import
+          </button>
+          <button class="tab-button ${viewMode === 'json' ? 'active' : ''}" 
+                  onclick="schemaConfigView.setViewMode('json'); schemaConfigView.render();"
+                  title="Advanced JSON editor">
+            <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M12.316 3.051a1 1 0 01.633 1.265l-4 12a1 1 0 11-1.898-.632l4-12a1 1 0 011.265-.633zM5.707 6.293a1 1 0 010 1.414L3.414 10l2.293 2.293a1 1 0 11-1.414 1.414l-3-3a1 1 0 010-1.414l3-3a1 1 0 011.414 0zm8.586 0a1 1 0 011.414 0l3 3a1 1 0 010 1.414l-3 3a1 1 0 11-1.414-1.414L16.586 10l-2.293-2.293a1 1 0 010-1.414z" clip-rule="evenodd"/>
+            </svg>
+            JSON Editor
+          </button>
+        </div>
+
+        <!-- Tab Content -->
         <div class="schema-content">
-          ${viewMode === 'json' ? this.renderJsonEditor() : `
+          ${viewMode === 'json' ? this.renderJsonEditor() : 
+            activeTab === 'export-import' ? this.renderExportImportTab() : `
             <div class="schema-sidebar">
-              <h3>Tables</h3>
+              <div class="sidebar-header">
+                <h3>Database Tables</h3>
+                <p class="sidebar-subtitle">Select a table to configure its export fields</p>
+              </div>
               <div class="table-list" id="table-list">
                 ${this.renderTableList()}
               </div>
@@ -98,13 +140,18 @@ class SchemaConfigView {
 
     if (viewMode === 'json') {
       this.attachJsonEditorListeners();
-    } else {
+    } else if (activeTab === 'configure') {
       this.attachEventListeners();
     }
   }
 
   setViewMode(mode) {
     this.viewMode = mode;
+    if (mode === 'json') {
+      this.activeTab = null; // Clear active tab when switching to JSON
+    } else if (!this.activeTab) {
+      this.activeTab = 'configure'; // Default to configure tab
+    }
   }
 
   renderJsonEditor() {
@@ -276,56 +323,135 @@ class SchemaConfigView {
       `;
     }
 
-    // Count enabled/disabled fields
-    const totalFields = this.schema.tables.reduce((sum, table) => sum + table.columns.length, 0);
-    const enabledFields = this.customFields.filter(f => f.enabled).length;
-    const disabledFields = this.customFields.filter(f => !f.enabled).length;
+    // Count enabled/disabled fields per table
+    const tableStats = this.schema.tables.map(table => {
+      const tableFields = this.customFields.filter(f => f.tableName === table.name);
+      return {
+        ...table,
+        enabled: tableFields.filter(f => f.enabled).length,
+        disabled: tableFields.filter(f => !f.enabled).length,
+        configured: tableFields.length
+      };
+    });
 
-    // Show schema overview by default
     return `
       <div class="schema-overview">
         <div class="overview-header">
-          <h3>Export Field Configuration</h3>
+          <h3>Database Schema Overview</h3>
           <p class="overview-description">
-            Configure which database fields are included in exports. 
-            <strong>Enabled fields</strong> are exported; <strong>disabled fields</strong> are excluded.
-            <br><br>
-            <span style="color: var(--color-success);">✓ ${enabledFields} fields enabled</span> | 
-            <span style="color: var(--color-text-muted);">✗ ${disabledFields} fields disabled</span> | 
-            <span style="color: var(--color-text-muted);">${totalFields - enabledFields - disabledFields} not configured (exported by default)</span>
+            Select a table from the sidebar to configure which fields are included in exports. 
+            Fields that are <strong>enabled</strong> will be exported; <strong>disabled</strong> fields will be excluded.
+            Fields without explicit configuration are exported by default.
           </p>
         </div>
 
         <div class="tables-overview">
-          ${this.schema.tables.map(table => `
-            <div class="table-overview-card" data-table="${table.name}" style="cursor: pointer;">
+          ${tableStats.map(table => {
+            const configStatus = table.configured > 0 
+              ? `<span class="config-badge">${table.enabled} enabled, ${table.disabled} disabled</span>`
+              : '<span class="config-badge badge-default">All fields exported by default</span>';
+            
+            return `
+            <div class="table-overview-card" data-table="${table.name}">
               <div class="table-overview-header">
-                <h4 class="table-overview-name">${table.name}</h4>
+                <div>
+                  <h4 class="table-overview-name">${table.name}</h4>
+                  ${configStatus}
+                </div>
                 <span class="table-overview-count">${table.columns.length} columns</span>
               </div>
               <div class="table-overview-columns">
-                ${table.columns.slice(0, 5).map(col => `
-                  <div class="column-preview">
+                ${table.columns.slice(0, 6).map(col => {
+                  const fieldConfig = this.customFields.find(f => f.tableName === table.name && f.fieldName === col.name);
+                  const statusClass = fieldConfig 
+                    ? (fieldConfig.enabled ? 'field-enabled' : 'field-disabled')
+                    : 'field-default';
+                  return `
+                  <div class="column-preview ${statusClass}">
                     <span class="column-preview-name">${col.name}</span>
                     <span class="column-preview-type">${col.type}</span>
                     ${col.primaryKey ? '<span class="badge badge-primary badge-small">PK</span>' : ''}
-                    ${col.notnull ? '<span class="badge badge-info badge-small">NN</span>' : ''}
+                    ${fieldConfig ? (fieldConfig.enabled ? '<span class="badge badge-success badge-small">✓</span>' : '<span class="badge badge-muted badge-small">✗</span>') : ''}
                   </div>
-                `).join('')}
-                ${table.columns.length > 5 ? `
+                `;
+                }).join('')}
+                ${table.columns.length > 6 ? `
                   <div class="column-preview-more">
-                    +${table.columns.length - 5} more columns
+                    +${table.columns.length - 6} more columns
                   </div>
                 ` : ''}
               </div>
             </div>
-          `).join('')}
+          `;
+          }).join('')}
         </div>
 
         <div class="overview-actions">
-          <p class="overview-hint">
-            <strong>Tip:</strong> Select a table from the sidebar or click on any table card above to view its full schema and make modifications.
+          <div class="info-box">
+            <strong>How it works:</strong>
+            <ul>
+              <li>Fields without configuration are <strong>exported by default</strong></li>
+              <li>Add a field configuration to explicitly control its export status</li>
+              <li>Toggle fields on/off to include or exclude them from exports</li>
+              <li>This only affects exports, not the database schema itself</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  renderExportImportTab() {
+    return `
+      <div class="export-import-tab">
+        <div class="tab-header">
+          <h3>Export & Import Workspace Data</h3>
+          <p class="tab-description">
+            Export your workspace data with custom options, or import/open shared workspaces. 
+            Export settings respect your field configuration above.
           </p>
+        </div>
+        
+        <div class="export-import-grid">
+          <!-- Export Section -->
+          <div class="action-card">
+            <div class="action-card-header">
+              <svg width="24" height="24" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd"/>
+              </svg>
+              <h4>Export Workspace Data</h4>
+            </div>
+            <p class="action-card-description">
+              Export your workspace data as JSON with custom date ranges, workspace selection, and privacy levels.
+            </p>
+            <button class="btn btn-primary btn-block" 
+                    onclick="if(window.showExportOptionsModal) window.showExportOptionsModal(); else console.warn('Export options modal not loaded');">
+              Configure & Export
+            </button>
+            <div class="action-card-info">
+              <strong>Export includes:</strong> File changes, AI prompts, terminal commands, context files, and workspace metadata (based on your field configuration).
+            </div>
+          </div>
+          
+          <!-- Import Section -->
+          <div class="action-card">
+            <div class="action-card-header">
+              <svg width="24" height="24" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" transform="rotate(180 10 10)" clip-rule="evenodd"/>
+              </svg>
+              <h4>Import / Open Shared Workspace</h4>
+            </div>
+            <p class="action-card-description">
+              Open a workspace shared by a teammate, restore from backup, or import historical data.
+            </p>
+            <button class="btn btn-primary btn-block" 
+                    onclick="if(window.showImportModal) window.showImportModal(); else console.warn('Import handler not loaded');">
+              Open Shared Workspace
+            </button>
+            <div class="action-card-info">
+              <strong>Use cases:</strong> Open shared workspaces, restore backups, sync across devices, import historical data.
+            </div>
+          </div>
         </div>
       </div>
     `;
@@ -697,6 +823,7 @@ class SchemaConfigView {
       setTimeout(() => notification.remove(), 300);
     }, 3000);
   }
+
 }
 
 // Export for use

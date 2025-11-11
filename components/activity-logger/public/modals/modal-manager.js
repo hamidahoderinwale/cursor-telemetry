@@ -692,12 +692,16 @@ class ModalManager {
           ${prompts.slice(0, 5).map((prompt, idx) => {
             const promptText = prompt.text || prompt.prompt || prompt.preview || prompt.content || 'No prompt text';
             const displayText = promptText.length > 150 ? promptText.substring(0, 150) + '...' : promptText;
-            const minutes = Math.floor(prompt.timeDiffSeconds / 60);
-            const seconds = prompt.timeDiffSeconds % 60;
-            const timeDiffText = prompt.timeDiffSeconds < 60 ? 
-              `${prompt.timeDiffSeconds}s ${prompt.isBefore ? 'before' : 'after'}` : 
-              `${minutes}m ${seconds}s ${prompt.isBefore ? 'before' : 'after'}`;
-            const relevancePercent = Math.round(prompt.relevanceScore * 100);
+            // Safely calculate time difference, handling NaN cases
+            const timeDiffSeconds = (prompt.timeDiffSeconds && !isNaN(prompt.timeDiffSeconds)) ? prompt.timeDiffSeconds : 0;
+            const minutes = Math.floor(timeDiffSeconds / 60);
+            const seconds = timeDiffSeconds % 60;
+            const timeDiffText = timeDiffSeconds < 60 && timeDiffSeconds > 0 ? 
+              `${Math.floor(timeDiffSeconds)}s ${prompt.isBefore ? 'before' : 'after'}` : 
+              timeDiffSeconds > 0
+              ? `${minutes}m ${seconds}s ${prompt.isBefore ? 'before' : 'after'}`
+              : 'now';
+            const relevancePercent = (prompt.relevanceScore && !isNaN(prompt.relevanceScore)) ? Math.round(prompt.relevanceScore * 100) : 0;
             
             return `
             <div style="padding: var(--space-md); background: var(--color-bg); border-left: 3px solid var(--color-accent); border-radius: var(--radius-md); cursor: pointer; transition: all 0.2s;" 
@@ -765,13 +769,19 @@ class ModalManager {
     const nearbyPrompts = allPrompts
       .map(p => {
         const promptTime = new Date(p.timestamp).getTime();
+        // Validate timestamp
+        if (isNaN(promptTime) || isNaN(eventTime)) return null;
+        
         const timeDiff = Math.abs(eventTime - promptTime);
         if (timeDiff > 15 * 60 * 1000) return null; // Outside 15 minutes
         
         const promptWorkspace = normalizeWorkspacePath(p.workspacePath || p.workspaceId || p.workspace_name || '');
         const workspaceMatch = eventWorkspace && promptWorkspace && eventWorkspace === promptWorkspace;
         const minutes = Math.floor(timeDiff / 60000);
-        const isBefore = new Date(p.timestamp).getTime() < eventTime;
+        const isBefore = promptTime < eventTime;
+        
+        // Ensure all numeric values are valid
+        if (isNaN(minutes) || isNaN(timeDiff)) return null;
         
         return {
           ...p,
@@ -823,9 +833,14 @@ class ModalManager {
         <div style="display: grid; gap: var(--space-sm);">
           ${nearbyPrompts.slice(0, 5).map((prompt, idx) => {
             const promptText = (prompt.text || prompt.prompt || prompt.preview || prompt.content || 'No prompt text').substring(0, 150);
-            const timeDiffText = prompt.minutes > 0 
-              ? `${prompt.minutes}m ${prompt.isBefore ? 'before' : 'after'}`
-              : `${Math.floor(prompt.timeDiff / 1000)}s ${prompt.isBefore ? 'before' : 'after'}`;
+            // Safely calculate time difference text, handling NaN cases
+            const minutes = (prompt.minutes && !isNaN(prompt.minutes)) ? prompt.minutes : 0;
+            const timeDiff = (prompt.timeDiff && !isNaN(prompt.timeDiff)) ? prompt.timeDiff : 0;
+            const timeDiffText = minutes > 0 
+              ? `${minutes}m ${prompt.isBefore ? 'before' : 'after'}`
+              : timeDiff > 0
+              ? `${Math.floor(timeDiff / 1000)}s ${prompt.isBefore ? 'before' : 'after'}`
+              : 'now';
             const escapedText = window.escapeHtml ? window.escapeHtml(promptText) : promptText.replace(/</g, '&lt;').replace(/>/g, '&gt;');
             
             return `

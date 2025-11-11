@@ -3,6 +3,12 @@
  * Layout computation algorithms (physical, latent, UMAP)
  */
 
+// Prevent redeclaration if script is loaded multiple times
+if (window._navigatorLayoutLoaded) {
+  console.warn('[NAV-LAYOUT] Script already loaded, skipping re-initialization');
+} else {
+  window._navigatorLayoutLoaded = true;
+
 /**
  * Compute physical layout based on co-occurrence similarity
  * Enhanced with workspace and directory awareness
@@ -251,6 +257,36 @@ async function buildKNN(vectors, k) {
  * Create feature vector from file for semantic analysis (optimized)
  */
 function createFeatureVector(file) {
+  // Build conversation hierarchy if available for context
+  let conversationContext = null;
+  if (window.ConversationHierarchyBuilder && window.state?.data?.prompts) {
+    try {
+      const hierarchyBuilder = new window.ConversationHierarchyBuilder();
+      const hierarchy = hierarchyBuilder.buildHierarchy(window.state.data.prompts, []);
+      
+      // Find conversations that reference this file
+      const fileConversations = [];
+      hierarchy.workspaces.forEach(workspace => {
+        workspace.conversations.forEach(conv => {
+          const convFiles = hierarchyBuilder.getConversationFiles(conv, true);
+          if (convFiles.includes(file.path || file.id)) {
+            fileConversations.push({
+              id: conv.id,
+              title: conv.title,
+              workspace: workspace.name,
+              messageCount: conv.metadata.messageCount
+            });
+          }
+        });
+      });
+      
+      if (fileConversations.length > 0) {
+        conversationContext = fileConversations;
+      }
+    } catch (error) {
+      console.debug('[NAVIGATOR] Failed to build conversation context:', error);
+    }
+  }
   // Create a simple feature vector based on file characteristics
   const vector = [];
   
@@ -283,6 +319,22 @@ function createFeatureVector(file) {
   exts.forEach(ext => {
     vector.push(file.ext === ext ? 1 : 0);
   });
+  
+  // Add conversation context features (if available)
+  // This helps cluster files that are discussed together in the same conversations
+  if (conversationContext && conversationContext.length > 0) {
+    // Add features based on conversation IDs (hashed for privacy)
+    // Use multiple hash positions to create richer features
+    conversationContext.forEach((conv, idx) => {
+      const hash = conv.id.substring(0, 8);
+      // Add multiple features from hash to capture conversation relationships
+      for (let i = 0; i < Math.min(3, hash.length); i++) {
+        vector.push((hash.charCodeAt(i) % 10) / 10); // Normalize to 0-1
+      }
+      // Add conversation size feature (larger conversations = more important)
+      vector.push(Math.min(conv.messageCount / 50, 1)); // Normalize to 0-1
+    });
+  }
   
   return vector;
 }
@@ -633,9 +685,10 @@ function detectLatentClusters(nodes, links) {
     k = Math.min(8, Math.max(4, Math.ceil(nodes.length / 8))); // 4-8 clusters for larger sets
   }
   
-  const clusters = [];
+  // Use a different variable name to avoid any potential scope conflicts
+  const fallbackClusters = [];
   
-  if (nodes.length === 0) return clusters;
+  if (nodes.length === 0) return fallbackClusters;
   
   console.log(`[TARGET] Detecting ${k} latent clusters from ${nodes.length} files`);
   
@@ -703,7 +756,7 @@ function detectLatentClusters(nodes, links) {
     const clusterNodes = nodes.filter((_, idx) => assignments[idx] === i);
     if (clusterNodes.length > 0) {
       clusterNodes.forEach(n => n.cluster = `latent-${i}`);
-      clusters.push({
+      fallbackClusters.push({
         id: `latent-${i}`,
         name: `Cluster ${i + 1}`, // Will be updated by annotator
         nodes: clusterNodes,
@@ -717,33 +770,33 @@ function detectLatentClusters(nodes, links) {
   }
   
   // Annotate clusters asynchronously (non-blocking)
-  if (window.clusterAnnotator && clusters.length > 0) {
-    window.clusterAnnotator.annotateClusters(clusters, {
+  if (window.clusterAnnotator && fallbackClusters.length > 0) {
+    window.clusterAnnotator.annotateClusters(fallbackClusters, {
       useLLM: window.CONFIG?.ENABLE_SEMANTIC_SEARCH === true,
       useEmbeddings: window.CONFIG?.ENABLE_SEMANTIC_SEARCH === true
     }).then(annotatedClusters => {
       // Update clusters with annotations
       annotatedClusters.forEach((annotated, idx) => {
-        if (clusters[idx]) {
-          clusters[idx].name = annotated.name;
-          clusters[idx].description = annotated.description;
-          clusters[idx].keywords = annotated.keywords;
-          clusters[idx].category = annotated.category;
+        if (fallbackClusters[idx]) {
+          fallbackClusters[idx].name = annotated.name;
+          fallbackClusters[idx].description = annotated.description;
+          fallbackClusters[idx].keywords = annotated.keywords;
+          fallbackClusters[idx].category = annotated.category;
         }
       });
       
       // Trigger re-render if navigator is active
       if (window.navigatorState && window.navigatorState.clusters) {
-        window.navigatorState.clusters = clusters;
+        window.navigatorState.clusters = fallbackClusters;
         // Dispatch event to update UI
-        window.dispatchEvent(new CustomEvent('clusters-annotated', { detail: { clusters } }));
+        window.dispatchEvent(new CustomEvent('clusters-annotated', { detail: { clusters: fallbackClusters } }));
       }
     }).catch(err => {
       console.warn('[CLUSTER-ANNOTATOR] Annotation failed, using default names:', err.message);
     });
   }
   
-  return clusters;
+  return fallbackClusters;
 }
 
 // Export to window
@@ -753,4 +806,5 @@ window.buildKNN = buildKNN;
 window.createFeatureVector = createFeatureVector;
 window.detectLatentClusters = detectLatentClusters;
 
+} // End of _navigatorLayoutLoaded check
 

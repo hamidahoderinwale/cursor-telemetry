@@ -4,7 +4,15 @@
  */
 
 class PersistentStorage {
+  static _instance = null;
+  static _initPromise = null;
+
   constructor() {
+    // Singleton pattern - return existing instance if available
+    if (PersistentStorage._instance) {
+      return PersistentStorage._instance;
+    }
+
     this.dbName = 'CursorTelemetryDB';
     this.version = 2;  // Incremented for new metadata store
     this.db = null;
@@ -20,6 +28,18 @@ class PersistentStorage {
     };
     this.maxTimeSeriesPoints = 1000; // Limit time series to 1000 points max
     this.cacheKey = 'snapshot_version';
+    
+    PersistentStorage._instance = this;
+  }
+
+  /**
+   * Get singleton instance
+   */
+  static getInstance() {
+    if (!PersistentStorage._instance) {
+      PersistentStorage._instance = new PersistentStorage();
+    }
+    return PersistentStorage._instance;
   }
 
   /**
@@ -83,10 +103,21 @@ class PersistentStorage {
   }
 
   /**
-   * Initialize IndexedDB
+   * Initialize IndexedDB (singleton - only opens once)
    */
   async init() {
-    return new Promise((resolve, reject) => {
+    // If already initialized, return existing db
+    if (this.db) {
+      return Promise.resolve(this.db);
+    }
+
+    // If initialization is in progress, return the same promise
+    if (PersistentStorage._initPromise) {
+      return PersistentStorage._initPromise;
+    }
+
+    // Start new initialization
+    PersistentStorage._initPromise = new Promise((resolve, reject) => {
       console.log('[DATA] Opening IndexedDB:', this.dbName, 'version', this.version);
       
       const request = indexedDB.open(this.dbName, this.version);
@@ -99,6 +130,7 @@ class PersistentStorage {
       request.onerror = () => {
         clearTimeout(timeout);
         console.error('[ERROR] IndexedDB open failed:', request.error);
+        PersistentStorage._initPromise = null; // Clear promise on error
         reject(request.error);
       };
       
@@ -106,6 +138,7 @@ class PersistentStorage {
         clearTimeout(timeout);
         this.db = request.result;
         console.log('[SUCCESS] Persistent storage initialized (version', this.db.version, ')');
+        PersistentStorage._initPromise = null; // Clear promise after success
         resolve(this.db);
       };
 
@@ -743,7 +776,8 @@ class PersistentStorage {
 }
 
 // Export singleton
-const persistentStorage = new PersistentStorage();
+// Use singleton instance
+const persistentStorage = PersistentStorage.getInstance();
 
 // Export to window for global access
 if (typeof window !== 'undefined') {

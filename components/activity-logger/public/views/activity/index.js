@@ -11,6 +11,12 @@ async function renderActivityView(container) {
   let prompts = window.state?.data?.prompts || [];
   let terminalCommands = window.state?.data?.terminalCommands || [];
   
+  // Sync with global workspace selector if available
+  const globalWorkspace = window.state?.currentWorkspace;
+  if (globalWorkspace && globalWorkspace !== 'all') {
+    currentWorkspaceFilter = globalWorkspace;
+  }
+  
   // Apply workspace filter with proper normalization
   if (currentWorkspaceFilter !== 'all') {
     // Normalize the filter value
