@@ -496,19 +496,12 @@ a:focus:not(:focus-visible) {
 /* Dashboard Header */
 .dashboard-header {
   padding: var(--space-md) var(--space-lg);
-  background: var(--color-surface);
-  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface, #1E293B);
+  border-bottom: 1px solid var(--color-border, #475569);
   position: sticky;
   top: 0;
   z-index: 100;
   backdrop-filter: blur(10px);
-  background: rgba(255, 255, 255, 0.95);
-}
-
-@media (prefers-color-scheme: dark) {
-  .dashboard-header {
-    background: rgba(17, 24, 39, 0.95);
-  }
 }
 
 .stats-grid {
@@ -523,8 +516,8 @@ a:focus:not(:focus-visible) {
   align-items: center;
   justify-content: center;
   padding: var(--space-md);
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
+  background: var(--color-surface, #1E293B);
+  border: 1px solid var(--color-border, #475569);
   border-radius: var(--radius-md);
   transition: all var(--transition-base);
   gap: 2px;
