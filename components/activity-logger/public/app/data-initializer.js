@@ -17,80 +17,78 @@ async function initializeDashboard() {
     await loadFromCache();
     window.initProgress.update('cache', 100);
     
-    // Step 2: Check server version to see if we need to sync
+    // Step 2: Check server version (non-blocking - don't wait for it)
     window.initProgress.update('server', 0);
     let serverHealth = null;
     let isConnected = false;
     
-    try {
-      serverHealth = await window.APIClient.get('/health');
-      const serverSequence = serverHealth.sequence || 0;
-      isConnected = serverHealth.status === 'running' || serverHealth.sequence !== undefined;
-      window.initProgress.update('server', 100);
-      
-      // Update connection state
-      if (window.state) {
-        window.state.connected = isConnected;
+    // Start health check but don't block on it - render UI first
+    const healthCheckPromise = (async () => {
+      try {
+        const health = await window.APIClient.get('/health', { timeout: 5000, retries: 0, silent: true });
+        return health;
+      } catch (error) {
+        return null; // Return null on error, will be handled below
       }
-      
-      if (isConnected) {
-        window.updateConnectionStatus(true, 'Connected to companion service');
+    })();
+    
+    // Mark server check as complete immediately (optimistic)
+    window.initProgress.update('server', 100);
+    window.updateConnectionStatus(false, 'Checking connection...');
+    
+    // Update connection status when health check completes (non-blocking)
+    healthCheckPromise.then(health => {
+      serverHealth = health;
+      if (health) {
+        isConnected = health.status === 'running' || health.sequence !== undefined;
+        if (window.state) {
+          window.state.connected = isConnected;
+          window.state.companionServiceOnline = isConnected;
+        }
+        if (isConnected) {
+          window.updateConnectionStatus(true, 'Connected to companion service');
+        } else {
+          window.updateConnectionStatus(false, 'Companion service offline');
+        }
       } else {
-        window.updateConnectionStatus(false, 'Companion service offline');
-      }
-    } catch (error) {
-      const isNetworkError = window.APIClient?.isOfflineError(error) || 
-                             error.message?.includes('CORS') || 
-                             error.message?.includes('NetworkError') || 
-                             error.message?.includes('Failed to fetch') ||
-                             error.name === 'NetworkError' ||
-                             error.name === 'TypeError';
-      
-      // Only log health check failures if not a network error (expected when offline)
-      if (!isNetworkError) {
-        console.warn('[WARNING] Health check failed:', error.message);
+        isConnected = false;
+        if (window.state) {
+          window.state.connected = false;
+          window.state.companionServiceOnline = false;
+        }
+        const apiBase = window.APIClient?.getApiBase() || window.CONFIG?.API_BASE || 'http://localhost:43917';
+        window.updateConnectionStatus(false, `Offline - using cached data`);
       }
       
+      // Check cache staleness after health check completes
+      if (serverHealth && window.persistentStorage) {
+        window.persistentStorage.isCacheStale(serverHealth.sequence || 0).then(stale => {
+          if (stale && isConnected) {
+            // Fetch updates in background
+            fetchRecentData().catch(err => {
+              console.warn('[WARNING] Background sync failed:', err.message);
+            });
+          }
+        });
+      }
+    }).catch(() => {
+      // Health check failed, continue with cached data
       isConnected = false;
       if (window.state) {
         window.state.connected = false;
         window.state.companionServiceOnline = false;
       }
-      
-      // Provide more helpful error message
-      const apiBase = window.APIClient?.getApiBase() || window.CONFIG?.API_BASE || 'http://localhost:43917';
-      const errorMessage = isNetworkError 
-        ? `Offline - using cached data (service at ${apiBase} not reachable)`
-        : `Connection failed - ${error.message || 'Unknown error'}`;
-      
-      window.updateConnectionStatus(false, errorMessage);
-      window.initProgress.update('server', 100);
-    }
+      window.updateConnectionStatus(false, 'Offline - using cached data');
+    });
     
-    const cacheStale = serverHealth && window.persistentStorage ? await window.persistentStorage.isCacheStale(serverHealth.sequence || 0) : false;
+    // Assume cache is fresh initially (optimistic)
+    const cacheStale = false;
     
-    if (cacheStale && isConnected) {
-      console.log('Cache stale, fetching updates...');
-      window.initProgress.update('data', 0);
-      try {
-        await fetchRecentData();
-        if (window.persistentStorage) {
-          await window.persistentStorage.updateServerSequence(serverHealth.sequence || 0);
-        }
-        window.updateConnectionStatus(true, 'Connected - data synced');
-        window.initProgress.update('data', 100);
-      } catch (error) {
-        console.warn('[WARNING] Data fetch failed:', error.message);
-        window.updateConnectionStatus(false, 'Connected but sync failed');
-        window.initProgress.update('data', 100);
-      }
-    } else {
-      console.log('[SUCCESS] Cache up-to-date, using cached data');
-      if (isConnected) {
-        window.updateConnectionStatus(true, 'Connected - using cached data');
-      }
-      window.initProgress.update('data', 100);
-    }
+    // Skip blocking data fetch - use cached data immediately, sync in background
+    console.log('[SUCCESS] Using cached data, syncing in background...');
+    window.initProgress.update('data', 100);
+    
+    // Background sync will happen when health check completes (see above)
     
     // Step 3: Render initial UI immediately (defer stats calculation)
     window.initProgress.update('render', 0);
@@ -212,60 +210,48 @@ async function loadFromCache() {
     return;
   }
   
-  // Load minimal recent data (last 2 hours) for fastest startup
+  // Load minimal recent data (last 1 hour) for fastest startup
   const now = Date.now();
-  const twoHoursAgo = now - 2 * 60 * 60 * 1000; // Reduced to 2 hours for even faster load
+  const oneHourAgo = now - 60 * 60 * 1000; // Reduced to 1 hour for even faster load
   
   try {
-    // Load only most recent events (limit to 30 for ultra-fast load)
-    if (window.persistentStorage.getEventsSince) {
-      const recentEvents = await window.persistentStorage.getEventsSince(twoHoursAgo);
-      if (recentEvents && recentEvents.length > 0) {
-        // Limit to 30 most recent for fastest load
-        window.state.data.events = recentEvents.slice(0, 30);
-        console.log(`[SUCCESS] Loaded ${window.state.data.events.length} recent events from cache`);
-      } else {
-        // Fallback: try getting just the last 30 events directly
-        const lastEvents = await window.persistentStorage.getAllEvents(30);
-        if (lastEvents && lastEvents.length > 0) {
-          window.state.data.events = lastEvents;
-          console.log(`[SUCCESS] Loaded ${lastEvents.length} events from cache (fallback)`);
-        }
+    // Load only most recent events (limit to 20 for ultra-fast load)
+    if (window.persistentStorage.getAllEvents) {
+      // Use getAllEvents with limit for fastest query
+      const lastEvents = await window.persistentStorage.getAllEvents(20);
+      if (lastEvents && lastEvents.length > 0) {
+        window.state.data.events = lastEvents;
+        console.log(`[SUCCESS] Loaded ${lastEvents.length} events from cache`);
       }
     }
     
-    // Load only most recent prompts (limit to 30 for ultra-fast load)
-    if (window.persistentStorage.getPromptsSince) {
-      const recentPrompts = await window.persistentStorage.getPromptsSince(twoHoursAgo);
-      if (recentPrompts && recentPrompts.length > 0) {
-        // Limit to 30 most recent for fastest load
-        window.state.data.prompts = recentPrompts.slice(0, 30);
-        console.log(`[SUCCESS] Loaded ${window.state.data.prompts.length} recent prompts from cache`);
-      } else {
-        // Fallback: try getting just the last 30 prompts directly
-        const lastPrompts = await window.persistentStorage.getAllPrompts(30);
-        if (lastPrompts && lastPrompts.length > 0) {
-          window.state.data.prompts = lastPrompts;
-          console.log(`[SUCCESS] Loaded ${lastPrompts.length} prompts from cache (fallback)`);
-        }
+    // Load only most recent prompts (limit to 20 for ultra-fast load)
+    if (window.persistentStorage.getAllPrompts) {
+      // Use getAllPrompts with limit for fastest query
+      const lastPrompts = await window.persistentStorage.getAllPrompts(20);
+      if (lastPrompts && lastPrompts.length > 0) {
+        window.state.data.prompts = lastPrompts;
+        console.log(`[SUCCESS] Loaded ${lastPrompts.length} prompts from cache`);
       }
     }
     
     // Don't calculate stats or render here - let main initialization handle it
     // This makes cache loading faster and non-blocking
     
-    // Load more data in background (non-blocking) - limit to 200 total
-    if (typeof requestIdleCallback !== 'undefined') {
-      requestIdleCallback(async () => {
-        try {
-          // Only load up to 200 more events/prompts (not all)
-          const currentEventCount = (window.state.data.events || []).length;
-          const currentPromptCount = (window.state.data.prompts || []).length;
-          const neededEvents = Math.max(0, 200 - currentEventCount);
-          const neededPrompts = Math.max(0, 200 - currentPromptCount);
-          
-          const allEvents = neededEvents > 0 ? await window.persistentStorage.getAllEvents(neededEvents) : [];
-          const allPrompts = neededPrompts > 0 ? await window.persistentStorage.getAllPrompts(neededPrompts) : [];
+    // Load more data in background (non-blocking) - limit to 100 total for faster loading
+    const loadMoreData = async () => {
+      try {
+        // Only load up to 100 more events/prompts (reduced from 200)
+        const currentEventCount = (window.state.data.events || []).length;
+        const currentPromptCount = (window.state.data.prompts || []).length;
+        const neededEvents = Math.max(0, 100 - currentEventCount);
+        const neededPrompts = Math.max(0, 100 - currentPromptCount);
+        
+        if (neededEvents > 0 || neededPrompts > 0) {
+          const [allEvents, allPrompts] = await Promise.all([
+            neededEvents > 0 ? window.persistentStorage.getAllEvents(neededEvents) : Promise.resolve([]),
+            neededPrompts > 0 ? window.persistentStorage.getAllPrompts(neededPrompts) : Promise.resolve([])
+          ]);
           
           // Merge with recent data (avoid duplicates)
           const existingEventIds = new Set((window.state.data.events || []).map(e => e.id));
@@ -280,51 +266,24 @@ async function loadFromCache() {
           if (olderEvents.length > 0 || olderPrompts.length > 0) {
             window.state.data.events = [...(window.state.data.events || []), ...olderEvents];
             window.state.data.prompts = [...(window.state.data.prompts || []), ...olderPrompts];
-            console.log(`[SUCCESS] Loaded ${olderEvents.length} older events and ${olderPrompts.length} older prompts`);
+            console.log(`[BACKGROUND] Loaded ${olderEvents.length} older events and ${olderPrompts.length} older prompts`);
             
-            // Recalculate stats with full dataset
+            // Recalculate stats with full dataset (deferred)
             if (window.calculateStats) {
-              window.calculateStats();
+              setTimeout(() => window.calculateStats(), 100);
             }
           }
-        } catch (error) {
-          console.warn('[WARNING] Failed to load older cached data:', error.message);
         }
-      }, { timeout: 3000 });
+      } catch (error) {
+        // Silently fail - this is background loading
+      }
+    };
+    
+    // Defer to idle time or after delay
+    if (typeof requestIdleCallback !== 'undefined') {
+      requestIdleCallback(loadMoreData, { timeout: 5000 });
     } else {
-      // Fallback: load more data after a delay (limit to 200 total)
-      setTimeout(async () => {
-        try {
-          const currentEventCount = (window.state.data.events || []).length;
-          const currentPromptCount = (window.state.data.prompts || []).length;
-          const neededEvents = Math.max(0, 200 - currentEventCount);
-          const neededPrompts = Math.max(0, 200 - currentPromptCount);
-          
-          const allEvents = neededEvents > 0 ? await window.persistentStorage.getAllEvents(neededEvents) : [];
-          const allPrompts = neededPrompts > 0 ? await window.persistentStorage.getAllPrompts(neededPrompts) : [];
-          
-          const existingEventIds = new Set((window.state.data.events || []).map(e => e.id));
-          const existingPromptIds = new Set((window.state.data.prompts || []).map(p => p.id || p.prompt_id));
-          
-          const olderEvents = (allEvents || []).filter(e => !existingEventIds.has(e.id));
-          const olderPrompts = (allPrompts || []).filter(p => {
-            const id = p.id || p.prompt_id;
-            return id && !existingPromptIds.has(id);
-          });
-          
-          if (olderEvents.length > 0 || olderPrompts.length > 0) {
-            window.state.data.events = [...(window.state.data.events || []), ...olderEvents];
-            window.state.data.prompts = [...(window.state.data.prompts || []), ...olderPrompts];
-            console.log(`[SUCCESS] Loaded ${olderEvents.length} older events and ${olderPrompts.length} older prompts`);
-            
-            if (window.calculateStats) {
-              window.calculateStats();
-            }
-          }
-        } catch (error) {
-          console.warn('[WARNING] Failed to load older cached data:', error.message);
-        }
-      }, 2000);
+      setTimeout(loadMoreData, 3000);
     }
   } catch (error) {
     console.warn('[WARNING] Cache load failed, trying fallback:', error.message);
@@ -387,7 +346,7 @@ async function fetchRecentData() {
     // console.log(`[SYNC] Fetching recent data (${windowLabel} window)...`);
   }
   
-  const pageSize = 30; // Ultra-minimal initial load for fastest startup (load more in background)
+  const pageSize = 20; // Ultra-minimal initial load for fastest startup (load more in background)
   
   try {
     // Fetch recent events in parallel for faster loading (cloud-optimized)

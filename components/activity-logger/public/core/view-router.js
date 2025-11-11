@@ -102,20 +102,21 @@ async function renderCurrentView() {
     try {
       // Yield to event loop before rendering heavy views
       if (['analytics', 'filegraph', 'navigator', 'whiteboard'].includes(viewName)) {
-        // Heavy views: yield first, then render
-        await new Promise(resolve => setTimeout(resolve, 0));
+        // Heavy views: yield first, then render (use requestIdleCallback for better performance)
         if (typeof requestIdleCallback !== 'undefined') {
           requestIdleCallback(() => {
             renderFn(container);
             if (window.setLoading) window.setLoading(viewName, false);
-          }, { timeout: 100 });
+          }, { timeout: 50 }); // Reduced timeout for faster rendering
         } else {
-          await new Promise(resolve => requestAnimationFrame(resolve));
-          renderFn(container);
-          if (window.setLoading) window.setLoading(viewName, false);
+          // Fallback: use requestAnimationFrame
+          requestAnimationFrame(() => {
+            renderFn(container);
+            if (window.setLoading) window.setLoading(viewName, false);
+          });
         }
       } else {
-        // Light views: render immediately with animation frame
+        // Light views: render immediately with animation frame (non-blocking)
         if (typeof requestAnimationFrame !== 'undefined') {
           requestAnimationFrame(() => {
             renderFn(container);
