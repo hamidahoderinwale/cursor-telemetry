@@ -62,7 +62,14 @@ class QueryExecutor {
       }
     }
 
-    return sql;
+    // Translate legacy table names: 'events' -> 'entries'
+    // Use case-insensitive replacement to handle various SQL formats
+    let sanitized = sql;
+    sanitized = sanitized.replace(/\bFROM\s+events\b/gi, 'FROM entries');
+    sanitized = sanitized.replace(/\bJOIN\s+events\b/gi, 'JOIN entries');
+    sanitized = sanitized.replace(/\bevents\./gi, 'entries.');
+
+    return sanitized;
   }
 }
 

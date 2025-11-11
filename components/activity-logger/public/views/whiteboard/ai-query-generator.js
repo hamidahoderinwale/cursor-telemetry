@@ -59,7 +59,7 @@ class AIQueryGenerator {
   }
 
   generateFileEditQuery(query) {
-    let sql = 'SELECT file_path, COUNT(*) as edit_count FROM events';
+    let sql = 'SELECT file_path, COUNT(*) as edit_count FROM entries';
     
     // Add time filter
     if (query.includes('today')) {
@@ -106,7 +106,7 @@ class AIQueryGenerator {
   }
 
   generateTimeQuery(query) {
-    let sql = "SELECT strftime('%H', timestamp) as hour, COUNT(*) as activity_count FROM events";
+    let sql = "SELECT strftime('%H', timestamp) as hour, COUNT(*) as activity_count FROM entries";
     
     if (query.includes('today')) {
       sql += " WHERE DATE(timestamp) = DATE('now')";
@@ -121,7 +121,7 @@ class AIQueryGenerator {
   }
 
   generateWorkspaceQuery(query) {
-    let sql = 'SELECT workspace_path, COUNT(*) as activity_count FROM events';
+    let sql = 'SELECT workspace_path, COUNT(*) as activity_count FROM entries';
     
     if (query.includes('today')) {
       sql += " WHERE timestamp > datetime('now', '-1 day')";
@@ -149,7 +149,7 @@ class AIQueryGenerator {
     }
     
     // Fallback: simple event count
-    return "SELECT DATE(timestamp) as date, COUNT(*) as count FROM events WHERE timestamp > datetime('now', '-30 days') GROUP BY date ORDER BY date DESC LIMIT 30";
+    return "SELECT DATE(timestamp) as date, COUNT(*) as count FROM entries WHERE timestamp > datetime('now', '-30 days') GROUP BY date ORDER BY date DESC LIMIT 30";
   }
 }
 

@@ -128,11 +128,24 @@ class WhiteboardManager {
       });
     }
 
-    // Visualize button
-    const vizBtn = block.querySelector('[data-action="visualize"]');
-    if (vizBtn) {
-      vizBtn.addEventListener('click', () => {
-        this.visualizeQuery(queryId);
+    // Toggle expand/collapse
+    const expandBtn = block.querySelector('[data-action="toggle-expand"]');
+    if (expandBtn) {
+      expandBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        block.classList.toggle('expanded');
+        block.classList.toggle('collapsed');
+        const isExpanded = block.classList.contains('expanded');
+        expandBtn.textContent = isExpanded ? '⊟' : '⛶';
+        expandBtn.title = isExpanded ? 'Collapse' : 'Expand';
+      });
+    }
+
+    // Create chart widget button
+    const chartBtn = block.querySelector('[data-action="create-chart"]');
+    if (chartBtn) {
+      chartBtn.addEventListener('click', () => {
+        this.createChartWidget(queryId);
       });
     }
 
@@ -310,6 +323,117 @@ class WhiteboardManager {
     if (chartContainer) {
       chartContainer.style.display = 'block';
       this.visualizeQuery(queryId);
+    }
+  }
+
+  createChartWidget(queryId) {
+    const query = this.queries.get(queryId);
+    if (!query || !query.results) {
+      alert('Please run the query first to create a chart');
+      return;
+    }
+
+    const chartId = `chart-${Date.now()}`;
+    const template = document.getElementById('chartWidgetTemplate');
+    if (!template) {
+      console.error('Chart widget template not found');
+      return;
+    }
+
+    const canvas = document.getElementById('whiteboardCanvas');
+    if (!canvas) return;
+
+    const chartWidget = template.cloneNode(true);
+    chartWidget.id = chartId;
+    chartWidget.style.display = 'block';
+    chartWidget.querySelector('.chart-widget').dataset.chartId = chartId;
+    chartWidget.querySelector('.chart-widget').dataset.queryId = queryId;
+
+    // Position near the query block
+    const queryBlock = document.getElementById(queryId);
+    if (queryBlock) {
+      const rect = queryBlock.getBoundingClientRect();
+      const canvasRect = canvas.getBoundingClientRect();
+      chartWidget.querySelector('.chart-widget').style.left = `${rect.right - canvasRect.left + 20}px`;
+      chartWidget.querySelector('.chart-widget').style.top = `${rect.top - canvasRect.top}px`;
+    }
+
+    canvas.appendChild(chartWidget);
+
+    // Initialize chart widget
+    this.initializeChartWidget(chartId, queryId);
+    
+    // Render chart
+    this.renderChart(chartId, query.results);
+  }
+
+  initializeChartWidget(chartId, queryId) {
+    const widget = document.querySelector(`[data-chart-id="${chartId}"]`);
+    if (!widget) return;
+
+    // Toggle expand/collapse
+    const expandBtn = widget.querySelector('[data-action="toggle-expand"]');
+    if (expandBtn) {
+      expandBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        widget.classList.toggle('expanded');
+        widget.classList.toggle('collapsed');
+        const isExpanded = widget.classList.contains('expanded');
+        expandBtn.textContent = isExpanded ? '⊟' : '⛶';
+        expandBtn.title = isExpanded ? 'Collapse' : 'Expand';
+      });
+    }
+
+    // Refresh button
+    const refreshBtn = widget.querySelector('[data-action="refresh"]');
+    if (refreshBtn) {
+      refreshBtn.addEventListener('click', async () => {
+        const query = this.queries.get(queryId);
+        if (query?.results) {
+          this.renderChart(chartId, query.results);
+        }
+      });
+    }
+
+    // Delete button
+    const deleteBtn = widget.querySelector('[data-action="delete"]');
+    if (deleteBtn) {
+      deleteBtn.addEventListener('click', () => {
+        widget.remove();
+      });
+    }
+
+    // Chart type selector
+    const typeSelect = widget.querySelector('.chart-type-select');
+    if (typeSelect) {
+      typeSelect.addEventListener('change', () => {
+        const query = this.queries.get(queryId);
+        if (query?.results) {
+          this.renderChart(chartId, query.results, typeSelect.value);
+        }
+      });
+    }
+
+    // Make draggable
+    const header = widget.querySelector('.chart-widget-header');
+    if (header) {
+      this.makeDraggable(widget, { id: chartId, position: { x: 0, y: 0 } });
+    }
+  }
+
+  renderChart(chartId, results, chartType = 'bar') {
+    const widget = document.querySelector(`[data-chart-id="${chartId}"]`);
+    if (!widget) return;
+
+    const container = widget.querySelector('.chart-container');
+    if (!container) return;
+
+    // Use visualization engine if available
+    if (this.visualizationEngine) {
+      this.visualizationEngine.renderChart(container, results, chartType);
+    } else {
+      // Fallback: simple message
+      container.innerHTML = `<div class="chart-loading">Chart visualization will be rendered here (${chartType})</div>`;
     }
   }
 

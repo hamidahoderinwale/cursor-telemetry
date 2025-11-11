@@ -78,8 +78,9 @@ function renderWhiteboardView(container) {
               <span class="query-status" title="Query status"></span>
             </div>
             <div class="query-block-actions">
+              <button class="btn-icon expand-btn" title="Expand/Collapse" data-action="toggle-expand">⛶</button>
               <button class="btn-icon" title="Run query" data-action="run">Run</button>
-              <button class="btn-icon" title="Visualize" data-action="visualize">Chart</button>
+              <button class="btn-icon" title="Create chart widget" data-action="create-chart">Chart</button>
               <button class="btn-icon" title="Export" data-action="export">Export</button>
               <button class="btn-icon" title="Delete" data-action="delete">×</button>
             </div>
@@ -93,7 +94,7 @@ function renderWhiteboardView(container) {
               </div>
               <div class="query-input-content">
                 <textarea class="query-input natural-input" placeholder="Ask a question in natural language...&#10;Example: 'Show me files I edited most this week'"></textarea>
-                <textarea class="query-input sql-input" style="display: none;" placeholder="Write SQL query...&#10;Example: SELECT file_path, COUNT(*) FROM events WHERE timestamp > date('now', '-7 days') GROUP BY file_path"></textarea>
+                <textarea class="query-input sql-input" style="display: none;" placeholder="Write SQL query...&#10;Example: SELECT file_path, COUNT(*) FROM entries WHERE timestamp > date('now', '-7 days') GROUP BY file_path"></textarea>
                 <div class="query-builder" style="display: none;">
                   <div class="builder-section">
                     <label>Data Source:</label>
@@ -206,8 +207,8 @@ function initializeWhiteboard() {
             sqlInput.value = `SELECT 
   file_path,
   COUNT(*) as change_count,
-  SUM(CASE WHEN details LIKE '%chars_added%' THEN 1 ELSE 0 END) as additions
-FROM events 
+  SUM(CASE WHEN after_code IS NOT NULL THEN 1 ELSE 0 END) as additions
+FROM entries 
 WHERE timestamp > datetime('now', '-7 days')
 GROUP BY file_path
 ORDER BY change_count DESC
