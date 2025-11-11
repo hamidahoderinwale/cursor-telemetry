@@ -83,24 +83,44 @@ function renderOverviewView(container) {
   const workspaceCount = window.state.stats?.workspaces || window.state.data?.workspaces?.length || 0;
   
   // Calculate streak (consecutive days with activity)
+  // Count backwards from today, including today if it has activity
   let streak = 0;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  for (let i = 0; i < 365; i++) {
-    const checkDate = new Date(today);
-    checkDate.setDate(checkDate.getDate() - i);
-    const dayStart = checkDate.getTime();
-    const dayEnd = dayStart + (24 * 60 * 60 * 1000);
+  
+  // Get all unique days with activity (normalize to start of day in local timezone)
+  const daysWithActivity = new Set();
+  [...events, ...prompts, ...terminalCommands].forEach(item => {
+    if (item.timestamp) {
+      const date = new Date(item.timestamp);
+      // Normalize to start of day in local timezone (handles timezone correctly)
+      const dayKey = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+      daysWithActivity.add(dayKey);
+    }
+  });
+  
+  if (daysWithActivity.size > 0) {
+    // Count consecutive days going backwards from today
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayKey = today.getTime();
     
-    const hasActivity = [...events, ...prompts, ...terminalCommands].some(item => {
-      const ts = item.timestamp ? new Date(item.timestamp).getTime() : 0;
-      return ts >= dayStart && ts < dayEnd;
-    });
-    
-    if (hasActivity) {
-      streak++;
-    } else {
-      break;
+    // Count backwards day by day, starting from today
+    for (let i = 0; i < 365; i++) {
+      const checkDay = todayKey - (i * 24 * 60 * 60 * 1000);
+      
+      if (daysWithActivity.has(checkDay)) {
+        streak++;
+      } else {
+        // Stop counting if we hit a day without activity
+        // But if today (i=0) has no activity, we should check yesterday
+        // So only break if we've already counted at least one day
+        if (i === 0) {
+          // Today has no activity, but continue to check yesterday
+          continue;
+        } else {
+          // Found a gap in the streak
+          break;
+        }
+      }
     }
   }
   

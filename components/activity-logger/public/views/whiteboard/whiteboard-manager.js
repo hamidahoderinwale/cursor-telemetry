@@ -41,12 +41,12 @@ class WhiteboardManager {
     block.style.display = 'block';
     block.dataset.queryId = queryId;
     
-    // Set initial position (staggered)
+    // Set initial position (staggered, with better spacing)
     const count = this.queries.size;
     block.style.position = 'absolute';
-    block.style.left = `${50 + (count % 3) * 400}px`;
-    block.style.top = `${100 + Math.floor(count / 3) * 400}px`;
-    block.style.width = '380px';
+    block.style.left = `${80 + (count % 3) * 560}px`;
+    block.style.top = `${120 + Math.floor(count / 3) * 500}px`;
+    block.style.width = '520px';
     
     // Set title
     const titleInput = block.querySelector('.query-title-input');

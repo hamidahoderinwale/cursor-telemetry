@@ -211,32 +211,46 @@ function renderSystemResourceStats() {
 
   container.innerHTML = `
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: var(--space-lg);">
-      <div class="stat-card" style="padding: var(--space-lg);">
-        <div class="stat-label" style="font-size: var(--text-sm); font-weight: 500; color: var(--color-text-muted); margin-bottom: var(--space-sm); text-transform: uppercase; letter-spacing: 0.5px;">Avg Memory</div>
-        <div class="stat-value" style="font-size: 2rem; font-weight: 600; color: var(--color-text); margin-bottom: var(--space-md); line-height: 1.2;">${avgMemory.toFixed(1)} <span style="font-size: 1rem; font-weight: 400; color: var(--color-text-muted);">MB</span></div>
-        <div style="font-size: var(--text-xs); color: var(--color-text-muted); padding-top: var(--space-sm); border-top: 1px solid var(--color-border);">
-          <span style="opacity: 0.7;">Range:</span> <strong>${minMemory.toFixed(1)}</strong> - <strong>${maxMemory.toFixed(1)}</strong> MB
+      <div class="stat-card" style="padding: var(--space-xl); background: var(--color-bg); border: 1px solid var(--color-border); border-radius: var(--radius-lg);">
+        <div class="stat-label" style="font-size: var(--text-xs); font-weight: 600; color: var(--color-text-muted); margin-bottom: var(--space-md); text-transform: uppercase; letter-spacing: 0.8px;">Avg Memory</div>
+        <div class="stat-value" style="font-size: 2.5rem; font-weight: 700; color: var(--color-text); margin-bottom: var(--space-lg); line-height: 1.1;">
+          ${avgMemory.toFixed(1)} <span style="font-size: 1.25rem; font-weight: 500; color: var(--color-text-secondary);">MB</span>
+        </div>
+        <div style="font-size: var(--text-sm); color: var(--color-text-secondary); padding-top: var(--space-md); border-top: 1px solid var(--color-border); line-height: 1.6;">
+          <div style="margin-bottom: var(--space-xs);">
+            <span style="color: var(--color-text-muted); font-weight: 500;">Range:</span>
+            <span style="margin-left: var(--space-xs); font-weight: 600; color: var(--color-text);">${minMemory.toFixed(1)} - ${maxMemory.toFixed(1)} MB</span>
+          </div>
         </div>
       </div>
-      <div class="stat-card" style="padding: var(--space-lg);">
-        <div class="stat-label" style="font-size: var(--text-sm); font-weight: 500; color: var(--color-text-muted); margin-bottom: var(--space-sm); text-transform: uppercase; letter-spacing: 0.5px;">Peak Memory</div>
-        <div class="stat-value" style="font-size: 2rem; font-weight: 600; color: var(--color-text); margin-bottom: var(--space-md); line-height: 1.2;">${maxMemory.toFixed(1)} <span style="font-size: 1rem; font-weight: 400; color: var(--color-text-muted);">MB</span></div>
-        <div style="font-size: var(--text-xs); color: var(--color-text-muted); padding-top: var(--space-sm); border-top: 1px solid var(--color-border);">
-          <span style="opacity: 0.7;">Maximum observed</span>
+      <div class="stat-card" style="padding: var(--space-xl); background: var(--color-bg); border: 1px solid var(--color-border); border-radius: var(--radius-lg);">
+        <div class="stat-label" style="font-size: var(--text-xs); font-weight: 600; color: var(--color-text-muted); margin-bottom: var(--space-md); text-transform: uppercase; letter-spacing: 0.8px;">Peak Memory</div>
+        <div class="stat-value" style="font-size: 2.5rem; font-weight: 700; color: var(--color-text); margin-bottom: var(--space-lg); line-height: 1.1;">
+          ${maxMemory.toFixed(1)} <span style="font-size: 1.25rem; font-weight: 500; color: var(--color-text-secondary);">MB</span>
+        </div>
+        <div style="font-size: var(--text-sm); color: var(--color-text-secondary); padding-top: var(--space-md); border-top: 1px solid var(--color-border); line-height: 1.6;">
+          <div style="color: var(--color-text-muted); font-weight: 500;">Maximum observed</div>
         </div>
       </div>
-      <div class="stat-card" style="padding: var(--space-lg);">
-        <div class="stat-label" style="font-size: var(--text-sm); font-weight: 500; color: var(--color-text-muted); margin-bottom: var(--space-sm); text-transform: uppercase; letter-spacing: 0.5px;">Avg CPU Load</div>
-        <div class="stat-value" style="font-size: 2rem; font-weight: 600; color: var(--color-text); margin-bottom: var(--space-md); line-height: 1.2;">${avgCpu.toFixed(2)}</div>
-        <div style="font-size: var(--text-xs); color: var(--color-text-muted); padding-top: var(--space-sm); border-top: 1px solid var(--color-border);">
-          <span style="opacity: 0.7;">Range:</span> <strong>${minCpu.toFixed(2)}</strong> - <strong>${maxCpu.toFixed(2)}</strong>
+      <div class="stat-card" style="padding: var(--space-xl); background: var(--color-bg); border: 1px solid var(--color-border); border-radius: var(--radius-lg);">
+        <div class="stat-label" style="font-size: var(--text-xs); font-weight: 600; color: var(--color-text-muted); margin-bottom: var(--space-md); text-transform: uppercase; letter-spacing: 0.8px;">Avg CPU Load</div>
+        <div class="stat-value" style="font-size: 2.5rem; font-weight: 700; color: var(--color-text); margin-bottom: var(--space-lg); line-height: 1.1;">
+          ${avgCpu.toFixed(2)}
+        </div>
+        <div style="font-size: var(--text-sm); color: var(--color-text-secondary); padding-top: var(--space-md); border-top: 1px solid var(--color-border); line-height: 1.6;">
+          <div style="margin-bottom: var(--space-xs);">
+            <span style="color: var(--color-text-muted); font-weight: 500;">Range:</span>
+            <span style="margin-left: var(--space-xs); font-weight: 600; color: var(--color-text);">${minCpu.toFixed(2)} - ${maxCpu.toFixed(2)}</span>
+          </div>
         </div>
       </div>
-      <div class="stat-card" style="padding: var(--space-lg);">
-        <div class="stat-label" style="font-size: var(--text-sm); font-weight: 500; color: var(--color-text-muted); margin-bottom: var(--space-sm); text-transform: uppercase; letter-spacing: 0.5px;">Peak CPU Load</div>
-        <div class="stat-value" style="font-size: 2rem; font-weight: 600; color: var(--color-text); margin-bottom: var(--space-md); line-height: 1.2;">${maxCpu.toFixed(2)}</div>
-        <div style="font-size: var(--text-xs); color: var(--color-text-muted); padding-top: var(--space-sm); border-top: 1px solid var(--color-border);">
-          <span style="opacity: 0.7;">Maximum observed</span>
+      <div class="stat-card" style="padding: var(--space-xl); background: var(--color-bg); border: 1px solid var(--color-border); border-radius: var(--radius-lg);">
+        <div class="stat-label" style="font-size: var(--text-xs); font-weight: 600; color: var(--color-text-muted); margin-bottom: var(--space-md); text-transform: uppercase; letter-spacing: 0.8px;">Peak CPU Load</div>
+        <div class="stat-value" style="font-size: 2.5rem; font-weight: 700; color: var(--color-text); margin-bottom: var(--space-lg); line-height: 1.1;">
+          ${maxCpu.toFixed(2)}
+        </div>
+        <div style="font-size: var(--text-sm); color: var(--color-text-secondary); padding-top: var(--space-md); border-top: 1px solid var(--color-border); line-height: 1.6;">
+          <div style="color: var(--color-text-muted); font-weight: 500;">Maximum observed</div>
         </div>
       </div>
     </div>
@@ -328,11 +342,30 @@ function renderPerformanceTrends() {
   if (!container) return;
 
   // Get time scale settings from UI or use defaults
+  // Read from DOM first (if elements exist), otherwise use stored values or defaults
   const timeRangeSelect = document.getElementById('performanceTimeRange');
   const periodSizeSelect = document.getElementById('performancePeriodSize');
   
-  const timeRange = timeRangeSelect?.value || '24h'; // Default: last 24 hours
-  const periodSize = periodSizeSelect?.value || '5m'; // Default: 5 minute periods
+  // Get current values from selects if they exist, otherwise use defaults
+  let timeRange = '24h'; // Default: last 24 hours
+  let periodSize = '5m'; // Default: 5 minute periods
+  
+  if (timeRangeSelect) {
+    timeRange = timeRangeSelect.value;
+  } else if (window.performanceTrendsState?.timeRange) {
+    timeRange = window.performanceTrendsState.timeRange;
+  }
+  
+  if (periodSizeSelect) {
+    periodSize = periodSizeSelect.value;
+  } else if (window.performanceTrendsState?.periodSize) {
+    periodSize = window.performanceTrendsState.periodSize;
+  }
+  
+  // Store current state for next render
+  if (!window.performanceTrendsState) window.performanceTrendsState = {};
+  window.performanceTrendsState.timeRange = timeRange;
+  window.performanceTrendsState.periodSize = periodSize;
   
   // Calculate time range in milliseconds
   const timeRangeMs = {
@@ -503,7 +536,7 @@ function renderPerformanceTrends() {
           <div style="display: flex; gap: var(--space-sm); align-items: center; flex-wrap: wrap;">
             <label style="font-size: var(--text-xs); color: var(--color-text-muted); display: flex; align-items: center; gap: var(--space-xs);">
               Time Range:
-              <select id="performanceTimeRange" onchange="if(window.renderPerformanceTrends) window.renderPerformanceTrends()" style="padding: 4px 8px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-surface); color: var(--color-text); font-size: var(--text-xs);">
+              <select id="performanceTimeRange" onchange="if(window.renderPerformanceTrends) { window.performanceTrendsState = window.performanceTrendsState || {}; window.performanceTrendsState.timeRange = this.value; window.renderPerformanceTrends(); }" style="padding: 4px 8px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-surface); color: var(--color-text); font-size: var(--text-xs);">
                 <option value="1h" ${timeRange === '1h' ? 'selected' : ''}>Last Hour</option>
                 <option value="6h" ${timeRange === '6h' ? 'selected' : ''}>Last 6 Hours</option>
                 <option value="24h" ${timeRange === '24h' ? 'selected' : ''}>Last 24 Hours</option>
@@ -514,7 +547,7 @@ function renderPerformanceTrends() {
             </label>
             <label style="font-size: var(--text-xs); color: var(--color-text-muted); display: flex; align-items: center; gap: var(--space-xs);">
               Period Size:
-              <select id="performancePeriodSize" onchange="if(window.renderPerformanceTrends) window.renderPerformanceTrends()" style="padding: 4px 8px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-surface); color: var(--color-text); font-size: var(--text-xs);">
+              <select id="performancePeriodSize" onchange="if(window.renderPerformanceTrends) { window.performanceTrendsState = window.performanceTrendsState || {}; window.performanceTrendsState.periodSize = this.value; window.renderPerformanceTrends(); }" style="padding: 4px 8px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-surface); color: var(--color-text); font-size: var(--text-xs);">
                 <option value="1m" ${periodSize === '1m' ? 'selected' : ''}>1 Minute</option>
                 <option value="5m" ${periodSize === '5m' ? 'selected' : ''}>5 Minutes</option>
                 <option value="15m" ${periodSize === '15m' ? 'selected' : ''}>15 Minutes</option>
@@ -534,9 +567,13 @@ function renderPerformanceTrends() {
   
   // Render chart if data available
   if (correlations.length > 0 && window.Chart) {
+    // Use a longer timeout to ensure DOM is updated
     setTimeout(() => {
-      renderPerformanceTrendsChart(correlations, periodSize);
-    }, 100);
+      const canvas = document.getElementById('performanceTrendsChart');
+      if (canvas) {
+        renderPerformanceTrendsChart(correlations, periodSize, timeRange);
+      }
+    }, 150);
   }
 }
 
@@ -591,13 +628,19 @@ function generateInsight(avgMemoryActive, avgMemoryIdle, avgCpuActive, avgCpuIdl
 /**
  * Render performance trends chart
  */
-function renderPerformanceTrendsChart(correlations, periodSize = '5m') {
+function renderPerformanceTrendsChart(correlations, periodSize = '5m', timeRange = '24h') {
   const canvas = document.getElementById('performanceTrendsChart');
   if (!canvas || !window.Chart) return;
 
   // Destroy existing chart
   if (canvas.chart) {
     canvas.chart.destroy();
+    canvas.chart = null;
+  }
+  
+  if (correlations.length === 0) {
+    console.warn('[PERFORMANCE] No correlation data to render');
+    return;
   }
 
   // Sort by timestamp
