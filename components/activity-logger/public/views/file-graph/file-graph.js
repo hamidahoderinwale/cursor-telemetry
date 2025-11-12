@@ -94,8 +94,8 @@ async function initializeD3FileGraph() {
       try {
         // Reduced limit for faster initial load - can fetch more on demand
         // Start with smaller limit, can increase if needed
-        // Reduced from 1000 to 500 for faster loading
-        response = await fetch(`${window.CONFIG.API_BASE}/api/file-contents?limit=500`);
+        // Reduced from 500 to 200 for faster initial loading
+        response = await fetch(`${window.CONFIG.API_BASE}/api/file-contents?limit=200`);
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
@@ -782,7 +782,8 @@ async function initializeD3FileGraph() {
     
     // Compute TF-IDF for semantic analysis ASYNCHRONOUSLY (defer heavy computation) - OPTIMIZATION
     // This allows the graph to render immediately while TF-IDF computes in background
-    setTimeout(async () => {
+    // Use idle time for this heavy computation
+    const computeTFIDF = async () => {
       try {
         const {tfidfStats, similarities} = window.computeTFIDFAnalysis(files);
         
@@ -800,7 +801,14 @@ async function initializeD3FileGraph() {
         console.warn('[GRAPH] TF-IDF analysis failed:', error);
         // Graph still works without TF-IDF
       }
-    }, 100);
+    };
+    
+    // Use idle time if available, otherwise delay
+    if (typeof requestIdleCallback !== 'undefined') {
+      requestIdleCallback(computeTFIDF, { timeout: 2000 });
+    } else {
+      setTimeout(computeTFIDF, 1000);
+    }
     
     // Update basic stats (with null checks)
     const nodeCountEl = document.getElementById('graphNodeCount');
@@ -822,22 +830,31 @@ async function initializeD3FileGraph() {
       avgSimEl.textContent = '0.000';
     }
     
-    // Render most similar file pairs
+    // Render most similar file pairs (lightweight, can run immediately)
     if (window.renderSimilarFilePairs) {
       window.renderSimilarFilePairs(links, files);
     }
     
-    // Render prompt embeddings visualization for the "Prompts Embedding Analysis" section
+    // Render prompt embeddings visualization - DEFER (very expensive computation)
     // This analyzes prompts themselves, not files (file analysis is in Navigator view)
-    // Use async to prevent blocking
+    // Defer to idle time as this is computationally expensive (PCA/t-SNE/MDS)
     if (window.renderEmbeddingsVisualization) {
-      window.renderEmbeddingsVisualization().catch(err => {
-        console.error('[ERROR] Failed to render embeddings:', err);
-        const container = document.getElementById('embeddingsVisualization');
-        if (container) {
-          container.innerHTML = `<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--color-error); font-size: 13px;">Error rendering embeddings: ${err.message}</div>`;
-        }
-      });
+      const renderEmbeddings = () => {
+        window.renderEmbeddingsVisualization().catch(err => {
+          console.error('[ERROR] Failed to render embeddings:', err);
+          const container = document.getElementById('embeddingsVisualization');
+          if (container) {
+            container.innerHTML = `<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--color-error); font-size: 13px;">Error rendering embeddings: ${err.message}</div>`;
+          }
+        });
+      };
+      
+      // Defer expensive embeddings computation
+      if (typeof requestIdleCallback !== 'undefined') {
+        requestIdleCallback(renderEmbeddings, { timeout: 5000 });
+      } else {
+        setTimeout(renderEmbeddings, 3000);
+      }
     }
     
     // Show loading state for TF-IDF stats

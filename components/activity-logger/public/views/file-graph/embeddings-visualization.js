@@ -80,8 +80,9 @@ async function renderEmbeddingsVisualization() {
       return !isJsonLike && !isComposerConversation && text.length > 10;
     });
     
-    // LIMIT: Process max 1000 prompts to prevent timeout (O(n²) similarity calculations)
-    const MAX_PROMPTS = 1000;
+    // LIMIT: Process max 500 prompts to prevent timeout (O(n²) similarity calculations)
+    // Reduced from 1000 to 500 for faster processing
+    const MAX_PROMPTS = 500;
     if (validPrompts.length > MAX_PROMPTS) {
       console.warn(`[EMBEDDINGS] Limiting to ${MAX_PROMPTS} most recent prompts (of ${validPrompts.length} total) to prevent timeout`);
       // Sort by timestamp and take most recent
