@@ -411,16 +411,51 @@ async function renderAnalyticsView(container) {
     });
     
     // PHASE 2: Load more data and render heavy analytics progressively
-    if (events.length < 200 || prompts.length < 200) {
-      // Load more data in background for complete analytics
-      loadMoreDataForAnalytics().then(() => {
-        const updatedEvents = window.state?.data?.events || [];
-        const updatedPrompts = window.state?.data?.prompts || [];
-        renderHeavyAnalytics(updatedEvents, updatedPrompts);
-      });
+    // Defer loading additional data more aggressively
+    if (typeof requestIdleCallback !== 'undefined') {
+      requestIdleCallback(() => {
+        if (events.length < 200 || prompts.length < 200) {
+          // Load more data in background for complete analytics
+          loadMoreDataForAnalytics().then(() => {
+            const updatedEvents = window.state?.data?.events || [];
+            const updatedPrompts = window.state?.data?.prompts || [];
+            if (window.state?.currentView === 'analytics') {
+              renderHeavyAnalytics(updatedEvents, updatedPrompts);
+            }
+          }).catch(err => {
+            console.warn('[ANALYTICS] Failed to load additional data:', err.message);
+            if (window.state?.currentView === 'analytics') {
+              renderHeavyAnalytics(events, prompts);
+            }
+          });
+        } else {
+          // Already have enough data, render heavy analytics
+          if (window.state?.currentView === 'analytics') {
+            renderHeavyAnalytics(events, prompts);
+          }
+        }
+      }, { timeout: 3000 }); // More aggressive deferral
     } else {
-      // Already have enough data, render heavy analytics
-      setTimeout(() => renderHeavyAnalytics(events, prompts), 100);
+      setTimeout(() => {
+        if (events.length < 200 || prompts.length < 200) {
+          loadMoreDataForAnalytics().then(() => {
+            const updatedEvents = window.state?.data?.events || [];
+            const updatedPrompts = window.state?.data?.prompts || [];
+            if (window.state?.currentView === 'analytics') {
+              renderHeavyAnalytics(updatedEvents, updatedPrompts);
+            }
+          }).catch(err => {
+            console.warn('[ANALYTICS] Failed to load additional data:', err.message);
+            if (window.state?.currentView === 'analytics') {
+              renderHeavyAnalytics(events, prompts);
+            }
+          });
+        } else {
+          if (window.state?.currentView === 'analytics') {
+            renderHeavyAnalytics(events, prompts);
+          }
+        }
+      }, 2000);
     }
   });
   
