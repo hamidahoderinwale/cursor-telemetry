@@ -135,7 +135,6 @@ class PersistentStorage {
       };
       
       request.onsuccess = () => {
-        clearTimeout(timeout);
         this.db = request.result;
         console.log('[SUCCESS] Persistent storage initialized (version', this.db.version, ')');
         PersistentStorage._initPromise = null; // Clear promise after success
@@ -143,7 +142,6 @@ class PersistentStorage {
       };
 
       request.onupgradeneeded = (event) => {
-        clearTimeout(timeout);
         const db = event.target.result;
         const oldVersion = event.oldVersion;
         const newVersion = event.newVersion;
