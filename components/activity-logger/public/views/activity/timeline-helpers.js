@@ -1797,7 +1797,7 @@ function renderTimelineItem(event, side = 'left', timelineItems = null) {
   
   // Check if this is a state transition event
   const isStateEvent = event.type === 'state_fork' || event.type === 'state_merge' || event.type === 'state_create' || event.type === 'state_switch';
-  const stateEventIcon = isStateEvent ? (event.type === 'state_fork' ? '↗' : event.type === 'state_merge' ? '⇄' : event.type === 'state_create' ? '✨' : '→') : '';
+  const stateEventLabel = isStateEvent ? (event.type === 'state_fork' ? '[Fork]' : event.type === 'state_merge' ? '[Merge]' : event.type === 'state_create' ? '[Create]' : '[Switch]') : '';
   const stateEventClass = isStateEvent ? 'state-transition-event' : '';
   const stateEventStyle = isStateEvent ? 'border-left: 3px solid var(--color-primary); background: var(--color-bg-alt);' : '';
 
@@ -1806,7 +1806,7 @@ function renderTimelineItem(event, side = 'left', timelineItems = null) {
       <div class="timeline-content">
         <div class="timeline-header">
           <div class="timeline-title">
-            ${stateEventIcon ? `<span style="margin-right: 4px; font-size: 1.2em;">${stateEventIcon}</span>` : ''}
+            ${stateEventLabel ? `<span style="margin-right: 4px; font-size: 0.85em; color: var(--color-text-muted);">${stateEventLabel}</span>` : ''}
             ${fileInfo.displayTitle || fileInfo.badges || title}
             ${fileInfo.badges ? ` ${fileInfo.badges}` : ''}
             ${diffStats}
@@ -1815,7 +1815,7 @@ function renderTimelineItem(event, side = 'left', timelineItems = null) {
         </div>
         <div class="timeline-description">
           ${desc ? `<div style="color: var(--color-text-muted); font-size: var(--text-sm);">${window.escapeHtml ? window.escapeHtml(desc) : desc}</div>` : ''}
-          ${event.annotation ? `<div class="ai-annotation" style="margin-top: 4px; font-style: italic; color: var(--color-text-secondary); font-size: 0.9em; display: flex; align-items: center; gap: 4px;">${window.renderAnnotationIcon ? window.renderAnnotationIcon(14, 'var(--color-text-secondary)') : '<span>✨</span>'} ${window.escapeHtml(event.annotation)}</div>` : ''}
+          ${event.annotation ? `<div class="ai-annotation" style="margin-top: 4px; font-style: italic; color: var(--color-text-secondary); font-size: 0.9em; display: flex; align-items: center; gap: 4px;">${window.renderAnnotationIcon ? window.renderAnnotationIcon(14, 'var(--color-text-secondary)') : '<span style="font-size: 0.85em; color: var(--color-text-muted);">[AI]</span>'} ${window.escapeHtml(event.annotation)}</div>` : ''}
           ${event.intent ? `<span class="timeline-badge timeline-badge-primary" style="margin-top: 4px; display: inline-block;">${window.escapeHtml(event.intent)}</span>` : ''}
           ${tagsHtml ? `<div style="display: flex; gap: var(--space-xs); flex-wrap: wrap; margin-top: var(--space-xs); align-items: center;">${tagsHtml}</div>` : ''}
           ${linkedPromptIndicator || contextIndicators ? `
@@ -2113,14 +2113,14 @@ function renderActivityTimeline(events) {
           const title = window.getEventTitle(event);
           const desc = window.getEventDescription(event);
           const isStateEvent = event.type === 'state_fork' || event.type === 'state_merge' || event.type === 'state_create' || event.type === 'state_switch';
-          const stateEventIcon = isStateEvent ? (event.type === 'state_fork' ? '↗' : event.type === 'state_merge' ? '⇄' : event.type === 'state_create' ? '✨' : '→') : '';
+          const stateEventLabel = isStateEvent ? (event.type === 'state_fork' ? '[Fork]' : event.type === 'state_merge' ? '[Merge]' : event.type === 'state_create' ? '[Create]' : '[Switch]') : '';
           
           return `
             <div class="timeline-simple-item ${isStateEvent ? 'state-transition-event' : ''}" onclick="showEventModal('${event.id || event.timestamp}')" style="${isStateEvent ? 'border-left: 3px solid var(--color-primary); background: var(--color-bg-alt);' : ''}">
               <div class="timeline-simple-content">
                 <div class="timeline-simple-header">
                   <div class="timeline-simple-title">
-                    ${stateEventIcon ? `<span style="margin-right: 4px;">${stateEventIcon}</span>` : ''}
+                    ${stateEventLabel ? `<span style="margin-right: 4px; font-size: 0.85em; color: var(--color-text-muted);">${stateEventLabel}</span>` : ''}
                     ${window.escapeHtml(title)}
                   </div>
                   <div class="timeline-simple-meta">${time}</div>

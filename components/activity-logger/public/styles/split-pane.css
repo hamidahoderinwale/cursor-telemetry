@@ -107,10 +107,13 @@
   flex: 1;
   min-width: 0;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: var(--space-md, 1rem);
   display: flex;
   flex-direction: column;
   gap: var(--space-md, 1rem);
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .analytics-db-panel {

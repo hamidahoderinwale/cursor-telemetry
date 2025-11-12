@@ -334,7 +334,7 @@ class ModalManager {
               color: var(--color-text);
               font-size: 0.9em;
             ">
-              ${window.renderAnnotationIcon ? window.renderAnnotationIcon(16, 'var(--color-primary)') : '<span>✨</span>'}
+              ${window.renderAnnotationIcon ? window.renderAnnotationIcon(16, 'var(--color-primary)') : '<span style="font-size: 0.85em; color: var(--color-text-muted);">[AI]</span>'}
               <span>AI Annotation</span>
             </div>
             <div style="
