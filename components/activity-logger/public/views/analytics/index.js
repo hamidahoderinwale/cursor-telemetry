@@ -378,8 +378,15 @@ async function renderAnalyticsView(container) {
   requestAnimationFrame(() => {
     // Check if analytics view is still active
     const viewContainer = document.getElementById('viewContainer');
-    if (!viewContainer || !viewContainer.innerHTML.includes('analytics-view')) {
-      // View has been switched away, don't render charts
+    if (!viewContainer) {
+      console.warn('[ANALYTICS] View container not found, skipping auto-load');
+      return;
+    }
+    
+    // Verify analytics view is rendered
+    const analyticsView = viewContainer.querySelector('.analytics-view');
+    if (!analyticsView && !viewContainer.innerHTML.includes('analytics-view')) {
+      console.warn('[ANALYTICS] Analytics view not found in container, skipping auto-load');
       return;
     }
     
@@ -406,8 +413,12 @@ async function renderAnalyticsView(container) {
     
     // PHASE 1: Render fast charts immediately with available data (defer to next frame)
     requestAnimationFrame(() => {
-      renderFastCharts(events, prompts);
-      renderQuickWins(events, prompts);
+      // Double-check view is still active before rendering
+      const currentView = document.getElementById('viewContainer');
+      if (currentView && (currentView.querySelector('.analytics-view') || currentView.innerHTML.includes('analytics-view'))) {
+        renderFastCharts(events, prompts);
+        renderQuickWins(events, prompts);
+      }
     });
     
     // PHASE 2: Load more data and render heavy analytics progressively
@@ -463,10 +474,18 @@ async function renderAnalyticsView(container) {
   function renderFastCharts(events, prompts) {
     console.log('[ANALYTICS] Rendering fast charts with', events.length, 'events and', prompts.length, 'prompts');
     
+    // Verify containers exist before rendering
+    const aiActivityCanvas = document.getElementById('aiActivityChart');
+    const promptTokensCanvas = document.getElementById('promptTokensChart');
+    if (!aiActivityCanvas && !promptTokensCanvas) {
+      console.warn('[ANALYTICS] Chart containers not found, charts may not render');
+    }
+    
     // Render basic charts immediately - these are fast
     if (window.renderAIActivityChart) {
       try {
         // Auto-detect and set initial time scale button
+        const state = window.state || {};
         const allEvents = state.data?.events || [];
         const allPrompts = state.data?.prompts || [];
         const now = Date.now();
@@ -543,6 +562,16 @@ async function renderAnalyticsView(container) {
   
   // Heavy analytics that load progressively
   function renderHeavyAnalytics(events, prompts) {
+    // Verify view is still active
+    const viewContainer = document.getElementById('viewContainer');
+    if (!viewContainer) return;
+    
+    const analyticsView = viewContainer.querySelector('.analytics-view');
+    if (!analyticsView && !viewContainer.innerHTML.includes('analytics-view')) {
+      console.log('[ANALYTICS] View switched away, skipping heavy analytics');
+      return;
+    }
+    
     // Skip if no data
     if (events.length === 0 && prompts.length === 0) {
       console.log('[ANALYTICS] Skipping heavy analytics - no data');
@@ -554,10 +583,19 @@ async function renderAnalyticsView(container) {
     // Defer heavy analytics more aggressively to avoid blocking
     if (typeof requestIdleCallback !== 'undefined') {
       requestIdleCallback(() => {
-        renderHeavyAnalyticsInternal(events, prompts);
+        // Check again before rendering
+        const currentView = document.getElementById('viewContainer');
+        if (currentView && (currentView.querySelector('.analytics-view') || currentView.innerHTML.includes('analytics-view'))) {
+          renderHeavyAnalyticsInternal(events, prompts);
+        }
       }, { timeout: 3000 }); // Increased timeout for lower priority
     } else {
-      setTimeout(() => renderHeavyAnalyticsInternal(events, prompts), 2000); // Increased delay
+      setTimeout(() => {
+        const currentView = document.getElementById('viewContainer');
+        if (currentView && (currentView.querySelector('.analytics-view') || currentView.innerHTML.includes('analytics-view'))) {
+          renderHeavyAnalyticsInternal(events, prompts);
+        }
+      }, 2000); // Increased delay
     }
   }
   

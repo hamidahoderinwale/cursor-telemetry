@@ -300,6 +300,35 @@ function renderUnifiedTimeline(items) {
   // This allows render functions to find related items by position in sequence
   window._currentTimelineItems = allItems;
   
+  // Check if any items are commit groups (before temporal threading)
+  const hasCommitGroups = allItems.some(item => item.itemType === 'commit-group');
+  
+  // If we have commit groups, handle them specially
+  if (hasCommitGroups) {
+    return `
+      <div class="timeline-alternating">
+        <div class="timeline-axis"></div>
+        ${allItems.map(item => {
+          if (item.itemType === 'commit-group') {
+            return window.renderCommitGroup ? window.renderCommitGroup(item, allItems) : '';
+          } else if (item.itemType === 'event') {
+            return window.renderTimelineItem(item, 'left', allItems);
+          } else if (item.itemType === 'terminal') {
+            return window.renderTerminalTimelineItem(item, 'left', allItems);
+          } else if (item.itemType === 'conversation') {
+            return window.renderConversationThread(item.conversation, 'right');
+          } else if (item.itemType === 'prompt') {
+            return window.renderPromptTimelineItem(item, 'right', allItems);
+          } else if (item.itemType === 'status') {
+            return window.renderStatusMessageTimelineItem ? 
+              window.renderStatusMessageTimelineItem(item, 'left') : '';
+          }
+          return '';
+        }).join('')}
+      </div>
+    `;
+  }
+  
   return `
     <div class="timeline-alternating">
       <div class="timeline-axis"></div>
@@ -2088,9 +2117,71 @@ window.renderActivityTimeline = renderActivityTimeline;
 window.renderConversationThread = renderConversationThread;
 window.renderConversationMessage = renderConversationMessage;
 window.toggleConversationMessages = toggleConversationMessages;
+/**
+ * Render a commit group with nested events and prompts
+ */
+function renderCommitGroup(commitGroup, timelineItems = null) {
+  const { commit, items, eventCount, promptCount } = commitGroup;
+  const commitId = `commit-${commit.hash.substring(0, 7)}`;
+  const commitTime = typeof commit.timestamp === 'number' 
+    ? commit.timestamp 
+    : new Date(commit.timestamp).getTime();
+  const timeStr = new Date(commitTime).toLocaleString();
+  const hashShort = commit.hash.substring(0, 7);
+  
+  // Escape commit message
+  const message = window.escapeHtml ? window.escapeHtml(commit.message) : commit.message;
+  
+  // Render nested items
+  const itemsHtml = items.map(item => {
+    if (item.itemType === 'prompt') {
+      return window.renderPromptTimelineItem ? 
+        window.renderPromptTimelineItem(item, 'right', timelineItems) : '';
+    } else if (item.itemType === 'event') {
+      return window.renderTimelineItem ? 
+        window.renderTimelineItem(item, 'left', timelineItems) : '';
+    }
+    return '';
+  }).filter(html => html).join('');
+  
+  return `
+    <div class="timeline-item commit-group" data-commit-id="${commitId}">
+      <div class="commit-group-header" onclick="toggleCommitGroup('${commitId}')">
+        <div class="commit-group-info">
+          <span class="commit-icon">📦</span>
+          <div class="commit-group-details">
+            <div class="commit-message">${message}</div>
+            <div class="commit-meta">
+              <span class="commit-hash">${hashShort}</span>
+              <span class="commit-time">${timeStr}</span>
+              <span class="commit-stats">${eventCount} event${eventCount !== 1 ? 's' : ''}, ${promptCount} prompt${promptCount !== 1 ? 's' : ''}</span>
+            </div>
+          </div>
+        </div>
+        <span class="commit-group-toggle" id="toggle-${commitId}">▼</span>
+      </div>
+      <div class="commit-group-items" id="items-${commitId}">
+        ${itemsHtml}
+      </div>
+    </div>
+  `;
+}
+
+// Toggle function for commit groups
+window.toggleCommitGroup = function(commitId) {
+  const itemsContainer = document.getElementById(`items-${commitId}`);
+  const toggle = document.getElementById(`toggle-${commitId}`);
+  if (itemsContainer && toggle) {
+    const isExpanded = itemsContainer.style.display !== 'none';
+    itemsContainer.style.display = isExpanded ? 'none' : 'block';
+    toggle.textContent = isExpanded ? '▶' : '▼';
+  }
+};
+
 window.renderPromptTimelineItem = renderPromptTimelineItem;
 window.renderTerminalTimelineItem = renderTerminalTimelineItem;
 window.renderTimelineItem = renderTimelineItem;
+window.renderCommitGroup = renderCommitGroup;
 window.renderTemporalThread = renderTemporalThread;
 window.toggleTemporalThread = toggleTemporalThread;
 window.getEventTitle = getEventTitle;

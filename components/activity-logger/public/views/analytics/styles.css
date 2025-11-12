@@ -7,9 +7,9 @@
 .analytics-view {
   display: flex;
   flex-direction: column;
-  gap: var(--space-md, 1rem);
+  gap: var(--space-xl, 2rem);
   height: 100%;
-  padding: var(--space-sm, 0.5rem) 0;
+  padding: var(--space-lg, 1.5rem) var(--space-md, 1rem);
 }
 
 /* Data Status Alert */
@@ -143,17 +143,17 @@
 
 /* Chart Containers */
 .chart-container {
-  max-height: 280px;
-  min-height: 200px;
+  max-height: 450px;
+  min-height: 350px;
   position: relative;
-  margin: var(--space-xs, 0.25rem) 0;
+  margin: var(--space-md, 1rem) 0;
 }
 
 .chart-container-small {
-  max-height: 200px;
-  min-height: 150px;
+  max-height: 350px;
+  min-height: 280px;
   position: relative;
-  margin: var(--space-xs, 0.25rem) 0;
+  margin: var(--space-md, 1rem) 0;
 }
 
 /* Timescale Buttons */
@@ -163,14 +163,16 @@
 }
 
 .btn-timescale {
-  padding: 4px 12px;
-  font-size: 12px;
+  padding: var(--space-sm, 0.5rem) var(--space-md, 1rem);
+  font-size: var(--text-sm, 0.875rem);
   border: 1px solid var(--color-border);
   background: var(--color-bg);
   color: var(--color-text);
-  border-radius: 4px;
+  border-radius: var(--radius-md, 6px);
   cursor: pointer;
   transition: all 0.2s;
+  font-weight: 500;
+  min-height: 36px;
 }
 
 .btn-timescale:hover {
@@ -187,42 +189,46 @@
 /* Analytics Grid Layout */
 .analytics-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
-  gap: var(--space-md, 1rem);
-  margin: var(--space-sm, 0.5rem) 0;
+  grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
+  gap: var(--space-lg, 1.5rem);
+  margin: var(--space-md, 1rem) 0;
 }
 
 .analytics-grid-2col {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
-  gap: var(--space-md, 1rem);
-  margin: var(--space-sm, 0.5rem) 0;
+  grid-template-columns: repeat(auto-fit, minmax(550px, 1fr));
+  gap: var(--space-lg, 1.5rem);
+  margin: var(--space-md, 1rem) 0;
 }
 
 /* Compact card styles for analytics */
 .analytics-charts-panel .card {
-  padding: var(--space-md, 1rem);
+  padding: var(--space-xl, 2rem);
+  min-height: auto;
 }
 
 .analytics-charts-panel .card-header {
-  margin-bottom: var(--space-sm, 0.5rem);
-  padding-bottom: var(--space-xs, 0.25rem);
+  margin-bottom: var(--space-lg, 1.5rem);
+  padding-bottom: var(--space-md, 1rem);
 }
 
 .analytics-charts-panel .card-subtitle {
-  margin-top: var(--space-xs, 0.25rem);
-  margin-bottom: 0;
-  font-size: var(--text-xs, 0.75rem);
-  line-height: 1.4;
+  margin-top: var(--space-sm, 0.5rem);
+  margin-bottom: var(--space-md, 1rem);
+  font-size: var(--text-sm, 0.875rem);
+  line-height: 1.6;
 }
 
 .analytics-charts-panel .card-title {
-  font-size: var(--text-base, 1rem);
-  margin-bottom: var(--space-xs, 0.25rem);
+  font-size: var(--text-lg, 1.125rem);
+  margin-bottom: var(--space-sm, 0.5rem);
+  font-weight: 600;
+  line-height: 1.4;
 }
 
 .analytics-charts-panel .card-body {
-  padding-top: var(--space-xs, 0.25rem);
+  padding-top: var(--space-md, 1rem);
+  min-height: 300px;
 }
 
 /* Chart Header Controls */
@@ -230,14 +236,16 @@
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: var(--space-md);
-  gap: var(--space-md);
+  margin-bottom: var(--space-lg, 1.5rem);
+  gap: var(--space-lg, 1.5rem);
   flex-wrap: wrap;
 }
 
 .chart-header-controls h3,
 .chart-header-controls .card-title {
   margin: 0;
+  flex: 1;
+  min-width: 200px;
 }
 
 /* Color Legend */
@@ -336,6 +344,55 @@
   color: white;
 }
 
+/* Content div min-heights - override inline styles */
+#modelUsageAnalytics,
+#contextFileAnalytics,
+#enhancedContextAnalytics,
+#productivityInsights,
+#promptEffectiveness,
+#contextEvolutionTimeline,
+#promptToCodeCorrelation,
+#gitCommitTimeline,
+#fileHotspots {
+  min-height: 300px !important;
+}
+
+/* Quick wins grid improvements */
+.quick-wins-grid {
+  gap: var(--space-lg, 1.5rem) !important;
+}
+
+.quick-win-card {
+  padding: var(--space-lg, 1.5rem) !important;
+  min-height: 200px;
+}
+
+.quick-win-title {
+  font-size: var(--text-base, 1rem) !important;
+  margin-bottom: var(--space-md, 1rem) !important;
+}
+
+.quick-win-value {
+  font-size: var(--text-3xl, 2.5rem) !important;
+  margin: var(--space-sm, 0.5rem) 0 !important;
+}
+
+.quick-win-description {
+  font-size: var(--text-sm, 0.875rem) !important;
+  margin-top: var(--space-sm, 0.5rem) !important;
+  line-height: 1.5;
+}
+
+#modelUsageChart,
+#contextFileFrequency,
+#thinkingTimeChart,
+#timeOfDayChart,
+#conversationLengthChart,
+#intentDistribution {
+  min-height: 220px !important;
+  margin-top: var(--space-md, 1rem) !important;
+}
+
 /* Responsive Design */
 @media (max-width: 1024px) {
   .analytics-view {
@@ -343,11 +400,11 @@
   }
   
   .analytics-grid {
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
   }
   
   .analytics-grid-2col {
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
   }
   
   .data-status-info-content {
@@ -369,15 +426,17 @@
   .analytics-grid,
   .analytics-grid-2col {
     grid-template-columns: 1fr;
-    gap: var(--space-md);
+    gap: var(--space-lg);
   }
   
   .chart-container {
-    max-height: 250px;
+    max-height: 350px;
+    min-height: 280px;
   }
   
   .chart-container-small {
-    max-height: 200px;
+    max-height: 300px;
+    min-height: 250px;
   }
   
   .chart-header-controls {
@@ -423,6 +482,18 @@
     align-items: flex-start;
     gap: var(--space-xs);
   }
+
+  #modelUsageAnalytics,
+  #contextFileAnalytics,
+  #enhancedContextAnalytics,
+  #productivityInsights,
+  #promptEffectiveness,
+  #contextEvolutionTimeline,
+  #promptToCodeCorrelation,
+  #gitCommitTimeline,
+  #fileHotspots {
+    min-height: 250px !important;
+  }
 }
 
 @media (max-width: 480px) {
@@ -431,11 +502,13 @@
   }
   
   .chart-container {
-    max-height: 200px;
+    max-height: 300px;
+    min-height: 250px;
   }
   
   .chart-container-small {
-    max-height: 150px;
+    max-height: 250px;
+    min-height: 200px;
   }
   
   .btn-timescale {
@@ -458,5 +531,17 @@
   
   .prompt-meta {
     gap: var(--space-xs);
+  }
+
+  #modelUsageAnalytics,
+  #contextFileAnalytics,
+  #enhancedContextAnalytics,
+  #productivityInsights,
+  #promptEffectiveness,
+  #contextEvolutionTimeline,
+  #promptToCodeCorrelation,
+  #gitCommitTimeline,
+  #fileHotspots {
+    min-height: 200px !important;
   }
 }

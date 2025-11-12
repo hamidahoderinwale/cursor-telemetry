@@ -161,6 +161,16 @@ async function renderActivityView(container) {
   // Limit to 100 items after enhancement
   timelineItems = timelineItems.slice(0, 100);
   
+  // Group by commits if available (lightweight, non-blocking)
+  if (window.groupByCommits) {
+    try {
+      timelineItems = await window.groupByCommits(timelineItems);
+    } catch (error) {
+      console.debug('[ACTIVITY] Commit grouping failed, using regular timeline:', error.message);
+      // Continue with ungrouped items
+    }
+  }
+  
   // Extract unique workspaces for filter dropdown
   const normalizeWorkspacePath = window.normalizeWorkspacePath || ((path) => {
     if (!path) return '';
