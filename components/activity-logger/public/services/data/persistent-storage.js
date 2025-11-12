@@ -124,15 +124,9 @@ class PersistentStorage {
       const startTime = Date.now();
       const request = indexedDB.open(this.dbName, this.version);
       
-      // Reduced timeout warning threshold (5 seconds instead of 3)
-      // This is just a warning, not a failure - IndexedDB can take time on first load
-      const timeout = setTimeout(() => {
-        // Only warn if it's taking unusually long (5+ seconds)
-        // This is expected on first load with large datasets
-        if (Date.now() - startTime > 5000) {
-          console.warn('[WARNING] IndexedDB initialization taking longer than expected...');
-        }
-      }, 5000);
+      // Suppress timeout warning - IndexedDB can legitimately take time on first load
+      // This is expected behavior, not an error, so we don't warn about it
+      // The dashboard will continue to work even if IndexedDB is slow
 
       request.onerror = () => {
         clearTimeout(timeout);

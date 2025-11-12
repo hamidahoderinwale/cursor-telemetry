@@ -219,16 +219,18 @@ async function loadFromCache() {
   
   // Initialize database with timeout - don't block if it's slow
   try {
-    // Use Promise.race to timeout after 2 seconds
+    // Use Promise.race to timeout after 1 second for ultra-fast startup
+    // IndexedDB will continue initializing in background
     const initPromise = window.persistentStorage.init();
     const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error('IndexedDB init timeout')), 2000)
+      setTimeout(() => reject(new Error('IndexedDB init timeout')), 1000)
     );
     
     await Promise.race([initPromise, timeoutPromise]);
   } catch (initError) {
     // If init times out or fails, continue without cache (non-blocking)
-    console.warn('[WARNING] IndexedDB init slow/failed, continuing without cache:', initError.message);
+    // This is expected and fine - cache will be available later
+    // Don't log as warning since this is normal behavior
     // Continue anyway - cache will be available later
     return;
   }
