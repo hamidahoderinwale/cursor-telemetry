@@ -3,12 +3,13 @@
 // Users can override with localStorage to use local companion service
 
 // Render backend URL (default for deployed dashboard)
-// Use var to allow redeclaration (core/config.js may have already declared it)
-// Store on window first to avoid any redeclaration issues
+// Store on window to avoid any redeclaration issues
 if (!window._RENDER_BACKEND_URL) {
   window._RENDER_BACKEND_URL = 'https://cursor-telemetry.onrender.com';
 }
-var RENDER_BACKEND_URL = window._RENDER_BACKEND_URL;
+// core/config.js loads first and declares RENDER_BACKEND_URL as const
+// Use window property to avoid redeclaration - reference it via window
+const getRenderBackendUrl = () => window._RENDER_BACKEND_URL;
 
 // Determine API base URL
 // Check for local development in multiple ways:
@@ -21,7 +22,7 @@ const isDevPort = window.location.port && parseInt(window.location.port) >= 3000
 const isLocal = isLocalhost || isFileProtocol || isDevPort;
 
 const customApiUrl = (window.LocalStorageHelper?.get('COMPANION_API_URL', null, false)) || localStorage.getItem('COMPANION_API_URL');
-const defaultApiUrl = isLocal ? 'http://localhost:43917' : RENDER_BACKEND_URL;
+const defaultApiUrl = isLocal ? 'http://localhost:43917' : getRenderBackendUrl();
 const apiBaseUrl = customApiUrl || defaultApiUrl;
 
 window.CONFIG = {
@@ -39,7 +40,7 @@ window.CONFIG = {
     if (customWsUrl) return customWsUrl;
     if (isLocal) return 'ws://localhost:43917';
     // Convert Render HTTPS URL to WSS
-    return RENDER_BACKEND_URL.replace('https://', 'wss://').replace('http://', 'ws://');
+    return getRenderBackendUrl().replace('https://', 'wss://').replace('http://', 'ws://');
   })(),
   
   // App Configuration

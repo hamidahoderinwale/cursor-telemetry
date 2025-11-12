@@ -362,7 +362,7 @@ function renderUnifiedTimeline(items) {
  * Extract conversation title for summary display
  */
 function extractConversationTitle(conversation) {
-  const { thread, messages } = conversation;
+  const { thread, messages } = conversation || {};
   
   function extractText(obj) {
     if (!obj) return '';
@@ -392,7 +392,7 @@ function extractConversationTitle(conversation) {
     const threadText = extractText(thread);
     if (threadText) return smartTitle(threadText);
   }
-  if (messages.length > 0) {
+  if (messages && Array.isArray(messages) && messages.length > 0) {
     const sorted = [...messages].sort((a, b) => (a.sortTime || 0) - (b.sortTime || 0));
     const firstUser = sorted.find(m => (m.messageRole === 'user' || !m.messageRole) && extractText(m).length > 5);
     if (firstUser) {
