@@ -97,20 +97,20 @@
 /* Analytics view specific split layout */
 .analytics-split-view {
   display: flex;
-  height: calc(100vh - 200px);
-  min-height: 600px;
+  height: calc(100vh - 150px);
+  min-height: 500px;
   gap: 0;
-  margin: var(--space-xl) 0;
+  margin: var(--space-md, 1rem) 0;
 }
 
 .analytics-charts-panel {
   flex: 1;
   min-width: 0;
   overflow-y: auto;
-  padding: var(--space-xl);
+  padding: var(--space-md, 1rem);
   display: flex;
   flex-direction: column;
-  gap: var(--space-xl);
+  gap: var(--space-md, 1rem);
 }
 
 .analytics-db-panel {
