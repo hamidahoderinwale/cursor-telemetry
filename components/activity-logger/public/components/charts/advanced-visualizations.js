@@ -7,12 +7,21 @@ class AdvancedVisualizations {
   constructor() {
     this.state = window.state;
     this.CONFIG = window.CONFIG;
+    // APIClient might not be available immediately, so we'll get it when needed
+    this.getAPIClient = () => window.APIClient || this.APIClient;
     this.APIClient = window.APIClient;
     this.escapeHtml = window.escapeHtml || ((text) => {
       const div = document.createElement('div');
       div.textContent = text;
       return div.innerHTML;
     });
+  }
+  
+  // Update APIClient reference (call this if APIClient is loaded later)
+  updateAPIClient() {
+    this.APIClient = window.APIClient;
+    // Also update state reference to ensure we have latest data
+    this.state = window.state;
   }
 
   /**
@@ -731,12 +740,37 @@ class AdvancedVisualizations {
    */
   async renderGitCommitTimeline() {
     const container = document.getElementById('gitCommitTimeline');
-    if (!container) return;
+    if (!container) {
+      console.warn('[GIT] Container #gitCommitTimeline not found');
+      return;
+    }
 
     try {
+      // Show loading state
+      if (container.innerHTML.trim() === '' || container.innerHTML.includes('Loading')) {
+        container.innerHTML = '<div style="padding: var(--space-lg); text-align: center; color: var(--color-text-muted);">Loading git data...</div>';
+      }
+
       // Try to fetch git data from raw-data endpoint
-      const response = await this.APIClient.get('/raw-data/git?limit=100', { silent: true });
-      const gitData = response?.gitData || response?.data || [];
+      let gitData = [];
+      const apiClient = this.APIClient || window.APIClient;
+      if (apiClient) {
+        try {
+          const response = await apiClient.get('/raw-data/git?limit=100', { silent: true, timeout: 5000 });
+          gitData = response?.gitData || response?.data || [];
+        } catch (apiError) {
+          console.warn('[GIT] API fetch failed, trying alternative methods:', apiError.message);
+          // Try alternative: check if git data is in state
+          if (window.state?.data?.gitCommits) {
+            gitData = window.state.data.gitCommits;
+          }
+        }
+      } else {
+        // Fallback: check state for git data
+        if (window.state?.data?.gitCommits) {
+          gitData = window.state.data.gitCommits;
+        }
+      }
 
       if (gitData.length === 0) {
         container.innerHTML = `
@@ -862,11 +896,27 @@ class AdvancedVisualizations {
       return;
     }
 
-    const events = this.state?.data?.events || [];
+    // Show loading state
+    if (container.innerHTML.trim() === '' || container.innerHTML.includes('Loading')) {
+      container.innerHTML = '<div style="padding: var(--space-lg); text-align: center; color: var(--color-text-muted);">Analyzing file activity...</div>';
+    }
+
+    // Get events from multiple sources - always check window.state for latest data
+    let events = window.state?.data?.events || this.state?.data?.events || [];
+    if (!Array.isArray(events) || events.length === 0) {
+      // Try alternative data sources
+      if (window.state?.data?.events) {
+        events = window.state.data.events;
+      } else if (window.state?.events) {
+        events = window.state.events;
+      } else if (this.state?.data?.events) {
+        events = this.state.data.events;
+      }
+    }
     
-    if (events.length === 0) {
+    if (!Array.isArray(events) || events.length === 0) {
       container.innerHTML = `
-        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 250px; padding: var(--space-xl); text-align: center;">
+        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 250px; padding: var(--space-xl); text-align: center;">
           <div style="font-size: var(--text-lg); color: var(--color-text); margin-bottom: var(--space-xs); font-weight: 500;">No Event Data</div>
           <div style="font-size: var(--text-sm); color: var(--color-text-muted);">File hotspots will appear as you edit files</div>
         </div>

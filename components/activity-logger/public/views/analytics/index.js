@@ -7,6 +7,11 @@ async function renderAnalyticsView(container) {
   if (window.loadAnalyticsServices && !window._analyticsServicesLoaded) {
     await window.loadAnalyticsServices();
   }
+  
+  // Ensure advancedVisualizations has the latest APIClient reference
+  if (window.advancedVisualizations && window.APIClient) {
+    window.advancedVisualizations.updateAPIClient();
+  }
   const totalPrompts = window.state.data.prompts?.length || 0;
   const totalEvents = window.state.data.events?.length || 0;
   const hasData = totalPrompts > 0 || totalEvents > 0;
@@ -640,8 +645,8 @@ async function renderAnalyticsView(container) {
       }
     }
     
-    // Advanced visualizations - lazy load with intersection observer
-    const lazyLoadVisualizations = () => {
+    // Advanced visualizations - ensure they render properly
+    const renderAdvancedVisualizations = () => {
       const containers = [
         { id: 'contextEvolutionTimeline', render: window.renderContextEvolutionTimeline },
         { id: 'promptToCodeCorrelation', render: window.renderPromptToCodeCorrelation },
@@ -649,34 +654,64 @@ async function renderAnalyticsView(container) {
         { id: 'fileHotspots', render: window.renderFileHotspots }
       ];
       
-      if (window.performanceOptimizer && window.performanceOptimizer.lazyLoad) {
-        containers.forEach(({ id, render }) => {
-          if (render) {
+      // Try to render each visualization
+      containers.forEach(({ id, render }) => {
+        const containerElement = document.getElementById(id);
+        if (!containerElement) {
+          console.warn(`[ANALYTICS] Container #${id} not found`);
+          return;
+        }
+        
+        // Show loading state
+        if (containerElement.innerHTML.trim() === '') {
+          containerElement.innerHTML = '<div style="padding: var(--space-lg); text-align: center; color: var(--color-text-muted);">Loading...</div>';
+        }
+        
+        if (render && typeof render === 'function') {
+          // Use lazy loading if available, otherwise render immediately
+          if (window.performanceOptimizer && window.performanceOptimizer.lazyLoad) {
             window.performanceOptimizer.lazyLoad(`#${id}`, (element) => {
               render().catch(err => {
-                if (!err.message || !err.message.includes('not found')) {
-                  console.warn(`[INFO] ${id} not available:`, err.message);
-                }
+                console.warn(`[ANALYTICS] Failed to render ${id}:`, err.message);
+                containerElement.innerHTML = `
+                  <div style="padding: var(--space-lg); text-align: center; color: var(--color-text-muted);">
+                    <div style="margin-bottom: var(--space-xs);">Unable to load ${id}</div>
+                    <div style="font-size: var(--text-xs);">${err.message || 'Unknown error'}</div>
+                  </div>
+                `;
               });
             });
+          } else {
+            // Render immediately with a small delay to ensure DOM is ready
+            setTimeout(() => {
+              render().catch(err => {
+                console.warn(`[ANALYTICS] Failed to render ${id}:`, err.message);
+                containerElement.innerHTML = `
+                  <div style="padding: var(--space-lg); text-align: center; color: var(--color-text-muted);">
+                    <div style="margin-bottom: var(--space-xs);">Unable to load ${id}</div>
+                    <div style="font-size: var(--text-xs);">${err.message || 'Unknown error'}</div>
+                  </div>
+                `;
+              });
+            }, 100);
           }
-        });
-      } else {
-        // Fallback: load all immediately
-        containers.forEach(({ render }) => {
-          if (render) {
-            render().catch(err => {
-              if (!err.message || !err.message.includes('not found')) {
-                console.warn('[INFO] Visualization not available:', err.message);
-              }
-            });
-          }
-        });
-      }
+        } else {
+          console.warn(`[ANALYTICS] Render function for ${id} not available`);
+          containerElement.innerHTML = `
+            <div style="padding: var(--space-lg); text-align: center; color: var(--color-text-muted);">
+              Visualization renderer not available
+            </div>
+          `;
+        }
+      });
     };
     
-    // Use requestIdleCallback for non-critical visualizations (already in idle callback)
-    lazyLoadVisualizations();
+    // Render immediately and also retry after a delay
+    renderAdvancedVisualizations();
+    
+    // Retry after a delay to catch any initialization issues
+    setTimeout(renderAdvancedVisualizations, 1000);
+    setTimeout(renderAdvancedVisualizations, 3000);
   }
   
   // Load more data for analytics if needed
