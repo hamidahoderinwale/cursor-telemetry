@@ -170,10 +170,42 @@ async function initializeNavigator() {
     console.log(`[NAVIGATOR] Event lookup map built with ${eventsByFilePath.size} keys`);
     
     // Extract workspace and directory information
-    const workspaces = new Set();
+    // First, collect all workspaces from state data (events, prompts, entries) - more comprehensive
+    const allWorkspacesFromState = new Set();
+    
+    // Get from events
+    allEvents.forEach(e => {
+      const ws = e.workspace_path || e.workspacePath || e.workspace;
+      if (ws) allWorkspacesFromState.add(ws);
+    });
+    
+    // Get from prompts
+    const allPrompts = window.state?.data?.prompts || [];
+    allPrompts.forEach(p => {
+      const ws = p.workspace_path || p.workspacePath || p.workspaceId || p.workspaceName;
+      if (ws) allWorkspacesFromState.add(ws);
+    });
+    
+    // Get from entries
+    const allEntries = window.state?.data?.entries || [];
+    allEntries.forEach(e => {
+      const ws = e.workspace_path || e.workspacePath || e.workspace;
+      if (ws) allWorkspacesFromState.add(ws);
+    });
+    
+    // Get from state workspaces if available
+    const stateWorkspaces = window.state?.data?.workspaces || [];
+    stateWorkspaces.forEach(ws => {
+      const wsPath = ws.path || ws.id || ws.workspace_path;
+      if (wsPath) allWorkspacesFromState.add(wsPath);
+    });
+    
+    console.log(`[NAVIGATOR] Found ${allWorkspacesFromState.size} workspaces from state data:`, Array.from(allWorkspacesFromState).slice(0, 10));
+    
+    const workspaces = new Set(allWorkspacesFromState); // Start with workspaces from state
     const directories = new Set();
     
-    // Helper to extract workspace from path
+    // Helper to extract workspace from path (fallback only)
     const extractWorkspace = (path) => {
       if (!path) return null;
       // Try to find workspace root (common patterns)
@@ -229,8 +261,39 @@ async function initializeNavigator() {
           });
         }
         
-        // Extract workspace and directory
-        const workspace = extractWorkspace(f.path);
+        // Extract workspace from events/files - prioritize actual workspace_path
+        let workspace = null;
+        
+        // First, try to get workspace from file data itself
+        if (f.workspace_path || f.workspacePath || f.workspace) {
+          workspace = f.workspace_path || f.workspacePath || f.workspace;
+        }
+        
+        // Then, try to get from related events (more reliable)
+        if (!workspace && relatedEvents.length > 0) {
+          const eventWorkspaces = relatedEvents
+            .map(e => e.workspace_path || e.workspacePath || e.workspace || '')
+            .filter(Boolean);
+          
+          if (eventWorkspaces.length > 0) {
+            // Use the most common workspace from events
+            const workspaceCounts = {};
+            eventWorkspaces.forEach(ws => {
+              workspaceCounts[ws] = (workspaceCounts[ws] || 0) + 1;
+            });
+            const sortedWorkspaces = Object.entries(workspaceCounts)
+              .sort((a, b) => b[1] - a[1]);
+            if (sortedWorkspaces.length > 0) {
+              workspace = sortedWorkspaces[0][0];
+            }
+          }
+        }
+        
+        // Fallback to path-based extraction if no workspace found
+        if (!workspace) {
+          workspace = extractWorkspace(f.path);
+        }
+        
         const directory = extractDirectory(f.path);
         const directoryParts = directory.split('/').filter(p => p);
         const topLevelDir = directoryParts.length > 0 ? directoryParts[0] : '/';
@@ -266,18 +329,6 @@ async function initializeNavigator() {
           }
         }
         
-        // Extract workspace from events if available
-        let eventWorkspace = null;
-        if (relatedEvents.length > 0) {
-          const eventWorkspaces = relatedEvents
-            .map(e => e.workspace_path || e.workspacePath || e.workspace || '')
-            .filter(Boolean);
-          if (eventWorkspaces.length > 0) {
-            eventWorkspace = eventWorkspaces[0]; // Use first workspace found
-            workspaces.add(eventWorkspace);
-          }
-        }
-        
         return {
           id: f.path,
           path: f.path,
@@ -289,7 +340,7 @@ async function initializeNavigator() {
           lastModified: lastModified,
           size: f.size,
           events: relatedEvents,
-          workspace: eventWorkspace || workspace,
+          workspace: workspace, // Use the workspace we determined above
           directory: directory,
           topLevelDir: topLevelDir,
           directoryDepth: directoryParts.length
