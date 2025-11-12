@@ -415,19 +415,59 @@ function updateWorkspaceComparison() {
   const events = window.state?.data?.events || [];
   const prompts = window.state?.data?.prompts || [];
 
+  // Normalize workspace path for comparison
+  const normalizePath = (path) => {
+    if (!path) return '';
+    return path.replace(/\/$/, '').toLowerCase().trim();
+  };
+
   // Calculate metrics for each workspace
   const workspaceMetrics = selectedWorkspaces.map(ws => {
+    const normalizedWsPath = normalizePath(ws.path);
+    
     const wsEvents = events.filter(e => {
-      const wsPath = e.workspace_path || e.workspacePath;
-      return wsPath === ws.path;
+      const eventWsPath = e.workspace_path || e.workspacePath || e.workspace || e.workspaceName || '';
+      const normalizedEventPath = normalizePath(eventWsPath);
+      
+      // Also check details for workspace path
+      if (!normalizedEventPath) {
+        try {
+          const details = typeof e.details === 'string' ? JSON.parse(e.details) : e.details || {};
+          const detailsWsPath = details.workspace_path || details.workspacePath || details.workspace || '';
+          const normalizedDetailsPath = normalizePath(detailsWsPath);
+          return normalizedDetailsPath === normalizedWsPath || 
+                 normalizedDetailsPath.includes(normalizedWsPath) ||
+                 normalizedWsPath.includes(normalizedDetailsPath);
+        } catch (e) {
+          return false;
+        }
+      }
+      
+      return normalizedEventPath === normalizedWsPath || 
+             normalizedEventPath.includes(normalizedWsPath) ||
+             normalizedWsPath.includes(normalizedEventPath);
     });
 
     const wsPrompts = prompts.filter(p => {
-      const wsPath = p.workspace_path || p.workspacePath || p.workspaceId;
-      return wsPath === ws.path;
+      const promptWsPath = p.workspace_path || p.workspacePath || p.workspaceId || p.workspaceName || p.workspace || '';
+      const normalizedPromptPath = normalizePath(promptWsPath);
+      return normalizedPromptPath === normalizedWsPath || 
+             normalizedPromptPath.includes(normalizedWsPath) ||
+             normalizedWsPath.includes(normalizedPromptPath);
     });
 
-    return calculateWorkspaceMetrics(ws, wsEvents, wsPrompts);
+    const metrics = calculateWorkspaceMetrics(ws, wsEvents, wsPrompts);
+    
+    // Debug logging
+    console.log(`[WORKSPACE-COMPARE] ${ws.path}:`, {
+      events: wsEvents.length,
+      prompts: wsPrompts.length,
+      fileChanges: metrics.fileChanges,
+      prompts: metrics.prompts,
+      events: metrics.events
+    });
+    
+    return metrics;
   });
 
   // Render comparison
@@ -561,11 +601,33 @@ function calculateWorkspaceMetrics(workspace, events, prompts) {
  */
 function renderWorkspaceComparisonChart(metrics) {
   const canvas = document.getElementById('workspaceComparisonChart');
-  if (!canvas || !window.Chart) return;
+  if (!canvas) {
+    console.warn('[WORKSPACE-COMPARE] Chart canvas not found');
+    return;
+  }
+  
+  if (!window.Chart) {
+    console.warn('[WORKSPACE-COMPARE] Chart.js not available');
+    return;
+  }
 
   if (canvas.chart) {
     canvas.chart.destroy();
   }
+
+  // Validate metrics data
+  if (!metrics || metrics.length === 0) {
+    console.warn('[WORKSPACE-COMPARE] No metrics data to render');
+    return;
+  }
+
+  // Log metrics for debugging
+  console.log('[WORKSPACE-COMPARE] Rendering chart with metrics:', metrics.map(m => ({
+    name: m.name,
+    prompts: m.prompts,
+    events: m.events,
+    fileChanges: m.fileChanges
+  })));
 
   const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'];
   
@@ -573,23 +635,23 @@ function renderWorkspaceComparisonChart(metrics) {
   canvas.chart = new Chart(canvas.getContext('2d'), {
     type: 'bar',
     data: {
-      labels: metrics.map(m => m.name),
+      labels: metrics.map(m => m.name || 'Unknown'),
       datasets: [
         {
           label: 'Prompts',
-          data: metrics.map(m => m.prompts),
+          data: metrics.map(m => m.prompts || 0),
           backgroundColor: colors[0],
           yAxisID: 'y'
         },
         {
           label: 'Events',
-          data: metrics.map(m => m.events),
+          data: metrics.map(m => m.events || 0),
           backgroundColor: colors[1],
           yAxisID: 'y'
         },
         {
           label: 'File Changes',
-          data: metrics.map(m => m.fileChanges),
+          data: metrics.map(m => m.fileChanges || 0),
           backgroundColor: colors[2],
           yAxisID: 'y'
         }
