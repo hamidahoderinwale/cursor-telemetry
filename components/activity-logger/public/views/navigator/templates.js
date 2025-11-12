@@ -8,15 +8,24 @@ function renderNavigatorViewTemplate(data) {
     <div class="navigator-view">
       <div class="view-header">
         <h2 title="Semantic Navigator: Visualizes your codebase in 2D space using advanced algorithms. Physical mode uses force-directed layout (Barnes-Hut optimized) for co-modification relationships. Latent mode uses UMAP (kNN graph + dimensionality reduction) for semantic similarity. Files with similar code or frequently modified together appear closer. Optimized for large graphs with adaptive parameters and sampling strategies.">Semantic Navigator</h2>
-        <p class="view-subtitle">
-          Explore your codebase in latent space - where semantic similarity becomes visual proximity. 
-          The Semantic Navigator transforms your codebase into a 2D map where files are positioned based on their relationships: in Physical mode, files frequently edited together appear closer using force-directed graph layout, while Latent mode uses UMAP (Uniform Manifold Approximation and Projection) to position files by semantic similarity - analyzing code content, structure, and patterns to reveal hidden relationships. 
-          The Hybrid mode blends both approaches, showing both co-modification patterns and semantic clusters simultaneously. 
-          Files with similar functionality, shared dependencies, or related code patterns naturally cluster together, making it easy to discover related code, understand codebase organization, and navigate complex projects visually. 
-          The visualization uses advanced dimensionality reduction techniques to compress high-dimensional code features (TF-IDF vectors, structural patterns, co-occurrence data) into an intuitive 2D layout that preserves meaningful relationships. 
-          Clusters are automatically discovered using k-means and community detection algorithms, with AI-powered annotations describing each group's purpose and characteristics. 
-          This creates a "map" of your codebase where proximity reveals relationships that might not be obvious from directory structure alone, helping you understand code organization, find related files, and discover architectural patterns at a glance.
-        </p>
+        <div class="view-subtitle">
+          <p>
+            Explore your codebase in latent space—where semantic similarity becomes visual proximity. 
+            The Semantic Navigator transforms your codebase into a 2D map where files are positioned based on their relationships, revealing hidden connections that aren't apparent from directory structure alone.
+          </p>
+          
+          <p>
+            The navigator offers three distinct viewing modes. <strong>Physical mode</strong> uses force-directed graph layout to position files based on co-modification patterns—files frequently edited together in the same sessions appear closer. <strong>Latent mode</strong> employs UMAP (Uniform Manifold Approximation and Projection) to analyze code content, structure, and patterns, positioning files by semantic similarity regardless of when they were modified. <strong>Hybrid mode</strong> blends both approaches, simultaneously showing co-modification patterns and semantic clusters for a comprehensive view.
+          </p>
+          
+          <p>
+            Files with similar functionality, shared dependencies, or related code patterns naturally cluster together, making it easy to discover related code, understand codebase organization, and navigate complex projects visually. The visualization uses advanced dimensionality reduction techniques to compress high-dimensional code features—including TF-IDF vectors, structural patterns, and co-occurrence data—into an intuitive 2D layout that preserves meaningful relationships.
+          </p>
+          
+          <p>
+            Clusters are automatically discovered using k-means and community detection algorithms, with AI-powered annotations describing each group's purpose and characteristics. This creates a "map" of your codebase where proximity reveals relationships that might not be obvious from directory structure alone, helping you understand code organization, find related files, and discover architectural patterns at a glance.
+          </p>
+        </div>
       </div>
 
       <!-- View Mode Switcher -->

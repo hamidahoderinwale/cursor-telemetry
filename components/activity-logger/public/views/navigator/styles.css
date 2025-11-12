@@ -26,6 +26,15 @@
   color: var(--color-text-muted);
 }
 
+.view-subtitle p {
+  margin: 0 0 var(--space-md) 0;
+  line-height: 1.6;
+}
+
+.view-subtitle p:last-child {
+  margin-bottom: 0;
+}
+
 /* View Mode Controls */
 .view-mode-controls {
   display: grid;
