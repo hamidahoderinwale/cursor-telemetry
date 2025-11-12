@@ -636,44 +636,130 @@ class ModalManager {
 
   _buildCodeDiffHTML(details, subtitle = null) {
     const { escapeHtml } = this;
+    const diffId = `diff_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const filePath = details.file_path || '';
+    
     return `
       <div>
-        <h4 style="margin-bottom: var(--space-md); color: var(--color-text); display: flex; align-items: center; gap: var(--space-sm);">
-          <span>Code Diff</span>
-          ${details.diff_stats?.has_diff ? `
-            <span style="font-size: var(--text-xs); color: var(--color-text-muted); font-weight: normal;">
-              (${details.diff_stats.lines_added > 0 ? `+${details.diff_stats.lines_added}` : ''}${details.diff_stats.lines_added > 0 && details.diff_stats.lines_removed > 0 ? '/' : ''}${details.diff_stats.lines_removed > 0 ? `-${details.diff_stats.lines_removed}` : ''} lines)
-            </span>
-          ` : ''}
-        </h4>
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-md);">
+          <h4 style="margin: 0; color: var(--color-text); display: flex; align-items: center; gap: var(--space-sm);">
+            <span>Code Diff</span>
+            ${details.diff_stats?.has_diff ? `
+              <span style="font-size: var(--text-xs); color: var(--color-text-muted); font-weight: normal;">
+                (${details.diff_stats.lines_added > 0 ? `+${details.diff_stats.lines_added}` : ''}${details.diff_stats.lines_added > 0 && details.diff_stats.lines_removed > 0 ? '/' : ''}${details.diff_stats.lines_removed > 0 ? `-${details.diff_stats.lines_removed}` : ''} lines)
+              </span>
+            ` : ''}
+          </h4>
+          <div style="display: flex; gap: var(--space-xs);">
+            <button id="${diffId}_code_btn" onclick="switchDiffView('${diffId}', 'code')" 
+                    style="padding: 6px 12px; background: var(--color-primary); color: white; border: none; border-radius: 6px; font-size: 11px; cursor: pointer; font-weight: 500;">
+              Code
+            </button>
+            <button id="${diffId}_ast_btn" onclick="switchDiffView('${diffId}', 'ast')" 
+                    style="padding: 6px 12px; background: var(--color-surface); color: var(--color-text-muted); border: none; border-radius: 6px; font-size: 11px; cursor: pointer; font-weight: 500;">
+              AST View
+            </button>
+          </div>
+        </div>
         ${subtitle ? `
           <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-bottom: var(--space-md); padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-sm);">
             ${subtitle}
           </div>
         ` : ''}
-        <div style="display: grid; gap: var(--space-md);">
-          ${details.before_content ? `
-            <div>
-              <div style="padding: var(--space-xs) var(--space-sm); background: rgba(239, 68, 68, 0.1); border-radius: var(--radius-sm) var(--radius-sm) 0 0; font-size: var(--text-xs); color: var(--color-error); font-weight: 500;">
-                Before (${details.before_content.split('\\n').length} lines)
+        <div id="${diffId}_code_view" style="display: block;">
+          <div style="display: grid; gap: var(--space-md);">
+            ${details.before_content ? `
+              <div>
+                <div style="padding: var(--space-xs) var(--space-sm); background: rgba(239, 68, 68, 0.1); border-radius: var(--radius-sm) var(--radius-sm) 0 0; font-size: var(--text-xs); color: var(--color-error); font-weight: 500;">
+                  Before (${details.before_content.split('\\n').length} lines)
+                </div>
+                <div class="code-block" style="max-height: 250px; overflow-y: auto; border-radius: 0 0 var(--radius-sm) var(--radius-sm);">
+                  <pre style="margin: 0; font-size: var(--text-xs); line-height: 1.5;">${escapeHtml(details.before_content)}</pre>
+                </div>
               </div>
-              <div class="code-block" style="max-height: 250px; overflow-y: auto; border-radius: 0 0 var(--radius-sm) var(--radius-sm);">
-                <pre style="margin: 0; font-size: var(--text-xs); line-height: 1.5;">${escapeHtml(details.before_content)}</pre>
+            ` : ''}
+            ${details.after_content ? `
+              <div>
+                <div style="padding: var(--space-xs) var(--space-sm); background: rgba(34, 197, 94, 0.1); border-radius: var(--radius-sm) var(--radius-sm) 0 0; font-size: var(--text-xs); color: var(--color-success); font-weight: 500;">
+                  After (${details.after_content.split('\\n').length} lines)
+                </div>
+                <div class="code-block" style="max-height: 250px; overflow-y: auto; border-radius: 0 0 var(--radius-sm) var(--radius-sm);">
+                  <pre style="margin: 0; font-size: var(--text-xs); line-height: 1.5;">${escapeHtml(details.after_content)}</pre>
+                </div>
               </div>
-            </div>
-          ` : ''}
-          ${details.after_content ? `
-            <div>
-              <div style="padding: var(--space-xs) var(--space-sm); background: rgba(34, 197, 94, 0.1); border-radius: var(--radius-sm) var(--radius-sm) 0 0; font-size: var(--text-xs); color: var(--color-success); font-weight: 500;">
-                After (${details.after_content.split('\\n').length} lines)
-              </div>
-              <div class="code-block" style="max-height: 250px; overflow-y: auto; border-radius: 0 0 var(--radius-sm) var(--radius-sm);">
-                <pre style="margin: 0; font-size: var(--text-xs); line-height: 1.5;">${escapeHtml(details.after_content)}</pre>
-              </div>
-            </div>
-          ` : ''}
+            ` : ''}
+          </div>
+        </div>
+        <div id="${diffId}_ast_view" style="display: none; min-height: 400px;">
+          <div style="padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md); border: 1px solid var(--color-border);">
+            <div id="${diffId}_ast_container" style="width: 100%; min-height: 400px;"></div>
+          </div>
         </div>
       </div>
+      <script>
+        (function() {
+          const diffId = '${diffId}';
+          const beforeCode = ${details.before_content ? `\`${details.before_content.replace(/`/g, '\\`').replace(/\$/g, '\\$')}\`` : 'null'};
+          const afterCode = ${details.after_content ? `\`${details.after_content.replace(/`/g, '\\`').replace(/\$/g, '\\$')}\`` : 'null'};
+          const filePath = '${filePath}';
+          
+          // Store AST data for this diff
+          window._astData = window._astData || {};
+          window._astData[diffId] = { beforeCode, afterCode, filePath };
+          
+          // Initialize AST visualization when AST view is shown
+          window.switchDiffView = window.switchDiffView || function(id, view) {
+            const codeView = document.getElementById(id + '_code_view');
+            const astView = document.getElementById(id + '_ast_view');
+            const codeBtn = document.getElementById(id + '_code_btn');
+            const astBtn = document.getElementById(id + '_ast_btn');
+            
+            if (view === 'code') {
+              codeView.style.display = 'block';
+              astView.style.display = 'none';
+              codeBtn.style.background = 'var(--color-primary)';
+              codeBtn.style.color = 'white';
+              astBtn.style.background = 'var(--color-surface)';
+              astBtn.style.color = 'var(--color-text-muted)';
+            } else {
+              codeView.style.display = 'none';
+              astView.style.display = 'block';
+              astBtn.style.background = 'var(--color-primary)';
+              astBtn.style.color = 'white';
+              codeBtn.style.background = 'var(--color-surface)';
+              codeBtn.style.color = 'var(--color-text-muted)';
+              
+              // Render AST if not already rendered
+              const container = document.getElementById(id + '_ast_container');
+              if (container && !container.dataset.rendered && window.ASTParser && window.ASTVisualizer) {
+                container.dataset.rendered = 'true';
+                const data = window._astData[id];
+                if (data) {
+                  const parser = new window.ASTParser();
+                  const language = parser.detectLanguage(data.filePath, data.beforeCode || data.afterCode);
+                  
+                  const beforeAST = data.beforeCode ? parser.parseCode(data.beforeCode, language) : null;
+                  const afterAST = data.afterCode ? parser.parseCode(data.afterCode, language) : null;
+                  
+                  if (beforeAST && afterAST) {
+                    parser.compareASTs(beforeAST, afterAST);
+                    const visualizer = new window.ASTVisualizer(id + '_ast_container');
+                    visualizer.renderComparison(beforeAST, afterAST, { width: container.clientWidth || 800, height: 400 });
+                  } else if (afterAST) {
+                    const visualizer = new window.ASTVisualizer(id + '_ast_container');
+                    visualizer.renderAST(afterAST, { width: container.clientWidth || 800, height: 400 });
+                  } else if (beforeAST) {
+                    const visualizer = new window.ASTVisualizer(id + '_ast_container');
+                    visualizer.renderAST(beforeAST, { width: container.clientWidth || 800, height: 400 });
+                  } else {
+                    container.innerHTML = '<div style="padding: var(--space-lg); text-align: center; color: var(--color-text-muted);">No code available for AST visualization</div>';
+                  }
+                }
+              }
+            }
+          };
+        })();
+      </script>
     `;
   }
 
