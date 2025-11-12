@@ -7,7 +7,7 @@
 .activity-view {
   display: grid;
   gap: var(--space-lg);
-  max-width: 1200px;
+  max-width: 1600px;
   margin: 0 auto;
   width: 100%;
 }
@@ -760,31 +760,24 @@
   font-size: var(--text-sm);
 }
 
-/* Timeline Layout - Single column by default, alternating optional */
+/* Timeline Layout - Two column with prompts as cards (60/40 split) */
 .timeline-alternating {
   position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-md);
+  display: grid;
+  grid-template-columns: 1.5fr 1px 1fr;
+  gap: var(--space-lg);
   padding: var(--space-sm) 0;
   max-width: 100%;
+  align-items: start;
 }
 
-.timeline-alternating.multi-workspace {
-  gap: var(--space-lg);
-  padding: var(--space-md) 0;
+.timeline-alternating.single-column {
+  grid-template-columns: 1fr;
+  gap: var(--space-sm);
 }
 
 .timeline-axis {
-  display: none;
-}
-
-.timeline-alternating.multi-workspace .timeline-axis {
-  display: block;
-  position: absolute;
-  left: 50%;
-  top: 0;
-  bottom: 0;
+  position: relative;
   width: 2px;
   background: linear-gradient(to bottom, 
     transparent 0%,
@@ -792,27 +785,54 @@
     var(--color-border) 95%,
     transparent 100%
   );
-  transform: translateX(-50%);
   z-index: 0;
+  margin: 0 var(--space-md);
+}
+
+.timeline-alternating.single-column .timeline-axis {
+  display: none;
 }
 
 .timeline-item-left,
 .timeline-item-right {
   position: relative;
   z-index: 1;
-  width: 100%;
-  margin-left: 0;
+}
+
+.timeline-item-left {
   margin-right: 0;
+  width: 100%;
+  grid-column: 1;
 }
 
-.timeline-alternating.multi-workspace .timeline-item-left {
-  margin-right: calc(50% + var(--space-lg));
-  width: calc(50% - var(--space-lg));
+.timeline-item-right {
+  margin-left: 0;
+  width: 100%;
+  grid-column: 3;
 }
 
-.timeline-alternating.multi-workspace .timeline-item-right {
-  margin-left: calc(50% + var(--space-lg));
-  width: calc(50% - var(--space-lg));
+/* Commit groups span full width */
+.commit-group {
+  grid-column: 1 / -1;
+  width: 100%;
+}
+
+/* Prompt cards styling */
+.prompt-timeline-item {
+  border-left: 3px solid var(--color-accent) !important;
+  background: linear-gradient(to right, rgba(168, 85, 247, 0.05), var(--color-bg)) !important;
+  margin-bottom: var(--space-sm);
+}
+
+.prompt-timeline-item:hover {
+  background: linear-gradient(to right, rgba(168, 85, 247, 0.1), var(--color-bg-alt)) !important;
+  border-left-color: var(--color-primary) !important;
+  box-shadow: 0 4px 12px rgba(168, 85, 247, 0.15) !important;
+}
+
+.prompt-content {
+  background: transparent;
+  border-left: none;
 }
 
 /* Enhanced Badge Styles */
@@ -960,25 +980,25 @@
 }
 
 /* Responsive Timeline */
-@media (max-width: 1024px) {
+@media (max-width: 1200px) {
+  .timeline-alternating {
+    grid-template-columns: 1fr;
+  }
+  
+  .timeline-axis {
+    display: none;
+  }
+  
+  .timeline-item-left,
+  .timeline-item-right {
+    width: 100%;
+  }
+}
+
+@media (max-width: 768px) {
   .timeline-alternating {
     gap: var(--space-sm);
     padding: var(--space-xs) 0;
-  }
-  
-  .timeline-alternating.multi-workspace {
-    gap: var(--space-md);
-  }
-  
-  .timeline-alternating.multi-workspace .timeline-axis {
-    left: 24px;
-  }
-  
-  .timeline-alternating.multi-workspace .timeline-item-left,
-  .timeline-alternating.multi-workspace .timeline-item-right {
-    margin-left: var(--space-xl);
-    margin-right: 0;
-    width: 100%;
   }
 }
 

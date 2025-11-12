@@ -329,6 +329,7 @@ function renderUnifiedTimeline(items) {
     `;
   }
   
+  // Render with two-column layout: events on left, prompts on right
   return `
     <div class="timeline-alternating">
       <div class="timeline-axis"></div>
@@ -351,8 +352,32 @@ function renderUnifiedTimeline(items) {
           return '';
         }
         
-        // Multiple items: render as a temporal thread/session with mixed content
-        return window.renderTemporalThread(thread, allItems);
+        // Multiple items: render events on left, prompts on right
+        const events = thread.items.filter(i => i.itemType === 'event' || i.itemType === 'terminal' || i.itemType === 'status');
+        const prompts = thread.items.filter(i => i.itemType === 'prompt' || i.itemType === 'conversation');
+        
+        let html = '';
+        // Render events on left
+        events.forEach(event => {
+          if (event.itemType === 'event') {
+            html += window.renderTimelineItem(event, 'left', allItems);
+          } else if (event.itemType === 'terminal') {
+            html += window.renderTerminalTimelineItem(event, 'left', allItems);
+          } else if (event.itemType === 'status') {
+            html += window.renderStatusMessageTimelineItem ? 
+              window.renderStatusMessageTimelineItem(event, 'left') : '';
+          }
+        });
+        // Render prompts on right
+        prompts.forEach(prompt => {
+          if (prompt.itemType === 'prompt') {
+            html += window.renderPromptTimelineItem(prompt, 'right', allItems);
+          } else if (prompt.itemType === 'conversation') {
+            html += window.renderConversationThread(prompt.conversation, 'right');
+          }
+        });
+        
+        return html || window.renderTemporalThread(thread, allItems);
       }).join('')}
     </div>
   `;
