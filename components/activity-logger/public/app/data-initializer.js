@@ -99,20 +99,18 @@ async function initializeDashboard() {
       await window.renderCurrentView();
     }
     
-    // Calculate stats in background after UI is visible
+    // Calculate stats in background after UI is visible (more aggressive deferral)
     if (window.calculateStats) {
-      // Defer stats to background - don't block UI
-      setTimeout(() => {
-        if (typeof requestIdleCallback !== 'undefined') {
-          requestIdleCallback(() => {
-            window.calculateStats().catch(err => console.warn('[STATS] Stats calculation error:', err));
-          }, { timeout: 1000 });
-        } else {
-          setTimeout(() => {
-            window.calculateStats().catch(err => console.warn('[STATS] Stats calculation error:', err));
-          }, 1000);
-        }
-      }, 100); // Small delay to let UI render first
+      // Defer stats more aggressively - don't block UI
+      if (typeof requestIdleCallback !== 'undefined') {
+        requestIdleCallback(() => {
+          window.calculateStats().catch(err => console.warn('[STATS] Stats calculation error:', err));
+        }, { timeout: 2000 }); // Increased timeout for lower priority
+      } else {
+        setTimeout(() => {
+          window.calculateStats().catch(err => console.warn('[STATS] Stats calculation error:', err));
+        }, 2000); // Increased delay
+      }
     }
     
     window.initProgress.update('render', 100);

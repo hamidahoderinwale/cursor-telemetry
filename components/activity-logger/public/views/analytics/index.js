@@ -387,6 +387,12 @@ async function renderAnalyticsView(container) {
     const events = state.data?.events || [];
     const prompts = state.data?.prompts || [];
     
+    // Skip chart rendering if no data (faster)
+    if (events.length === 0 && prompts.length === 0) {
+      console.log('[CHART] Skipping chart rendering - no data available');
+      return;
+    }
+    
     console.log('[CHART] Rendering analytics charts with data:', {
       events: events.length,
       prompts: prompts.length,
@@ -398,11 +404,11 @@ async function renderAnalyticsView(container) {
       return;
     }
     
-    // PHASE 1: Render fast charts immediately with available data
-    renderFastCharts(events, prompts);
-    
-    // PHASE 1.5: Render quick wins immediately
-    renderQuickWins(events, prompts);
+    // PHASE 1: Render fast charts immediately with available data (defer to next frame)
+    requestAnimationFrame(() => {
+      renderFastCharts(events, prompts);
+      renderQuickWins(events, prompts);
+    });
     
     // PHASE 2: Load more data and render heavy analytics progressively
     if (events.length < 200 || prompts.length < 200) {
@@ -502,15 +508,21 @@ async function renderAnalyticsView(container) {
   
   // Heavy analytics that load progressively
   function renderHeavyAnalytics(events, prompts) {
+    // Skip if no data
+    if (events.length === 0 && prompts.length === 0) {
+      console.log('[ANALYTICS] Skipping heavy analytics - no data');
+      return;
+    }
+    
     console.log('[ANALYTICS] Rendering heavy analytics with', events.length, 'events and', prompts.length, 'prompts');
     
-    // Defer heavy analytics to avoid blocking
+    // Defer heavy analytics more aggressively to avoid blocking
     if (typeof requestIdleCallback !== 'undefined') {
       requestIdleCallback(() => {
         renderHeavyAnalyticsInternal(events, prompts);
-      }, { timeout: 1000 });
+      }, { timeout: 3000 }); // Increased timeout for lower priority
     } else {
-      setTimeout(() => renderHeavyAnalyticsInternal(events, prompts), 500);
+      setTimeout(() => renderHeavyAnalyticsInternal(events, prompts), 2000); // Increased delay
     }
   }
   

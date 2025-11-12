@@ -105,14 +105,21 @@ async function renderCurrentView() {
         // Heavy views: yield first, then render (use requestIdleCallback for better performance)
         if (typeof requestIdleCallback !== 'undefined') {
           requestIdleCallback(() => {
-            renderFn(container);
+            // Double-check view is still active before rendering
+            if (window.state?.currentView === viewName) {
+              renderFn(container);
+            }
             if (window.setLoading) window.setLoading(viewName, false);
-          }, { timeout: 50 }); // Reduced timeout for faster rendering
+          }, { timeout: 100 }); // Slightly increased for better batching
         } else {
-          // Fallback: use requestAnimationFrame
+          // Fallback: use requestAnimationFrame with double frame delay
           requestAnimationFrame(() => {
-            renderFn(container);
-            if (window.setLoading) window.setLoading(viewName, false);
+            requestAnimationFrame(() => {
+              if (window.state?.currentView === viewName) {
+                renderFn(container);
+              }
+              if (window.setLoading) window.setLoading(viewName, false);
+            });
           });
         }
       } else {

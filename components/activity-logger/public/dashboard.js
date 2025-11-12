@@ -78,10 +78,10 @@ async function calculateStats() {
     clearTimeout(statsCalculationTimeout);
   }
   
-  // Debounce: wait 200ms before calculating (batch multiple calls)
-  statsCalculationTimeout = setTimeout(() => {
+  // Debounce: wait 500ms before calculating (batch multiple calls, more aggressive)
+    statsCalculationTimeout = setTimeout(() => {
     _calculateStatsInternal();
-  }, 200);
+  }, 500); // Increased debounce for better batching
 }
 
 async function _calculateStatsInternal() {
