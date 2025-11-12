@@ -82,48 +82,6 @@ function renderOverviewView(container) {
   // Get workspace count
   const workspaceCount = window.state.stats?.workspaces || window.state.data?.workspaces?.length || 0;
   
-  // Calculate streak (consecutive days with activity)
-  // Count backwards from today, including today if it has activity
-  let streak = 0;
-  
-  // Get all unique days with activity (normalize to start of day in local timezone)
-  const daysWithActivity = new Set();
-  [...events, ...prompts, ...terminalCommands].forEach(item => {
-    if (item.timestamp) {
-      const date = new Date(item.timestamp);
-      // Normalize to start of day in local timezone (handles timezone correctly)
-      const dayKey = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
-      daysWithActivity.add(dayKey);
-    }
-  });
-  
-  if (daysWithActivity.size > 0) {
-    // Count consecutive days going backwards from today
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const todayKey = today.getTime();
-    
-    // Count backwards day by day, starting from today
-    for (let i = 0; i < 365; i++) {
-      const checkDay = todayKey - (i * 24 * 60 * 60 * 1000);
-      
-      if (daysWithActivity.has(checkDay)) {
-        streak++;
-      } else {
-        // Stop counting if we hit a day without activity
-        // But if today (i=0) has no activity, we should check yesterday
-        // So only break if we've already counted at least one day
-        if (i === 0) {
-          // Today has no activity, but continue to check yesterday
-          continue;
-        } else {
-          // Found a gap in the streak
-          break;
-        }
-      }
-    }
-  }
-  
   // Get top files today
   const fileActivityToday = new Map();
   todayEvents > 0 && events.forEach(event => {
@@ -257,10 +215,6 @@ function renderOverviewView(container) {
           <div class="quick-stat">
             <div class="quick-stat-value">${activeDays.size}</div>
             <div class="quick-stat-label">Active Days (7d)</div>
-          </div>
-          <div class="quick-stat">
-            <div class="quick-stat-value">${streak}</div>
-            <div class="quick-stat-label">Day Streak</div>
           </div>
           <div class="quick-stat">
             <div class="quick-stat-value">${workspaceCount > 0 ? workspaceCount : '-'}</div>
@@ -433,25 +387,6 @@ function renderOverviewView(container) {
         
       </div>
       
-      <!-- Streak Tracker -->
-      <div class="card">
-        <div class="card-header">
-          <h3 class="card-title">Coding Streak</h3>
-          <p class="card-subtitle">Consecutive days with activity</p>
-        </div>
-        <div class="card-body">
-          <div class="streak-display">
-            <div class="streak-number">${streak}</div>
-            <div class="streak-label">day${streak !== 1 ? 's' : ''} in a row</div>
-          </div>
-          ${streak > 0 ? `
-            <div class="streak-hint">Keep it up! You're on a roll.</div>
-          ` : `
-            <div class="streak-hint">Start coding today to begin your streak!</div>
-          `}
-        </div>
-      </div>
-      
     </div>
   `;
   
@@ -481,18 +416,28 @@ function renderOverviewView(container) {
   })();
   
   // Render visualizations after DOM is ready
-  setTimeout(() => {
-    // Render heatmap
+  // Use multiple attempts to ensure data is loaded
+  const renderHeatmap = () => {
     const heatmapContainer = document.getElementById('activityHeatmap');
-    if (heatmapContainer && window.renderActivityHeatmap) {
+    if (!heatmapContainer) return;
+    
+    if (window.renderActivityHeatmap) {
       window.renderActivityHeatmap(heatmapContainer);
-    } else if (heatmapContainer) {
+    } else {
       heatmapContainer.innerHTML = `
         <div class="empty-state">
           <div class="empty-state-text" style="font-style: normal;">Heatmap renderer not available</div>
         </div>
       `;
     }
+  };
+  
+  // Try immediately
+  setTimeout(renderHeatmap, 100);
+  
+  // Retry after data might have loaded
+  setTimeout(renderHeatmap, 1000);
+  setTimeout(renderHeatmap, 3000);
     
     // Render activity rhythm with D3
     const rhythmContainer = document.getElementById('activityRhythmChart');

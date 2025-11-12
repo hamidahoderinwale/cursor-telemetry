@@ -49,123 +49,163 @@ function renderSystemStatus() {
 
 function renderWorkspacesList() {
   const workspaces = window.state?.data?.workspaces || [];
+  const events = window.state?.data?.events || [];
+  const prompts = window.state?.data?.prompts || [];
   
-  if (workspaces.length === 0) {
-    // Try to extract workspaces from events and prompts if not available
-    const workspaceMap = new Map();
-    
-    // Extract from events
-    (window.state?.data?.events || []).forEach(event => {
-      const wsPath = event.workspace_path || event.workspacePath || event.workspace;
-      if (wsPath) {
-        if (!workspaceMap.has(wsPath)) {
-          workspaceMap.set(wsPath, {
-            path: wsPath,
-            name: wsPath.split('/').pop() || 'Unknown',
-            events: 0,
-            entries: 0,
-            promptCount: 0
-          });
-        }
-        workspaceMap.get(wsPath).events++;
+  // Build comprehensive workspace map from all sources
+  const workspaceMap = new Map();
+  const now = Date.now();
+  const sevenDaysAgo = now - (7 * 24 * 60 * 60 * 1000);
+  
+  // Extract from events
+  events.forEach(event => {
+    const wsPath = event.workspace_path || event.workspacePath || event.workspace;
+    if (wsPath) {
+      if (!workspaceMap.has(wsPath)) {
+        workspaceMap.set(wsPath, {
+          path: wsPath,
+          name: wsPath.split('/').pop() || 'Unknown',
+          events: 0,
+          entries: 0,
+          promptCount: 0,
+          lastActivity: 0,
+          recentActivity: 0
+        });
       }
-    });
-    
-    // Extract from prompts
-    (window.state?.data?.prompts || []).forEach(prompt => {
-      const wsPath = prompt.workspace_path || prompt.workspacePath || prompt.workspaceName || prompt.workspaceId;
-      if (wsPath) {
-        if (!workspaceMap.has(wsPath)) {
-          workspaceMap.set(wsPath, {
-            path: wsPath,
-            name: wsPath.split('/').pop() || 'Unknown',
-            events: 0,
-            entries: 0,
-            promptCount: 0
-          });
-        }
-        workspaceMap.get(wsPath).promptCount++;
+      const ws = workspaceMap.get(wsPath);
+      ws.events++;
+      
+      // Track last activity time
+      const eventTime = event.timestamp ? new Date(event.timestamp).getTime() : 0;
+      if (eventTime > ws.lastActivity) {
+        ws.lastActivity = eventTime;
       }
-    });
-    
-    const extractedWorkspaces = Array.from(workspaceMap.values());
-    
-    if (extractedWorkspaces.length === 0) {
-      return `
-        <div class="empty-state">
-          <div class="empty-state-text">No workspaces detected</div>
-          <div class="empty-state-hint" style="font-size: 0.85em; margin-top: 8px; line-height: 1.5;">
-            Workspaces will appear as you work in different projects. Make sure the companion service is running and monitoring your activity.
-            <br><br>
-            <span style="font-size: 0.9em; color: var(--color-text-subtle);">
-              Workspaces are automatically detected from file paths in your events and prompts.
-            </span>
-          </div>
-        </div>
-      `;
+      if (eventTime >= sevenDaysAgo) {
+        ws.recentActivity++;
+      }
     }
-    
-    // Use extracted workspaces
+  });
+  
+  // Extract from prompts
+  prompts.forEach(prompt => {
+    const wsPath = prompt.workspace_path || prompt.workspacePath || prompt.workspaceName || prompt.workspaceId;
+    if (wsPath) {
+      if (!workspaceMap.has(wsPath)) {
+        workspaceMap.set(wsPath, {
+          path: wsPath,
+          name: wsPath.split('/').pop() || 'Unknown',
+          events: 0,
+          entries: 0,
+          promptCount: 0,
+          lastActivity: 0,
+          recentActivity: 0
+        });
+      }
+      const ws = workspaceMap.get(wsPath);
+      ws.promptCount++;
+      
+      // Track last activity time
+      const promptTime = prompt.timestamp ? new Date(prompt.timestamp).getTime() : 0;
+      if (promptTime > ws.lastActivity) {
+        ws.lastActivity = promptTime;
+      }
+      if (promptTime >= sevenDaysAgo) {
+        ws.recentActivity++;
+      }
+    }
+  });
+  
+  // Merge with provided workspaces data
+  workspaces.forEach(ws => {
+    const wsPath = ws.path || ws.id || ws.name;
+    if (wsPath) {
+      if (!workspaceMap.has(wsPath)) {
+        workspaceMap.set(wsPath, {
+          path: wsPath,
+          name: ws.name || wsPath.split('/').pop() || 'Unknown',
+          events: ws.events || ws.eventCount || 0,
+          entries: ws.entries || 0,
+          promptCount: ws.promptCount || 0,
+          lastActivity: 0,
+          recentActivity: 0
+        });
+      } else {
+        // Update with provided data if available
+        const existing = workspaceMap.get(wsPath);
+        existing.events = existing.events || ws.events || ws.eventCount || 0;
+        existing.entries = existing.entries || ws.entries || 0;
+        existing.promptCount = existing.promptCount || ws.promptCount || 0;
+      }
+    }
+  });
+  
+  const allWorkspaces = Array.from(workspaceMap.values());
+  
+  if (allWorkspaces.length === 0) {
     return `
-      <div class="workspaces-list">
-        ${extractedWorkspaces.map(ws => {
-          const escapedPath = window.escapeHtml ? window.escapeHtml(ws.path) : ws.path;
-          return `
-          <div class="workspace-item">
-            <div class="workspace-item-title">
-              <span class="workspace-item-title-text">${window.escapeHtml ? window.escapeHtml(ws.name) : ws.name}</span>
-              <div class="workspace-item-title-fade"></div>
-            </div>
-            <div class="workspace-item-meta">
-              <span>${ws.events || 0} events</span>
-              ${ws.promptCount > 0 ? `<span>${ws.promptCount} prompts</span>` : ''}
-              <button class="btn btn-sm" onclick="if(window.showShareModal) window.showShareModal(['${escapedPath}']); else alert('Sharing feature not available');" title="Share this workspace" style="margin-left: auto; padding: 4px 8px; font-size: 0.75rem;">
-                <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor" style="vertical-align: middle;">
-                  <path d="M15 8a3 3 0 10-2.977-2.63l-4.94 2.47a3 3 0 100 4.319l4.94 2.47a3 3 0 10.895-1.789l-4.94-2.47a3.027 3.027 0 000-.74l4.94-2.47C13.456 7.68 14.19 8 15 8z"/>
-                </svg>
-                Share
-              </button>
-            </div>
-          </div>
-        `;
-        }).join('')}
+      <div class="empty-state">
+        <div class="empty-state-text">No workspaces detected</div>
+        <div class="empty-state-hint" style="font-size: 0.85em; margin-top: 8px; line-height: 1.5;">
+          Workspaces will appear as you work in different projects. Make sure the companion service is running and monitoring your activity.
+          <br><br>
+          <span style="font-size: 0.9em; color: var(--color-text-subtle);">
+            Workspaces are automatically detected from file paths in your events and prompts.
+          </span>
+        </div>
       </div>
     `;
   }
-
+  
+  // Separate active (recent activity in last 7 days) and non-active workspaces
+  const activeWorkspaces = allWorkspaces.filter(ws => ws.recentActivity > 0 || ws.lastActivity >= sevenDaysAgo);
+  const nonActiveWorkspaces = allWorkspaces.filter(ws => ws.recentActivity === 0 && ws.lastActivity < sevenDaysAgo);
+  
+  // Sort active by recent activity, non-active by total activity
+  activeWorkspaces.sort((a, b) => (b.recentActivity || 0) - (a.recentActivity || 0));
+  nonActiveWorkspaces.sort((a, b) => (b.events + b.promptCount) - (a.events + a.promptCount));
+  
+  const renderWorkspaceItem = (ws, isActive = true) => {
+    const name = ws.name || ws.path?.split('/').pop() || ws.path || 'Unknown';
+    const eventCount = ws.events || 0;
+    const entryCount = ws.entries || 0;
+    const promptCount = ws.promptCount || 0;
+    const wsPath = ws.path || '';
+    const escapedPath = window.escapeHtml ? window.escapeHtml(wsPath) : wsPath;
+    
+    return `
+      <div class="workspace-item ${!isActive ? 'workspace-item-inactive' : ''}">
+        <div class="workspace-item-title">
+          <span class="workspace-item-title-text">${window.escapeHtml ? window.escapeHtml(name) : name}</span>
+          ${!isActive ? '<span class="workspace-item-badge" style="font-size: 0.7rem; color: var(--color-text-muted); margin-left: var(--space-xs);">(inactive)</span>' : ''}
+          <div class="workspace-item-title-fade"></div>
+        </div>
+        <div class="workspace-item-meta" style="display: flex; align-items: center; gap: var(--space-xs); flex-wrap: wrap;">
+          <div style="display: flex; gap: var(--space-xs); flex-wrap: wrap;">
+            ${eventCount > 0 ? `<span>${eventCount} events</span>` : ''}
+            ${entryCount > 0 ? `<span>${entryCount} entries</span>` : ''}
+            ${promptCount > 0 ? `<span>${promptCount} prompts</span>` : ''}
+            ${eventCount === 0 && entryCount === 0 && promptCount === 0 ? '<span>No activity</span>' : ''}
+          </div>
+          ${wsPath ? `<button class="btn btn-sm" onclick="if(window.showShareModal) window.showShareModal(['${escapedPath}']); else alert('Sharing feature not available');" title="Share this workspace" style="margin-left: auto; padding: 4px 8px; font-size: 0.75rem;">
+            <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor" style="vertical-align: middle;">
+              <path d="M15 8a3 3 0 10-2.977-2.63l-4.94 2.47a3 3 0 100 4.319l4.94 2.47a3 3 0 10.895-1.789l-4.94-2.47a3.027 3.027 0 000-.74l4.94-2.47C13.456 7.68 14.19 8 15 8z"/>
+            </svg>
+            Share
+          </button>` : ''}
+        </div>
+      </div>
+    `;
+  };
+  
   return `
     <div class="workspaces-list">
-      ${workspaces.map(ws => {
-        const name = ws.name || ws.path?.split('/').pop() || ws.path || 'Unknown';
-        const eventCount = ws.events || ws.eventCount || 0;
-        const entryCount = ws.entries || ws.entryCount || 0;
-        const promptCount = ws.promptCount || 0;
-        const wsPath = ws.path || ws.id || '';
-        const escapedPath = window.escapeHtml ? window.escapeHtml(wsPath) : wsPath;
-        
-        return `
-          <div class="workspace-item">
-            <div class="workspace-item-title">
-              <span class="workspace-item-title-text">${window.escapeHtml ? window.escapeHtml(name) : name}</span>
-              <div class="workspace-item-title-fade"></div>
-            </div>
-            <div class="workspace-item-meta" style="display: flex; align-items: center; gap: var(--space-xs); flex-wrap: wrap;">
-              <div style="display: flex; gap: var(--space-xs); flex-wrap: wrap;">
-                ${eventCount > 0 ? `<span>${eventCount} events</span>` : ''}
-                ${entryCount > 0 ? `<span>${entryCount} entries</span>` : ''}
-                ${promptCount > 0 ? `<span>${promptCount} prompts</span>` : ''}
-                ${eventCount === 0 && entryCount === 0 && promptCount === 0 ? '<span>No activity</span>' : ''}
-              </div>
-              ${wsPath ? `<button class="btn btn-sm" onclick="if(window.showShareModal) window.showShareModal(['${escapedPath}']); else alert('Sharing feature not available');" title="Share this workspace" style="margin-left: auto; padding: 4px 8px; font-size: 0.75rem;">
-                <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor" style="vertical-align: middle;">
-                  <path d="M15 8a3 3 0 10-2.977-2.63l-4.94 2.47a3 3 0 100 4.319l4.94 2.47a3 3 0 10.895-1.789l-4.94-2.47a3.027 3.027 0 000-.74l4.94-2.47C13.456 7.68 14.19 8 15 8z"/>
-                </svg>
-                Share
-              </button>` : ''}
-            </div>
-          </div>
-        `;
-      }).join('')}
+      ${activeWorkspaces.length > 0 ? `
+        ${activeWorkspaces.map(ws => renderWorkspaceItem(ws, true)).join('')}
+      ` : ''}
+      ${nonActiveWorkspaces.length > 0 ? `
+        ${activeWorkspaces.length > 0 ? '<div style="margin-top: var(--space-lg); padding-top: var(--space-lg); border-top: 1px solid var(--color-border);"><div style="font-size: var(--text-sm); font-weight: 600; color: var(--color-text-muted); margin-bottom: var(--space-md);">Other Projects</div></div>' : ''}
+        ${nonActiveWorkspaces.map(ws => renderWorkspaceItem(ws, false)).join('')}
+      ` : ''}
     </div>
   `;
 }

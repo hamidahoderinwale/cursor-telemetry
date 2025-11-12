@@ -8,9 +8,56 @@
  * Returns data organized by weeks and days
  */
 function generateYearHeatmapData(weeks = 53) {
-  const events = window.state?.data?.events || [];
-  const prompts = window.state?.data?.prompts || [];
-  const terminalCommands = window.state?.data?.terminalCommands || [];
+  // Try multiple data sources and structures
+  const state = window.state || {};
+  const data = state.data || {};
+  
+  // Get events from various possible locations
+  let events = data.events || [];
+  if (!Array.isArray(events) && data.activity?.events) {
+    events = data.activity.events;
+  }
+  if (!Array.isArray(events) && state.events) {
+    events = state.events;
+  }
+  if (!Array.isArray(events)) {
+    events = [];
+  }
+  
+  // Get prompts from various possible locations
+  let prompts = data.prompts || data.entries || [];
+  if (!Array.isArray(prompts) && data.activity?.prompts) {
+    prompts = data.activity.prompts;
+  }
+  if (!Array.isArray(prompts) && state.prompts) {
+    prompts = state.prompts;
+  }
+  if (!Array.isArray(prompts)) {
+    prompts = [];
+  }
+  
+  // Get terminal commands
+  let terminalCommands = data.terminalCommands || data.terminal_commands || [];
+  if (!Array.isArray(terminalCommands) && data.activity?.terminalCommands) {
+    terminalCommands = data.activity.terminalCommands;
+  }
+  if (!Array.isArray(terminalCommands) && state.terminalCommands) {
+    terminalCommands = state.terminalCommands;
+  }
+  if (!Array.isArray(terminalCommands)) {
+    terminalCommands = [];
+  }
+  
+  // Debug logging (only in development)
+  if (window.DEBUG || window.location.hostname === 'localhost') {
+    console.log('[HEATMAP] Data check:', {
+      eventsCount: events.length,
+      promptsCount: prompts.length,
+      terminalCount: terminalCommands.length,
+      hasState: !!window.state,
+      hasData: !!data
+    });
+  }
   
   // Initialize heatmap: weeks × 7 days
   // Each cell contains: { count: 0, linesAdded: 0, linesRemoved: 0, date: Date }
@@ -49,27 +96,72 @@ function generateYearHeatmapData(weeks = 53) {
     heatmap.push(weekData);
   }
   
-  // Process all activities
-  const allActivities = [
-    ...events.map(e => ({ 
-      time: new Date(e.timestamp).getTime(), 
-      type: 'event',
-      event: e
-    })),
-    ...prompts.map(p => ({ 
-      time: new Date(p.timestamp).getTime(), 
-      type: 'prompt',
-      prompt: p
-    })),
-    ...terminalCommands.map(c => ({ 
-      time: new Date(c.timestamp || c.created_at).getTime(), 
-      type: 'terminal',
-      command: c
-    }))
-  ];
+  // Process all activities with robust timestamp handling
+  const allActivities = [];
+  
+  // Process events
+  events.forEach(e => {
+    if (!e || !e.timestamp) return;
+    const time = typeof e.timestamp === 'string' 
+      ? new Date(e.timestamp).getTime() 
+      : (typeof e.timestamp === 'number' ? e.timestamp : null);
+    if (time && !isNaN(time) && time > 0) {
+      allActivities.push({ time, type: 'event', event: e });
+    }
+  });
+  
+  // Process prompts
+  prompts.forEach(p => {
+    if (!p || !p.timestamp) return;
+    const time = typeof p.timestamp === 'string' 
+      ? new Date(p.timestamp).getTime() 
+      : (typeof p.timestamp === 'number' ? p.timestamp : null);
+    if (time && !isNaN(time) && time > 0) {
+      allActivities.push({ time, type: 'prompt', prompt: p });
+    }
+  });
+  
+  // Process terminal commands
+  terminalCommands.forEach(c => {
+    if (!c) return;
+    const timestamp = c.timestamp || c.created_at;
+    if (!timestamp) return;
+    const time = typeof timestamp === 'string' 
+      ? new Date(timestamp).getTime() 
+      : (typeof timestamp === 'number' ? timestamp : null);
+    if (time && !isNaN(time) && time > 0) {
+      allActivities.push({ time, type: 'terminal', command: c });
+    }
+  });
   
   allActivities.forEach(activity => {
-    const activityDate = new Date(activity.time);
+    // Handle timestamp - try multiple formats
+    let activityTime = activity.time;
+    if (!activityTime && activity.event?.timestamp) {
+      activityTime = activity.event.timestamp;
+    }
+    if (!activityTime && activity.prompt?.timestamp) {
+      activityTime = activity.prompt.timestamp;
+    }
+    if (!activityTime && activity.command?.timestamp) {
+      activityTime = activity.command.timestamp || activity.command.created_at;
+    }
+    
+    // Convert to timestamp if it's a string
+    if (typeof activityTime === 'string') {
+      activityTime = new Date(activityTime).getTime();
+    }
+    
+    // Skip if timestamp is invalid
+    if (!activityTime || isNaN(activityTime) || activityTime <= 0) {
+      return;
+    }
+    
+    const activityDate = new Date(activityTime);
+    if (isNaN(activityDate.getTime())) {
+      return; // Invalid date
+    }
+    
     const daysSinceStart = Math.floor((activityDate - startDate) / oneDay);
     
     if (daysSinceStart >= 0 && daysSinceStart < (weeks * 7)) {
@@ -143,14 +235,45 @@ function renderActivityHeatmap(container) {
   
   // Show empty state if no data
   if (totalActivities === 0) {
+    // Check if data might be loading
+    const hasState = !!window.state;
+    const hasData = !!(window.state?.data);
+    const eventsCount = (window.state?.data?.events || []).length;
+    const promptsCount = (window.state?.data?.prompts || []).length;
+    
+    let message = 'No activity data available';
+    let hint = 'Start coding to see your activity heatmap. Make sure the companion service is running.';
+    
+    if (!hasState) {
+      hint = 'Waiting for dashboard to initialize...';
+    } else if (!hasData) {
+      hint = 'Data is loading. Please wait a moment...';
+    } else if (eventsCount === 0 && promptsCount === 0) {
+      hint = 'Start coding to see your activity heatmap. Make sure the companion service is running.';
+    }
+    
     container.innerHTML = `
       <div class="empty-state" style="padding: 3rem; text-align: center;">
-        <div class="empty-state-text" style="font-size: 1.1rem; font-weight: 500; margin-bottom: 0.5rem; font-style: normal;">No activity data available</div>
+        <div class="empty-state-text" style="font-size: 1.1rem; font-weight: 500; margin-bottom: 0.5rem; font-style: normal;">${message}</div>
         <div class="empty-state-hint" style="font-size: 0.9rem; color: var(--color-text-muted); font-style: normal;">
-          Start coding to see your activity heatmap. Make sure the companion service is running.
+          ${hint}
         </div>
+        ${hasState && hasData ? `
+          <div style="font-size: 0.85rem; color: var(--color-text-muted); margin-top: 0.5rem;">
+            Found ${eventsCount} events and ${promptsCount} prompts, but no valid timestamps.
+          </div>
+        ` : ''}
       </div>
     `;
+    
+    // Retry after a delay if data might be loading
+    if (hasState && !hasData) {
+      setTimeout(() => {
+        if (window.renderActivityHeatmap && container) {
+          window.renderActivityHeatmap(container);
+        }
+      }, 2000);
+    }
     return;
   }
   
