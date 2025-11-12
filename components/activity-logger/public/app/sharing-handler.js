@@ -104,7 +104,10 @@ async function showShareModal(workspaces = null) {
         
         <!-- Workspace Selection -->
         <div>
-          <h3 class="card-title">Workspaces to Share</h3>
+          <h3 class="card-title">
+            Workspaces to Share
+            <span class="tooltip-icon" title="Select one or more workspaces to include in the share link. Only data from selected workspaces will be shared. You can select all workspaces or choose specific ones. The preview below shows how much data will be included.">i</span>
+          </h3>
           ${allWorkspaces.length === 0 ? `
             <div style="color: var(--color-text-muted); padding: var(--space-sm); text-align: center; border: 1px solid var(--color-border); border-radius: var(--radius-md);">
               No workspaces found in telemetry data
