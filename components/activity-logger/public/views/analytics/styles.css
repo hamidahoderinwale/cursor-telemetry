@@ -195,8 +195,8 @@
 .analytics-grid-2col {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
-  gap: var(--space-xl);
-  margin: var(--space-lg) 0;
+  gap: var(--space-md, 1rem);
+  margin: var(--space-sm, 0.5rem) 0;
 }
 
 /* Compact card styles for analytics */
