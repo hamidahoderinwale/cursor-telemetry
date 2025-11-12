@@ -54,6 +54,11 @@ async function initializeNavigator() {
     const startTime = Date.now();
     console.log('[NAVIGATOR] Starting initialization...');
     
+    // Lazy load navigator services if not already loaded
+    if (window.loadNavigatorServices && !window._navigatorServicesLoaded) {
+      await window.loadNavigatorServices();
+    }
+    
     // Show loading
     container.innerHTML = '<div class="loading-wrapper"><div class="loading-spinner"></div><span>Computing latent embeddings...</span></div>';
     

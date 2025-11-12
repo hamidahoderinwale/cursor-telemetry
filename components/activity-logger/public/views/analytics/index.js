@@ -2,7 +2,11 @@
  * Analytics View - Main analytics dashboard
  */
 
-function renderAnalyticsView(container) {
+async function renderAnalyticsView(container) {
+  // Lazy load analytics services if not already loaded
+  if (window.loadAnalyticsServices && !window._analyticsServicesLoaded) {
+    await window.loadAnalyticsServices();
+  }
   const totalPrompts = window.state.data.prompts?.length || 0;
   const totalEvents = window.state.data.events?.length || 0;
   const hasData = totalPrompts > 0 || totalEvents > 0;

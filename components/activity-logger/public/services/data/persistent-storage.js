@@ -121,12 +121,18 @@ class PersistentStorage {
     PersistentStorage._initPromise = new Promise((resolve, reject) => {
       console.log('[DATA] Opening IndexedDB:', this.dbName, 'version', this.version);
       
+      const startTime = Date.now();
       const request = indexedDB.open(this.dbName, this.version);
       
-      // Add timeout to prevent hanging
+      // Reduced timeout warning threshold (5 seconds instead of 3)
+      // This is just a warning, not a failure - IndexedDB can take time on first load
       const timeout = setTimeout(() => {
-        console.warn('[WARNING] IndexedDB initialization taking longer than expected...');
-      }, 3000);
+        // Only warn if it's taking unusually long (5+ seconds)
+        // This is expected on first load with large datasets
+        if (Date.now() - startTime > 5000) {
+          console.warn('[WARNING] IndexedDB initialization taking longer than expected...');
+        }
+      }, 5000);
 
       request.onerror = () => {
         clearTimeout(timeout);

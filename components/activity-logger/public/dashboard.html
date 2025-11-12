@@ -726,12 +726,41 @@
   <script src="views/file-graph/index.js" defer></script>
   <script src="views/workspace-comparison/index.js" defer></script>
   <script src="views/navigator/templates.js" defer></script>
-  <!-- Enhanced Navigator Services (load before layout) -->
-  <script src="services/navigator/code-embedding-service.js" defer></script>
-  <script src="services/navigator/umap-service.js" defer></script>
-  <script src="services/navigator/clustering-service.js" defer></script>
-  <script src="services/navigator/enhanced-cluster-labeling.js" defer></script>
-  <script src="services/navigator/semantic-search-service.js" defer></script>
+  <!-- Enhanced Navigator Services (lazy load - only when navigator view is accessed) -->
+  <script>
+    // Lazy load navigator services only when needed
+    window.loadNavigatorServices = function() {
+      if (window._navigatorServicesLoaded) return Promise.resolve();
+      window._navigatorServicesLoaded = true;
+      
+      return Promise.all([
+        import('./services/navigator/code-embedding-service.js'),
+        import('./services/navigator/umap-service.js'),
+        import('./services/navigator/clustering-service.js'),
+        import('./services/navigator/enhanced-cluster-labeling.js'),
+        import('./services/navigator/semantic-search-service.js')
+      ]).catch(() => {
+        // Fallback to regular script loading if dynamic import fails
+        const scripts = [
+          'services/navigator/code-embedding-service.js',
+          'services/navigator/umap-service.js',
+          'services/navigator/clustering-service.js',
+          'services/navigator/enhanced-cluster-labeling.js',
+          'services/navigator/semantic-search-service.js'
+        ];
+        return Promise.all(scripts.map(src => {
+          return new Promise((resolve) => {
+            const script = document.createElement('script');
+            script.src = src;
+            script.defer = true;
+            script.onload = resolve;
+            script.onerror = resolve; // Continue even if one fails
+            document.head.appendChild(script);
+          });
+        }));
+      });
+    };
+  </script>
   <script src="views/navigator/navigator-layout.js" defer></script>
   <script src="views/navigator/navigator-renderer.js" defer></script>
   <script src="views/navigator/navigator-core.js" defer></script>

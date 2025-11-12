@@ -217,17 +217,25 @@ async function loadFromCache() {
     return;
   }
   
-  // Ensure database is initialized before accessing it
+  // Initialize database with timeout - don't block if it's slow
   try {
-    await window.persistentStorage.init();
+    // Use Promise.race to timeout after 2 seconds
+    const initPromise = window.persistentStorage.init();
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('IndexedDB init timeout')), 2000)
+    );
+    
+    await Promise.race([initPromise, timeoutPromise]);
   } catch (initError) {
-    console.warn('[WARNING] Failed to initialize database:', initError.message);
+    // If init times out or fails, continue without cache (non-blocking)
+    console.warn('[WARNING] IndexedDB init slow/failed, continuing without cache:', initError.message);
+    // Continue anyway - cache will be available later
     return;
   }
   
-  // Load minimal recent data (last 1 hour) for fastest startup
+  // Load minimal recent data (last 30 minutes) for fastest startup
   const now = Date.now();
-  const oneHourAgo = now - 60 * 60 * 1000; // Reduced to 1 hour for even faster load
+  const thirtyMinutesAgo = now - 30 * 60 * 1000; // Reduced to 30 minutes for ultra-fast load
   
   try {
     // Load only most recent events (limit to 20 for ultra-fast load)
