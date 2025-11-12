@@ -218,21 +218,35 @@ async function loadFromCache() {
   }
   
   // Initialize database with timeout - don't block if it's slow
+  let dbInitialized = false;
   try {
-    // Use Promise.race to timeout after 1 second for ultra-fast startup
+    // Use Promise.race to timeout after 2 seconds (increased from 1s for better reliability)
     // IndexedDB will continue initializing in background
     const initPromise = window.persistentStorage.init();
     const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error('IndexedDB init timeout')), 1000)
+      setTimeout(() => reject(new Error('IndexedDB init timeout')), 2000)
     );
     
     await Promise.race([initPromise, timeoutPromise]);
+    dbInitialized = true;
   } catch (initError) {
-    // If init times out or fails, continue without cache (non-blocking)
-    // This is expected and fine - cache will be available later
-    // Don't log as warning since this is normal behavior
-    // Continue anyway - cache will be available later
-    return;
+    // If init times out, try to load data anyway (IndexedDB might be ready)
+    // Don't return early - try to load data even if init seemed slow
+    console.log('[CACHE] IndexedDB init timeout, attempting to load data anyway...');
+    dbInitialized = false;
+  }
+  
+  // Try to load data even if init timed out (IndexedDB might be ready by now)
+  if (!dbInitialized) {
+    // Give IndexedDB a moment, then try again
+    await new Promise(resolve => setTimeout(resolve, 500));
+    try {
+      await window.persistentStorage.init();
+      dbInitialized = true;
+    } catch (retryError) {
+      // Still not ready, but continue to try loading
+      console.log('[CACHE] IndexedDB still not ready, will retry in background');
+    }
   }
   
   // Load minimal recent data (last 30 minutes) for fastest startup
