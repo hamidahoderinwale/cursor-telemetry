@@ -32,7 +32,12 @@ function renderFileGraphView(container) {
       if (typeof IntersectionObserver === 'undefined') {
         // Fallback: load after delay
         setTimeout(() => {
-          loadHeavyVisualizations();
+          if (window.renderFileDependencyStrength) {
+            window.renderFileDependencyStrength().catch(() => {});
+          }
+          if (window.renderFileComplexityTrends) {
+            window.renderFileComplexityTrends().catch(() => {});
+          }
         }, 3000);
         return;
       }
