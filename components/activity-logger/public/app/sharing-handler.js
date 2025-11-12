@@ -86,6 +86,22 @@ async function showShareModal(workspaces = null) {
       </div>
       <div class="modal-body export-modal-section">
         
+        <!-- Feature Explanation -->
+        <div style="margin-bottom: var(--space-lg); padding: var(--space-md); background: var(--color-bg-alt); border-radius: var(--radius-md); border-left: 3px solid var(--color-primary);">
+          <h3 style="margin-bottom: var(--space-xs); font-size: var(--text-base); display: flex; align-items: center; gap: var(--space-xs);">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" style="color: var(--color-primary);">
+              <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+            </svg>
+            How Workspace Sharing Works
+          </h3>
+          <p style="font-size: var(--text-sm); color: var(--color-text-muted); line-height: 1.6; margin: 0;">
+            Create secure, shareable links to your workspace data. Recipients can view your analytics, activity patterns, and metrics without needing access to your local files. 
+            <strong style="color: var(--color-text);">Privacy controls</strong> let you choose how much detail to share (from full code traces to high-level patterns only). 
+            Links can be set to expire automatically, and you can filter by date ranges to share specific time periods. 
+            Perfect for <strong style="color: var(--color-text);">team collaboration</strong>, <strong style="color: var(--color-text);">project showcases</strong>, or <strong style="color: var(--color-text);">sharing progress</strong> with stakeholders.
+          </p>
+        </div>
+        
         <!-- Workspace Selection -->
         <div>
           <h3 class="card-title">Workspaces to Share</h3>
@@ -127,7 +143,7 @@ async function showShareModal(workspaces = null) {
         <div>
           <h3 class="card-title">
             Privacy Level
-            <span class="tooltip-icon" title="Controls how much detail is shared. Higher levels remove code content for privacy.">i</span>
+            <span class="tooltip-icon" title="Controls how much detail is shared. Level 0: Full code diffs and all metadata (use only for trusted recipients). Level 1: Metrics and statistics without code content (recommended for most sharing). Level 2: High-level descriptions only. Level 3: Workflow patterns only (maximum privacy).">i</span>
           </h3>
           <div class="export-modal-field-group">
             <select id="shareAbstractionLevel" class="form-input" onchange="updateSharePreview()">
@@ -146,7 +162,7 @@ async function showShareModal(workspaces = null) {
         <div>
           <h3 class="card-title">
             Date Range (Optional)
-            <span class="tooltip-icon" title="Limit sharing to data within a specific time range">i</span>
+            <span class="tooltip-icon" title="Limit sharing to data within a specific time range. Useful for sharing recent work, specific project phases, or limiting data exposure. Leave empty to share all historical data.">i</span>
           </h3>
           <div class="export-modal-field-group">
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-sm);">
@@ -169,7 +185,7 @@ async function showShareModal(workspaces = null) {
         <div>
           <h3 class="card-title">
             Share Link Name (Optional)
-            <span class="tooltip-icon" title="Give your share link a friendly name to help identify it later">i</span>
+            <span class="tooltip-icon" title="Give your share link a friendly name to help identify it later. This name appears in your share links list and makes it easier to manage multiple shared workspaces. Examples: 'Project Alpha - Q4 2024', 'Team Demo - Sprint 3', 'Client Progress Report'.">i</span>
           </h3>
           <div class="export-modal-field-group">
             <input type="text" id="shareLinkName" class="form-input" placeholder="e.g., Project Alpha - Q4 2024" maxlength="100">
@@ -181,7 +197,10 @@ async function showShareModal(workspaces = null) {
 
         <!-- Expiration -->
         <div>
-          <h3 class="card-title">Link Expiration</h3>
+          <h3 class="card-title">
+            Link Expiration
+            <span class="tooltip-icon" title="Set when the share link will automatically expire. Expired links cannot be accessed. Use shorter expiration for sensitive data or temporary sharing. Use 'Never expire' for permanent documentation or long-term collaboration. You can always delete links manually from the 'Manage Links' button.">i</span>
+          </h3>
           <div class="export-modal-field-group">
             <select id="shareExpirationDays" class="form-input" onchange="updateSharePreview()">
               <option value="1">1 day</option>
@@ -193,7 +212,7 @@ async function showShareModal(workspaces = null) {
               <option value="0">Never expire</option>
             </select>
             <div class="file-input-hint">
-              Share link will automatically expire after this time. Choose "Never expire" for permanent links.
+              Share link will automatically expire after this time. Choose "Never expire" for permanent links. You can delete links manually anytime from the "Manage Links" button.
             </div>
           </div>
         </div>
