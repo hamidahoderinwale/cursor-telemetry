@@ -14,6 +14,7 @@ The Cursor Telemetry Dashboard is an intelligent monitoring platform that captur
 - **Advanced Analytics**: Context window usage, error tracking, productivity insights
 - **Multi-Layer Search**: Full-text (Lunr.js) + Semantic (OpenRouter embeddings) + Fuzzy matching
 - **SQLite Persistence**: Durable storage with comprehensive indexing
+- **Workspace Sharing**: Create secure, shareable links to workspace data with privacy controls and expiration
 
 ## Quick Start
 
@@ -109,6 +110,40 @@ Control your development workflow with natural language commands:
 - **Navigator** - Explore workspace structure
 - **System** - Resource usage and IDE state
 - **API Docs** - Complete API reference
+
+### Workspace Sharing
+
+Share your workspace data securely with others via shareable links:
+
+**Features:**
+- **Privacy Controls**: Choose from 4 abstraction levels (Level 0: Full code traces → Level 3: Workflow patterns only)
+- **Date Range Filtering**: Limit sharing to specific time periods
+- **Automatic Expiration**: Set links to expire after 1 day to 1 year, or never expire
+- **Custom Names**: Give share links friendly names for easy identification
+- **Link Management**: View, copy, test, and delete all your share links
+- **Real-Time Preview**: See exactly what will be shared (workspaces, events, prompts, estimated size) before creating the link
+
+**Use Cases:**
+- **Team Collaboration**: Share progress with teammates without exposing code
+- **Project Showcases**: Demonstrate development workflow and patterns
+- **Stakeholder Updates**: Share metrics and insights with non-technical stakeholders
+- **Cross-Device Sync**: Access your workspace data from different machines
+
+**Privacy Levels:**
+- **Level 0**: Raw Traces - Full code diffs and all metadata (use only for trusted recipients)
+- **Level 1**: Code Abstracts - Metrics and statistics without code content (recommended for most sharing)
+- **Level 2**: Statement-Level - High-level descriptions only
+- **Level 3**: Workflow-Level - Patterns only (maximum privacy)
+
+**How to Use:**
+1. Click "Share Workspace" button in the sidebar
+2. Select workspaces to share (or select all)
+3. Choose privacy level and expiration
+4. Optionally set date range and custom name
+5. Review the preview showing what will be shared
+6. Click "Create Share Link"
+7. Copy the link and share it with others
+8. Manage links via "Manage Links" button
 
 ### Performance Optimizations
 
@@ -210,6 +245,34 @@ Located at `components/activity-logger/companion/config.json`:
 - `GET /api/analytics/context` - Context usage statistics
 - `GET /api/analytics/productivity` - Productivity metrics
 
+### Sharing Endpoints
+
+- `POST /api/share/create` - Create a shareable link for workspace data
+- `GET /api/share/:shareId` - Get workspace data via share link
+- `GET /api/share/:shareId/info` - Get share link metadata (without exporting data)
+- `DELETE /api/share/:shareId` - Delete a share link
+- `GET /api/share` - List all share links (for management)
+
+**Example:**
+```bash
+# Create a share link
+curl -X POST http://localhost:43917/api/share/create \
+  -H "Content-Type: application/json" \
+  -d '{
+    "workspaces": ["/path/to/workspace"],
+    "abstractionLevel": 1,
+    "expirationDays": 7,
+    "name": "Project Alpha - Q4 2024",
+    "filters": {
+      "dateFrom": "2024-01-01",
+      "dateTo": "2024-12-31"
+    }
+  }'
+
+# Access shared data
+curl http://localhost:43917/api/share/{shareId}
+```
+
 For complete API documentation, visit: `http://localhost:43917/dashboard.html#api-docs`
 
 ## Usage Examples
@@ -283,8 +346,16 @@ Annotations appear automatically in:
 - **Data Captured**: File changes, AI prompts, terminal commands, system metrics
 - **No Encryption**: Data stored in plain text by default
 - **Export**: Download complete database via `/api/export/database`
+- **Sharing**: Create secure, time-limited share links with privacy controls
 
 **Note**: The system captures code, prompts, and system information. Review captured data regularly and implement retention policies for production use.
+
+**Sharing Privacy:**
+- Use abstraction levels to control how much detail is shared
+- Set expiration dates to limit link lifetime
+- Filter by date ranges to share only specific time periods
+- Share links can be deleted manually at any time
+- Recipients can view analytics and metrics without accessing your local files
 
 ## Development
 
