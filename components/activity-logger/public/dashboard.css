@@ -1968,7 +1968,7 @@ a:focus:not(:focus-visible) {
   
   /* Compact spacing */
   .stats-grid {
-    gap: var(--space-xs);
+    gap: var(--space-sm, 0.75rem);
   }
   
   /* Hide less important elements */
