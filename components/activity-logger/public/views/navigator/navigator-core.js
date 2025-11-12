@@ -443,7 +443,9 @@ async function initializeNavigator() {
     console.log('[NAVIGATOR] Physical layout rendered, computing latent embeddings in background...');
     
     // Populate workspace and directory filters (can do this while latent computes)
-    populateNavigatorFilters();
+    if (window.populateNavigatorFilters) {
+      window.populateNavigatorFilters();
+    }
     
     // Compute latent positions in background (defer to idle time for better UX)
     // This allows users to see and interact with the graph while latent positions compute

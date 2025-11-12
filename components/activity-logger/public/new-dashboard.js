@@ -2485,7 +2485,7 @@ async function initializeD3FileGraph() {
     console.log('[FILE] Fetching file contents from SQLite for TF-IDF analysis...');
     let response, data;
     try {
-      response = await fetch(`${CONFIG.API_BASE}/api/file-contents?limit=100000`);
+      response = await fetch(`${window.CONFIG.API_BASE}/api/file-contents?limit=100000`);
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
@@ -4398,7 +4398,7 @@ async function initializeNavigator() {
     // Fetch file data
     let response, data;
     try {
-      response = await fetch(`${CONFIG.API_BASE}/api/file-contents?limit=100000`);
+      response = await fetch(`${window.CONFIG.API_BASE}/api/file-contents?limit=100000`);
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
@@ -6853,7 +6853,7 @@ async function exportDatabase(limit = 1000, includeAllFields = false) {
       }
       
       // Fetch data from API with limit
-      const url = new URL(`${CONFIG.API_BASE}/api/export/database`);
+      const url = new URL(`${window.CONFIG.API_BASE}/api/export/database`);
       url.searchParams.set('limit', limit.toString());
       if (includeAllFields) {
         url.searchParams.set('full', 'true');
@@ -6990,7 +6990,7 @@ async function exportDatabaseWithFilters({ dateFrom, dateTo, limit = 1000, types
     }
     
     // Build URL with all parameters
-    const url = new URL(`${CONFIG.API_BASE}/api/export/database`);
+    const url = new URL(`${window.CONFIG.API_BASE}/api/export/database`);
     url.searchParams.set('limit', limit.toString());
     
     // Date range

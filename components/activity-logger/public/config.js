@@ -3,10 +3,20 @@
 // Users can override with localStorage to use local companion service
 
 // Render backend URL (default for deployed dashboard)
-const RENDER_BACKEND_URL = 'https://cursor-telemetry.onrender.com';
+// Use var to allow redeclaration (core/config.js may have already declared it)
+var RENDER_BACKEND_URL = window._RENDER_BACKEND_URL || 'https://cursor-telemetry.onrender.com';
+window._RENDER_BACKEND_URL = RENDER_BACKEND_URL;
 
 // Determine API base URL
-const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+// Check for local development in multiple ways:
+// 1. hostname is localhost or 127.0.0.1
+// 2. protocol is file:// (opened as local file)
+// 3. port is a common development port (3000-9999)
+const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+const isFileProtocol = window.location.protocol === 'file:';
+const isDevPort = window.location.port && parseInt(window.location.port) >= 3000 && parseInt(window.location.port) <= 9999;
+const isLocal = isLocalhost || isFileProtocol || isDevPort;
+
 const customApiUrl = (window.LocalStorageHelper?.get('COMPANION_API_URL', null, false)) || localStorage.getItem('COMPANION_API_URL');
 const defaultApiUrl = isLocal ? 'http://localhost:43917' : RENDER_BACKEND_URL;
 const apiBaseUrl = customApiUrl || defaultApiUrl;

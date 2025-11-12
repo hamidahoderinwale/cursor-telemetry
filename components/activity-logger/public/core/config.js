@@ -5,8 +5,9 @@
 // Use external config (from config.js) if available, otherwise use defaults
 const EXTERNAL_CONFIG = window.CONFIG || {};
 
-// Render backend URL
-const RENDER_BACKEND_URL = 'https://cursor-telemetry.onrender.com';
+// Render backend URL (use var to allow redeclaration by config.js)
+var RENDER_BACKEND_URL = window._RENDER_BACKEND_URL || 'https://cursor-telemetry.onrender.com';
+window._RENDER_BACKEND_URL = RENDER_BACKEND_URL;
 
 const DASHBOARD_CONFIG = {
   API_BASE: EXTERNAL_CONFIG.API_BASE_URL || RENDER_BACKEND_URL,
