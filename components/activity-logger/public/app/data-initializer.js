@@ -14,7 +14,13 @@ async function initializeDashboard() {
   try {
     // Step 1: Load from IndexedDB cache first (instant UI)
     window.initProgress.update('cache', 0);
-    await loadFromCache();
+    
+    // Update progress during cache loading
+    const cacheProgressCallback = (progress) => {
+      window.initProgress.update('cache', progress);
+    };
+    
+    await loadFromCache(cacheProgressCallback);
     window.initProgress.update('cache', 100);
     
     // Step 2: Check server version (non-blocking - don't wait for it)
@@ -206,8 +212,11 @@ async function initializeDashboard() {
  * Load data from IndexedDB cache for instant startup
  * Optimized: Loads recent data first, then older data in background
  */
-async function loadFromCache() {
+async function loadFromCache(progressCallback = null) {
   console.log('[PACKAGE] Loading from cache...');
+  
+  // Update progress: Starting
+  if (progressCallback) progressCallback(5);
   
   // Check if persistentStorage is available
   if (!window.persistentStorage) {
@@ -218,8 +227,12 @@ async function loadFromCache() {
     } else if (!window.state.data) {
       window.state.data = { events: [], prompts: [] };
     }
+    if (progressCallback) progressCallback(100);
     return;
   }
+  
+  // Update progress: Checking IndexedDB
+  if (progressCallback) progressCallback(10);
   
   // Initialize database with timeout - don't block if it's slow
   let dbInitialized = false;
@@ -234,16 +247,19 @@ async function loadFromCache() {
     await Promise.race([initPromise, timeoutPromise]);
     dbInitialized = true;
     console.log('[CACHE] IndexedDB initialized successfully');
+    if (progressCallback) progressCallback(30);
   } catch (initError) {
     // If init times out, try to load data anyway (IndexedDB might be ready)
     // Don't return early - try to load data even if init seemed slow
     console.log('[CACHE] IndexedDB init timeout, attempting to load data anyway...');
     dbInitialized = false;
+    if (progressCallback) progressCallback(25);
   }
   
   // Try to load data even if init timed out (IndexedDB might be ready by now)
   if (!dbInitialized) {
     // Give IndexedDB a moment, then try again with shorter timeout
+    if (progressCallback) progressCallback(35);
     await new Promise(resolve => setTimeout(resolve, 300));
     try {
       const retryPromise = window.persistentStorage.init();
@@ -253,6 +269,7 @@ async function loadFromCache() {
       await Promise.race([retryPromise, retryTimeout]);
       dbInitialized = true;
       console.log('[CACHE] IndexedDB initialized on retry');
+      if (progressCallback) progressCallback(40);
     } catch (retryError) {
       // Still not ready, but continue to try loading
       console.log('[CACHE] IndexedDB still not ready, will skip cache and continue');
@@ -262,6 +279,7 @@ async function loadFromCache() {
       } else if (!window.state.data) {
         window.state.data = { events: [], prompts: [] };
       }
+      if (progressCallback) progressCallback(100);
       return; // Exit early if IndexedDB is not available
     }
   }
@@ -280,6 +298,9 @@ async function loadFromCache() {
   }
   
   try {
+    // Update progress: Starting data load
+    if (progressCallback) progressCallback(50);
+    
     // Load only most recent events (limit to 20 for ultra-fast load)
     // Add timeout to prevent hanging
     if (window.persistentStorage.getAllEvents) {
@@ -296,18 +317,21 @@ async function loadFromCache() {
         } else {
           console.log(`[CACHE] No events found in cache (tried to load 20)`);
         }
+        if (progressCallback) progressCallback(70);
       } catch (eventsError) {
         console.warn('[CACHE] Failed to load events:', eventsError.message);
         // Continue with empty events array
         if (!window.state.data.events) {
           window.state.data.events = [];
         }
+        if (progressCallback) progressCallback(65);
       }
     } else {
       console.warn('[CACHE] getAllEvents method not available');
       if (!window.state.data.events) {
         window.state.data.events = [];
       }
+      if (progressCallback) progressCallback(65);
     }
     
     // Load only most recent prompts (limit to 20 for ultra-fast load)
@@ -326,18 +350,21 @@ async function loadFromCache() {
         } else {
           console.log(`[CACHE] No prompts found in cache (tried to load 20)`);
         }
+        if (progressCallback) progressCallback(90);
       } catch (promptsError) {
         console.warn('[CACHE] Failed to load prompts:', promptsError.message);
         // Continue with empty prompts array
         if (!window.state.data.prompts) {
           window.state.data.prompts = [];
         }
+        if (progressCallback) progressCallback(85);
       }
     } else {
       console.warn('[CACHE] getAllPrompts method not available');
       if (!window.state.data.prompts) {
         window.state.data.prompts = [];
       }
+      if (progressCallback) progressCallback(85);
     }
     
     // Log final state

@@ -47,7 +47,13 @@ async function initializeDashboard() {
   try {
     // Step 1: Load from IndexedDB cache first (instant UI)
     initProgress.update('cache', 0);
-    await loadFromCache();
+    
+    // Update progress during cache loading
+    const cacheProgressCallback = (progress) => {
+      initProgress.update('cache', progress);
+    };
+    
+    await loadFromCache(cacheProgressCallback);
     initProgress.update('cache', 100);
     
     // Step 2: Check server version to see if we need to sync
@@ -141,8 +147,11 @@ async function initializeDashboard() {
 /**
  * Load data from IndexedDB cache for instant startup
  */
-async function loadFromCache() {
+async function loadFromCache(progressCallback = null) {
   console.log('[PACKAGE] Loading from cache...');
+  
+  // Update progress: Starting
+  if (progressCallback) progressCallback(10);
   
   // Check if persistentStorage is available
   if (!persistentStorage) {
@@ -151,17 +160,23 @@ async function loadFromCache() {
     if (!state.data) {
       state.data = { events: [], prompts: [] };
     }
+    if (progressCallback) progressCallback(100);
     return;
   }
   
   try {
+    // Update progress: Loading data
+    if (progressCallback) progressCallback(30);
+    
     // Add timeout to prevent hanging
     const cachePromise = persistentStorage.getAll();
     const cacheTimeout = new Promise((_, reject) => 
       setTimeout(() => reject(new Error('Cache load timeout')), 3000)
     );
     
+    if (progressCallback) progressCallback(50);
     const cached = await Promise.race([cachePromise, cacheTimeout]);
+    if (progressCallback) progressCallback(70);
     
     if (cached.events && cached.events.length > 0) {
       state.data.events = cached.events;
@@ -183,11 +198,15 @@ async function loadFromCache() {
       console.log('[CACHE] No prompts found in cache');
     }
     
+    if (progressCallback) progressCallback(90);
+    
     // Render with cached data immediately
     if (state.data.events.length > 0 || state.data.prompts.length > 0) {
       calculateStats();
       await renderCurrentView();
     }
+    
+    if (progressCallback) progressCallback(100);
   } catch (error) {
     console.warn('[WARNING] Cache load failed:', error.message);
     // Initialize empty state and continue
@@ -200,6 +219,7 @@ async function loadFromCache() {
     if (!state.data.prompts) {
       state.data.prompts = [];
     }
+    if (progressCallback) progressCallback(100);
   }
 }
 
