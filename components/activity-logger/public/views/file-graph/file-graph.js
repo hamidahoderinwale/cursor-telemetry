@@ -927,8 +927,7 @@ async function initializeD3FileGraph() {
     const promptCountEl = document.getElementById('graphPromptCount');
     const avgSimEl = document.getElementById('graphAvgSimilarity');
     
-    // Ensure prompts is defined (it should be from line 554, but add defensive check)
-    const prompts = window.state?.data?.prompts || [];
+    // prompts is already defined at line 665, no need to redeclare
     
     if (nodeCountEl) nodeCountEl.textContent = files.length;
     if (linkCountEl) linkCountEl.textContent = links.length;
