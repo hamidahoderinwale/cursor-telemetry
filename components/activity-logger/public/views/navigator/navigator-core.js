@@ -175,11 +175,15 @@ async function initializeNavigator() {
     
     try {
       // Try to fetch from API first (most comprehensive)
+      // Use AbortController for timeout (5 seconds)
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      
       const workspaceResponse = await fetch(`${window.CONFIG.API_BASE}/api/workspaces`, { 
-        timeout: 5000, 
-        retries: 0, 
-        silent: true 
+        signal: controller.signal 
       });
+      clearTimeout(timeoutId);
+      
       if (workspaceResponse && workspaceResponse.ok) {
         const workspaceData = await workspaceResponse.json();
         const apiWorkspaces = Array.isArray(workspaceData) ? workspaceData : (workspaceData?.data || []);
@@ -190,7 +194,9 @@ async function initializeNavigator() {
         console.log(`[NAVIGATOR] Found ${allWorkspacesFromState.size} workspaces from API`);
       }
     } catch (error) {
-      console.warn('[NAVIGATOR] Could not fetch workspaces from API, using state data:', error.message);
+      if (error.name !== 'AbortError') {
+        console.warn('[NAVIGATOR] Could not fetch workspaces from API, using state data:', error.message);
+      }
     }
     
     // Also collect from state data (events, prompts, entries) as fallback/enhancement
