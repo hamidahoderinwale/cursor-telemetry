@@ -170,9 +170,30 @@ async function initializeNavigator() {
     console.log(`[NAVIGATOR] Event lookup map built with ${eventsByFilePath.size} keys`);
     
     // Extract workspace and directory information
-    // First, collect all workspaces from state data (events, prompts, entries) - more comprehensive
-    const allWorkspacesFromState = new Set();
+    // First, try to get comprehensive workspace list from API
+    let allWorkspacesFromState = new Set();
     
+    try {
+      // Try to fetch from API first (most comprehensive)
+      const workspaceResponse = await fetch(`${window.CONFIG.API_BASE}/api/workspaces`, { 
+        timeout: 5000, 
+        retries: 0, 
+        silent: true 
+      });
+      if (workspaceResponse && workspaceResponse.ok) {
+        const workspaceData = await workspaceResponse.json();
+        const apiWorkspaces = Array.isArray(workspaceData) ? workspaceData : (workspaceData?.data || []);
+        apiWorkspaces.forEach(ws => {
+          const wsPath = ws.path || ws.id || ws.workspace_path;
+          if (wsPath) allWorkspacesFromState.add(wsPath);
+        });
+        console.log(`[NAVIGATOR] Found ${allWorkspacesFromState.size} workspaces from API`);
+      }
+    } catch (error) {
+      console.warn('[NAVIGATOR] Could not fetch workspaces from API, using state data:', error.message);
+    }
+    
+    // Also collect from state data (events, prompts, entries) as fallback/enhancement
     // Get from events
     allEvents.forEach(e => {
       const ws = e.workspace_path || e.workspacePath || e.workspace;
@@ -200,9 +221,9 @@ async function initializeNavigator() {
       if (wsPath) allWorkspacesFromState.add(wsPath);
     });
     
-    console.log(`[NAVIGATOR] Found ${allWorkspacesFromState.size} workspaces from state data:`, Array.from(allWorkspacesFromState).slice(0, 10));
+    console.log(`[NAVIGATOR] Found ${allWorkspacesFromState.size} total workspaces (from API + state data):`, Array.from(allWorkspacesFromState).slice(0, 10));
     
-    const workspaces = new Set(allWorkspacesFromState); // Start with workspaces from state
+    const workspaces = new Set(allWorkspacesFromState); // Start with all collected workspaces
     const directories = new Set();
     
     // Helper to extract workspace from path (fallback only)
