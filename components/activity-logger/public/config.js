@@ -4,8 +4,11 @@
 
 // Render backend URL (default for deployed dashboard)
 // Use var to allow redeclaration (core/config.js may have already declared it)
-var RENDER_BACKEND_URL = window._RENDER_BACKEND_URL || 'https://cursor-telemetry.onrender.com';
-window._RENDER_BACKEND_URL = RENDER_BACKEND_URL;
+// Store on window first to avoid any redeclaration issues
+if (!window._RENDER_BACKEND_URL) {
+  window._RENDER_BACKEND_URL = 'https://cursor-telemetry.onrender.com';
+}
+var RENDER_BACKEND_URL = window._RENDER_BACKEND_URL;
 
 // Determine API base URL
 // Check for local development in multiple ways:

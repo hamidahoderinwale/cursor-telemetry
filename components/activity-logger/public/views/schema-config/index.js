@@ -21,8 +21,11 @@ class SchemaConfigView {
   async loadSchema() {
     try {
       // Create abort controller for timeout (compatible with older browsers)
+      // Use longer timeout for production (Render backend can be slow on cold start)
+      const isProduction = !this.apiBase.includes('localhost') && !this.apiBase.includes('127.0.0.1');
+      const timeout = isProduction ? 30000 : 5000; // 30s for production, 5s for local
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      const timeoutId = setTimeout(() => controller.abort(), timeout);
       
       const response = await fetch(`${this.apiBase}/api/schema`, {
         signal: controller.signal
@@ -41,7 +44,58 @@ class SchemaConfigView {
         throw new Error(result.error || 'Failed to load schema');
       }
     } catch (error) {
-      console.error('Error loading schema:', error);
+      // Don't log abort errors as errors - they're expected when backend is slow
+      if (error.name === 'AbortError' || error.message.includes('aborted')) {
+        console.log('Schema request timed out (backend may be starting up)');
+      } else {
+        console.error('Error loading schema:', error);
+      }
+      
+      // If the primary URL failed and it's not localhost, try localhost as fallback
+      const isNetworkError = error.message.includes('Failed to fetch') || 
+                            error.message.includes('NetworkError') ||
+                            error.message.includes('timeout') ||
+                            error.name === 'AbortError' ||
+                            error.name === 'TypeError';
+      const isLocalhost = this.apiBase.includes('localhost') || this.apiBase.includes('127.0.0.1');
+      
+      if (isNetworkError && !isLocalhost) {
+        console.log('Primary URL failed, trying localhost fallback...');
+        const localhostUrl = 'http://localhost:43917';
+        try {
+          const fallbackController = new AbortController();
+          const fallbackTimeoutId = setTimeout(() => fallbackController.abort(), 3000);
+          
+          const fallbackResponse = await fetch(`${localhostUrl}/api/schema`, {
+            signal: fallbackController.signal
+          });
+          
+          clearTimeout(fallbackTimeoutId);
+          
+          if (fallbackResponse.ok) {
+            const fallbackResult = await fallbackResponse.json();
+            if (fallbackResult.success) {
+              // Localhost worked! Update the API base
+              this.apiBase = localhostUrl;
+              this.schema = fallbackResult.data;
+              this.connectionError = null;
+              
+              // Update global config
+              if (window.configureCompanionURL) {
+                window.configureCompanionURL(localhostUrl, 'ws://localhost:43917');
+              }
+              
+              console.log('Successfully connected to localhost companion service');
+              return; // Success, exit early
+            }
+          }
+        } catch (fallbackError) {
+          console.log('Localhost fallback also failed:', fallbackError);
+          // Continue to set the original error
+        }
+      }
+      
+      // If fallback didn't work or wasn't applicable, set the original error
       this.connectionError = error;
       // Set empty schema so UI can show error message
       this.schema = { tables: [] };
@@ -55,8 +109,11 @@ class SchemaConfigView {
         : `${this.apiBase}/api/schema/config/fields`;
       
       // Create abort controller for timeout (compatible with older browsers)
+      // Use longer timeout for production (Render backend can be slow on cold start)
+      const isProduction = !this.apiBase.includes('localhost') && !this.apiBase.includes('127.0.0.1');
+      const timeout = isProduction ? 30000 : 5000; // 30s for production, 5s for local
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      const timeoutId = setTimeout(() => controller.abort(), timeout);
       
       const response = await fetch(url, {
         signal: controller.signal
@@ -75,7 +132,12 @@ class SchemaConfigView {
         this.customFields = [];
       }
     } catch (error) {
-      console.error('Error loading custom fields:', error);
+      // Don't log abort errors as errors - they're expected when backend is slow
+      if (error.name === 'AbortError' || error.message.includes('aborted')) {
+        console.log('Custom fields request timed out (backend may be starting up)');
+      } else {
+        console.error('Error loading custom fields:', error);
+      }
       // Don't set connectionError here - schema loading is the main indicator
       this.customFields = [];
     }
@@ -360,6 +422,9 @@ class SchemaConfigView {
                             this.connectionError.name === 'AbortError' ||
                             this.connectionError.name === 'TypeError';
       
+      const isLocalhost = this.apiBase.includes('localhost') || this.apiBase.includes('127.0.0.1');
+      const showSwitchToLocalhost = !isLocalhost && isNetworkError;
+      
       return `
         <div class="welcome-message" style="max-width: 600px; margin: 0 auto; padding: var(--space-xl);">
           <div style="text-align: center; margin-bottom: var(--space-lg);">
@@ -371,6 +436,11 @@ class SchemaConfigView {
                 : `Error: ${errorMessage}`
               }
             </p>
+            ${showSwitchToLocalhost ? `
+              <p style="color: var(--color-text-muted); margin-bottom: var(--space-md); font-size: var(--text-sm);">
+                If you're running the companion service locally, try switching to localhost.
+              </p>
+            ` : ''}
           </div>
           
           <div style="background: var(--color-bg-alt); border-radius: var(--radius-md); padding: var(--space-md); margin-bottom: var(--space-md);">
@@ -400,13 +470,18 @@ class SchemaConfigView {
             </ol>
           </div>
           
-          <div style="display: flex; gap: var(--space-sm); justify-content: center;">
+          <div style="display: flex; gap: var(--space-sm); justify-content: center; flex-wrap: wrap;">
             <button class="btn btn-primary" onclick="schemaConfigView.testConnection()" style="min-width: 120px;">
               Test Connection
             </button>
             <button class="btn btn-secondary" onclick="schemaConfigView.init()" style="min-width: 120px;">
               Retry
             </button>
+            ${showSwitchToLocalhost ? `
+              <button class="btn btn-secondary" onclick="schemaConfigView.switchToLocalhost()" style="min-width: 140px;">
+                Switch to Localhost
+              </button>
+            ` : ''}
           </div>
           
           <div style="margin-top: var(--space-md); padding: var(--space-sm); background: var(--color-bg-alt); border-radius: var(--radius-sm); font-size: var(--text-xs); color: var(--color-text-muted); text-align: center;">
@@ -959,6 +1034,38 @@ class SchemaConfigView {
       this.render();
       this.showNotification(`Connection failed: ${error.message}`, 'error');
     }
+  }
+
+  async switchToLocalhost() {
+    // Switch API base to localhost
+    const localhostUrl = 'http://localhost:43917';
+    this.apiBase = localhostUrl;
+    
+    // Update global config
+    if (window.configureCompanionURL) {
+      window.configureCompanionURL(localhostUrl, 'ws://localhost:43917');
+    } else {
+      // Fallback: update localStorage directly
+      if (window.LocalStorageHelper) {
+        window.LocalStorageHelper.set('COMPANION_API_URL', localhostUrl, false);
+        window.LocalStorageHelper.set('COMPANION_WS_URL', 'ws://localhost:43917', false);
+      } else {
+        localStorage.setItem('COMPANION_API_URL', localhostUrl);
+        localStorage.setItem('COMPANION_WS_URL', 'ws://localhost:43917');
+      }
+      if (window.CONFIG) {
+        window.CONFIG.API_BASE = localhostUrl;
+        window.CONFIG.API_BASE_URL = localhostUrl;
+        window.CONFIG.WS_URL = 'ws://localhost:43917';
+      }
+    }
+    
+    // Clear connection error and try to connect
+    this.connectionError = null;
+    this.showNotification('Switched to localhost. Testing connection...', 'info');
+    
+    // Test connection to localhost
+    await this.testConnection();
   }
 
   showNotification(message, type = 'info') {
