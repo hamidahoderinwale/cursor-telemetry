@@ -20,17 +20,17 @@ class FileWatcher {
 
     const cfg = config.get();
     const watchPath = cfg.root_dir;
-    
+
     console.log(`Starting file watcher for: ${watchPath}`);
-    
+
     this.watcher = chokidar.watch(watchPath, {
       ignored: cfg.ignore,
       persistent: true,
       ignoreInitial: true,
       awaitWriteFinish: {
         stabilityThreshold: 1000,
-        pollInterval: 100
-      }
+        pollInterval: 100,
+      },
     });
 
     this.watcher
@@ -62,32 +62,32 @@ class FileWatcher {
 
       const cfg = config.get();
       const relativePath = relative(cfg.root_dir, filePath);
-      
+
       console.log(`File ${eventType}: ${relativePath}`);
 
       // Read current content
       const currentContent = existsSync(filePath) ? readFileSync(filePath, 'utf8') : '';
-      
+
       // Get previous snapshot
       const previousContent = this.snapshots.get(filePath) || '';
-      
+
       // Update snapshot
       this.snapshots.set(filePath, currentContent);
 
       // Only process if there's a meaningful change
       if (eventType === 'change' && previousContent) {
         const diff = diffEngine.createDiff(previousContent, currentContent);
-        
+
         if (diff && diff.length >= cfg.diff_threshold) {
           console.log(` Code change detected: ${relativePath} (${diff.length} chars)`);
-          
+
           // Add to queue
           queue.addEntry({
             source: 'filewatcher',
             file_path: relativePath,
             before_code: previousContent,
             after_code: currentContent,
-            notes: `File ${eventType} - ${diff.length} character change`
+            notes: `File ${eventType} - ${diff.length} character change`,
           });
         }
       } else if (eventType === 'add') {
@@ -97,10 +97,9 @@ class FileWatcher {
           file_path: relativePath,
           before_code: '',
           after_code: currentContent,
-          notes: `New file added`
+          notes: `New file added`,
         });
       }
-
     } catch (error) {
       console.error(`Error handling file change ${filePath}:`, error);
     }
@@ -110,18 +109,17 @@ class FileWatcher {
     try {
       const cfg = config.get();
       const relativePath = relative(cfg.root_dir, filePath);
-      
+
       console.log(`File deleted: ${relativePath}`);
-      
+
       // Remove from snapshots
       this.snapshots.delete(filePath);
-      
+
       // Log deletion event
       queue.addEvent({
         type: 'file_deleted',
-        details: { file_path: relativePath }
+        details: { file_path: relativePath },
       });
-      
     } catch (error) {
       console.error(`Error handling file delete ${filePath}:`, error);
     }
@@ -130,12 +128,40 @@ class FileWatcher {
   isTextFile(filePath) {
     const ext = extname(filePath).toLowerCase();
     const textExtensions = [
-      '.js', '.ts', '.jsx', '.tsx', '.py', '.java', '.cpp', '.c', '.h',
-      '.css', '.scss', '.sass', '.html', '.htm', '.xml', '.json', '.md',
-      '.txt', '.yml', '.yaml', '.toml', '.ini', '.cfg', '.conf',
-      '.vue', '.svelte', '.php', '.rb', '.go', '.rs', '.swift', '.kt'
+      '.js',
+      '.ts',
+      '.jsx',
+      '.tsx',
+      '.py',
+      '.java',
+      '.cpp',
+      '.c',
+      '.h',
+      '.css',
+      '.scss',
+      '.sass',
+      '.html',
+      '.htm',
+      '.xml',
+      '.json',
+      '.md',
+      '.txt',
+      '.yml',
+      '.yaml',
+      '.toml',
+      '.ini',
+      '.cfg',
+      '.conf',
+      '.vue',
+      '.svelte',
+      '.php',
+      '.rb',
+      '.go',
+      '.rs',
+      '.swift',
+      '.kt',
     ];
-    
+
     return textExtensions.includes(ext) || ext === '';
   }
 
@@ -143,7 +169,7 @@ class FileWatcher {
     return {
       is_watching: this.isWatching,
       files_tracked: this.snapshots.size,
-      watched_files: Array.from(this.snapshots.keys())
+      watched_files: Array.from(this.snapshots.keys()),
     };
   }
 }

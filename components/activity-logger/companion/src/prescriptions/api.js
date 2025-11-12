@@ -1,6 +1,6 @@
 /**
  * Prescription API Routes
- * 
+ *
  * Express router for prescription management endpoints.
  * Provides REST API for CRUD operations, suggestions, and injection.
  */
@@ -32,19 +32,19 @@ function createPrescriptionAPI(manager, injector, detector) {
         active: req.query.active !== undefined ? req.query.active === 'true' : undefined,
         category: req.query.category,
         scope: req.query.scope,
-        search: req.query.search
+        search: req.query.search,
       };
 
       const prescriptions = manager.getAll(filters);
       res.json({
         success: true,
         count: prescriptions.length,
-        prescriptions
+        prescriptions,
       });
     } catch (error) {
       res.status(500).json({
         success: false,
-        error: error.message
+        error: error.message,
       });
     }
   });
@@ -56,22 +56,22 @@ function createPrescriptionAPI(manager, injector, detector) {
   router.get('/:id', (req, res) => {
     try {
       const prescription = manager.getById(req.params.id);
-      
+
       if (!prescription) {
         return res.status(404).json({
           success: false,
-          error: 'Prescription not found'
+          error: 'Prescription not found',
         });
       }
 
       res.json({
         success: true,
-        prescription
+        prescription,
       });
     } catch (error) {
       res.status(500).json({
         success: false,
-        error: error.message
+        error: error.message,
       });
     }
   });
@@ -93,7 +93,7 @@ function createPrescriptionAPI(manager, injector, detector) {
     } catch (error) {
       res.status(500).json({
         success: false,
-        error: error.message
+        error: error.message,
       });
     }
   });
@@ -115,7 +115,7 @@ function createPrescriptionAPI(manager, injector, detector) {
     } catch (error) {
       res.status(500).json({
         success: false,
-        error: error.message
+        error: error.message,
       });
     }
   });
@@ -136,7 +136,7 @@ function createPrescriptionAPI(manager, injector, detector) {
     } catch (error) {
       res.status(500).json({
         success: false,
-        error: error.message
+        error: error.message,
       });
     }
   });
@@ -157,7 +157,7 @@ function createPrescriptionAPI(manager, injector, detector) {
     } catch (error) {
       res.status(500).json({
         success: false,
-        error: error.message
+        error: error.message,
       });
     }
   });
@@ -176,7 +176,7 @@ function createPrescriptionAPI(manager, injector, detector) {
       const context = {
         workspace: req.query.workspace,
         fileType: req.query.fileType,
-        filePath: req.query.filePath
+        filePath: req.query.filePath,
       };
 
       const result = injector.inject(context);
@@ -204,12 +204,12 @@ function createPrescriptionAPI(manager, injector, detector) {
         formatted,
         count: result.count,
         prescriptions: result.prescriptions,
-        context
+        context,
       });
     } catch (error) {
       res.status(500).json({
         success: false,
-        error: error.message
+        error: error.message,
       });
     }
   });
@@ -223,19 +223,19 @@ function createPrescriptionAPI(manager, injector, detector) {
       const context = {
         workspace: req.query.workspace,
         fileType: req.query.fileType,
-        filePath: req.query.filePath
+        filePath: req.query.filePath,
       };
 
       const preview = injector.preview(context);
 
       res.json({
         success: true,
-        ...preview
+        ...preview,
       });
     } catch (error) {
       res.status(500).json({
         success: false,
-        error: error.message
+        error: error.message,
       });
     }
   });
@@ -254,12 +254,12 @@ function createPrescriptionAPI(manager, injector, detector) {
 
       res.json({
         success: true,
-        stats
+        stats,
       });
     } catch (error) {
       res.status(500).json({
         success: false,
-        error: error.message
+        error: error.message,
       });
     }
   });
@@ -275,12 +275,12 @@ function createPrescriptionAPI(manager, injector, detector) {
       res.json({
         success: true,
         count: conflicts.length,
-        conflicts
+        conflicts,
       });
     } catch (error) {
       res.status(500).json({
         success: false,
-        error: error.message
+        error: error.message,
       });
     }
   });
@@ -298,7 +298,7 @@ function createPrescriptionAPI(manager, injector, detector) {
     try {
       const options = {
         days: parseInt(req.query.days) || 7,
-        minOccurrences: parseInt(req.query.minOccurrences) || 3
+        minOccurrences: parseInt(req.query.minOccurrences) || 3,
       };
 
       const source = req.query.source || 'all';
@@ -316,12 +316,12 @@ function createPrescriptionAPI(manager, injector, detector) {
       res.json({
         success: true,
         count: suggestions.length,
-        suggestions
+        suggestions,
       });
     } catch (error) {
       res.status(500).json({
         success: false,
-        error: error.message
+        error: error.message,
       });
     }
   });
@@ -334,7 +334,7 @@ function createPrescriptionAPI(manager, injector, detector) {
   router.post('/suggest/accept', (req, res) => {
     try {
       const suggestion = req.body;
-      
+
       // Create prescription from suggestion
       const result = manager.create({
         title: suggestion.title,
@@ -348,8 +348,8 @@ function createPrescriptionAPI(manager, injector, detector) {
         metadata: {
           confidence: suggestion.confidence,
           reason: suggestion.reason,
-          acceptedAt: Date.now()
-        }
+          acceptedAt: Date.now(),
+        },
       });
 
       if (!result.success) {
@@ -360,7 +360,7 @@ function createPrescriptionAPI(manager, injector, detector) {
     } catch (error) {
       res.status(500).json({
         success: false,
-        error: error.message
+        error: error.message,
       });
     }
   });
@@ -381,12 +381,12 @@ function createPrescriptionAPI(manager, injector, detector) {
         success: true,
         count: prescriptions.length,
         prescriptions,
-        exportedAt: new Date().toISOString()
+        exportedAt: new Date().toISOString(),
       });
     } catch (error) {
       res.status(500).json({
         success: false,
-        error: error.message
+        error: error.message,
       });
     }
   });
@@ -403,7 +403,7 @@ function createPrescriptionAPI(manager, injector, detector) {
       if (!Array.isArray(prescriptions)) {
         return res.status(400).json({
           success: false,
-          error: 'prescriptions must be an array'
+          error: 'prescriptions must be an array',
         });
       }
 
@@ -411,12 +411,12 @@ function createPrescriptionAPI(manager, injector, detector) {
 
       res.json({
         success: true,
-        result
+        result,
       });
     } catch (error) {
       res.status(500).json({
         success: false,
-        error: error.message
+        error: error.message,
       });
     }
   });
@@ -436,12 +436,12 @@ function createPrescriptionAPI(manager, injector, detector) {
       res.json({
         success: true,
         count: templates.length,
-        templates
+        templates,
       });
     } catch (error) {
       res.status(500).json({
         success: false,
-        error: error.message
+        error: error.message,
       });
     }
   });
@@ -453,12 +453,12 @@ function createPrescriptionAPI(manager, injector, detector) {
   router.post('/templates/:templateId/apply', (req, res) => {
     try {
       const templates = getPrescriptionTemplates();
-      const template = templates.find(t => t.id === req.params.templateId);
+      const template = templates.find((t) => t.id === req.params.templateId);
 
       if (!template) {
         return res.status(404).json({
           success: false,
-          error: 'Template not found'
+          error: 'Template not found',
         });
       }
 
@@ -467,12 +467,12 @@ function createPrescriptionAPI(manager, injector, detector) {
       res.json({
         success: true,
         templateName: template.name,
-        result
+        result,
       });
     } catch (error) {
       res.status(500).json({
         success: false,
-        error: error.message
+        error: error.message,
       });
     }
   });
@@ -495,23 +495,24 @@ function getPrescriptionTemplates() {
           prescription: 'This is a React/Next.js project - follow React best practices',
           category: 'domain',
           scope: 'global',
-          priority: 80
+          priority: 80,
         },
         {
           title: 'Server Components',
-          prescription: 'Use Server Components by default unless client-side interactivity is needed',
+          prescription:
+            'Use Server Components by default unless client-side interactivity is needed',
           category: 'behavior',
           scope: 'global',
-          priority: 70
+          priority: 70,
         },
         {
           title: 'TypeScript Strict',
           prescription: 'Use TypeScript with strict mode enabled',
           category: 'formatting',
           scope: 'global',
-          priority: 70
-        }
-      ]
+          priority: 70,
+        },
+      ],
     },
     {
       id: 'python-data-science',
@@ -523,7 +524,7 @@ function getPrescriptionTemplates() {
           prescription: 'This is a Python data science project - use pandas, numpy, scikit-learn',
           category: 'domain',
           scope: 'global',
-          priority: 80
+          priority: 80,
         },
         {
           title: 'Type Hints Required',
@@ -531,7 +532,7 @@ function getPrescriptionTemplates() {
           category: 'formatting',
           scope: 'file-type',
           scope_value: '.py',
-          priority: 70
+          priority: 70,
         },
         {
           title: 'Document Functions',
@@ -539,9 +540,9 @@ function getPrescriptionTemplates() {
           category: 'behavior',
           scope: 'file-type',
           scope_value: '.py',
-          priority: 60
-        }
-      ]
+          priority: 60,
+        },
+      ],
     },
     {
       id: 'security-focused',
@@ -553,23 +554,23 @@ function getPrescriptionTemplates() {
           prescription: 'Never include real API keys, passwords, or tokens in code',
           category: 'security',
           scope: 'global',
-          priority: 95
+          priority: 95,
         },
         {
           title: 'Input Validation',
           prescription: 'Always validate and sanitize user input',
           category: 'security',
           scope: 'global',
-          priority: 90
+          priority: 90,
         },
         {
           title: 'Use Environment Variables',
           prescription: 'Store sensitive configuration in environment variables',
           category: 'security',
           scope: 'global',
-          priority: 85
-        }
-      ]
+          priority: 85,
+        },
+      ],
     },
     {
       id: 'clean-code',
@@ -581,33 +582,32 @@ function getPrescriptionTemplates() {
           prescription: 'Use descriptive variable and function names',
           category: 'behavior',
           scope: 'global',
-          priority: 60
+          priority: 60,
         },
         {
           title: 'Small Functions',
           prescription: 'Keep functions small and focused on a single responsibility',
           category: 'behavior',
           scope: 'global',
-          priority: 60
+          priority: 60,
         },
         {
           title: 'DRY Principle',
           prescription: "Don't Repeat Yourself - extract common code into reusable functions",
           category: 'behavior',
           scope: 'global',
-          priority: 60
+          priority: 60,
         },
         {
           title: 'No Magic Numbers',
           prescription: 'Use named constants instead of magic numbers',
           category: 'behavior',
           scope: 'global',
-          priority: 50
-        }
-      ]
-    }
+          priority: 50,
+        },
+      ],
+    },
   ];
 }
 
 module.exports = createPrescriptionAPI;
-

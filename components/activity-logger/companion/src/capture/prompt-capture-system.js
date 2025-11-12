@@ -15,7 +15,7 @@ class PromptCaptureSystem extends EventEmitter {
     this.promptThreads = new Map();
     this.correlationIds = new Map();
     this.captureMethods = new Map();
-    
+
     this.initializeCaptureMethods();
   }
 
@@ -27,35 +27,35 @@ class PromptCaptureSystem extends EventEmitter {
     this.captureMethods.set('clipboard', {
       enabled: true,
       priority: 'high',
-      handler: this.handleClipboardPrompt.bind(this)
+      handler: this.handleClipboardPrompt.bind(this),
     });
 
     // DOM-based capture
     this.captureMethods.set('dom', {
       enabled: true,
       priority: 'medium',
-      handler: this.handleDOMPrompt.bind(this)
+      handler: this.handleDOMPrompt.bind(this),
     });
 
     // MCP-based capture
     this.captureMethods.set('mcp', {
       enabled: true,
       priority: 'high',
-      handler: this.handleMCPPrompt.bind(this)
+      handler: this.handleMCPPrompt.bind(this),
     });
 
     // Manual capture
     this.captureMethods.set('manual', {
       enabled: true,
       priority: 'low',
-      handler: this.handleManualPrompt.bind(this)
+      handler: this.handleManualPrompt.bind(this),
     });
 
     // File-based capture
     this.captureMethods.set('file', {
       enabled: true,
       priority: 'medium',
-      handler: this.handleFilePrompt.bind(this)
+      handler: this.handleFilePrompt.bind(this),
     });
   }
 
@@ -66,7 +66,7 @@ class PromptCaptureSystem extends EventEmitter {
     try {
       const correlationId = this.generateCorrelationId();
       const promptId = crypto.randomUUID();
-      
+
       // Enhanced prompt data structure
       const enhancedPrompt = {
         id: promptId,
@@ -82,26 +82,25 @@ class PromptCaptureSystem extends EventEmitter {
           intent: this.analyzeIntent(promptData.content),
           complexity: this.analyzeComplexity(promptData.content),
           keywords: this.extractKeywords(promptData.content),
-          patterns: this.extractPatterns(promptData.content)
+          patterns: this.extractPatterns(promptData.content),
         },
         status: 'captured',
         linkedEvents: [],
         linkedFiles: [],
-        threadId: null
+        threadId: null,
       };
 
       // Store prompt
       this.activePrompts.set(promptId, enhancedPrompt);
-      
+
       // Create or update thread
       await this.createOrUpdateThread(enhancedPrompt);
-      
+
       // Emit capture event
       this.emit('promptCaptured', enhancedPrompt);
-      
+
       console.log(`[NOTE] Prompt captured: ${promptId} via ${method}`);
       return enhancedPrompt;
-      
     } catch (error) {
       console.error('Error capturing prompt:', error);
       this.emit('promptCaptureError', { error, promptData });
@@ -117,11 +116,11 @@ class PromptCaptureSystem extends EventEmitter {
       content: clipboardData.text,
       context: {
         source: 'clipboard',
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       },
-      source: 'clipboard'
+      source: 'clipboard',
     };
-    
+
     return await this.capturePrompt(promptData, 'clipboard');
   }
 
@@ -135,12 +134,12 @@ class PromptCaptureSystem extends EventEmitter {
         source: 'dom',
         element: domData.element,
         filePath: domData.filePath,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       },
       source: 'dom',
-      filePath: domData.filePath
+      filePath: domData.filePath,
     };
-    
+
     return await this.capturePrompt(promptData, 'dom');
   }
 
@@ -153,12 +152,12 @@ class PromptCaptureSystem extends EventEmitter {
       context: {
         source: 'mcp',
         sessionId: mcpData.sessionId,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       },
       source: 'mcp',
-      sessionId: mcpData.sessionId
+      sessionId: mcpData.sessionId,
     };
-    
+
     return await this.capturePrompt(promptData, 'mcp');
   }
 
@@ -178,12 +177,12 @@ class PromptCaptureSystem extends EventEmitter {
       context: {
         source: 'file',
         filePath: fileData.filePath,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       },
       source: 'file',
-      filePath: fileData.filePath
+      filePath: fileData.filePath,
     };
-    
+
     return await this.capturePrompt(promptData, 'file');
   }
 
@@ -192,7 +191,7 @@ class PromptCaptureSystem extends EventEmitter {
    */
   async createOrUpdateThread(prompt) {
     const threadId = prompt.metadata.sessionId || `thread-${Date.now()}`;
-    
+
     if (!this.promptThreads.has(threadId)) {
       this.promptThreads.set(threadId, {
         id: threadId,
@@ -203,19 +202,19 @@ class PromptCaptureSystem extends EventEmitter {
         status: 'active',
         metadata: {
           totalPrompts: 0,
-          lastActivity: prompt.timestamp
-        }
+          lastActivity: prompt.timestamp,
+        },
       });
     }
-    
+
     const thread = this.promptThreads.get(threadId);
     thread.prompts.push(prompt);
     thread.metadata.totalPrompts++;
     thread.metadata.lastActivity = prompt.timestamp;
-    
+
     // Update prompt with thread ID
     prompt.threadId = threadId;
-    
+
     this.emit('threadUpdated', thread);
   }
 
@@ -275,14 +274,14 @@ class PromptCaptureSystem extends EventEmitter {
    */
   analyzeIntent(content) {
     const intentPatterns = {
-      'data_visualization': ['plot', 'chart', 'graph', 'visualize', 'matplotlib', 'seaborn'],
-      'data_analysis': ['analyze', 'analysis', 'data', 'dataset', 'pandas', 'numpy'],
-      'code_implementation': ['implement', 'create', 'build', 'write', 'function', 'class'],
-      'debugging': ['debug', 'error', 'bug', 'fix', 'issue', 'problem'],
-      'optimization': ['optimize', 'performance', 'speed', 'efficient', 'improve'],
-      'documentation': ['document', 'comment', 'explain', 'readme', 'docstring'],
-      'testing': ['test', 'testing', 'unit test', 'assert', 'verify'],
-      'refactoring': ['refactor', 'restructure', 'reorganize', 'clean up']
+      data_visualization: ['plot', 'chart', 'graph', 'visualize', 'matplotlib', 'seaborn'],
+      data_analysis: ['analyze', 'analysis', 'data', 'dataset', 'pandas', 'numpy'],
+      code_implementation: ['implement', 'create', 'build', 'write', 'function', 'class'],
+      debugging: ['debug', 'error', 'bug', 'fix', 'issue', 'problem'],
+      optimization: ['optimize', 'performance', 'speed', 'efficient', 'improve'],
+      documentation: ['document', 'comment', 'explain', 'readme', 'docstring'],
+      testing: ['test', 'testing', 'unit test', 'assert', 'verify'],
+      refactoring: ['refactor', 'restructure', 'reorganize', 'clean up'],
     };
 
     const contentLower = content.toLowerCase();
@@ -293,7 +292,7 @@ class PromptCaptureSystem extends EventEmitter {
       const score = keywords.reduce((acc, keyword) => {
         return acc + (contentLower.includes(keyword) ? 1 : 0);
       }, 0);
-      
+
       if (score > maxScore) {
         maxScore = score;
         detectedIntent = intent;
@@ -310,7 +309,7 @@ class PromptCaptureSystem extends EventEmitter {
     const wordCount = content.split(/\s+/).length;
     const sentenceCount = content.split(/[.!?]+/).length;
     const avgWordsPerSentence = wordCount / sentenceCount;
-    
+
     if (wordCount < 10) return 'simple';
     if (wordCount < 50 && avgWordsPerSentence < 15) return 'medium';
     return 'complex';
@@ -320,18 +319,19 @@ class PromptCaptureSystem extends EventEmitter {
    * Extract keywords from prompt
    */
   extractKeywords(content) {
-    const words = content.toLowerCase()
+    const words = content
+      .toLowerCase()
       .replace(/[^\w\s]/g, '')
       .split(/\s+/)
-      .filter(word => word.length > 3);
-    
+      .filter((word) => word.length > 3);
+
     const wordFreq = {};
-    words.forEach(word => {
+    words.forEach((word) => {
       wordFreq[word] = (wordFreq[word] || 0) + 1;
     });
-    
+
     return Object.entries(wordFreq)
-      .sort(([,a], [,b]) => b - a)
+      .sort(([, a], [, b]) => b - a)
       .slice(0, 10)
       .map(([word]) => word);
   }
@@ -341,27 +341,27 @@ class PromptCaptureSystem extends EventEmitter {
    */
   extractPatterns(content) {
     const patterns = [];
-    
+
     // Direct prompt patterns
     if (/prompt:|question:|ask:|request:/i.test(content)) {
       patterns.push('direct_prompt');
     }
-    
+
     // Code patterns
     if (/```[\s\S]*```/.test(content)) {
       patterns.push('code_block');
     }
-    
+
     // Question patterns
     if (/\?/.test(content)) {
       patterns.push('question');
     }
-    
+
     // Task patterns
     if (/task:|goal:|objective:/i.test(content)) {
       patterns.push('task_definition');
     }
-    
+
     return patterns;
   }
 
@@ -378,20 +378,20 @@ class PromptCaptureSystem extends EventEmitter {
   getStats() {
     const prompts = this.getAllPrompts();
     const threads = this.getAllThreads();
-    
+
     return {
       totalPrompts: prompts.length,
       totalThreads: threads.length,
-      activePrompts: prompts.filter(p => p.status === 'captured').length,
+      activePrompts: prompts.filter((p) => p.status === 'captured').length,
       intentDistribution: this.getIntentDistribution(prompts),
       methodDistribution: this.getMethodDistribution(prompts),
-      complexityDistribution: this.getComplexityDistribution(prompts)
+      complexityDistribution: this.getComplexityDistribution(prompts),
     };
   }
 
   getIntentDistribution(prompts) {
     const distribution = {};
-    prompts.forEach(prompt => {
+    prompts.forEach((prompt) => {
       const intent = prompt.metadata.intent;
       distribution[intent] = (distribution[intent] || 0) + 1;
     });
@@ -400,7 +400,7 @@ class PromptCaptureSystem extends EventEmitter {
 
   getMethodDistribution(prompts) {
     const distribution = {};
-    prompts.forEach(prompt => {
+    prompts.forEach((prompt) => {
       const method = prompt.metadata.method;
       distribution[method] = (distribution[method] || 0) + 1;
     });
@@ -409,7 +409,7 @@ class PromptCaptureSystem extends EventEmitter {
 
   getComplexityDistribution(prompts) {
     const distribution = {};
-    prompts.forEach(prompt => {
+    prompts.forEach((prompt) => {
       const complexity = prompt.metadata.complexity;
       distribution[complexity] = (distribution[complexity] || 0) + 1;
     });

@@ -25,14 +25,14 @@ class ContextChangeTracker {
         eventId = null,
         timestamp = Date.now(),
         taskId = null,
-        sessionId = null
+        sessionId = null,
       } = options;
 
       // Extract file paths from current context
       const currentFiles = this.extractFilePaths(currentContext);
-      
+
       // Get previous context files
-      const previousFiles = this.previousContextSnapshot 
+      const previousFiles = this.previousContextSnapshot
         ? this.extractFilePaths(this.previousContextSnapshot)
         : [];
 
@@ -54,15 +54,17 @@ class ContextChangeTracker {
         unchangedFiles: delta.unchanged,
         netChange: delta.added.length - delta.removed.length,
         metadata: {
-          previousContext: this.previousContextSnapshot ? {
-            fileCount: previousFiles.length,
-            files: previousFiles
-          } : null,
+          previousContext: this.previousContextSnapshot
+            ? {
+                fileCount: previousFiles.length,
+                files: previousFiles,
+              }
+            : null,
           currentContext: {
             fileCount: currentFiles.length,
-            files: currentFiles
-          }
-        }
+            files: currentFiles,
+          },
+        },
       };
 
       // Store in memory (keep last 1000)
@@ -101,7 +103,7 @@ class ContextChangeTracker {
 
     // Handle array of file objects
     if (Array.isArray(context)) {
-      context.forEach(file => {
+      context.forEach((file) => {
         const path = this.getFilePath(file);
         if (path) files.add(path);
       });
@@ -111,15 +113,15 @@ class ContextChangeTracker {
     // Handle contextFiles object structure
     if (context.contextFiles) {
       if (Array.isArray(context.contextFiles)) {
-        context.contextFiles.forEach(file => {
+        context.contextFiles.forEach((file) => {
           const path = this.getFilePath(file);
           if (path) files.add(path);
         });
       } else if (typeof context.contextFiles === 'object') {
         // Handle nested structure (attachedFiles, codebaseFiles, etc.)
-        Object.values(context.contextFiles).forEach(fileArray => {
+        Object.values(context.contextFiles).forEach((fileArray) => {
           if (Array.isArray(fileArray)) {
-            fileArray.forEach(file => {
+            fileArray.forEach((file) => {
               const path = this.getFilePath(file);
               if (path) files.add(path);
             });
@@ -130,7 +132,7 @@ class ContextChangeTracker {
 
     // Handle atFiles
     if (context.atFiles && Array.isArray(context.atFiles)) {
-      context.atFiles.forEach(file => {
+      context.atFiles.forEach((file) => {
         const path = this.getFilePath(file);
         if (path) files.add(path);
       });
@@ -138,7 +140,7 @@ class ContextChangeTracker {
 
     // Handle direct file paths
     if (context.files && Array.isArray(context.files)) {
-      context.files.forEach(file => {
+      context.files.forEach((file) => {
         const path = this.getFilePath(file);
         if (path) files.add(path);
       });
@@ -152,11 +154,11 @@ class ContextChangeTracker {
    */
   getFilePath(file) {
     if (!file) return null;
-    
+
     if (typeof file === 'string') {
       return file;
     }
-    
+
     return file.path || file.filePath || file.fileName || file.name || null;
   }
 
@@ -167,9 +169,9 @@ class ContextChangeTracker {
     const previousSet = new Set(previousFiles);
     const currentSet = new Set(currentFiles);
 
-    const added = currentFiles.filter(f => !previousSet.has(f));
-    const removed = previousFiles.filter(f => !currentSet.has(f));
-    const unchanged = currentFiles.filter(f => previousSet.has(f));
+    const added = currentFiles.filter((f) => !previousSet.has(f));
+    const removed = previousFiles.filter((f) => !currentSet.has(f));
+    const unchanged = currentFiles.filter((f) => previousSet.has(f));
 
     return {
       added,
@@ -177,7 +179,7 @@ class ContextChangeTracker {
       unchanged,
       addedCount: added.length,
       removedCount: removed.length,
-      unchangedCount: unchanged.length
+      unchangedCount: unchanged.length,
     };
   }
 
@@ -188,8 +190,8 @@ class ContextChangeTracker {
     if (this.persistentDB) {
       return await this.persistentDB.getContextChanges({ promptId });
     }
-    
-    return this.contextHistory.filter(change => change.promptId === promptId);
+
+    return this.contextHistory.filter((change) => change.promptId === promptId);
   }
 
   /**
@@ -199,8 +201,8 @@ class ContextChangeTracker {
     if (this.persistentDB) {
       return await this.persistentDB.getContextChanges({ eventId });
     }
-    
-    return this.contextHistory.filter(change => change.eventId === eventId);
+
+    return this.contextHistory.filter((change) => change.eventId === eventId);
   }
 
   /**
@@ -210,8 +212,8 @@ class ContextChangeTracker {
     if (this.persistentDB) {
       return await this.persistentDB.getContextChanges({ taskId });
     }
-    
-    return this.contextHistory.filter(change => change.taskId === taskId);
+
+    return this.contextHistory.filter((change) => change.taskId === taskId);
   }
 
   /**
@@ -219,14 +221,14 @@ class ContextChangeTracker {
    */
   async getContextChangesInRange(startTime, endTime) {
     if (this.persistentDB) {
-      return await this.persistentDB.getContextChanges({ 
-        startTime, 
-        endTime 
+      return await this.persistentDB.getContextChanges({
+        startTime,
+        endTime,
       });
     }
-    
-    return this.contextHistory.filter(change => 
-      change.timestamp >= startTime && change.timestamp <= endTime
+
+    return this.contextHistory.filter(
+      (change) => change.timestamp >= startTime && change.timestamp <= endTime
     );
   }
 
@@ -235,7 +237,7 @@ class ContextChangeTracker {
    */
   getSummaryStats() {
     const changes = this.contextHistory;
-    
+
     if (changes.length === 0) {
       return {
         totalChanges: 0,
@@ -243,7 +245,7 @@ class ContextChangeTracker {
         totalFilesRemoved: 0,
         averageNetChange: 0,
         mostAddedFiles: [],
-        mostRemovedFiles: []
+        mostRemovedFiles: [],
       };
     }
 
@@ -252,13 +254,13 @@ class ContextChangeTracker {
     let totalAdded = 0;
     let totalRemoved = 0;
 
-    changes.forEach(change => {
-      change.addedFiles.forEach(file => {
+    changes.forEach((change) => {
+      change.addedFiles.forEach((file) => {
         fileAddCounts.set(file, (fileAddCounts.get(file) || 0) + 1);
         totalAdded++;
       });
-      
-      change.removedFiles.forEach(file => {
+
+      change.removedFiles.forEach((file) => {
         fileRemoveCounts.set(file, (fileRemoveCounts.get(file) || 0) + 1);
         totalRemoved++;
       });
@@ -274,9 +276,8 @@ class ContextChangeTracker {
       .slice(0, 10)
       .map(([file, count]) => ({ file, count }));
 
-    const averageNetChange = changes.length > 0
-      ? changes.reduce((sum, c) => sum + c.netChange, 0) / changes.length
-      : 0;
+    const averageNetChange =
+      changes.length > 0 ? changes.reduce((sum, c) => sum + c.netChange, 0) / changes.length : 0;
 
     return {
       totalChanges: changes.length,
@@ -284,7 +285,7 @@ class ContextChangeTracker {
       totalFilesRemoved: totalRemoved,
       averageNetChange: Math.round(averageNetChange * 100) / 100,
       mostAddedFiles,
-      mostRemovedFiles
+      mostRemovedFiles,
     };
   }
 
@@ -304,8 +305,3 @@ class ContextChangeTracker {
 }
 
 module.exports = ContextChangeTracker;
-
-
-
-
-

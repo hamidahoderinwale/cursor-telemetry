@@ -4,11 +4,7 @@
  */
 
 function createSharingRoutes(deps) {
-  const {
-    app,
-    sharingService,
-    persistentDB
-  } = deps;
+  const { app, sharingService, persistentDB } = deps;
 
   /**
    * Create a shareable link for workspace data
@@ -21,13 +17,13 @@ function createSharingRoutes(deps) {
         abstractionLevel = 1,
         filters = {},
         expirationDays = 7,
-        name = null
+        name = null,
       } = req.body;
 
       if (!workspaces || workspaces.length === 0) {
         return res.status(400).json({
           success: false,
-          error: 'At least one workspace must be specified'
+          error: 'At least one workspace must be specified',
         });
       }
 
@@ -36,18 +32,18 @@ function createSharingRoutes(deps) {
         abstractionLevel,
         filters,
         expirationDays,
-        name
+        name,
       });
 
       res.json({
         success: true,
-        ...shareLink
+        ...shareLink,
       });
     } catch (error) {
       console.error('[SHARING] Error creating share link:', error);
       res.status(500).json({
         success: false,
-        error: error.message
+        error: error.message,
       });
     }
   });
@@ -59,13 +55,13 @@ function createSharingRoutes(deps) {
   app.get('/api/share/:shareId', async (req, res) => {
     try {
       const { shareId } = req.params;
-      
+
       const shareData = await sharingService.getShareLink(shareId);
-      
+
       if (!shareData) {
         return res.status(404).json({
           success: false,
-          error: 'Share link not found or expired'
+          error: 'Share link not found or expired',
         });
       }
 
@@ -73,9 +69,9 @@ function createSharingRoutes(deps) {
       // Import the export handler logic (we'll need to refactor this)
       // For now, use a simplified approach - call the export endpoint internally
       const exportUrl = new URL(`${req.protocol}://${req.get('host')}/api/export/database`);
-      
+
       // Add workspace filters
-      shareData.workspaces.forEach(ws => {
+      shareData.workspaces.forEach((ws) => {
         exportUrl.searchParams.append('workspace', ws);
       });
 
@@ -98,7 +94,7 @@ function createSharingRoutes(deps) {
       // Make internal request to export endpoint
       const http = require('http');
       const exportPath = exportUrl.pathname + exportUrl.search;
-      
+
       return new Promise((resolve, reject) => {
         const options = {
           hostname: req.get('host').split(':')[0],
@@ -106,13 +102,15 @@ function createSharingRoutes(deps) {
           path: exportPath,
           method: 'GET',
           headers: {
-            'Host': req.get('host')
-          }
+            Host: req.get('host'),
+          },
         };
-        
+
         const exportReq = http.request(options, (exportRes) => {
           let data = '';
-          exportRes.on('data', (chunk) => { data += chunk; });
+          exportRes.on('data', (chunk) => {
+            data += chunk;
+          });
           exportRes.on('end', () => {
             try {
               const exportData = JSON.parse(data);
@@ -120,27 +118,26 @@ function createSharingRoutes(deps) {
             } catch (err) {
               res.status(500).json({
                 success: false,
-                error: 'Failed to parse export data'
+                error: 'Failed to parse export data',
               });
             }
           });
         });
-        
+
         exportReq.on('error', (err) => {
           res.status(500).json({
             success: false,
-            error: 'Failed to fetch shared data'
+            error: 'Failed to fetch shared data',
           });
         });
-        
+
         exportReq.end();
       });
-      
     } catch (error) {
       console.error('[SHARING] Error getting share link:', error);
       res.status(500).json({
         success: false,
-        error: error.message
+        error: error.message,
       });
     }
   });
@@ -152,13 +149,13 @@ function createSharingRoutes(deps) {
   app.get('/api/share/:shareId/info', async (req, res) => {
     try {
       const { shareId } = req.params;
-      
+
       const shareData = await sharingService.getShareLink(shareId);
-      
+
       if (!shareData) {
         return res.status(404).json({
           success: false,
-          error: 'Share link not found or expired'
+          error: 'Share link not found or expired',
         });
       }
 
@@ -171,13 +168,13 @@ function createSharingRoutes(deps) {
         abstractionLevel: shareData.abstractionLevel,
         createdAt: new Date(shareData.createdAt).toISOString(),
         expiresAt: shareData.expiresAt ? new Date(shareData.expiresAt).toISOString() : null,
-        isExpired: shareData.expiresAt ? Date.now() > shareData.expiresAt : false
+        isExpired: shareData.expiresAt ? Date.now() > shareData.expiresAt : false,
       });
     } catch (error) {
       console.error('[SHARING] Error getting share link info:', error);
       res.status(500).json({
         success: false,
-        error: error.message
+        error: error.message,
       });
     }
   });
@@ -189,18 +186,18 @@ function createSharingRoutes(deps) {
   app.delete('/api/share/:shareId', async (req, res) => {
     try {
       const { shareId } = req.params;
-      
+
       await sharingService.deleteShareLink(shareId);
-      
+
       res.json({
         success: true,
-        message: 'Share link deleted'
+        message: 'Share link deleted',
       });
     } catch (error) {
       console.error('[SHARING] Error deleting share link:', error);
       res.status(500).json({
         success: false,
-        error: error.message
+        error: error.message,
       });
     }
   });
@@ -212,10 +209,10 @@ function createSharingRoutes(deps) {
   app.get('/api/share', async (req, res) => {
     try {
       const links = await sharingService.listShareLinks();
-      
+
       res.json({
         success: true,
-        links: links.map(link => ({
+        links: links.map((link) => ({
           shareId: link.id || link.shareId,
           name: link.name || null,
           workspaces: link.workspaces,
@@ -224,18 +221,17 @@ function createSharingRoutes(deps) {
           expiresAt: link.expiresAt ? new Date(link.expiresAt).toISOString() : null,
           accessCount: link.accessCount || 0,
           lastAccessed: link.lastAccessed ? new Date(link.lastAccessed).toISOString() : null,
-          isExpired: link.expiresAt ? Date.now() > link.expiresAt : false
-        }))
+          isExpired: link.expiresAt ? Date.now() > link.expiresAt : false,
+        })),
       });
     } catch (error) {
       console.error('[SHARING] Error listing share links:', error);
       res.status(500).json({
         success: false,
-        error: error.message
+        error: error.message,
       });
     }
   });
 }
 
 module.exports = createSharingRoutes;
-

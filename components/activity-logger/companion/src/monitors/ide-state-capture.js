@@ -24,7 +24,7 @@ class IDEStateCapture {
    */
   start(intervalMs = 2000) {
     if (this.captureInterval) return;
-    
+
     this.captureInterval = setInterval(async () => {
       try {
         await this.captureIDEState();
@@ -32,7 +32,7 @@ class IDEStateCapture {
         console.error('Error capturing IDE state:', error);
       }
     }, intervalMs);
-    
+
     console.log(`[TARGET] IDE state capture started with ${intervalMs}ms interval`);
   }
 
@@ -52,7 +52,7 @@ class IDEStateCapture {
    */
   async captureIDEState() {
     const timestamp = Date.now();
-    
+
     try {
       const ideState = {
         timestamp,
@@ -61,12 +61,12 @@ class IDEStateCapture {
         editorConfiguration: await this.captureEditorConfiguration(),
         debugState: await this.captureDebugState(),
         cursorSpecificState: await this.captureCursorSpecificState(),
-        systemState: await this.captureSystemState()
+        systemState: await this.captureSystemState(),
       };
 
       // Store in cache
       this.cache.set(timestamp, ideState);
-      
+
       // Keep only last 1000 entries
       if (this.cache.size > 1000) {
         const oldestKey = Math.min(...this.cache.keys());
@@ -75,7 +75,7 @@ class IDEStateCapture {
 
       this.lastCapture = timestamp;
       console.log(`[DATA] Captured IDE state: ${Object.keys(ideState).length} components`);
-      
+
       return ideState;
     } catch (error) {
       console.error('Error capturing IDE state:', error);
@@ -90,31 +90,37 @@ class IDEStateCapture {
     try {
       // Get active tabs via AppleScript
       const activeTabs = await this.getActiveTabs();
-      
+
       // Get editor layout
       const editorLayout = await this.getEditorLayout();
-      
+
       // Get panel states
       const panelStates = await this.getPanelStates();
-      
+
       // Get sidebar state
       const sidebarState = await this.getSidebarState();
 
       return {
         activeTabs,
-        openFiles: activeTabs.map(tab => tab.filePath).filter(Boolean),
+        openFiles: activeTabs.map((tab) => tab.filePath).filter(Boolean),
         editorLayout,
         panelStates,
-        sidebarState
+        sidebarState,
       };
     } catch (error) {
       console.warn('Error capturing editor state:', error.message);
       return {
         activeTabs: [],
         openFiles: [],
-        editorLayout: { activeEditor: '', editorGroups: [], panelLayout: {}, sidebarLayout: {}, statusBar: {} },
+        editorLayout: {
+          activeEditor: '',
+          editorGroups: [],
+          panelLayout: {},
+          sidebarLayout: {},
+          statusBar: {},
+        },
         panelStates: [],
-        sidebarState: { isVisible: false, activeView: '', expandedSections: [], width: 0 }
+        sidebarState: { isVisible: false, activeView: '', expandedSections: [], width: 0 },
       };
     }
   }
@@ -135,16 +141,29 @@ class IDEStateCapture {
         gitBranch,
         gitStatus,
         activeExtensions,
-        themeSettings
+        themeSettings,
       };
     } catch (error) {
       console.warn('Error capturing workspace state:', error.message);
       return {
         workspaceRoot: '',
         gitBranch: '',
-        gitStatus: { branch: '', isDirty: false, stagedFiles: [], unstagedFiles: [], untrackedFiles: [], lastCommit: null },
+        gitStatus: {
+          branch: '',
+          isDirty: false,
+          stagedFiles: [],
+          unstagedFiles: [],
+          untrackedFiles: [],
+          lastCommit: null,
+        },
         activeExtensions: [],
-        themeSettings: { colorTheme: '', iconTheme: '', fontFamily: '', fontSize: 0, fontWeight: '' }
+        themeSettings: {
+          colorTheme: '',
+          iconTheme: '',
+          fontFamily: '',
+          fontSize: 0,
+          fontWeight: '',
+        },
       };
     }
   }
@@ -163,15 +182,22 @@ class IDEStateCapture {
         languageMode,
         indentationSettings,
         editorSettings,
-        keybindings
+        keybindings,
       };
     } catch (error) {
       console.warn('Error capturing editor configuration:', error.message);
       return {
         languageMode: '',
         indentationSettings: { insertSpaces: true, tabSize: 2, detectIndentation: true },
-        editorSettings: { wordWrap: 'off', lineNumbers: 'on', minimap: true, scrollBeyondLastLine: false, cursorBlinking: 'blink', cursorStyle: 'line' },
-        keybindings: []
+        editorSettings: {
+          wordWrap: 'off',
+          lineNumbers: 'on',
+          minimap: true,
+          scrollBeyondLastLine: false,
+          cursorBlinking: 'blink',
+          cursorStyle: 'line',
+        },
+        keybindings: [],
       };
     }
   }
@@ -188,14 +214,22 @@ class IDEStateCapture {
       return {
         breakpoints,
         debugSession,
-        watchExpressions
+        watchExpressions,
       };
     } catch (error) {
       console.warn('Error capturing debug state:', error.message);
       return {
         breakpoints: [],
-        debugSession: { id: '', name: '', type: '', isActive: false, configuration: {}, variables: [], callStack: [] },
-        watchExpressions: []
+        debugSession: {
+          id: '',
+          name: '',
+          type: '',
+          isActive: false,
+          configuration: {},
+          variables: [],
+          callStack: [],
+        },
+        watchExpressions: [],
       };
     }
   }
@@ -214,15 +248,38 @@ class IDEStateCapture {
         aiChat,
         codeCompletion,
         suggestions,
-        contextWindow
+        contextWindow,
       };
     } catch (error) {
       console.warn('Error capturing Cursor-specific state:', error.message);
       return {
-        aiChat: { isOpen: false, messageCount: 0, lastMessage: '', conversationHistory: [], contextFiles: [] },
-        codeCompletion: { isActive: false, suggestions: [], acceptedSuggestions: 0, rejectedSuggestions: 0, completionRate: 0 },
-        suggestions: { activeSuggestions: [], acceptedCount: 0, rejectedCount: 0, partialAcceptance: [] },
-        contextWindow: { isOpen: false, content: '', referencedFiles: [], selectedText: '', cursorPosition: { line: 0, character: 0 } }
+        aiChat: {
+          isOpen: false,
+          messageCount: 0,
+          lastMessage: '',
+          conversationHistory: [],
+          contextFiles: [],
+        },
+        codeCompletion: {
+          isActive: false,
+          suggestions: [],
+          acceptedSuggestions: 0,
+          rejectedSuggestions: 0,
+          completionRate: 0,
+        },
+        suggestions: {
+          activeSuggestions: [],
+          acceptedCount: 0,
+          rejectedCount: 0,
+          partialAcceptance: [],
+        },
+        contextWindow: {
+          isOpen: false,
+          content: '',
+          referencedFiles: [],
+          selectedText: '',
+          cursorPosition: { line: 0, character: 0 },
+        },
       };
     }
   }
@@ -239,14 +296,14 @@ class IDEStateCapture {
       return {
         processes,
         resources,
-        environment
+        environment,
       };
     } catch (error) {
       console.warn('Error capturing system state:', error.message);
       return {
         processes: [],
         resources: { cpuUsage: 0, memoryUsage: 0, diskUsage: 0, networkUsage: 0 },
-        environment: { platform: '', arch: '', nodeVersion: '', cursorVersion: '' }
+        environment: { platform: '', arch: '', nodeVersion: '', cursorVersion: '' },
       };
     }
   }
@@ -267,16 +324,16 @@ class IDEStateCapture {
           end tell
         end tell
       `;
-      
+
       const { stdout } = await execAsync(`osascript -e '${script.replace(/'/g, "'\\''")}'`);
       const windowTitle = stdout.trim();
-      
-      if (windowTitle && windowTitle !== "") {
+
+      if (windowTitle && windowTitle !== '') {
         // Parse window title to extract file information
         // Cursor window titles typically show: "filename — workspace" or "filename - workspace - Cursor"
         // Remove the workspace suffix (everything after — or after second -)
         let fileName = windowTitle;
-        
+
         // Try splitting by em-dash first
         if (windowTitle.includes(' — ')) {
           fileName = windowTitle.split(' — ')[0];
@@ -284,45 +341,56 @@ class IDEStateCapture {
           const parts = windowTitle.split(' - ');
           fileName = parts[0] || '';
         }
-        
+
         // Get the working directory to construct full path
         const workspaceRoot = await this.getWorkspaceRoot();
-        
+
         // Construct full path if not absolute
-        const filePath = fileName.includes('/') ? fileName : (fileName ? path.join(workspaceRoot, fileName) : '');
-        
-        return [{
-          title: windowTitle,
-          fileName: fileName,
-          filePath: filePath,
-          isActive: true,
-          isDirty: windowTitle.includes('●') || windowTitle.includes('•'),
-          lineNumber: 1,
-          columnNumber: 1
-        }];
+        const filePath = fileName.includes('/')
+          ? fileName
+          : fileName
+            ? path.join(workspaceRoot, fileName)
+            : '';
+
+        return [
+          {
+            title: windowTitle,
+            fileName: fileName,
+            filePath: filePath,
+            isActive: true,
+            isDirty: windowTitle.includes('●') || windowTitle.includes('•'),
+            lineNumber: 1,
+            columnNumber: 1,
+          },
+        ];
       }
-      
+
       return [];
     } catch (error) {
       console.warn('Could not get active tabs via AppleScript:', error.message);
       return [];
     }
   }
-  
+
   async getEditorLayout() {
     try {
       const activeTabs = await this.getActiveTabs();
       const activeEditor = activeTabs.length > 0 ? activeTabs[0].filePath : '';
-      
+
       return {
         activeEditor,
-        editorGroups: activeTabs.length > 0 ? [{
-          viewColumn: 1,
-          editors: activeTabs
-        }] : [],
+        editorGroups:
+          activeTabs.length > 0
+            ? [
+                {
+                  viewColumn: 1,
+                  editors: activeTabs,
+                },
+              ]
+            : [],
         panelLayout: { panels: [] },
         sidebarLayout: { sections: [] },
-        statusBar: { items: [] }
+        statusBar: { items: [] },
       };
     } catch (error) {
       console.warn('Could not get editor layout:', error.message);
@@ -331,23 +399,23 @@ class IDEStateCapture {
         editorGroups: [],
         panelLayout: { panels: [] },
         sidebarLayout: { sections: [] },
-        statusBar: { items: [] }
+        statusBar: { items: [] },
       };
     }
   }
-  
+
   async getPanelStates() {
     console.warn('Could not get panel states via AppleScript (temporarily disabled).');
     return [];
   }
-  
+
   async getSidebarState() {
     console.warn('Could not get sidebar state via AppleScript (temporarily disabled).');
     return {
       isVisible: false,
       activeView: '',
       expandedSections: [],
-      width: 0
+      width: 0,
     };
   }
 
@@ -376,12 +444,21 @@ class IDEStateCapture {
       const { stdout: status } = await execAsync('git status --porcelain');
       const { stdout: branch } = await execAsync('git branch --show-current');
       const { stdout: lastCommit } = await execAsync('git log -1 --oneline');
-      
-      const statusLines = status.trim().split('\n').filter(line => line);
-      const stagedFiles = statusLines.filter(line => line.startsWith('M ') || line.startsWith('A ')).map(line => line.substring(2));
-      const unstagedFiles = statusLines.filter(line => line.startsWith(' M') || line.startsWith(' A')).map(line => line.substring(2));
-      const untrackedFiles = statusLines.filter(line => line.startsWith('??')).map(line => line.substring(3));
-      
+
+      const statusLines = status
+        .trim()
+        .split('\n')
+        .filter((line) => line);
+      const stagedFiles = statusLines
+        .filter((line) => line.startsWith('M ') || line.startsWith('A '))
+        .map((line) => line.substring(2));
+      const unstagedFiles = statusLines
+        .filter((line) => line.startsWith(' M') || line.startsWith(' A'))
+        .map((line) => line.substring(2));
+      const untrackedFiles = statusLines
+        .filter((line) => line.startsWith('??'))
+        .map((line) => line.substring(3));
+
       return {
         branch: branch.trim(),
         isDirty: statusLines.length > 0,
@@ -393,8 +470,8 @@ class IDEStateCapture {
           message: lastCommit.trim().substring(lastCommit.trim().indexOf(' ') + 1) || '',
           author: '',
           timestamp: Date.now(),
-          files: []
-        }
+          files: [],
+        },
       };
     } catch (error) {
       console.warn('Could not get git status:', error.message);
@@ -404,7 +481,7 @@ class IDEStateCapture {
         stagedFiles: [],
         unstagedFiles: [],
         untrackedFiles: [],
-        lastCommit: null
+        lastCommit: null,
       };
     }
   }
@@ -414,14 +491,15 @@ class IDEStateCapture {
       // Try to get extensions from Cursor's extension directory
       const extensionPaths = [
         path.join(os.homedir(), '.cursor/extensions'),
-        path.join(os.homedir(), 'Library/Application Support/Cursor/User/extensions')
+        path.join(os.homedir(), 'Library/Application Support/Cursor/User/extensions'),
       ];
-      
+
       for (const extPath of extensionPaths) {
         if (fs.existsSync(extPath)) {
-          const extensions = fs.readdirSync(extPath)
-            .filter(item => fs.statSync(path.join(extPath, item)).isDirectory())
-            .map(item => {
+          const extensions = fs
+            .readdirSync(extPath)
+            .filter((item) => fs.statSync(path.join(extPath, item)).isDirectory())
+            .map((item) => {
               const manifestPath = path.join(extPath, item, 'package.json');
               try {
                 const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
@@ -431,7 +509,7 @@ class IDEStateCapture {
                   version: manifest.version || '1.0.0',
                   isActive: true,
                   isEnabled: true,
-                  activationEvents: manifest.activationEvents || []
+                  activationEvents: manifest.activationEvents || [],
                 };
               } catch {
                 return {
@@ -440,15 +518,15 @@ class IDEStateCapture {
                   version: '1.0.0',
                   isActive: true,
                   isEnabled: true,
-                  activationEvents: []
+                  activationEvents: [],
                 };
               }
             });
-          
+
           return extensions;
         }
       }
-      
+
       return [];
     } catch (error) {
       console.warn('Could not get active extensions:', error.message);
@@ -459,7 +537,10 @@ class IDEStateCapture {
   async getThemeSettings() {
     try {
       // Try to get theme from Cursor settings
-      const settingsPath = path.join(os.homedir(), 'Library/Application Support/Cursor/User/settings.json');
+      const settingsPath = path.join(
+        os.homedir(),
+        'Library/Application Support/Cursor/User/settings.json'
+      );
       if (fs.existsSync(settingsPath)) {
         const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
         return {
@@ -467,16 +548,16 @@ class IDEStateCapture {
           iconTheme: settings['workbench.iconTheme'] || 'vs-seti',
           fontFamily: settings['editor.fontFamily'] || 'Consolas, "Courier New", monospace',
           fontSize: settings['editor.fontSize'] || 14,
-          fontWeight: settings['editor.fontWeight'] || 'normal'
+          fontWeight: settings['editor.fontWeight'] || 'normal',
         };
       }
-      
+
       return {
         colorTheme: 'Default Dark+',
         iconTheme: 'vs-seti',
         fontFamily: 'Consolas, "Courier New", monospace',
         fontSize: 14,
-        fontWeight: 'normal'
+        fontWeight: 'normal',
       };
     } catch (error) {
       console.warn('Could not get theme settings:', error.message);
@@ -485,7 +566,7 @@ class IDEStateCapture {
         iconTheme: '',
         fontFamily: '',
         fontSize: 0,
-        fontWeight: ''
+        fontWeight: '',
       };
     }
   }
@@ -496,20 +577,20 @@ class IDEStateCapture {
       if (activeTabs.length > 0 && activeTabs[0].filePath) {
         const ext = path.extname(activeTabs[0].filePath).substring(1);
         const languageMap = {
-          'js': 'javascript',
-          'ts': 'typescript',
-          'py': 'python',
-          'rb': 'ruby',
-          'go': 'go',
-          'rs': 'rust',
-          'java': 'java',
-          'cpp': 'cpp',
-          'c': 'c',
-          'html': 'html',
-          'css': 'css',
-          'json': 'json',
-          'md': 'markdown',
-          'sh': 'shell'
+          js: 'javascript',
+          ts: 'typescript',
+          py: 'python',
+          rb: 'ruby',
+          go: 'go',
+          rs: 'rust',
+          java: 'java',
+          cpp: 'cpp',
+          c: 'c',
+          html: 'html',
+          css: 'css',
+          json: 'json',
+          md: 'markdown',
+          sh: 'shell',
         };
         return languageMap[ext] || ext || '';
       }
@@ -522,13 +603,16 @@ class IDEStateCapture {
 
   async getIndentationSettings() {
     try {
-      const settingsPath = path.join(os.homedir(), 'Library/Application Support/Cursor/User/settings.json');
+      const settingsPath = path.join(
+        os.homedir(),
+        'Library/Application Support/Cursor/User/settings.json'
+      );
       if (fs.existsSync(settingsPath)) {
         const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
         return {
           insertSpaces: settings['editor.insertSpaces'] !== false,
           tabSize: settings['editor.tabSize'] || 2,
-          detectIndentation: settings['editor.detectIndentation'] !== false
+          detectIndentation: settings['editor.detectIndentation'] !== false,
         };
       }
       return { insertSpaces: true, tabSize: 2, detectIndentation: true };
@@ -540,7 +624,10 @@ class IDEStateCapture {
 
   async getEditorSettings() {
     try {
-      const settingsPath = path.join(os.homedir(), 'Library/Application Support/Cursor/User/settings.json');
+      const settingsPath = path.join(
+        os.homedir(),
+        'Library/Application Support/Cursor/User/settings.json'
+      );
       if (fs.existsSync(settingsPath)) {
         const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
         return {
@@ -549,13 +636,27 @@ class IDEStateCapture {
           minimap: settings['editor.minimap.enabled'] !== false,
           scrollBeyondLastLine: settings['editor.scrollBeyondLastLine'] !== false,
           cursorBlinking: settings['editor.cursorBlinking'] || 'blink',
-          cursorStyle: settings['editor.cursorStyle'] || 'line'
+          cursorStyle: settings['editor.cursorStyle'] || 'line',
         };
       }
-      return { wordWrap: 'off', lineNumbers: 'on', minimap: true, scrollBeyondLastLine: false, cursorBlinking: 'blink', cursorStyle: 'line' };
+      return {
+        wordWrap: 'off',
+        lineNumbers: 'on',
+        minimap: true,
+        scrollBeyondLastLine: false,
+        cursorBlinking: 'blink',
+        cursorStyle: 'line',
+      };
     } catch (error) {
       console.warn('Could not get editor settings:', error.message);
-      return { wordWrap: 'off', lineNumbers: 'on', minimap: true, scrollBeyondLastLine: false, cursorBlinking: 'blink', cursorStyle: 'line' };
+      return {
+        wordWrap: 'off',
+        lineNumbers: 'on',
+        minimap: true,
+        scrollBeyondLastLine: false,
+        cursorBlinking: 'blink',
+        cursorStyle: 'line',
+      };
     }
   }
 
@@ -578,7 +679,7 @@ class IDEStateCapture {
       isActive: false,
       configuration: {},
       variables: [],
-      callStack: []
+      callStack: [],
     };
   }
 
@@ -592,31 +693,31 @@ class IDEStateCapture {
       // Try to detect AI chat state from Cursor database
       const dbPaths = [
         path.join(os.homedir(), 'Library/Application Support/Cursor/User/workspaceStorage'),
-        path.join(os.homedir(), 'Library/Application Support/Cursor/User/globalStorage')
+        path.join(os.homedir(), 'Library/Application Support/Cursor/User/globalStorage'),
       ];
-      
+
       for (const dbPath of dbPaths) {
         if (fs.existsSync(dbPath)) {
           // Look for AI chat related files
           const files = fs.readdirSync(dbPath);
-          const chatFiles = files.filter(file => file.includes('chat') || file.includes('ai'));
-          
+          const chatFiles = files.filter((file) => file.includes('chat') || file.includes('ai'));
+
           return {
             isOpen: chatFiles.length > 0,
             messageCount: chatFiles.length,
             lastMessage: '',
             conversationHistory: [],
-            contextFiles: []
+            contextFiles: [],
           };
         }
       }
-      
+
       return {
         isOpen: false,
         messageCount: 0,
         lastMessage: '',
         conversationHistory: [],
-        contextFiles: []
+        contextFiles: [],
       };
     } catch (error) {
       console.warn('Could not get AI chat state:', error.message);
@@ -625,7 +726,7 @@ class IDEStateCapture {
         messageCount: 0,
         lastMessage: '',
         conversationHistory: [],
-        contextFiles: []
+        contextFiles: [],
       };
     }
   }
@@ -639,7 +740,7 @@ class IDEStateCapture {
         suggestions: [],
         acceptedSuggestions: 0,
         rejectedSuggestions: 0,
-        completionRate: 0
+        completionRate: 0,
       };
     } catch (error) {
       console.warn('Could not get code completion state:', error.message);
@@ -648,7 +749,7 @@ class IDEStateCapture {
         suggestions: [],
         acceptedSuggestions: 0,
         rejectedSuggestions: 0,
-        completionRate: 0
+        completionRate: 0,
       };
     }
   }
@@ -659,7 +760,7 @@ class IDEStateCapture {
         activeSuggestions: [],
         acceptedCount: 0,
         rejectedCount: 0,
-        partialAcceptance: []
+        partialAcceptance: [],
       };
     } catch (error) {
       console.warn('Could not get suggestion state:', error.message);
@@ -667,7 +768,7 @@ class IDEStateCapture {
         activeSuggestions: [],
         acceptedCount: 0,
         rejectedCount: 0,
-        partialAcceptance: []
+        partialAcceptance: [],
       };
     }
   }
@@ -679,7 +780,7 @@ class IDEStateCapture {
         content: '',
         referencedFiles: [],
         selectedText: '',
-        cursorPosition: { line: 0, character: 0 }
+        cursorPosition: { line: 0, character: 0 },
       };
     } catch (error) {
       console.warn('Could not get context window state:', error.message);
@@ -688,7 +789,7 @@ class IDEStateCapture {
         content: '',
         referencedFiles: [],
         selectedText: '',
-        cursorPosition: { line: 0, character: 0 }
+        cursorPosition: { line: 0, character: 0 },
       };
     }
   }
@@ -696,8 +797,11 @@ class IDEStateCapture {
   async getCursorProcesses() {
     try {
       const { stdout } = await execAsync('ps aux | grep -i cursor | grep -v grep');
-      const processes = stdout.trim().split('\n').filter(line => line);
-      
+      const processes = stdout
+        .trim()
+        .split('\n')
+        .filter((line) => line);
+
       return processes.map((proc, index) => {
         const parts = proc.trim().split(/\s+/);
         return {
@@ -705,7 +809,7 @@ class IDEStateCapture {
           name: parts[10] || 'Cursor',
           cpuUsage: parseFloat(parts[2]) || 0,
           memoryUsage: parseFloat(parts[3]) || 0,
-          timestamp: Date.now()
+          timestamp: Date.now(),
         };
       });
     } catch (error) {
@@ -721,7 +825,7 @@ class IDEStateCapture {
         cpuUsage: process.cpuUsage().user / 1000000, // Convert to seconds
         memoryUsage: memUsage.heapUsed / 1024 / 1024, // Convert to MB
         diskUsage: 0, // Would need additional implementation
-        networkUsage: 0 // Would need additional implementation
+        networkUsage: 0, // Would need additional implementation
       };
     } catch (error) {
       console.warn('Could not get system resources:', error.message);
@@ -729,7 +833,7 @@ class IDEStateCapture {
         cpuUsage: 0,
         memoryUsage: 0,
         diskUsage: 0,
-        networkUsage: 0
+        networkUsage: 0,
       };
     }
   }
@@ -740,7 +844,7 @@ class IDEStateCapture {
         platform: os.platform(),
         arch: os.arch(),
         nodeVersion: process.version,
-        cursorVersion: 'Unknown' // Would need to be extracted from Cursor
+        cursorVersion: 'Unknown', // Would need to be extracted from Cursor
       };
     } catch (error) {
       console.warn('Could not get environment info:', error.message);
@@ -748,7 +852,7 @@ class IDEStateCapture {
         platform: '',
         arch: '',
         nodeVersion: '',
-        cursorVersion: ''
+        cursorVersion: '',
       };
     }
   }
@@ -762,12 +866,12 @@ class IDEStateCapture {
       .sort(([a], [b]) => b - a)
       .slice(0, limit)
       .map(([timestamp, data]) => ({ timestamp, ...data }));
-    
+
     return {
       success: true,
       data: entries,
       count: entries.length,
-      total: this.cache.size
+      total: this.cache.size,
     };
   }
 
@@ -776,7 +880,7 @@ class IDEStateCapture {
    */
   getLatestState() {
     if (this.cache.size === 0) return null;
-    
+
     const latestTimestamp = Math.max(...this.cache.keys());
     return this.cache.get(latestTimestamp);
   }

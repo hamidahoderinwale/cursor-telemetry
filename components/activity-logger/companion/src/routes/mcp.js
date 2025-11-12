@@ -21,7 +21,7 @@ function createMCPRoutes(deps) {
     enqueue,
     broadcastUpdate,
     broadcastConversationUpdate,
-    conversationStreams
+    conversationStreams,
   } = deps;
 
   // Check if MCP is enabled (default: false)
@@ -37,16 +37,16 @@ function createMCPRoutes(deps) {
   // Enhanced MCP endpoints with comprehensive data capture (OPTIONAL)
   app.post('/mcp/log-prompt-response', async (req, res) => {
     if (!isMCPEnabled()) {
-      return res.status(503).json({ 
-        success: false, 
+      return res.status(503).json({
+        success: false,
         error: 'MCP endpoints are disabled. Set enable_mcp: true in config.json to enable.',
-        note: 'MCP is an optional feature for external data collection. Database mode is the default.'
+        note: 'MCP is an optional feature for external data collection. Database mode is the default.',
       });
     }
     console.log('[MCP] Enhanced prompt-response received:', Object.keys(req.body));
     checkSessionTimeout();
     updateActivityTime();
-    
+
     const {
       session_id,
       conversation_id,
@@ -59,16 +59,17 @@ function createMCPRoutes(deps) {
       prompt,
       response,
       message_role = 'user',
-      metadata = {}
+      metadata = {},
     } = req.body;
-    
+
     // Detect workspace for this file
-    const workspacePath = workspace_path || (file_path ? detectWorkspace(file_path) : getCurrentWorkspace());
+    const workspacePath =
+      workspace_path || (file_path ? detectWorkspace(file_path) : getCurrentWorkspace());
     const workspaceSession = getWorkspaceSession(workspacePath);
-    
+
     const entryId = message_id || crypto.randomUUID();
     const entryTimestamp = timestamp || new Date().toISOString();
-    
+
     // Create entry with enhanced metadata
     const entry = {
       id: entryId,
@@ -83,9 +84,9 @@ function createMCPRoutes(deps) {
       notes: 'Logged via MCP (Enhanced)',
       conversation_id: conversation_id,
       conversation_title: conversation_title,
-      message_role: message_role
+      message_role: message_role,
     };
-    
+
     // Create prompt record with comprehensive metadata (matching database mode structure)
     const promptData = {
       id: crypto.randomUUID(),
@@ -112,9 +113,9 @@ function createMCPRoutes(deps) {
       command_type: metadata.commandType || metadata.command_type || null,
       generation_uuid: metadata.generationUUID || metadata.generation_uuid || null,
       status: 'captured',
-      confidence: 'high'
+      confidence: 'high',
     };
-    
+
     // Create matching event
     const event = {
       id: crypto.randomUUID(),
@@ -126,10 +127,10 @@ function createMCPRoutes(deps) {
         file_path: entry.file_path,
         conversation_id: conversation_id,
         message_role: message_role,
-        metadata: metadata
-      })
+        metadata: metadata,
+      }),
     };
-    
+
     // Store in database if persistent DB is available
     if (persistentDB) {
       try {
@@ -142,42 +143,44 @@ function createMCPRoutes(deps) {
         console.warn('[MCP] Failed to save to persistent DB:', dbError.message);
       }
     }
-    
+
     // Use enqueue function for reliable queuing
     enqueue('entry', entry);
     enqueue('event', event);
-    
+
     // Add prompt to in-memory store
     if (!db.prompts) db.prompts = [];
     db.prompts.push(promptData);
-    
+
     // Update workspace data
     updateWorkspaceData(workspacePath, entry, event);
-    
+
     // Broadcast real-time update via WebSocket
     broadcastUpdate('prompt-captured', {
       prompt: promptData,
       entry: entry,
-      conversation_id: conversation_id
+      conversation_id: conversation_id,
     });
-    
-    console.log(`[SUCCESS] MCP enhanced entry added: ${entry.id} - ${entry.file_path} in workspace: ${workspacePath}`);
-    
+
+    console.log(
+      `[SUCCESS] MCP enhanced entry added: ${entry.id} - ${entry.file_path} in workspace: ${workspacePath}`
+    );
+
     res.json({ success: true, entry_id: entry.id, prompt_id: promptData.id });
   });
 
   app.post('/mcp/log-code-change', async (req, res) => {
     if (!isMCPEnabled()) {
-      return res.status(503).json({ 
-        success: false, 
+      return res.status(503).json({
+        success: false,
         error: 'MCP endpoints are disabled. Set enable_mcp: true in config.json to enable.',
-        note: 'MCP is an optional feature for external data collection. Database mode is the default.'
+        note: 'MCP is an optional feature for external data collection. Database mode is the default.',
       });
     }
-    
+
     checkSessionTimeout();
     updateActivityTime();
-    
+
     const {
       session_id,
       conversation_id,
@@ -186,19 +189,24 @@ function createMCPRoutes(deps) {
       workspace_path,
       before_code,
       after_code,
-      metadata = {}
+      metadata = {},
     } = req.body;
-    
+
     // Detect workspace for this file
-    const workspacePath = workspace_path || (file_path ? detectWorkspace(file_path) : getCurrentWorkspace());
+    const workspacePath =
+      workspace_path || (file_path ? detectWorkspace(file_path) : getCurrentWorkspace());
     const workspaceSession = getWorkspaceSession(workspacePath);
-    
+
     // Calculate diff metrics if not provided
-    const linesAdded = metadata.linesAdded || metadata.lines_added || 
+    const linesAdded =
+      metadata.linesAdded ||
+      metadata.lines_added ||
       Math.max(0, (after_code || '').split('\n').length - (before_code || '').split('\n').length);
-    const linesRemoved = metadata.linesRemoved || metadata.lines_removed || 
+    const linesRemoved =
+      metadata.linesRemoved ||
+      metadata.lines_removed ||
       Math.max(0, (before_code || '').split('\n').length - (after_code || '').split('\n').length);
-    
+
     const entry = {
       id: crypto.randomUUID(),
       session_id: session_id || workspaceSession,
@@ -212,10 +220,12 @@ function createMCPRoutes(deps) {
       conversation_id: conversation_id,
       lines_added: linesAdded,
       lines_removed: linesRemoved,
-      diff_size: metadata.diffSize || metadata.diff_size || 
-        Math.abs((after_code || '').length - (before_code || '').length)
+      diff_size:
+        metadata.diffSize ||
+        metadata.diff_size ||
+        Math.abs((after_code || '').length - (before_code || '').length),
     };
-    
+
     // Store in database if persistent DB is available
     if (persistentDB) {
       try {
@@ -224,10 +234,10 @@ function createMCPRoutes(deps) {
         console.warn('[MCP] Failed to save entry to persistent DB:', dbError.message);
       }
     }
-    
+
     // Use enqueue function for reliable queuing
     enqueue('entry', entry);
-    
+
     // Create matching event
     const event = {
       id: crypto.randomUUID(),
@@ -240,39 +250,41 @@ function createMCPRoutes(deps) {
         conversation_id: conversation_id,
         lines_added: linesAdded,
         lines_removed: linesRemoved,
-        metadata: metadata
-      })
+        metadata: metadata,
+      }),
     };
     enqueue('event', event);
-    
+
     // Update workspace data
     updateWorkspaceData(workspacePath, entry, event);
-    
+
     // Broadcast real-time update
     broadcastUpdate('file-changed', {
       entry: entry,
-      event: event
+      event: event,
     });
-    
-    console.log(`[SUCCESS] MCP enhanced code change added: ${entry.id} - ${entry.file_path} in workspace: ${workspacePath}`);
-    
+
+    console.log(
+      `[SUCCESS] MCP enhanced code change added: ${entry.id} - ${entry.file_path} in workspace: ${workspacePath}`
+    );
+
     res.json({ success: true, entry_id: entry.id });
   });
 
   // Enhanced conversation logging endpoint (OPTIONAL)
   app.post('/mcp/log-conversation', async (req, res) => {
     if (!isMCPEnabled()) {
-      return res.status(503).json({ 
-        success: false, 
+      return res.status(503).json({
+        success: false,
         error: 'MCP endpoints are disabled. Set enable_mcp: true in config.json to enable.',
-        note: 'MCP is an optional feature for external data collection. Database mode is the default.'
+        note: 'MCP is an optional feature for external data collection. Database mode is the default.',
       });
     }
-    
+
     console.log('[MCP] Conversation received:', req.body.conversation_id);
     checkSessionTimeout();
     updateActivityTime();
-    
+
     const {
       conversation_id,
       conversation_title,
@@ -280,20 +292,20 @@ function createMCPRoutes(deps) {
       workspace_path,
       workspace_name,
       messages = [],
-      metadata = {}
+      metadata = {},
     } = req.body;
-    
+
     const workspacePath = workspace_path || getCurrentWorkspace();
     const workspaceSession = getWorkspaceSession(workspacePath);
-    
+
     // Process all messages in the conversation
     const savedPrompts = [];
     const savedEntries = [];
-    
+
     for (const message of messages) {
       const messageId = message.id || crypto.randomUUID();
       const messageTimestamp = message.timestamp || new Date().toISOString();
-      
+
       // Create prompt record for each message
       const promptData = {
         id: messageId,
@@ -313,15 +325,18 @@ function createMCPRoutes(deps) {
         ai_mode: message.metadata?.aiMode || metadata.aiMode || 'chat',
         model: message.metadata?.model || metadata.model || null,
         finish_reason: message.metadata?.finishReason || metadata.finishReason || null,
-        thinking_time_seconds: message.metadata?.thinkingTimeSeconds || metadata.thinkingTimeSeconds || null,
-        context_files: JSON.stringify(message.metadata?.contextFiles || metadata.contextFiles || []),
+        thinking_time_seconds:
+          message.metadata?.thinkingTimeSeconds || metadata.thinkingTimeSeconds || null,
+        context_files: JSON.stringify(
+          message.metadata?.contextFiles || metadata.contextFiles || []
+        ),
         at_files: JSON.stringify(message.metadata?.atFiles || metadata.atFiles || []),
         status: 'captured',
-        confidence: 'high'
+        confidence: 'high',
       };
-      
+
       savedPrompts.push(promptData);
-      
+
       // Store in database
       if (persistentDB) {
         try {
@@ -330,12 +345,12 @@ function createMCPRoutes(deps) {
           console.warn('[MCP] Failed to save prompt:', dbError.message);
         }
       }
-      
+
       // Add to in-memory store
       if (!db.prompts) db.prompts = [];
       db.prompts.push(promptData);
     }
-    
+
     // Create conversation event
     const event = {
       id: crypto.randomUUID(),
@@ -347,130 +362,133 @@ function createMCPRoutes(deps) {
         conversation_id: conversation_id,
         conversation_title: conversation_title,
         message_count: messages.length,
-        metadata: metadata
-      })
+        metadata: metadata,
+      }),
     };
-    
+
     enqueue('event', event);
     updateWorkspaceData(workspacePath, null, event);
-    
+
     // Broadcast conversation update
     broadcastUpdate('conversation-update', {
       conversation_id: conversation_id,
       conversation_title: conversation_title,
       messages: savedPrompts,
-      metadata: metadata
+      metadata: metadata,
     });
-    
+
     // Broadcast to subscribed WebSocket clients
     if (broadcastConversationUpdate) {
       broadcastConversationUpdate(conversation_id, {
         conversation_id: conversation_id,
         conversation_title: conversation_title,
         messages: savedPrompts,
-        metadata: metadata
+        metadata: metadata,
       });
     }
-    
-    console.log(`[SUCCESS] MCP conversation logged: ${conversation_id} with ${messages.length} messages`);
-    
+
+    console.log(
+      `[SUCCESS] MCP conversation logged: ${conversation_id} with ${messages.length} messages`
+    );
+
     res.json({
       success: true,
       conversation_id: conversation_id,
       message_count: messages.length,
-      prompt_ids: savedPrompts.map(p => p.id)
+      prompt_ids: savedPrompts.map((p) => p.id),
     });
   });
 
   // Conversation streaming endpoint (OPTIONAL)
   app.post('/mcp/stream-conversation', (req, res) => {
     if (!isMCPEnabled()) {
-      return res.status(503).json({ 
-        success: false, 
+      return res.status(503).json({
+        success: false,
         error: 'MCP endpoints are disabled. Set enable_mcp: true in config.json to enable.',
-        note: 'MCP is an optional feature for external data collection. Database mode is the default.'
+        note: 'MCP is an optional feature for external data collection. Database mode is the default.',
       });
     }
-    
+
     const { conversation_id, enable = true } = req.body;
-    
+
     if (enable) {
       conversationStreams.set(conversation_id, {
         id: conversation_id,
         enabled: true,
         startTime: Date.now(),
-        messageCount: 0
+        messageCount: 0,
       });
       console.log(`[MCP] Conversation streaming enabled: ${conversation_id}`);
     } else {
       conversationStreams.delete(conversation_id);
       console.log(`[MCP] Conversation streaming disabled: ${conversation_id}`);
     }
-    
+
     res.json({ success: true, streaming: enable, conversation_id });
   });
 
   // Get active conversation streams (OPTIONAL)
   app.get('/mcp/streams', (req, res) => {
     if (!isMCPEnabled()) {
-      return res.status(503).json({ 
-        success: false, 
+      return res.status(503).json({
+        success: false,
         error: 'MCP endpoints are disabled. Set enable_mcp: true in config.json to enable.',
-        note: 'MCP is an optional feature for external data collection. Database mode is the default.'
+        note: 'MCP is an optional feature for external data collection. Database mode is the default.',
       });
     }
-    
+
     const streams = Array.from(conversationStreams.values());
     res.json({ success: true, streams: streams });
   });
 
   app.post('/mcp/log-event', (req, res) => {
     if (!isMCPEnabled()) {
-      return res.status(503).json({ 
-        success: false, 
+      return res.status(503).json({
+        success: false,
         error: 'MCP endpoints are disabled. Set enable_mcp: true in config.json to enable.',
-        note: 'MCP is an optional feature for external data collection. Database mode is the default.'
+        note: 'MCP is an optional feature for external data collection. Database mode is the default.',
       });
     }
-    
+
     checkSessionTimeout();
     updateActivityTime();
-    
+
     const { session_id, type, details, file_path, timestamp } = req.body;
-    
+
     // Detect workspace from file_path if provided, or use details
     let workspacePath = getCurrentWorkspace();
     const parsedDetails = typeof details === 'string' ? JSON.parse(details || '{}') : details;
     const eventFilePath = file_path || parsedDetails.file_path;
-    
+
     if (eventFilePath) {
       workspacePath = detectWorkspace(eventFilePath);
     }
     const workspaceSession = getWorkspaceSession(workspacePath);
-    
+
     const event = {
       id: crypto.randomUUID(),
       session_id: session_id || workspaceSession,
       workspace_path: workspacePath,
       timestamp: timestamp || new Date().toISOString(),
       type: type || 'unknown',
-      details: typeof details === 'string' ? details : JSON.stringify(details || {})
+      details: typeof details === 'string' ? details : JSON.stringify(details || {}),
     };
-    
+
     // Use enqueue function for reliable queuing
     enqueue('event', event);
-    
+
     // Update workspace data
     updateWorkspaceData(workspacePath, null, event);
-    
+
     // Broadcast real-time update
     broadcastUpdate('event', event);
-    
-    console.log(`[SUCCESS] MCP event added: ${event.id} - ${event.type} in workspace: ${workspacePath}`);
-    
+
+    console.log(
+      `[SUCCESS] MCP event added: ${event.id} - ${event.type} in workspace: ${workspacePath}`
+    );
+
     res.json({ success: true, event_id: event.id });
   });
 }
 
 module.exports = createMCPRoutes;
-

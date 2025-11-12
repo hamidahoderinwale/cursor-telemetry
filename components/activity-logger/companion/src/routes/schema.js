@@ -30,14 +30,14 @@ function createSchemaRoutes(deps) {
     try {
       const { tableName } = req.params;
       const columnDef = req.body;
-      
+
       if (!columnDef.name || !columnDef.type) {
         return res.status(400).json({
           success: false,
-          error: 'Column name and type are required'
+          error: 'Column name and type are required',
         });
       }
-      
+
       const result = await persistentDB.addColumn(tableName, columnDef);
       res.json({ success: true, data: result });
     } catch (error) {
@@ -53,7 +53,7 @@ function createSchemaRoutes(deps) {
       // workspaceId can be passed explicitly, or extracted from workspace query param
       const workspace = workspaceId || req.query.workspace || null;
       const includeGlobalConfigs = includeGlobal !== 'false'; // Default to true
-      
+
       const configs = await persistentDB.getCustomFieldConfigs(
         tableName || null,
         workspace || null,
@@ -69,33 +69,32 @@ function createSchemaRoutes(deps) {
   app.post('/api/schema/config/fields', async (req, res) => {
     try {
       const config = req.body;
-      
+
       if (!config.tableName || !config.fieldName || !config.fieldType) {
         return res.status(400).json({
           success: false,
-          error: 'tableName, fieldName, and fieldType are required'
+          error: 'tableName, fieldName, and fieldType are required',
         });
       }
-      
+
       // Extract workspace context from request
       // Priority: body.workspaceId > body.workspace > query.workspaceId > query.workspace
-      const workspaceId = config.workspaceId || 
-                         req.body.workspaceId || 
-                         req.query.workspaceId || 
-                         req.query.workspace || 
-                         null;
-      const workspacePath = config.workspacePath || 
-                           req.body.workspacePath || 
-                           req.query.workspacePath || 
-                           null;
-      
+      const workspaceId =
+        config.workspaceId ||
+        req.body.workspaceId ||
+        req.query.workspaceId ||
+        req.query.workspace ||
+        null;
+      const workspacePath =
+        config.workspacePath || req.body.workspacePath || req.query.workspacePath || null;
+
       // Add workspace context to config
       const configWithWorkspace = {
         ...config,
         workspaceId: workspaceId || null, // null means global config
-        workspacePath: workspacePath || null
+        workspacePath: workspacePath || null,
       };
-      
+
       const result = await persistentDB.saveCustomFieldConfig(configWithWorkspace);
       res.json({ success: true, data: result });
     } catch (error) {
@@ -107,19 +106,20 @@ function createSchemaRoutes(deps) {
   app.delete('/api/schema/config/fields/:tableName/:fieldName', async (req, res) => {
     try {
       const { tableName, fieldName } = req.params;
-      
+
       // Extract workspace context from request
       // If workspaceId is provided, only delete workspace-specific config
       // If not provided (or null), delete global config
-      const workspaceId = req.query.workspaceId || 
-                         req.query.workspace || 
-                         req.body.workspaceId || 
-                         req.body.workspace || 
-                         null;
-      
+      const workspaceId =
+        req.query.workspaceId ||
+        req.query.workspace ||
+        req.body.workspaceId ||
+        req.body.workspace ||
+        null;
+
       const result = await persistentDB.deleteCustomFieldConfig(
-        tableName, 
-        fieldName, 
+        tableName,
+        fieldName,
         workspaceId || null
       );
       res.json({ success: true, data: result });
@@ -131,4 +131,3 @@ function createSchemaRoutes(deps) {
 }
 
 module.exports = createSchemaRoutes;
-

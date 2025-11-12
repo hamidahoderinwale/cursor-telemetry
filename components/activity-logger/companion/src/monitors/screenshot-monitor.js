@@ -24,10 +24,10 @@ class ScreenshotMonitor {
    */
   findScreenshotPaths() {
     const basePath = path.join(os.homedir(), 'Library/Application Support/Cursor');
-    
+
     return {
       workspaceImages: path.join(basePath, 'User/workspaceStorage/images'),
-      history: path.join(basePath, 'User/History')
+      history: path.join(basePath, 'User/History'),
     };
   }
 
@@ -45,8 +45,8 @@ class ScreenshotMonitor {
         ignoreInitial: false, // Process existing screenshots
         awaitWriteFinish: {
           stabilityThreshold: 1000,
-          pollInterval: 100
-        }
+          pollInterval: 100,
+        },
       });
 
       workspaceWatcher
@@ -66,8 +66,8 @@ class ScreenshotMonitor {
         depth: 2, // Scan subdirectories
         awaitWriteFinish: {
           stabilityThreshold: 1000,
-          pollInterval: 100
-        }
+          pollInterval: 100,
+        },
       });
 
       historyWatcher
@@ -111,13 +111,13 @@ class ScreenshotMonitor {
 
       const stats = fs.statSync(filePath);
       const fileName = path.basename(filePath);
-      
+
       // Extract metadata from filename
       const metadata = this.extractScreenshotMetadata(fileName);
-      
+
       // Generate unique ID
       const screenshotId = crypto.randomUUID();
-      
+
       const screenshotData = {
         id: screenshotId,
         path: filePath,
@@ -125,7 +125,7 @@ class ScreenshotMonitor {
         source: source,
         timestamp: stats.birthtime || stats.mtime,
         size: stats.size,
-        ...metadata
+        ...metadata,
       };
 
       // Store screenshot data
@@ -149,8 +149,9 @@ class ScreenshotMonitor {
    */
   async handleScreenshotChanged(filePath, source) {
     try {
-      const existingScreenshot = Array.from(this.screenshots.values())
-        .find(s => s.path === filePath);
+      const existingScreenshot = Array.from(this.screenshots.values()).find(
+        (s) => s.path === filePath
+      );
 
       if (existingScreenshot) {
         const stats = fs.statSync(filePath);
@@ -175,8 +176,9 @@ class ScreenshotMonitor {
    * Handle screenshot deletion
    */
   handleScreenshotDeleted(filePath) {
-    const existingScreenshot = Array.from(this.screenshots.entries())
-      .find(([id, s]) => s.path === filePath);
+    const existingScreenshot = Array.from(this.screenshots.entries()).find(
+      ([id, s]) => s.path === filePath
+    );
 
     if (existingScreenshot) {
       const [id, data] = existingScreenshot;
@@ -199,7 +201,7 @@ class ScreenshotMonitor {
       isScreenshot: false,
       captureDate: null,
       uuid: null,
-      description: null
+      description: null,
     };
 
     // Check if it's a Cursor screenshot
@@ -207,10 +209,12 @@ class ScreenshotMonitor {
       metadata.isScreenshot = true;
 
       // Try to extract date
-      const dateMatch = fileName.match(/Screenshot (\d{4}-\d{2}-\d{2} at \d{1,2}\.\d{2}\.\d{2} [AP]M)/);
+      const dateMatch = fileName.match(
+        /Screenshot (\d{4}-\d{2}-\d{2} at \d{1,2}\.\d{2}\.\d{2} [AP]M)/
+      );
       if (dateMatch) {
         metadata.description = dateMatch[1];
-        
+
         // Parse date
         try {
           const dateStr = dateMatch[1].replace(/ at /, ' ').replace(/\./g, ':');
@@ -221,7 +225,9 @@ class ScreenshotMonitor {
       }
 
       // Extract UUID
-      const uuidMatch = fileName.match(/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/i);
+      const uuidMatch = fileName.match(
+        /([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/i
+      );
       if (uuidMatch) {
         metadata.uuid = uuidMatch[1];
       }
@@ -251,7 +257,7 @@ class ScreenshotMonitor {
    */
   getScreenshotsInRange(startTime, endTime) {
     return Array.from(this.screenshots.values())
-      .filter(s => {
+      .filter((s) => {
         const time = new Date(s.timestamp).getTime();
         return time >= startTime && time <= endTime;
       })
@@ -270,7 +276,7 @@ class ScreenshotMonitor {
       screenshot.linkedEvents.push({
         eventId: eventId,
         eventType: eventType,
-        linkedAt: Date.now()
+        linkedAt: Date.now(),
       });
       return true;
     }
@@ -283,7 +289,7 @@ class ScreenshotMonitor {
   findScreenshotsNearTime(timestamp, windowMs = 5 * 60 * 1000) {
     const targetTime = new Date(timestamp).getTime();
     return Array.from(this.screenshots.values())
-      .filter(s => {
+      .filter((s) => {
         const screenshotTime = new Date(s.timestamp).getTime();
         return Math.abs(screenshotTime - targetTime) <= windowMs;
       })
@@ -301,17 +307,21 @@ class ScreenshotMonitor {
     const screenshots = this.getAllScreenshots();
     return {
       total: screenshots.length,
-      workspace: screenshots.filter(s => s.source === 'workspace').length,
-      history: screenshots.filter(s => s.source === 'history').length,
+      workspace: screenshots.filter((s) => s.source === 'workspace').length,
+      history: screenshots.filter((s) => s.source === 'history').length,
       recent: this.getRecentScreenshots(5).length,
-      oldest: screenshots.length > 0 ? 
-        screenshots.reduce((oldest, s) => 
-          new Date(s.timestamp) < new Date(oldest.timestamp) ? s : oldest
-        ).timestamp : null,
-      newest: screenshots.length > 0 ? 
-        screenshots.reduce((newest, s) => 
-          new Date(s.timestamp) > new Date(newest.timestamp) ? s : newest
-        ).timestamp : null
+      oldest:
+        screenshots.length > 0
+          ? screenshots.reduce((oldest, s) =>
+              new Date(s.timestamp) < new Date(oldest.timestamp) ? s : oldest
+            ).timestamp
+          : null,
+      newest:
+        screenshots.length > 0
+          ? screenshots.reduce((newest, s) =>
+              new Date(s.timestamp) > new Date(newest.timestamp) ? s : newest
+            ).timestamp
+          : null,
     };
   }
 
@@ -320,11 +330,10 @@ class ScreenshotMonitor {
    */
   stop() {
     console.log('📷 Stopping screenshot monitor...');
-    this.watchers.forEach(watcher => watcher.close());
+    this.watchers.forEach((watcher) => watcher.close());
     this.watchers = [];
     console.log('[SUCCESS] Screenshot monitor stopped');
   }
 }
 
 module.exports = ScreenshotMonitor;
-

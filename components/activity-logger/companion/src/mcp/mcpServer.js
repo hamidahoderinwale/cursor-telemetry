@@ -17,15 +17,18 @@ class MCPServer {
     }
 
     console.log(' Starting MCP server...');
-    
+
     // Start the MCP server process
     this.process = spawn('node', ['src/mcp-handler.js'], {
       stdio: ['pipe', 'pipe', 'pipe'],
-      cwd: process.cwd()
+      cwd: process.cwd(),
     });
 
     this.process.stdout.on('data', (data) => {
-      const lines = data.toString().split('\n').filter(line => line.trim());
+      const lines = data
+        .toString()
+        .split('\n')
+        .filter((line) => line.trim());
       for (const line of lines) {
         try {
           const message = JSON.parse(line);
@@ -60,9 +63,9 @@ class MCPServer {
 
   handleMCPMessage(message) {
     const { method, params, id } = message;
-    
+
     console.log(` MCP message: ${method}`);
-    
+
     switch (method) {
       case 'logPromptResponse':
         this.handleLogPromptResponse(params);
@@ -86,15 +89,15 @@ class MCPServer {
 
   handleLogPromptResponse(params) {
     const { session_id, timestamp, file_path, prompt, response } = params;
-    
+
     // Update session info if provided
     if (session_id) {
       this.sessionId = session_id;
     }
-    
+
     // Update activity
     idleDetector.onUserActivity();
-    
+
     // Add to queue
     queue.addEntry({
       source: 'mcp',
@@ -102,21 +105,21 @@ class MCPServer {
       file_path: file_path || '',
       prompt: prompt || '',
       response: response || '',
-      notes: 'Logged via MCP'
+      notes: 'Logged via MCP',
     });
   }
 
   handleLogCodeChange(params) {
     const { session_id, timestamp, file_path, before_code, after_code } = params;
-    
+
     // Update session info if provided
     if (session_id) {
       this.sessionId = session_id;
     }
-    
+
     // Update activity
     idleDetector.onUserActivity();
-    
+
     // Add to queue
     queue.addEntry({
       source: 'mcp',
@@ -124,26 +127,26 @@ class MCPServer {
       file_path: file_path || '',
       before_code: before_code || '',
       after_code: after_code || '',
-      notes: 'Code change logged via MCP'
+      notes: 'Code change logged via MCP',
     });
   }
 
   handleLogEvent(params) {
     const { session_id, timestamp, type, details } = params;
-    
+
     // Update session info if provided
     if (session_id) {
       this.sessionId = session_id;
     }
-    
+
     // Update activity
     idleDetector.onUserActivity();
-    
+
     // Add to queue
     queue.addEvent({
       session_id: this.sessionId,
       type: type || 'unknown',
-      details: details || {}
+      details: details || {},
     });
   }
 
@@ -154,25 +157,25 @@ class MCPServer {
       result: {
         session_id: this.sessionId,
         name: this.sessionName || 'Unknown Session',
-        created_at: new Date().toISOString()
-      }
+        created_at: new Date().toISOString(),
+      },
     };
-    
+
     console.log(JSON.stringify(response));
   }
 
   handleSetConfig(params, id) {
     const { root_dir, ignore, diff_threshold } = params;
-    
+
     // Update configuration (this would need to be implemented)
     console.log(' MCP config update:', params);
-    
+
     const response = {
       jsonrpc: '2.0',
       id,
-      result: { success: true }
+      result: { success: true },
     };
-    
+
     console.log(JSON.stringify(response));
   }
 
@@ -180,7 +183,7 @@ class MCPServer {
     return {
       is_running: this.isRunning,
       session_id: this.sessionId,
-      session_name: this.sessionName
+      session_name: this.sessionName,
     };
   }
 }

@@ -144,22 +144,62 @@ async function initializeDashboard() {
 async function loadFromCache() {
   console.log('[PACKAGE] Loading from cache...');
   
-  const cached = await persistentStorage.getAll();
-  
-  if (cached.events && cached.events.length > 0) {
-    state.data.events = cached.events;
-    console.log(`[SUCCESS] Loaded ${cached.events.length} events from cache`);
+  // Check if persistentStorage is available
+  if (!persistentStorage) {
+    console.warn('[WARNING] PersistentStorage not available, skipping cache load');
+    // Initialize empty state and continue
+    if (!state.data) {
+      state.data = { events: [], prompts: [] };
+    }
+    return;
   }
   
-  if (cached.prompts && cached.prompts.length > 0) {
-    state.data.prompts = cached.prompts;
-    console.log(`[SUCCESS] Loaded ${cached.prompts.length} prompts from cache`);
-  }
-  
-  // Render with cached data immediately
-  if (state.data.events.length > 0 || state.data.prompts.length > 0) {
-    calculateStats();
-    await renderCurrentView();
+  try {
+    // Add timeout to prevent hanging
+    const cachePromise = persistentStorage.getAll();
+    const cacheTimeout = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Cache load timeout')), 3000)
+    );
+    
+    const cached = await Promise.race([cachePromise, cacheTimeout]);
+    
+    if (cached.events && cached.events.length > 0) {
+      state.data.events = cached.events;
+      console.log(`[SUCCESS] Loaded ${cached.events.length} events from cache`);
+    } else {
+      if (!state.data.events) {
+        state.data.events = [];
+      }
+      console.log('[CACHE] No events found in cache');
+    }
+    
+    if (cached.prompts && cached.prompts.length > 0) {
+      state.data.prompts = cached.prompts;
+      console.log(`[SUCCESS] Loaded ${cached.prompts.length} prompts from cache`);
+    } else {
+      if (!state.data.prompts) {
+        state.data.prompts = [];
+      }
+      console.log('[CACHE] No prompts found in cache');
+    }
+    
+    // Render with cached data immediately
+    if (state.data.events.length > 0 || state.data.prompts.length > 0) {
+      calculateStats();
+      await renderCurrentView();
+    }
+  } catch (error) {
+    console.warn('[WARNING] Cache load failed:', error.message);
+    // Initialize empty state and continue
+    if (!state.data) {
+      state.data = { events: [], prompts: [] };
+    }
+    if (!state.data.events) {
+      state.data.events = [];
+    }
+    if (!state.data.prompts) {
+      state.data.prompts = [];
+    }
   }
 }
 

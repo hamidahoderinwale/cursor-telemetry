@@ -26,9 +26,11 @@ class SessionManager {
   checkSessionTimeout() {
     const now = Date.now();
     const timeSinceLastActivity = now - this.lastActivityTime;
-    
+
     if (timeSinceLastActivity > this.SESSION_TIMEOUT) {
-      console.log(`[TIME] Session timeout reached (${Math.round(timeSinceLastActivity / 60000)} minutes), creating new session`);
+      console.log(
+        `[TIME] Session timeout reached (${Math.round(timeSinceLastActivity / 60000)} minutes), creating new session`
+      );
       this.createNewSession();
     }
   }
@@ -39,15 +41,15 @@ class SessionManager {
 
   detectWorkspace(filePath) {
     if (!filePath) return this.currentWorkspace;
-    
+
     let searchPath = path.isAbsolute(filePath) ? path.dirname(filePath) : path.resolve(filePath);
-    
+
     // First pass: look for .git directory (highest priority - marks the true project root)
     let currentSearch = searchPath;
     let gitRoot = null;
     const maxDepth = 15;
     let depth = 0;
-    
+
     while (currentSearch !== path.dirname(currentSearch) && depth < maxDepth) {
       const gitPath = path.join(currentSearch, '.git');
       if (fs.existsSync(gitPath)) {
@@ -57,19 +59,19 @@ class SessionManager {
       currentSearch = path.dirname(currentSearch);
       depth++;
     }
-    
+
     // If we found a git root, that's the workspace
     if (gitRoot) {
       this.knownWorkspaces.add(gitRoot);
       return gitRoot;
     }
-    
+
     // Second pass: if no .git found, look for other strong workspace indicators
     // but only at reasonably high levels (not deep nested directories)
     currentSearch = searchPath;
     depth = 0;
     const strongIndicators = ['.cursor', 'Cargo.toml', 'go.mod', 'requirements.txt', 'pom.xml'];
-    
+
     while (currentSearch !== path.dirname(currentSearch) && depth < maxDepth) {
       // Check for strong indicators
       for (const indicator of strongIndicators) {
@@ -77,7 +79,8 @@ class SessionManager {
         if (fs.existsSync(indicatorPath)) {
           // Only accept if it's at a reasonable level (not too deep)
           const parts = currentSearch.split(path.sep);
-          if (parts.length <= 7) { // Adjust based on typical depth
+          if (parts.length <= 7) {
+            // Adjust based on typical depth
             this.knownWorkspaces.add(currentSearch);
             return currentSearch;
           }
@@ -86,12 +89,14 @@ class SessionManager {
       currentSearch = path.dirname(currentSearch);
       depth++;
     }
-    
+
     // Third pass: look for well-known parent directories
     const parts = searchPath.split(path.sep);
     for (let i = parts.length - 1; i >= 3; i--) {
       const dirName = parts[i];
-      if (['Desktop', 'Documents', 'Projects', 'Code', 'dev', 'workspace', 'repos'].includes(dirName)) {
+      if (
+        ['Desktop', 'Documents', 'Projects', 'Code', 'dev', 'workspace', 'repos'].includes(dirName)
+      ) {
         // Take the directory right under this
         if (i + 1 < parts.length) {
           const workspacePath = parts.slice(0, i + 2).join(path.sep);
@@ -100,14 +105,14 @@ class SessionManager {
         }
       }
     }
-    
+
     // Last resort: use a reasonable parent (3-4 levels deep from root)
     if (parts.length > 4) {
       const workspacePath = parts.slice(0, 5).join(path.sep);
       this.knownWorkspaces.add(workspacePath);
       return workspacePath;
     }
-    
+
     this.knownWorkspaces.add(searchPath);
     return searchPath;
   }
@@ -124,10 +129,10 @@ class SessionManager {
       this.workspaceData.set(workspacePath, {
         entries: [],
         events: [],
-        lastActivity: Date.now()
+        lastActivity: Date.now(),
       });
     }
-    
+
     const data = this.workspaceData.get(workspacePath);
     if (entry) data.entries.push(entry);
     if (event) data.events.push(event);
@@ -144,4 +149,3 @@ class SessionManager {
 }
 
 module.exports = SessionManager;
-

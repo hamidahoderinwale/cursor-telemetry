@@ -19,13 +19,13 @@ class EnhancedMCPHandler {
 
   setupStdin() {
     let buffer = '';
-    
+
     stdin.on('data', (data) => {
       buffer += data.toString();
-      
+
       const lines = buffer.split('\n');
       buffer = lines.pop();
-      
+
       for (const line of lines) {
         if (line.trim()) {
           this.handleMessage(line.trim());
@@ -45,7 +45,7 @@ class EnhancedMCPHandler {
 
   processMessage(message) {
     const { method, params, id } = message;
-    
+
     switch (method) {
       case 'initialize':
         this.handleInitialize(id);
@@ -88,22 +88,22 @@ class EnhancedMCPHandler {
             promptResponse: true,
             codeChange: true,
             events: true,
-            streaming: true
+            streaming: true,
           },
           metadata: {
             contextUsage: true,
             linesChanged: true,
             aiMode: true,
-            conversationThreading: true
-          }
+            conversationThreading: true,
+          },
         },
         serverInfo: {
           name: 'cursor-companion-enhanced',
-          version: '2.0.0'
-        }
-      }
+          version: '2.0.0',
+        },
+      },
     };
-    
+
     this.sendResponse(response);
   }
 
@@ -118,7 +118,7 @@ class EnhancedMCPHandler {
       workspace_path,
       workspace_name,
       messages,
-      metadata = {}
+      metadata = {},
     } = params;
 
     if (session_id) {
@@ -132,7 +132,7 @@ class EnhancedMCPHandler {
         title: conversation_title,
         messages: messages || [],
         metadata,
-        lastUpdate: Date.now()
+        lastUpdate: Date.now(),
       });
     }
 
@@ -154,14 +154,14 @@ class EnhancedMCPHandler {
         finishReason: metadata.finishReason || metadata.finish_reason,
         thinkingTimeSeconds: metadata.thinkingTimeSeconds || metadata.thinking_time_seconds,
         contextFiles: metadata.contextFiles || metadata.context_files || [],
-        atFiles: metadata.atFiles || metadata.at_files || []
-      }
+        atFiles: metadata.atFiles || metadata.at_files || [],
+      },
     });
 
     this.sendResponse({
       jsonrpc: '2.0',
       id,
-      result: { success: true, conversation_id }
+      result: { success: true, conversation_id },
     });
   }
 
@@ -181,7 +181,7 @@ class EnhancedMCPHandler {
       prompt,
       response,
       message_role = 'user',
-      metadata = {}
+      metadata = {},
     } = params;
 
     if (session_id) {
@@ -195,17 +195,17 @@ class EnhancedMCPHandler {
         title: conversation_title,
         messages: [],
         metadata: {},
-        lastUpdate: Date.now()
+        lastUpdate: Date.now(),
       };
-      
+
       conv.messages.push({
         id: message_id,
         role: message_role,
         text: message_role === 'user' ? prompt : response,
         timestamp: timestamp || new Date().toISOString(),
-        metadata
+        metadata,
       });
-      
+
       if (conversation_title) conv.title = conversation_title;
       conv.lastUpdate = Date.now();
       this.conversations.set(conversation_id, conv);
@@ -236,14 +236,14 @@ class EnhancedMCPHandler {
         contextFiles: metadata.contextFiles || metadata.context_files || [],
         atFiles: metadata.atFiles || metadata.at_files || [],
         commandType: metadata.commandType || metadata.command_type,
-        generationUUID: metadata.generationUUID || metadata.generation_uuid
-      }
+        generationUUID: metadata.generationUUID || metadata.generation_uuid,
+      },
     });
 
     this.sendResponse({
       jsonrpc: '2.0',
       id,
-      result: { success: true, message_id }
+      result: { success: true, message_id },
     });
   }
 
@@ -259,7 +259,7 @@ class EnhancedMCPHandler {
       workspace_path,
       before_code,
       after_code,
-      metadata = {}
+      metadata = {},
     } = params;
 
     if (session_id) {
@@ -267,7 +267,8 @@ class EnhancedMCPHandler {
     }
 
     // Calculate diff metrics
-    const linesAdded = (after_code || '').split('\n').length - (before_code || '').split('\n').length;
+    const linesAdded =
+      (after_code || '').split('\n').length - (before_code || '').split('\n').length;
     const linesRemoved = Math.max(0, -linesAdded);
     const actualLinesAdded = Math.max(0, linesAdded);
 
@@ -283,14 +284,14 @@ class EnhancedMCPHandler {
         ...metadata,
         linesAdded: metadata.linesAdded || actualLinesAdded,
         linesRemoved: metadata.linesRemoved || linesRemoved,
-        diffSize: metadata.diffSize || (after_code || '').length - (before_code || '').length
-      }
+        diffSize: metadata.diffSize || (after_code || '').length - (before_code || '').length,
+      },
     });
 
     this.sendResponse({
       jsonrpc: '2.0',
       id,
-      result: { success: true }
+      result: { success: true },
     });
   }
 
@@ -309,13 +310,13 @@ class EnhancedMCPHandler {
       timestamp: timestamp || new Date().toISOString(),
       type: type || 'unknown',
       details: details || {},
-      file_path
+      file_path,
     });
 
     this.sendResponse({
       jsonrpc: '2.0',
       id,
-      result: { success: true }
+      result: { success: true },
     });
   }
 
@@ -329,8 +330,8 @@ class EnhancedMCPHandler {
       // Notify companion service to start streaming this conversation
       this.sendToCompanion('POST', '/mcp/stream-conversation', {
         conversation_id,
-        enable: true
-      }).catch(err => {
+        enable: true,
+      }).catch((err) => {
         console.error('[MCP] Failed to enable streaming:', err.message);
       });
     }
@@ -338,7 +339,7 @@ class EnhancedMCPHandler {
     this.sendResponse({
       jsonrpc: '2.0',
       id,
-      result: { success: true, streaming: enable }
+      result: { success: true, streaming: enable },
     });
   }
 
@@ -350,35 +351,35 @@ class EnhancedMCPHandler {
         session_id: this.sessionId,
         name: this.sessionName || 'Unknown Session',
         created_at: new Date().toISOString(),
-        active_conversations: Array.from(this.conversations.keys())
-      }
+        active_conversations: Array.from(this.conversations.keys()),
+      },
     });
   }
 
   handleSetConfig(params, id) {
-    this.sendToCompanion('POST', '/config', params).catch(err => {
+    this.sendToCompanion('POST', '/config', params).catch((err) => {
       console.error('[MCP] Failed to update config:', err.message);
     });
 
     this.sendResponse({
       jsonrpc: '2.0',
       id,
-      result: { success: true }
+      result: { success: true },
     });
   }
 
   async sendToCompanion(method, path, data) {
     try {
       const { default: fetch } = await import('node-fetch');
-      
+
       const response = await fetch(`${this.companionUrl}${path}`, {
         method,
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
         },
-        body: JSON.stringify(data)
+        body: JSON.stringify(data),
       });
-      
+
       if (!response.ok) {
         const errorText = await response.text();
         console.error(`[MCP] Companion API error: ${response.status} - ${errorText}`);
@@ -398,11 +399,10 @@ class EnhancedMCPHandler {
     this.sendResponse({
       jsonrpc: '2.0',
       id,
-      error: { code, message }
+      error: { code, message },
     });
   }
 }
 
 // Start the enhanced MCP handler
 new EnhancedMCPHandler();
-

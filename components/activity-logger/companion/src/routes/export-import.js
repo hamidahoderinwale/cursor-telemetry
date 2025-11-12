@@ -3,40 +3,44 @@
  */
 
 function createExportImportRoutes(deps) {
-  const {
-    app,
-    persistentDB,
-    db,
-    abstractionEngine,
-    schemaMigrations
-  } = deps;
+  const { app, persistentDB, db, abstractionEngine, schemaMigrations } = deps;
 
   // Streaming export handler for large datasets
   async function handleStreamingExport(req, res, options) {
     const {
-      limit, includeAllFields, since, until,
-      excludeEvents, excludePrompts, excludeTerminal, excludeContext,
-      noCodeDiffs, noLinkedData, noTemporalChunks,
-      abstractionLevel, abstractPrompts, extractPatterns,
-      fieldFilter // Pass field filter from main handler
+      limit,
+      includeAllFields,
+      since,
+      until,
+      excludeEvents,
+      excludePrompts,
+      excludeTerminal,
+      excludeContext,
+      noCodeDiffs,
+      noLinkedData,
+      noTemporalChunks,
+      abstractionLevel,
+      abstractPrompts,
+      extractPatterns,
+      fieldFilter, // Pass field filter from main handler
     } = options;
-    
+
     try {
       // Set headers for streaming
       res.setHeader('Content-Type', 'application/json');
       res.setHeader('Transfer-Encoding', 'chunked');
-      
+
       // Helper function to filter by date range
       const filterByDateRange = (items) => {
         if (!since && !until) return items;
-        return items.filter(item => {
+        return items.filter((item) => {
           const itemTime = new Date(item.timestamp).getTime();
           if (since && itemTime < since) return false;
           if (until && itemTime > until) return false;
           return true;
         });
       };
-      
+
       // Helper to filter object fields based on config (if fieldFilter provided)
       const filterFields = (obj, tableName) => {
         if (!fieldFilter || !fieldFilter.has(tableName)) return obj; // No config = export all
@@ -52,12 +56,12 @@ function createExportImportRoutes(deps) {
         }
         return filtered;
       };
-      
+
       // Helper to write JSON chunk
       const writeChunk = (chunk) => {
         res.write(chunk);
       };
-      
+
       // Helper to abstract entry if needed
       const processEntry = (entry) => {
         if (abstractionLevel > 0 && abstractionEngine) {
@@ -65,7 +69,7 @@ function createExportImportRoutes(deps) {
         }
         return entry;
       };
-      
+
       // Helper to abstract prompt if needed
       const processPrompt = (prompt) => {
         if (abstractionLevel > 0 && abstractionEngine) {
@@ -73,10 +77,11 @@ function createExportImportRoutes(deps) {
         }
         return prompt;
       };
-      
+
       // Calculate diff stats
       const calculateDiff = (before, after) => {
-        if (!before && !after) return { linesAdded: 0, linesRemoved: 0, charsAdded: 0, charsDeleted: 0 };
+        if (!before && !after)
+          return { linesAdded: 0, linesRemoved: 0, charsAdded: 0, charsDeleted: 0 };
         const beforeLines = (before || '').split('\n');
         const afterLines = (after || '').split('\n');
         const charsAdded = (after || '').length;
@@ -85,10 +90,10 @@ function createExportImportRoutes(deps) {
         const linesRemoved = Math.max(0, beforeLines.length - afterLines.length);
         return { linesAdded, linesRemoved, charsAdded, charsDeleted };
       };
-      
+
       // Start writing JSON structure
       writeChunk('{\n  "success": true,\n  "data": {\n');
-      
+
       // Get current schema version
       let schemaVersion = '1.0.0';
       try {
@@ -108,29 +113,41 @@ function createExportImportRoutes(deps) {
         fullExport: includeAllFields,
         dateRange: {
           since: since ? new Date(since).toISOString() : null,
-          until: until ? new Date(until).toISOString() : null
+          until: until ? new Date(until).toISOString() : null,
         },
         filters: {
-          excludeEvents, excludePrompts, excludeTerminal, excludeContext,
-          noCodeDiffs, noLinkedData, noTemporalChunks
+          excludeEvents,
+          excludePrompts,
+          excludeTerminal,
+          excludeContext,
+          noCodeDiffs,
+          noLinkedData,
+          noTemporalChunks,
         },
         streaming: true,
-        organization: 'Structured format with clear sections'
+        organization: 'Structured format with clear sections',
       };
-      writeChunk(`    "metadata": ${JSON.stringify(metadata, null, 2).split('\n').join('\n    ')},\n`);
-      
+      writeChunk(
+        `    "metadata": ${JSON.stringify(metadata, null, 2).split('\n').join('\n    ')},\n`
+      );
+
       // Stream entries in batches
       if (!excludeEvents) {
         writeChunk('    "entries": [\n');
         const batchSize = 100; // Process 100 entries at a time
         let processedCount = 0;
         let firstEntry = true;
-        
+
         // Get entries - use time range filtering if dates are provided
         let allEntries = [];
         if (since || until) {
           // Get all entries in time range at once (more efficient for date filtering)
-          allEntries = await persistentDB.getEntriesInTimeRange(since || 0, until || Date.now(), null, limit);
+          allEntries = await persistentDB.getEntriesInTimeRange(
+            since || 0,
+            until || Date.now(),
+            null,
+            limit
+          );
         } else {
           // Get entries in batches
           for (let offset = 0; offset < limit; offset += batchSize) {
@@ -141,21 +158,24 @@ function createExportImportRoutes(deps) {
           }
           allEntries = allEntries.slice(0, limit);
         }
-        
+
         // Process entries
         for (const entry of allEntries) {
           if (processedCount >= limit) break;
-          
+
           // Apply date range filter (in case database query didn't filter perfectly)
           const itemTime = new Date(entry.timestamp).getTime();
           if (since && itemTime < since) continue;
           if (until && itemTime > until) continue;
-          
+
           if (!firstEntry) writeChunk(',\n');
           firstEntry = false;
-          
+
           // Enrich entry
-          const diff = calculateDiff(entry.before_code || entry.before_content, entry.after_code || entry.after_content);
+          const diff = calculateDiff(
+            entry.before_code || entry.before_content,
+            entry.after_code || entry.after_content
+          );
           const enriched = {
             ...entry,
             diff_stats: {
@@ -163,10 +183,10 @@ function createExportImportRoutes(deps) {
               lines_removed: diff.linesRemoved,
               chars_added: diff.charsAdded,
               chars_deleted: diff.charsDeleted,
-              has_diff: !!(entry.before_code || entry.after_code)
-            }
+              has_diff: !!(entry.before_code || entry.after_code),
+            },
           };
-          
+
           // Only include code diffs if requested
           if (noCodeDiffs) {
             enriched.before_code = '';
@@ -174,39 +194,43 @@ function createExportImportRoutes(deps) {
             enriched.before_content = '';
             enriched.after_content = '';
           }
-          
+
           // Apply abstraction
           const processed = processEntry(enriched);
-          
+
           // Filter fields based on schema config (entries table)
           const filtered = filterFields(processed, 'entries');
-          
+
           writeChunk('      ' + JSON.stringify(filtered).split('\n').join('\n      '));
           processedCount++;
-          
+
           // Flush periodically
           if (processedCount % (batchSize * 10) === 0) {
-            await new Promise(resolve => setImmediate(resolve));
+            await new Promise((resolve) => setImmediate(resolve));
           }
         }
-        
+
         writeChunk('\n    ],\n');
       } else {
         writeChunk('    "entries": [],\n');
       }
-      
+
       // Stream prompts in batches
       if (!excludePrompts) {
         writeChunk('    "prompts": [\n');
         const batchSize = 100;
         let processedCount = 0;
         let firstPrompt = true;
-        
+
         // Use time range filtering if dates are provided
         let allPrompts = [];
         if (since || until) {
           // Get all prompts in time range at once (more efficient for date filtering)
-          allPrompts = await persistentDB.getPromptsInTimeRange(since || 0, until || Date.now(), limit);
+          allPrompts = await persistentDB.getPromptsInTimeRange(
+            since || 0,
+            until || Date.now(),
+            limit
+          );
         } else {
           // Get recent prompts in batches
           for (let offset = 0; offset < limit; offset += batchSize) {
@@ -217,89 +241,98 @@ function createExportImportRoutes(deps) {
           }
           allPrompts = allPrompts.slice(0, limit);
         }
-        
+
         // Process prompts
         for (const prompt of allPrompts) {
           if (processedCount >= limit) break;
-          
+
           // Apply date range filter (in case database query didn't filter perfectly)
           const itemTime = new Date(prompt.timestamp).getTime();
           if (since && itemTime < since) continue;
           if (until && itemTime > until) continue;
-          
+
           if (!firstPrompt) writeChunk(',\n');
           firstPrompt = false;
-          
+
           const processed = processPrompt(prompt);
-          
+
           // Filter fields based on schema config (prompts table)
           const filtered = filterFields(processed, 'prompts');
-          
+
           writeChunk('      ' + JSON.stringify(filtered).split('\n').join('\n      '));
           processedCount++;
-          
+
           // Flush periodically
           if (processedCount % (batchSize * 10) === 0) {
-            await new Promise(resolve => setImmediate(resolve));
+            await new Promise((resolve) => setImmediate(resolve));
           }
         }
-        
+
         writeChunk('\n    ],\n');
       } else {
         writeChunk('    "prompts": [],\n');
       }
-      
+
       // Stream terminal commands (smaller, can batch)
       if (!excludeTerminal) {
         writeChunk('    "terminal_commands": [\n');
         const commands = await persistentDB.getAllTerminalCommands(Math.min(limit, 10000));
         const filteredCommands = filterByDateRange(commands);
         let firstCmd = true;
-        
+
         for (const cmd of filteredCommands.slice(0, limit)) {
           if (!firstCmd) writeChunk(',\n');
           firstCmd = false;
-          
+
           // Filter fields based on schema config (terminal_commands table)
           const filtered = filterFields(cmd, 'terminal_commands');
-          
+
           writeChunk('      ' + JSON.stringify(filtered).split('\n').join('\n      '));
         }
-        
+
         writeChunk('\n    ],\n');
       } else {
         writeChunk('    "terminal_commands": [],\n');
       }
-      
+
       // Context snapshots (smaller dataset)
       if (!excludeContext) {
         writeChunk('    "context_snapshots": [\n');
-        const snapshots = await persistentDB.getContextSnapshots({ since: since || 0, limit: Math.min(limit, 10000) });
+        const snapshots = await persistentDB.getContextSnapshots({
+          since: since || 0,
+          limit: Math.min(limit, 10000),
+        });
         const filteredSnapshots = filterByDateRange(snapshots);
         let firstSnapshot = true;
-        
+
         for (const snapshot of filteredSnapshots.slice(0, limit)) {
           if (!firstSnapshot) writeChunk(',\n');
           firstSnapshot = false;
-          
+
           // Filter fields based on schema config (context_snapshots table)
           const filtered = filterFields(snapshot, 'context_snapshots');
-          
+
           writeChunk('      ' + JSON.stringify(filtered).split('\n').join('\n      '));
         }
-        
+
         writeChunk('\n    ],\n');
       } else {
         writeChunk('    "context_snapshots": [],\n');
       }
-      
+
       // Context analytics (small, can load all)
       const contextAnalytics = await persistentDB.getContextAnalytics();
-      writeChunk(`    "context_analytics": ${JSON.stringify(contextAnalytics).split('\n').join('\n    ')},\n`);
-      
+      writeChunk(
+        `    "context_analytics": ${JSON.stringify(contextAnalytics).split('\n').join('\n    ')},\n`
+      );
+
       // Workspaces (small)
-      writeChunk(`    "workspaces": ${JSON.stringify(db.workspaces || []).split('\n').join('\n    ')},\n`);
-      
+      writeChunk(
+        `    "workspaces": ${JSON.stringify(db.workspaces || [])
+          .split('\n')
+          .join('\n    ')},\n`
+      );
+
       // Stats (computed)
       const stats = {
         sessions: 0, // Would need to compute
@@ -307,16 +340,15 @@ function createExportImportRoutes(deps) {
         aiInteractions: 0,
         totalActivities: 0,
         terminalCommands: 0,
-        avgContextUsage: contextAnalytics.avgContextUtilization || 0
+        avgContextUsage: contextAnalytics.avgContextUtilization || 0,
       };
       writeChunk(`    "stats": ${JSON.stringify(stats).split('\n').join('\n    ')}\n`);
-      
+
       // Close JSON
       writeChunk('\n  }\n}');
-      
+
       res.end();
       console.log(`[STREAM] Streaming export completed`);
-      
     } catch (error) {
       console.error('Error in streaming export:', error);
       // Try to close JSON properly on error
@@ -333,33 +365,35 @@ function createExportImportRoutes(deps) {
   app.get('/api/export/database', async (req, res) => {
     try {
       console.log(' Export request received');
-      
+
       // Check if streaming is requested
       const useStreaming = req.query.stream === 'true' || req.query.streaming === 'true';
       const streamThreshold = parseInt(req.query.stream_threshold) || 5000; // Stream if > 5000 items
-      
+
       // Parse query parameters
       const limit = parseInt(req.query.limit) || 1000;
       const includeAllFields = req.query.full === 'true';
-      
+
       // Get custom field configurations for export filtering
       let fieldConfigs = [];
       try {
         fieldConfigs = await persistentDB.getCustomFieldConfigs(null, null, true);
-        console.log(`[EXPORT] Loaded ${fieldConfigs.length} field configurations for export filtering`);
+        console.log(
+          `[EXPORT] Loaded ${fieldConfigs.length} field configurations for export filtering`
+        );
       } catch (err) {
         console.warn('[EXPORT] Could not load field configs, exporting all fields:', err.message);
       }
-      
+
       // Build field filter map: table -> field -> enabled
       const fieldFilter = new Map();
-      fieldConfigs.forEach(config => {
+      fieldConfigs.forEach((config) => {
         if (!fieldFilter.has(config.table_name)) {
           fieldFilter.set(config.table_name, new Map());
         }
         fieldFilter.get(config.table_name).set(config.field_name, config.enabled === 1);
       });
-      
+
       // Helper to filter object fields based on config
       const filterFields = (obj, tableName) => {
         if (!fieldFilter.has(tableName)) return obj; // No config = export all
@@ -375,7 +409,7 @@ function createExportImportRoutes(deps) {
         }
         return filtered;
       };
-      
+
       // Parse date strings - handle both ISO date strings (YYYY-MM-DD) and timestamps
       let since = null;
       let until = null;
@@ -399,107 +433,146 @@ function createExportImportRoutes(deps) {
           until = date.getTime();
         }
       }
-      
+
       // Type filters
       const excludeEvents = req.query.exclude_events === 'true';
       const excludePrompts = req.query.exclude_prompts === 'true';
       const excludeTerminal = req.query.exclude_terminal === 'true';
       const excludeContext = req.query.exclude_context === 'true';
-      
+
       // Options
       const noCodeDiffs = req.query.no_code_diffs === 'true';
       const noLinkedData = req.query.no_linked_data === 'true';
       const noTemporalChunks = req.query.no_temporal_chunks === 'true';
-      
+
       // Abstraction level (new)
-      const abstractionLevel = parseInt(req.query.abstraction_level || req.query.abstractionLevel || '0');
-      const abstractPrompts = req.query.abstract_prompts === 'true' || req.query.abstractPrompts === 'true';
-      const extractPatterns = req.query.extract_patterns === 'true' || req.query.extractPatterns === 'true';
-      
-      console.log(`[EXPORT] Limit: ${limit}, Since: ${since ? new Date(since).toISOString() : 'all'}, Until: ${until ? new Date(until).toISOString() : 'all'}`);
-      console.log(`[EXPORT] Exclude: events=${excludeEvents}, prompts=${excludePrompts}, terminal=${excludeTerminal}, context=${excludeContext}`);
-      console.log(`[EXPORT] Abstraction Level: ${abstractionLevel}, Abstract Prompts: ${abstractPrompts}, Extract Patterns: ${extractPatterns}`);
-      console.log(`[EXPORT] Streaming: ${useStreaming || limit > streamThreshold} (threshold: ${streamThreshold})`);
-      
+      const abstractionLevel = parseInt(
+        req.query.abstraction_level || req.query.abstractionLevel || '0'
+      );
+      const abstractPrompts =
+        req.query.abstract_prompts === 'true' || req.query.abstractPrompts === 'true';
+      const extractPatterns =
+        req.query.extract_patterns === 'true' || req.query.extractPatterns === 'true';
+
+      console.log(
+        `[EXPORT] Limit: ${limit}, Since: ${since ? new Date(since).toISOString() : 'all'}, Until: ${until ? new Date(until).toISOString() : 'all'}`
+      );
+      console.log(
+        `[EXPORT] Exclude: events=${excludeEvents}, prompts=${excludePrompts}, terminal=${excludeTerminal}, context=${excludeContext}`
+      );
+      console.log(
+        `[EXPORT] Abstraction Level: ${abstractionLevel}, Abstract Prompts: ${abstractPrompts}, Extract Patterns: ${extractPatterns}`
+      );
+      console.log(
+        `[EXPORT] Streaming: ${useStreaming || limit > streamThreshold} (threshold: ${streamThreshold})`
+      );
+
       // Use streaming for large exports or if explicitly requested
       if (useStreaming || limit > streamThreshold) {
         return handleStreamingExport(req, res, {
-          limit, includeAllFields, since, until,
-          excludeEvents, excludePrompts, excludeTerminal, excludeContext,
-          noCodeDiffs, noLinkedData, noTemporalChunks,
-          abstractionLevel, abstractPrompts, extractPatterns,
-          fieldFilter // Pass field filter to streaming handler
+          limit,
+          includeAllFields,
+          since,
+          until,
+          excludeEvents,
+          excludePrompts,
+          excludeTerminal,
+          excludeContext,
+          noCodeDiffs,
+          noLinkedData,
+          noTemporalChunks,
+          abstractionLevel,
+          abstractPrompts,
+          extractPatterns,
+          fieldFilter, // Pass field filter to streaming handler
         });
       }
-      
+
       // Helper function to filter by date range
       const filterByDateRange = (items) => {
         if (!since && !until) return items;
-        return items.filter(item => {
+        return items.filter((item) => {
           const itemTime = new Date(item.timestamp).getTime();
           if (since && itemTime < since) return false;
           if (until && itemTime > until) return false;
           return true;
         });
       };
-      
+
       // Gather data from database with limits and filters
       const promises = [];
-      
+
       if (!excludeEvents) {
         // Use time range filtering if dates are provided, otherwise get entries with code
         if (since || until) {
-          promises.push(persistentDB.getEntriesInTimeRange(since || 0, until || Date.now(), null, Math.min(limit, 10000)));
+          promises.push(
+            persistentDB.getEntriesInTimeRange(
+              since || 0,
+              until || Date.now(),
+              null,
+              Math.min(limit, 10000)
+            )
+          );
         } else {
           promises.push(persistentDB.getEntriesWithCode(Math.min(limit, 10000)));
         }
       } else {
         promises.push(Promise.resolve([]));
       }
-      
+
       if (!excludePrompts) {
         // Use time range filtering if dates are provided, otherwise get recent prompts
         if (since || until) {
-          promises.push(persistentDB.getPromptsInTimeRange(since || 0, until || Date.now(), Math.min(limit, 10000)));
+          promises.push(
+            persistentDB.getPromptsInTimeRange(
+              since || 0,
+              until || Date.now(),
+              Math.min(limit, 10000)
+            )
+          );
         } else {
           promises.push(persistentDB.getRecentPrompts(Math.min(limit, 10000)));
         }
       } else {
         promises.push(Promise.resolve([]));
       }
-      
+
       if (!excludeEvents) {
         promises.push(persistentDB.getAllEvents());
       } else {
         promises.push(Promise.resolve([]));
       }
-      
+
       if (!excludeTerminal) {
         promises.push(persistentDB.getAllTerminalCommands(Math.min(limit, 10000)));
       } else {
         promises.push(Promise.resolve([]));
       }
-      
+
       if (!excludeContext) {
-        promises.push(persistentDB.getContextSnapshots({ since: since || 0, limit: Math.min(limit, 10000) }));
+        promises.push(
+          persistentDB.getContextSnapshots({ since: since || 0, limit: Math.min(limit, 10000) })
+        );
       } else {
         promises.push(Promise.resolve([]));
       }
-      
+
       promises.push(persistentDB.getContextAnalytics());
-      
-      const [entries, prompts, events, terminalCommands, contextSnapshots, contextAnalytics] = await Promise.all(promises);
-      
+
+      const [entries, prompts, events, terminalCommands, contextSnapshots, contextAnalytics] =
+        await Promise.all(promises);
+
       // Apply date range filtering
       const filteredEntries = filterByDateRange(entries);
       const filteredPrompts = filterByDateRange(prompts);
       const filteredEvents = filterByDateRange(events);
       const filteredTerminalCommands = filterByDateRange(terminalCommands);
       const filteredContextSnapshots = filterByDateRange(contextSnapshots);
-      
+
       // Calculate diff stats for entries with code
       const calculateDiff = (before, after) => {
-        if (!before && !after) return { linesAdded: 0, linesRemoved: 0, charsAdded: 0, charsDeleted: 0 };
+        if (!before && !after)
+          return { linesAdded: 0, linesRemoved: 0, charsAdded: 0, charsDeleted: 0 };
         const beforeLines = (before || '').split('\n');
         const afterLines = (after || '').split('\n');
         const charsAdded = (after || '').length;
@@ -509,10 +582,13 @@ function createExportImportRoutes(deps) {
         const linesRemoved = Math.max(0, beforeLines.length - afterLines.length);
         return { linesAdded, linesRemoved, charsAdded, charsDeleted };
       };
-      
+
       // Enrich entries with diff stats and ensure code diffs are included
-      const enrichedEntries = filteredEntries.map(entry => {
-        const diff = calculateDiff(entry.before_code || entry.before_content, entry.after_code || entry.after_content);
+      const enrichedEntries = filteredEntries.map((entry) => {
+        const diff = calculateDiff(
+          entry.before_code || entry.before_content,
+          entry.after_code || entry.after_content
+        );
         const enriched = {
           ...entry,
           // Add computed diff stats
@@ -521,10 +597,10 @@ function createExportImportRoutes(deps) {
             lines_removed: diff.linesRemoved,
             chars_added: diff.charsAdded,
             chars_deleted: diff.charsDeleted,
-            has_diff: !!(entry.before_code || entry.after_code)
-          }
+            has_diff: !!(entry.before_code || entry.after_code),
+          },
         };
-        
+
         // Only include code diffs if requested
         if (!noCodeDiffs) {
           enriched.before_code = entry.before_code || entry.before_content || '';
@@ -538,23 +614,23 @@ function createExportImportRoutes(deps) {
           enriched.before_content = '';
           enriched.after_content = '';
         }
-        
+
         return enriched;
       });
-      
+
       // Create linked data structure: group prompts with their code changes
       const linkedData = [];
       const unlinkedEntries = [];
       const unlinkedPrompts = [];
-      
+
       // Build lookup maps for fast access
-      const promptMap = new Map(filteredPrompts.map(p => [p.id, p]));
-      const entryMap = new Map(enrichedEntries.map(e => [e.id, e]));
-      
+      const promptMap = new Map(filteredPrompts.map((p) => [p.id, p]));
+      const entryMap = new Map(enrichedEntries.map((e) => [e.id, e]));
+
       // Only build linked data if requested
       if (!noLinkedData) {
         // Group linked prompts and entries
-        enrichedEntries.forEach(entry => {
+        enrichedEntries.forEach((entry) => {
           if (entry.prompt_id) {
             const prompt = promptMap.get(entry.prompt_id);
             if (prompt) {
@@ -566,8 +642,8 @@ function createExportImportRoutes(deps) {
                 relationship: {
                   prompt_id: prompt.id,
                   entry_id: entry.id,
-                  link_type: 'entry_to_prompt'
-                }
+                  link_type: 'entry_to_prompt',
+                },
               });
             } else {
               unlinkedEntries.push(entry);
@@ -576,15 +652,15 @@ function createExportImportRoutes(deps) {
             unlinkedEntries.push(entry);
           }
         });
-        
+
         // Add prompts that link to entries (reverse direction)
-        filteredPrompts.forEach(prompt => {
+        filteredPrompts.forEach((prompt) => {
           if (prompt.linked_entry_id || prompt.linkedEntryId) {
             const entryId = prompt.linked_entry_id || prompt.linkedEntryId;
             const entry = entryMap.get(entryId);
             // Only add if not already in linkedData
-            const alreadyLinked = linkedData.some(link => 
-              link.prompt.id === prompt.id && link.code_change.id === entryId
+            const alreadyLinked = linkedData.some(
+              (link) => link.prompt.id === prompt.id && link.code_change.id === entryId
             );
             if (entry && !alreadyLinked) {
               linkedData.push({
@@ -595,41 +671,41 @@ function createExportImportRoutes(deps) {
                 relationship: {
                   prompt_id: prompt.id,
                   entry_id: entry.id,
-                  link_type: 'prompt_to_entry'
-                }
+                  link_type: 'prompt_to_entry',
+                },
               });
             }
-          } else if (!linkedData.some(link => link.prompt.id === prompt.id)) {
+          } else if (!linkedData.some((link) => link.prompt.id === prompt.id)) {
             unlinkedPrompts.push(prompt);
           }
         });
       } else {
         // If no linked data requested, mark all as unlinked
-        enrichedEntries.forEach(entry => {
+        enrichedEntries.forEach((entry) => {
           if (!entry.prompt_id) {
             unlinkedEntries.push(entry);
           }
         });
-        filteredPrompts.forEach(prompt => {
+        filteredPrompts.forEach((prompt) => {
           if (!prompt.linked_entry_id && !prompt.linkedEntryId) {
             unlinkedPrompts.push(prompt);
           }
         });
       }
-      
+
       // Sort linked data by timestamp
       linkedData.sort((a, b) => new Date(b.linked_at) - new Date(a.linked_at));
-      
+
       // ============================================
       // NEW: Create temporal chunks/sessions
       // Groups prompts, code changes, and metadata by time proximity
       // ============================================
       const temporalChunks = [];
       const timeWindowMs = 5 * 60 * 1000; // 5 minutes
-      
+
       // Combine all items with timestamps for temporal grouping
       const allTemporalItems = [
-        ...enrichedEntries.map(e => ({
+        ...enrichedEntries.map((e) => ({
           type: 'code_change',
           item: e,
           timestamp: new Date(e.timestamp).getTime(),
@@ -645,10 +721,10 @@ function createExportImportRoutes(deps) {
             session_id: e.session_id,
             tags: e.tags || [],
             notes: e.notes,
-            type: e.type
-          }
+            type: e.type,
+          },
         })),
-        ...filteredPrompts.map(p => ({
+        ...filteredPrompts.map((p) => ({
           type: 'prompt',
           item: p,
           timestamp: new Date(p.timestamp).getTime(),
@@ -656,7 +732,7 @@ function createExportImportRoutes(deps) {
           workspace_path: p.workspace_path,
           model_info: {
             model_type: p.model_type || p.modelType,
-            model_name: p.model_name || p.modelName
+            model_name: p.model_name || p.modelName,
           },
           diff_stats: null,
           before_code: null,
@@ -674,10 +750,10 @@ function createExportImportRoutes(deps) {
             lines_removed: p.lines_removed || p.linesRemoved,
             conversation_title: p.conversation_title || p.conversationTitle,
             message_role: p.message_role || p.messageRole,
-            thinking_time: p.thinking_time || p.thinkingTime
-          }
+            thinking_time: p.thinking_time || p.thinkingTime,
+          },
         })),
-        ...filteredTerminalCommands.map(cmd => ({
+        ...filteredTerminalCommands.map((cmd) => ({
           type: 'terminal_command',
           item: cmd,
           timestamp: new Date(cmd.timestamp).getTime(),
@@ -695,18 +771,18 @@ function createExportImportRoutes(deps) {
             source: cmd.source,
             duration: cmd.duration,
             linked_entry_id: cmd.linked_entry_id,
-            linked_prompt_id: cmd.linked_prompt_id
-          }
-        }))
-      ].filter(item => item.timestamp > 0); // Filter invalid timestamps
-      
+            linked_prompt_id: cmd.linked_prompt_id,
+          },
+        })),
+      ].filter((item) => item.timestamp > 0); // Filter invalid timestamps
+
       // Sort by timestamp
       allTemporalItems.sort((a, b) => a.timestamp - b.timestamp);
-      
+
       // Group into temporal chunks
       let currentChunk = null;
-      allTemporalItems.forEach(item => {
-        if (!currentChunk || (item.timestamp - currentChunk.end_time) > timeWindowMs) {
+      allTemporalItems.forEach((item) => {
+        if (!currentChunk || item.timestamp - currentChunk.end_time > timeWindowMs) {
           // Start new chunk
           if (currentChunk) {
             temporalChunks.push(currentChunk);
@@ -727,35 +803,41 @@ function createExportImportRoutes(deps) {
               total_lines_added: 0,
               total_lines_removed: 0,
               total_chars_added: 0,
-              total_chars_deleted: 0
-            }
+              total_chars_deleted: 0,
+            },
           };
         }
-        
+
         // Add item to current chunk
         currentChunk.items.push(item);
         currentChunk.end_time = Math.max(currentChunk.end_time, item.timestamp);
-        currentChunk.duration_seconds = Math.round((currentChunk.end_time - currentChunk.start_time) / 1000);
-        
+        currentChunk.duration_seconds = Math.round(
+          (currentChunk.end_time - currentChunk.start_time) / 1000
+        );
+
         // Track workspace
         if (item.workspace_path) {
           currentChunk.workspace_paths.add(item.workspace_path);
         }
-        
+
         // Track files
         if (item.file_path) {
           currentChunk.files_changed.add(item.file_path);
         }
-        
+
         // Track models
         if (item.model_info) {
           const modelName = item.model_info.model_name || item.model_info.modelName;
           const modelType = item.model_info.model_type || item.model_info.modelType;
           if (modelName || modelType) {
-            currentChunk.models_used.add(modelType && modelName ? `${modelType}/${modelName}` : (modelName || modelType || 'Unknown'));
+            currentChunk.models_used.add(
+              modelType && modelName
+                ? `${modelType}/${modelName}`
+                : modelName || modelType || 'Unknown'
+            );
           }
         }
-        
+
         // Update summary
         if (item.type === 'prompt') currentChunk.summary.prompts++;
         if (item.type === 'code_change') {
@@ -769,30 +851,32 @@ function createExportImportRoutes(deps) {
         }
         if (item.type === 'terminal_command') currentChunk.summary.terminal_commands++;
       });
-      
+
       // Add final chunk
       if (currentChunk) {
         temporalChunks.push(currentChunk);
       }
-      
+
       // Convert Sets to Arrays for JSON serialization and add linked relationships
-      const enrichedChunks = temporalChunks.map(chunk => {
+      const enrichedChunks = temporalChunks.map((chunk) => {
         // Find linked relationships within this chunk
         const relationships = [];
-        chunk.items.forEach(item => {
+        chunk.items.forEach((item) => {
           if (item.type === 'code_change' && item.prompt_id) {
-            const linkedPrompt = chunk.items.find(i => i.type === 'prompt' && i.prompt_id === item.prompt_id);
+            const linkedPrompt = chunk.items.find(
+              (i) => i.type === 'prompt' && i.prompt_id === item.prompt_id
+            );
             if (linkedPrompt) {
               relationships.push({
                 type: 'prompt_to_code',
                 prompt_id: item.prompt_id,
                 code_change_id: item.item.id,
-                time_gap_seconds: Math.abs((item.timestamp - linkedPrompt.timestamp) / 1000)
+                time_gap_seconds: Math.abs((item.timestamp - linkedPrompt.timestamp) / 1000),
               });
             }
           }
         });
-        
+
         return {
           ...chunk,
           start_time: new Date(chunk.start_time).toISOString(),
@@ -802,38 +886,44 @@ function createExportImportRoutes(deps) {
           models_used: Array.from(chunk.models_used),
           relationships: relationships,
           // Include full items with all metadata
-          items: chunk.items.map(i => ({
+          items: chunk.items.map((i) => ({
             type: i.type,
             id: i.item.id,
             timestamp: new Date(i.timestamp).toISOString(),
             // Code change metadata
-            ...(i.type === 'code_change' ? {
-              file_path: i.file_path,
-              before_code: i.before_code,
-              after_code: i.after_code,
-              diff_stats: i.diff_stats,
-              model_info: i.model_info,
-              prompt_id: i.prompt_id,
-              metadata: i.metadata
-            } : {}),
+            ...(i.type === 'code_change'
+              ? {
+                  file_path: i.file_path,
+                  before_code: i.before_code,
+                  after_code: i.after_code,
+                  diff_stats: i.diff_stats,
+                  model_info: i.model_info,
+                  prompt_id: i.prompt_id,
+                  metadata: i.metadata,
+                }
+              : {}),
             // Prompt metadata
-            ...(i.type === 'prompt' ? {
-              text: i.item.text || i.item.prompt || i.item.content,
-              workspace_path: i.workspace_path,
-              model_info: i.model_info,
-              metadata: i.metadata
-            } : {}),
+            ...(i.type === 'prompt'
+              ? {
+                  text: i.item.text || i.item.prompt || i.item.content,
+                  workspace_path: i.workspace_path,
+                  model_info: i.model_info,
+                  metadata: i.metadata,
+                }
+              : {}),
             // Terminal command metadata
-            ...(i.type === 'terminal_command' ? {
-              command: i.metadata.command,
-              workspace_path: i.workspace_path,
-              exit_code: i.metadata.exit_code,
-              metadata: i.metadata
-            } : {})
-          }))
+            ...(i.type === 'terminal_command'
+              ? {
+                  command: i.metadata.command,
+                  workspace_path: i.workspace_path,
+                  exit_code: i.metadata.exit_code,
+                  metadata: i.metadata,
+                }
+              : {}),
+          })),
         };
       });
-      
+
       // Get current schema version
       let schemaVersion = '1.0.0';
       try {
@@ -851,16 +941,16 @@ function createExportImportRoutes(deps) {
         metadata: {
           // Export identification
           exportedAt: new Date().toISOString(),
-          version: '2.5',  // Bumped for better organization
+          version: '2.5', // Bumped for better organization
           schema_version: schemaVersion,
           exportFormat: 'structured', // 'structured' or 'flat' (for backward compatibility)
-          
+
           // Export configuration
           exportLimit: limit,
           fullExport: includeAllFields,
           dateRange: {
             since: since ? new Date(since).toISOString() : null,
-            until: until ? new Date(until).toISOString() : null
+            until: until ? new Date(until).toISOString() : null,
           },
           filters: {
             excludeEvents,
@@ -869,9 +959,9 @@ function createExportImportRoutes(deps) {
             excludeContext,
             noCodeDiffs,
             noLinkedData,
-            noTemporalChunks
+            noTemporalChunks,
           },
-          
+
           // Data counts (quick reference)
           counts: {
             entries: enrichedEntries.length,
@@ -881,21 +971,21 @@ function createExportImportRoutes(deps) {
             contextSnapshots: filteredContextSnapshots.length,
             linkedPairs: linkedData.length,
             temporalChunks: noTemporalChunks ? 0 : enrichedChunks.length,
-            workspaces: (db.workspaces || []).length
+            workspaces: (db.workspaces || []).length,
           },
-          
+
           // Export notes
           note: limit < 10000 ? 'Limited export - use ?limit=10000 for more data' : 'Full export',
-          organization: 'Structured format with clear sections for easy navigation'
+          organization: 'Structured format with clear sections for easy navigation',
         },
-        
+
         // ============================================
         // CORE DATA SECTION - Primary data arrays
         // Organized by data type for easy access
         // ============================================
         data: {
           // File/Code changes (entries)
-          codeChanges: enrichedEntries.map(e => ({
+          codeChanges: enrichedEntries.map((e) => ({
             id: e.id,
             timestamp: e.timestamp,
             file_path: e.file_path || e.filePath,
@@ -906,18 +996,20 @@ function createExportImportRoutes(deps) {
             prompt_id: e.prompt_id || e.promptId, // Link to prompt if available
             diff_stats: e.diff_stats,
             // Code content (only if not excluded)
-            ...(noCodeDiffs ? {} : {
-              before_code: e.before_code || e.before_content || '',
-              after_code: e.after_code || e.after_content || ''
-            }),
+            ...(noCodeDiffs
+              ? {}
+              : {
+                  before_code: e.before_code || e.before_content || '',
+                  after_code: e.after_code || e.after_content || '',
+                }),
             // Additional metadata
             tags: e.tags || [],
             notes: e.notes,
-            modelInfo: e.modelInfo || e.model_info
+            modelInfo: e.modelInfo || e.model_info,
           })),
-          
+
           // AI Prompts
-          prompts: filteredPrompts.map(p => ({
+          prompts: filteredPrompts.map((p) => ({
             id: p.id,
             timestamp: p.timestamp,
             text: p.text || p.prompt || p.content || p.preview || '',
@@ -940,21 +1032,21 @@ function createExportImportRoutes(deps) {
             lines_added: p.lines_added || p.linesAdded || 0,
             lines_removed: p.lines_removed || p.linesRemoved || 0,
             thinking_time: p.thinking_time || p.thinkingTime,
-            composer_id: p.composer_id || p.composerId
+            composer_id: p.composer_id || p.composerId,
           })),
-          
+
           // Activity Events (general activity tracking)
-          events: filteredEvents.map(e => ({
+          events: filteredEvents.map((e) => ({
             id: e.id,
             timestamp: e.timestamp,
             type: e.type || 'activity',
             workspace_path: e.workspace_path || e.workspacePath,
             session_id: e.session_id || e.sessionId,
-            details: e.details || {}
+            details: e.details || {},
           })),
-          
+
           // Terminal Commands
-          terminalCommands: filteredTerminalCommands.map(cmd => ({
+          terminalCommands: filteredTerminalCommands.map((cmd) => ({
             id: cmd.id,
             timestamp: cmd.timestamp,
             command: cmd.command,
@@ -966,62 +1058,71 @@ function createExportImportRoutes(deps) {
             output: cmd.output,
             error: cmd.error,
             linked_entry_id: cmd.linked_entry_id || cmd.linkedEntryId,
-            linked_prompt_id: cmd.linked_prompt_id || cmd.linkedPromptId
+            linked_prompt_id: cmd.linked_prompt_id || cmd.linkedPromptId,
           })),
-          
+
           // Context Snapshots
-          contextSnapshots: filteredContextSnapshots.map(snapshot => ({
+          contextSnapshots: filteredContextSnapshots.map((snapshot) => ({
             id: snapshot.id,
             timestamp: snapshot.timestamp,
             prompt_id: snapshot.prompt_id || snapshot.promptId,
             file_count: snapshot.current_file_count || snapshot.currentFileCount || 0,
             added_files: snapshot.addedFiles || [],
             removed_files: snapshot.removedFiles || [],
-            net_change: snapshot.netChange || 0
-          }))
+            net_change: snapshot.netChange || 0,
+          })),
         },
-        
+
         // ============================================
         // RELATIONSHIPS SECTION - How data connects
         // ============================================
         relationships: {
           // Explicit prompt-to-code links (when prompt_id is set)
-          linkedPairs: noLinkedData ? [] : linkedData.map(link => ({
-            prompt_id: link.prompt.id,
-            code_change_id: link.code_change.id,
-            linked_at: link.linked_at,
-            relationship_type: link.relationship.link_type,
-            // Quick reference (not full objects to avoid duplication)
-            prompt_timestamp: link.prompt.timestamp,
-            code_change_timestamp: link.code_change.timestamp,
-            time_gap_seconds: Math.abs(
-              (new Date(link.code_change.timestamp).getTime() - 
-               new Date(link.prompt.timestamp).getTime()) / 1000
-            )
-          })),
-          
+          linkedPairs: noLinkedData
+            ? []
+            : linkedData.map((link) => ({
+                prompt_id: link.prompt.id,
+                code_change_id: link.code_change.id,
+                linked_at: link.linked_at,
+                relationship_type: link.relationship.link_type,
+                // Quick reference (not full objects to avoid duplication)
+                prompt_timestamp: link.prompt.timestamp,
+                code_change_timestamp: link.code_change.timestamp,
+                time_gap_seconds: Math.abs(
+                  (new Date(link.code_change.timestamp).getTime() -
+                    new Date(link.prompt.timestamp).getTime()) /
+                    1000
+                ),
+              })),
+
           // Items without explicit links (for analysis)
           unlinked: {
-            codeChanges: unlinkedEntries.filter(e => !e.prompt_id).map(e => e.id),
-            prompts: unlinkedPrompts.map(p => p.id),
-            note: 'These items have no explicit prompt_id/linked_entry_id links. They may be related by timestamp proximity in temporal_chunks.'
-          }
+            codeChanges: unlinkedEntries.filter((e) => !e.prompt_id).map((e) => e.id),
+            prompts: unlinkedPrompts.map((p) => p.id),
+            note: 'These items have no explicit prompt_id/linked_entry_id links. They may be related by timestamp proximity in temporal_chunks.',
+          },
         },
-        
+
         // ============================================
         // CONVERSATION HIERARCHY - Full workspace → conversation → tabs → prompts structure
         // ============================================
         conversationHierarchy: (() => {
           // Build hierarchy: Workspace → Conversation → Tabs/Threads → Prompts
           const workspaceMap = new Map();
-          
-          filteredPrompts.forEach(prompt => {
-            const workspaceId = prompt.workspace_id || prompt.workspaceId || 
-                               prompt.workspace_path || prompt.workspacePath || 
-                               'unknown';
-            const workspaceName = prompt.workspace_name || prompt.workspaceName || 
-                                 (workspaceId.split('/').pop() || 'Unknown');
-            
+
+          filteredPrompts.forEach((prompt) => {
+            const workspaceId =
+              prompt.workspace_id ||
+              prompt.workspaceId ||
+              prompt.workspace_path ||
+              prompt.workspacePath ||
+              'unknown';
+            const workspaceName =
+              prompt.workspace_name ||
+              prompt.workspaceName ||
+              workspaceId.split('/').pop() ||
+              'Unknown';
+
             if (!workspaceMap.has(workspaceId)) {
               workspaceMap.set(workspaceId, {
                 id: workspaceId,
@@ -1031,36 +1132,37 @@ function createExportImportRoutes(deps) {
                 metadata: {
                   totalPrompts: 0,
                   totalConversations: 0,
-                  lastActivity: null
-                }
+                  lastActivity: null,
+                },
               });
             }
-            
+
             const workspace = workspaceMap.get(workspaceId);
             workspace.metadata.totalPrompts++;
-            
-            if (!workspace.metadata.lastActivity || 
-                new Date(prompt.timestamp) > new Date(workspace.metadata.lastActivity)) {
+
+            if (
+              !workspace.metadata.lastActivity ||
+              new Date(prompt.timestamp) > new Date(workspace.metadata.lastActivity)
+            ) {
               workspace.metadata.lastActivity = prompt.timestamp;
             }
-            
+
             // Group by conversation
-            const conversationId = prompt.conversation_id || 
-                                   prompt.conversationId || 
-                                   prompt.composer_id ||
-                                   prompt.composerId ||
-                                   `${workspaceId}_${(prompt.id || Date.now())}`;
-            
-            const parentConversationId = prompt.parent_conversation_id || 
-                                        prompt.parentConversationId || 
-                                        null;
-            
+            const conversationId =
+              prompt.conversation_id ||
+              prompt.conversationId ||
+              prompt.composer_id ||
+              prompt.composerId ||
+              `${workspaceId}_${prompt.id || Date.now()}`;
+
+            const parentConversationId =
+              prompt.parent_conversation_id || prompt.parentConversationId || null;
+
             if (!workspace.conversations.has(conversationId)) {
               workspace.conversations.set(conversationId, {
                 id: conversationId,
-                title: prompt.conversation_title || 
-                       prompt.conversationTitle || 
-                       'Untitled Conversation',
+                title:
+                  prompt.conversation_title || prompt.conversationTitle || 'Untitled Conversation',
                 workspaceId: workspaceId,
                 workspaceName: workspace.name,
                 tabs: new Map(),
@@ -1074,14 +1176,14 @@ function createExportImportRoutes(deps) {
                   lastMessage: null,
                   duration: null,
                   models: new Set(),
-                  contextFiles: new Set()
-                }
+                  contextFiles: new Set(),
+                },
               });
             }
-            
+
             const conversation = workspace.conversations.get(conversationId);
             conversation.allPrompts.push(prompt);
-            
+
             // Handle tabs/threads
             if (parentConversationId && parentConversationId !== conversationId) {
               if (!conversation.tabs.has(parentConversationId)) {
@@ -1092,26 +1194,30 @@ function createExportImportRoutes(deps) {
                   metadata: {
                     messageCount: 0,
                     firstMessage: null,
-                    lastMessage: null
-                  }
+                    lastMessage: null,
+                  },
                 });
               }
               const tab = conversation.tabs.get(parentConversationId);
               tab.prompts.push(prompt);
               tab.metadata.messageCount++;
-              
-              if (!tab.metadata.firstMessage || 
-                  new Date(prompt.timestamp) < new Date(tab.metadata.firstMessage)) {
+
+              if (
+                !tab.metadata.firstMessage ||
+                new Date(prompt.timestamp) < new Date(tab.metadata.firstMessage)
+              ) {
                 tab.metadata.firstMessage = prompt.timestamp;
               }
-              if (!tab.metadata.lastMessage || 
-                  new Date(prompt.timestamp) > new Date(tab.metadata.lastMessage)) {
+              if (
+                !tab.metadata.lastMessage ||
+                new Date(prompt.timestamp) > new Date(tab.metadata.lastMessage)
+              ) {
                 tab.metadata.lastMessage = prompt.timestamp;
               }
             } else {
               conversation.rootPrompts.push(prompt);
             }
-            
+
             // Update conversation metadata
             conversation.metadata.messageCount++;
             if (prompt.message_role === 'user' || !prompt.message_role) {
@@ -1119,24 +1225,28 @@ function createExportImportRoutes(deps) {
             } else if (prompt.message_role === 'assistant') {
               conversation.metadata.assistantMessageCount++;
             }
-            
-            if (!conversation.metadata.firstMessage || 
-                new Date(prompt.timestamp) < new Date(conversation.metadata.firstMessage)) {
+
+            if (
+              !conversation.metadata.firstMessage ||
+              new Date(prompt.timestamp) < new Date(conversation.metadata.firstMessage)
+            ) {
               conversation.metadata.firstMessage = prompt.timestamp;
             }
-            if (!conversation.metadata.lastMessage || 
-                new Date(prompt.timestamp) > new Date(conversation.metadata.lastMessage)) {
+            if (
+              !conversation.metadata.lastMessage ||
+              new Date(prompt.timestamp) > new Date(conversation.metadata.lastMessage)
+            ) {
               conversation.metadata.lastMessage = prompt.timestamp;
             }
-            
+
             if (prompt.model_name || prompt.modelName) {
               conversation.metadata.models.add(prompt.model_name || prompt.modelName);
             }
           });
-          
+
           // Calculate durations and convert Sets to Arrays
-          workspaceMap.forEach(workspace => {
-            workspace.conversations.forEach(conv => {
+          workspaceMap.forEach((workspace) => {
+            workspace.conversations.forEach((conv) => {
               if (conv.metadata.firstMessage && conv.metadata.lastMessage) {
                 const start = new Date(conv.metadata.firstMessage).getTime();
                 const end = new Date(conv.metadata.lastMessage).getTime();
@@ -1147,71 +1257,73 @@ function createExportImportRoutes(deps) {
               workspace.metadata.totalConversations++;
             });
           });
-          
+
           // Convert to serializable structure
-          return Array.from(workspaceMap.values()).map(ws => ({
+          return Array.from(workspaceMap.values()).map((ws) => ({
             id: ws.id,
             name: ws.name,
             path: ws.path,
-            conversations: Array.from(ws.conversations.values()).map(conv => ({
+            conversations: Array.from(ws.conversations.values()).map((conv) => ({
               id: conv.id,
               title: conv.title,
               workspaceId: conv.workspaceId,
               workspaceName: conv.workspaceName,
-              tabs: Array.from(conv.tabs.values()).map(tab => ({
+              tabs: Array.from(conv.tabs.values()).map((tab) => ({
                 id: tab.id,
                 title: tab.title,
-                promptIds: tab.prompts.map(p => p.id),
-                metadata: tab.metadata
+                promptIds: tab.prompts.map((p) => p.id),
+                metadata: tab.metadata,
               })),
-              rootPromptIds: conv.rootPrompts.map(p => p.id),
-              allPromptIds: conv.allPrompts.map(p => p.id),
+              rootPromptIds: conv.rootPrompts.map((p) => p.id),
+              allPromptIds: conv.allPrompts.map((p) => p.id),
               metadata: {
                 ...conv.metadata,
                 models: conv.metadata.models,
-                contextFiles: conv.metadata.contextFiles
-              }
+                contextFiles: conv.metadata.contextFiles,
+              },
             })),
-            metadata: ws.metadata
+            metadata: ws.metadata,
           }));
         })(),
-        
+
         // ============================================
         // TEMPORAL ORGANIZATION - Time-grouped activity
         // Groups related activity by time windows
         // ============================================
-        ...(noTemporalChunks ? {} : {
-          temporalChunks: enrichedChunks.map(chunk => ({
-            id: chunk.id,
-            start_time: chunk.start_time,
-            end_time: chunk.end_time,
-            duration_seconds: chunk.duration_seconds,
-            // Summary statistics
-            summary: chunk.summary,
-            // Workspaces involved
-            workspaces: chunk.workspace_paths,
-            // Files changed
-            files_changed: chunk.files_changed,
-            // Models used
-            models_used: chunk.models_used,
-            // Relationships within chunk
-            relationships: chunk.relationships,
-            // Item references (IDs only to avoid duplication)
-            item_ids: chunk.items.map(i => ({
-              type: i.type,
-              id: i.id,
-              timestamp: i.timestamp
-            }))
-          }))
-        }),
-        
+        ...(noTemporalChunks
+          ? {}
+          : {
+              temporalChunks: enrichedChunks.map((chunk) => ({
+                id: chunk.id,
+                start_time: chunk.start_time,
+                end_time: chunk.end_time,
+                duration_seconds: chunk.duration_seconds,
+                // Summary statistics
+                summary: chunk.summary,
+                // Workspaces involved
+                workspaces: chunk.workspace_paths,
+                // Files changed
+                files_changed: chunk.files_changed,
+                // Models used
+                models_used: chunk.models_used,
+                // Relationships within chunk
+                relationships: chunk.relationships,
+                // Item references (IDs only to avoid duplication)
+                item_ids: chunk.items.map((i) => ({
+                  type: i.type,
+                  id: i.id,
+                  timestamp: i.timestamp,
+                })),
+              })),
+            }),
+
         // ============================================
         // ANALYTICS & STATISTICS SECTION
         // ============================================
         analytics: {
           // Context analytics
           context: contextAnalytics,
-          
+
           // Overall statistics
           statistics: {
             totalSessions: enrichedEntries.length,
@@ -1220,19 +1332,20 @@ function createExportImportRoutes(deps) {
             totalEvents: filteredEvents.length,
             totalTerminalCommands: filteredTerminalCommands.length,
             avgContextUsage: contextAnalytics.avgContextUtilization || 0,
-            linkingRate: enrichedEntries.length > 0 
-              ? ((linkedData.length / enrichedEntries.length) * 100).toFixed(1) + '%'
-              : '0%',
-            linkedPairs: linkedData.length
+            linkingRate:
+              enrichedEntries.length > 0
+                ? ((linkedData.length / enrichedEntries.length) * 100).toFixed(1) + '%'
+                : '0%',
+            linkedPairs: linkedData.length,
           },
-          
+
           // Workspace information
-          workspaces: (db.workspaces || []).map(ws => ({
+          workspaces: (db.workspaces || []).map((ws) => ({
             path: ws,
-            name: ws.split('/').pop() || ws
-          }))
+            name: ws.split('/').pop() || ws,
+          })),
         },
-        
+
         // ============================================
         // BACKWARD COMPATIBILITY SECTION
         // Flat arrays for legacy code that expects them
@@ -1248,8 +1361,8 @@ function createExportImportRoutes(deps) {
           workspaces: db.workspaces || [],
           context_analytics: contextAnalytics,
           unlinked: {
-            entries: unlinkedEntries.filter(e => !e.prompt_id),
-            prompts: unlinkedPrompts
+            entries: unlinkedEntries.filter((e) => !e.prompt_id),
+            prompts: unlinkedPrompts,
           },
           stats: {
             sessions: enrichedEntries.length,
@@ -1259,37 +1372,39 @@ function createExportImportRoutes(deps) {
             terminalCommands: filteredTerminalCommands.length,
             avgContextUsage: contextAnalytics.avgContextUtilization || 0,
             linkedPairs: linkedData.length,
-            linkingRate: enrichedEntries.length > 0 
-              ? ((linkedData.length / enrichedEntries.length) * 100).toFixed(1) + '%'
-              : '0%'
-          }
-        }
+            linkingRate:
+              enrichedEntries.length > 0
+                ? ((linkedData.length / enrichedEntries.length) * 100).toFixed(1) + '%'
+                : '0%',
+          },
+        },
       };
-      
+
       // Apply abstraction if level > 0
       let finalExportData = exportData;
       if (abstractionLevel > 0) {
         console.log(`[ABSTRACTION] Applying level ${abstractionLevel} abstraction...`);
         finalExportData = abstractionEngine.abstractExportData(exportData, abstractionLevel, {
           abstractPrompts: abstractPrompts || abstractionLevel >= 2,
-          extractPatterns: extractPatterns || abstractionLevel >= 3
+          extractPatterns: extractPatterns || abstractionLevel >= 3,
         });
         console.log(`[ABSTRACTION] Abstraction applied successfully`);
       }
-      
-      console.log(`[SUCCESS] Exported ${enrichedEntries.length} entries (${linkedData.length} linked to prompts), ${filteredPrompts.length} prompts, ${filteredEvents.length} events, ${filteredTerminalCommands.length} terminal commands, ${filteredContextSnapshots.length} context snapshots`);
-      
+
+      console.log(
+        `[SUCCESS] Exported ${enrichedEntries.length} entries (${linkedData.length} linked to prompts), ${filteredPrompts.length} prompts, ${filteredEvents.length} events, ${filteredTerminalCommands.length} terminal commands, ${filteredContextSnapshots.length} context snapshots`
+      );
+
       res.json({
         success: true,
         schema_version: schemaVersion,
-        data: finalExportData
+        data: finalExportData,
       });
-      
     } catch (error) {
       console.error('Error exporting database:', error);
-      res.status(500).json({ 
-        success: false, 
-        error: error.message 
+      res.status(500).json({
+        success: false,
+        error: error.message,
       });
     }
   });
@@ -1298,28 +1413,28 @@ function createExportImportRoutes(deps) {
   app.post('/api/import/database', async (req, res) => {
     try {
       console.log('[IMPORT] Import request received');
-      
+
       const importData = req.body;
-      
+
       // Validate import data structure
       if (!importData || !importData.data) {
         return res.status(400).json({
           success: false,
-          error: 'Invalid import data: missing "data" field'
+          error: 'Invalid import data: missing "data" field',
         });
       }
-      
+
       const data = importData.data;
       const options = req.body.options || {};
       const {
-        overwrite = false,  // If true, overwrite existing records; if false, skip duplicates
-        skipLinkedData = false,  // Skip linked_data and temporal_chunks if present
-        dryRun = false,  // If true, validate but don't import
-        workspaceFilter = null,  // If set, only import data for this workspace
-        mergeStrategy = 'skip',  // 'skip', 'overwrite', 'merge', 'append'
-        workspaceMappings = {}  // Map imported workspace paths to local paths
+        overwrite = false, // If true, overwrite existing records; if false, skip duplicates
+        skipLinkedData = false, // Skip linked_data and temporal_chunks if present
+        dryRun = false, // If true, validate but don't import
+        workspaceFilter = null, // If set, only import data for this workspace
+        mergeStrategy = 'skip', // 'skip', 'overwrite', 'merge', 'append'
+        workspaceMappings = {}, // Map imported workspace paths to local paths
       } = options;
-      
+
       // Normalize data structure - handle both new structured format and legacy format
       let normalizedData = data;
       if (data.data && data.metadata) {
@@ -1335,15 +1450,15 @@ function createExportImportRoutes(deps) {
           // Fall back to legacy if structured is empty
           ...(data._legacy || {}),
           // Preserve other sections
-          workspaces: data.analytics?.workspaces?.map(w => w.path) || data.workspaces || [],
-          context_analytics: data.analytics?.context || data.context_analytics
+          workspaces: data.analytics?.workspaces?.map((w) => w.path) || data.workspaces || [],
+          context_analytics: data.analytics?.context || data.context_analytics,
         };
       } else if (data.entries || data.prompts) {
         // Legacy format (v2.4 and earlier) - use as-is
         console.log('[IMPORT] Detected legacy export format');
         normalizedData = data;
       }
-      
+
       // Helper to apply workspace mappings
       const mapWorkspace = (workspacePath) => {
         if (!workspacePath) return workspacePath;
@@ -1361,73 +1476,90 @@ function createExportImportRoutes(deps) {
       }
 
       // Detect import schema version
-      const importSchemaVersion = 
-        importData.schema_version || 
-        importData.metadata?.schema_version || 
-        data.metadata?.schema_version || 
+      const importSchemaVersion =
+        importData.schema_version ||
+        importData.metadata?.schema_version ||
+        data.metadata?.schema_version ||
         '1.0.0';
-      
-      console.log(`[IMPORT] Schema versions - Import: ${importSchemaVersion}, Current: ${currentSchemaVersion}`);
-      
+
+      console.log(
+        `[IMPORT] Schema versions - Import: ${importSchemaVersion}, Current: ${currentSchemaVersion}`
+      );
+
       // Schema compatibility check and migration
       const schemaCompatible = importSchemaVersion === currentSchemaVersion;
       if (!schemaCompatible) {
-        console.log(`[IMPORT] Schema version mismatch detected - will normalize data during import`);
-        
+        console.log(
+          `[IMPORT] Schema version mismatch detected - will normalize data during import`
+        );
+
         // Run migrations if needed (migrate to current version)
         if (!dryRun) {
           try {
             const migrationResult = await schemaMigrations.migrate();
             if (migrationResult.migrations.length > 0) {
-              console.log(`[IMPORT] Schema migrations completed: ${migrationResult.migrations.length} migration(s) applied`);
+              console.log(
+                `[IMPORT] Schema migrations completed: ${migrationResult.migrations.length} migration(s) applied`
+              );
             }
           } catch (migrationErr) {
             console.warn(`[IMPORT] Schema migration warning:`, migrationErr.message);
           }
         }
-        
+
         // Normalize data structure
         try {
-          const normalizedData = await schemaMigrations.normalizeData(data, importSchemaVersion, currentSchemaVersion);
+          const normalizedData = await schemaMigrations.normalizeData(
+            data,
+            importSchemaVersion,
+            currentSchemaVersion
+          );
           Object.assign(data, normalizedData);
         } catch (normalizeErr) {
           console.warn(`[IMPORT] Data normalization warning:`, normalizeErr.message);
         }
       }
-      
+
       // Log audit event for import start
       if (!dryRun) {
-        await persistentDB.logAuditEvent('Import started', 'import', {
-          workspaceId: workspaceFilter,
-          importVersion: importSchemaVersion,
-          currentVersion: currentSchemaVersion,
-          mergeStrategy,
-          overwrite,
-          status: 'in_progress'
-        }).catch(err => console.warn('[IMPORT] Could not log audit event:', err.message));
+        await persistentDB
+          .logAuditEvent('Import started', 'import', {
+            workspaceId: workspaceFilter,
+            importVersion: importSchemaVersion,
+            currentVersion: currentSchemaVersion,
+            mergeStrategy,
+            overwrite,
+            status: 'in_progress',
+          })
+          .catch((err) => console.warn('[IMPORT] Could not log audit event:', err.message));
       }
-      
+
       const stats = {
         entries: { imported: 0, skipped: 0, errors: 0 },
         prompts: { imported: 0, skipped: 0, errors: 0 },
         events: { imported: 0, skipped: 0, errors: 0 },
         terminalCommands: { imported: 0, skipped: 0, errors: 0 },
         contextSnapshots: { imported: 0, skipped: 0, errors: 0 },
-        workspaces: { imported: 0, skipped: 0, errors: 0 }
+        workspaces: { imported: 0, skipped: 0, errors: 0 },
       };
-      
+
       // Helper to check if record exists and apply merge strategy
       const shouldImport = async (table, item) => {
         if (mergeStrategy === 'append') return true; // Always import with append
-        
+
         // Filter by workspace if specified
         if (workspaceFilter) {
-          const itemWorkspace = item.workspaceId || item.workspace_id || item.workspace_path || item.workspacePath;
-          if (itemWorkspace && !itemWorkspace.includes(workspaceFilter) && !workspaceFilter.includes(itemWorkspace)) {
+          const itemWorkspace =
+            item.workspaceId || item.workspace_id || item.workspace_path || item.workspacePath;
+          if (
+            itemWorkspace &&
+            !itemWorkspace.includes(workspaceFilter) &&
+            !workspaceFilter.includes(itemWorkspace)
+          ) {
             return false; // Skip items not matching workspace filter
           }
         }
-        
+
         try {
           let existing = null;
           if (table === 'entries') {
@@ -1435,11 +1567,14 @@ function createExportImportRoutes(deps) {
           } else if (table === 'prompts') {
             existing = await persistentDB.getPromptById(item.id);
           }
-          
+
           if (!existing) return true; // New item, import it
-          
+
           // Item exists, apply merge strategy
-          if (mergeStrategy === 'skip' || (!overwrite && mergeStrategy !== 'overwrite' && mergeStrategy !== 'merge')) {
+          if (
+            mergeStrategy === 'skip' ||
+            (!overwrite && mergeStrategy !== 'overwrite' && mergeStrategy !== 'merge')
+          ) {
             return false; // Skip existing
           } else if (mergeStrategy === 'overwrite' || overwrite) {
             return true; // Overwrite existing
@@ -1448,17 +1583,17 @@ function createExportImportRoutes(deps) {
             Object.assign(item, existing, item);
             return true;
           }
-          
+
           return false;
         } catch (err) {
           return true; // On error, try to import
         }
       };
-      
+
       // Import entries
       if (data.entries && Array.isArray(data.entries)) {
         console.log(`[IMPORT] Processing ${data.entries.length} entries...`);
-        
+
         for (const entry of data.entries) {
           try {
             if (!dryRun) {
@@ -1467,7 +1602,7 @@ function createExportImportRoutes(deps) {
                 stats.entries.skipped++;
                 continue;
               }
-              
+
               // Normalize entry data
               const originalWorkspace = entry.workspace_path || entry.workspacePath;
               const normalizedEntry = {
@@ -1483,9 +1618,9 @@ function createExportImportRoutes(deps) {
                 tags: entry.tags,
                 prompt_id: entry.prompt_id || entry.promptId,
                 modelInfo: entry.modelInfo || entry.model_info,
-                type: entry.type || 'file_change'
+                type: entry.type || 'file_change',
               };
-              
+
               await persistentDB.saveEntry(normalizedEntry);
               stats.entries.imported++;
             } else {
@@ -1497,11 +1632,11 @@ function createExportImportRoutes(deps) {
           }
         }
       }
-      
+
       // Import prompts
       if (data.prompts && Array.isArray(data.prompts)) {
         console.log(`[IMPORT] Processing ${data.prompts.length} prompts...`);
-        
+
         for (const prompt of data.prompts) {
           try {
             if (!dryRun) {
@@ -1510,9 +1645,10 @@ function createExportImportRoutes(deps) {
                 stats.prompts.skipped++;
                 continue;
               }
-              
+
               // Normalize prompt data
-              const originalPromptWorkspace = prompt.workspace_path || prompt.workspacePath || prompt.workspaceId;
+              const originalPromptWorkspace =
+                prompt.workspace_path || prompt.workspacePath || prompt.workspaceId;
               const normalizedPrompt = {
                 id: prompt.id,
                 timestamp: prompt.timestamp,
@@ -1547,20 +1683,25 @@ function createExportImportRoutes(deps) {
                 conversationTitle: prompt.conversationTitle || prompt.conversation_title,
                 messageRole: prompt.messageRole || prompt.message_role,
                 parentConversationId: prompt.parentConversationId || prompt.parent_conversation_id,
-                conversationId: prompt.conversationId || prompt.composerId || prompt.parentConversationId,
-                conversationIndex: prompt.conversationIndex || prompt.conversation_index
+                conversationId:
+                  prompt.conversationId || prompt.composerId || prompt.parentConversationId,
+                conversationIndex: prompt.conversationIndex || prompt.conversation_index,
               };
-              
+
               // Update conversation metadata if conversation_id is set
               if (normalizedPrompt.conversationId && normalizedPrompt.workspaceId) {
-                await persistentDB.updateConversationMetadata(
-                  normalizedPrompt.conversationId,
-                  normalizedPrompt.workspaceId,
-                  normalizedPrompt.workspacePath,
-                  normalizedPrompt.conversationTitle
-                ).catch(err => console.warn('[IMPORT] Could not update conversation:', err.message));
+                await persistentDB
+                  .updateConversationMetadata(
+                    normalizedPrompt.conversationId,
+                    normalizedPrompt.workspaceId,
+                    normalizedPrompt.workspacePath,
+                    normalizedPrompt.conversationTitle
+                  )
+                  .catch((err) =>
+                    console.warn('[IMPORT] Could not update conversation:', err.message)
+                  );
               }
-              
+
               await persistentDB.savePrompt(normalizedPrompt);
               stats.prompts.imported++;
             } else {
@@ -1572,11 +1713,11 @@ function createExportImportRoutes(deps) {
           }
         }
       }
-      
+
       // Import events
       if (data.events && Array.isArray(data.events)) {
         console.log(`[IMPORT] Processing ${data.events.length} events...`);
-        
+
         for (const event of data.events) {
           try {
             if (!dryRun) {
@@ -1586,9 +1727,9 @@ function createExportImportRoutes(deps) {
                 workspace_path: event.workspace_path || event.workspacePath,
                 timestamp: event.timestamp,
                 type: event.type || 'activity',
-                details: event.details || event.metadata || {}
+                details: event.details || event.metadata || {},
               };
-              
+
               await persistentDB.saveEvent(normalizedEvent);
               stats.events.imported++;
             } else {
@@ -1600,11 +1741,11 @@ function createExportImportRoutes(deps) {
           }
         }
       }
-      
+
       // Import terminal commands
       if (data.terminal_commands && Array.isArray(data.terminal_commands)) {
         console.log(`[IMPORT] Processing ${data.terminal_commands.length} terminal commands...`);
-        
+
         for (const cmd of data.terminal_commands) {
           try {
             if (!dryRun) {
@@ -1621,9 +1762,9 @@ function createExportImportRoutes(deps) {
                 error: cmd.error || cmd.metadata?.error,
                 linkedEntryId: cmd.linked_entry_id || cmd.linkedEntryId,
                 linkedPromptId: cmd.linked_prompt_id || cmd.linkedPromptId,
-                sessionId: cmd.session_id || cmd.sessionId
+                sessionId: cmd.session_id || cmd.sessionId,
               };
-              
+
               await persistentDB.saveTerminalCommand(normalizedCmd);
               stats.terminalCommands.imported++;
             } else {
@@ -1635,7 +1776,7 @@ function createExportImportRoutes(deps) {
           }
         }
       }
-      
+
       // Import context snapshots (if present)
       if (data.context_snapshots && Array.isArray(data.context_snapshots)) {
         console.log(`[IMPORT] Processing ${data.context_snapshots.length} context snapshots...`);
@@ -1643,11 +1784,11 @@ function createExportImportRoutes(deps) {
         // unless there's a dedicated table for them
         stats.contextSnapshots.skipped = data.context_snapshots.length;
       }
-      
+
       // Import workspaces (add to in-memory db.workspaces)
       if (data.workspaces && Array.isArray(data.workspaces)) {
         console.log(`[IMPORT] Processing ${data.workspaces.length} workspaces...`);
-        
+
         if (!dryRun) {
           for (const workspace of data.workspaces) {
             try {
@@ -1667,7 +1808,7 @@ function createExportImportRoutes(deps) {
           stats.workspaces.imported = data.workspaces.length;
         }
       }
-      
+
       // Reload in-memory data from database after import
       if (!dryRun) {
         console.log('[IMPORT] Reloading in-memory data from database...');
@@ -1676,48 +1817,52 @@ function createExportImportRoutes(deps) {
         db.entries = recentEntries;
         db.prompts = recentPrompts;
       }
-      
-      const totalImported = 
+
+      const totalImported =
         stats.entries.imported +
         stats.prompts.imported +
         stats.events.imported +
         stats.terminalCommands.imported +
         stats.contextSnapshots.imported +
         stats.workspaces.imported;
-      
-      const totalSkipped = 
+
+      const totalSkipped =
         stats.entries.skipped +
         stats.prompts.skipped +
         stats.events.skipped +
         stats.terminalCommands.skipped +
         stats.contextSnapshots.skipped +
         stats.workspaces.skipped;
-      
-      const totalErrors = 
+
+      const totalErrors =
         stats.entries.errors +
         stats.prompts.errors +
         stats.events.errors +
         stats.terminalCommands.errors +
         stats.contextSnapshots.errors +
         stats.workspaces.errors;
-      
-      console.log(`[SUCCESS] Import completed: ${totalImported} imported, ${totalSkipped} skipped, ${totalErrors} errors`);
-      
+
+      console.log(
+        `[SUCCESS] Import completed: ${totalImported} imported, ${totalSkipped} skipped, ${totalErrors} errors`
+      );
+
       // Log audit event for import completion
       if (!dryRun) {
-        await persistentDB.logAuditEvent('Import completed', 'import', {
-          workspaceId: workspaceFilter,
-          importVersion: importSchemaVersion,
-          currentVersion: currentSchemaVersion,
-          mergeStrategy,
-          overwrite,
-          totalImported,
-          totalSkipped,
-          totalErrors,
-          status: totalErrors > 0 ? 'partial' : 'success'
-        }).catch(err => console.warn('[IMPORT] Could not log audit event:', err.message));
+        await persistentDB
+          .logAuditEvent('Import completed', 'import', {
+            workspaceId: workspaceFilter,
+            importVersion: importSchemaVersion,
+            currentVersion: currentSchemaVersion,
+            mergeStrategy,
+            overwrite,
+            totalImported,
+            totalSkipped,
+            totalErrors,
+            status: totalErrors > 0 ? 'partial' : 'success',
+          })
+          .catch((err) => console.warn('[IMPORT] Could not log audit event:', err.message));
       }
-      
+
       res.json({
         success: true,
         dryRun,
@@ -1729,38 +1874,38 @@ function createExportImportRoutes(deps) {
           overwrite,
           mergeStrategy,
           workspaceFilter,
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
         },
         schema: {
           importVersion: importSchemaVersion,
           currentVersion: currentSchemaVersion,
-          compatible: schemaCompatible
+          compatible: schemaCompatible,
         },
-        message: dryRun 
+        message: dryRun
           ? `Dry run: Would import ${totalImported} items (${totalSkipped} would be skipped)`
-          : `Successfully imported ${totalImported} items (${totalSkipped} skipped, ${totalErrors} errors)`
+          : `Successfully imported ${totalImported} items (${totalSkipped} skipped, ${totalErrors} errors)`,
       });
-      
     } catch (error) {
       console.error('Error importing database:', error);
-      
+
       // Log audit event for import failure
       if (!req.body.options?.dryRun) {
-        await persistentDB.logAuditEvent('Import failed', 'import', {
-          workspaceId: req.body.options?.workspaceFilter,
-          error: error.message,
-          status: 'error'
-        }).catch(err => console.warn('[IMPORT] Could not log audit event:', err.message));
+        await persistentDB
+          .logAuditEvent('Import failed', 'import', {
+            workspaceId: req.body.options?.workspaceFilter,
+            error: error.message,
+            status: 'error',
+          })
+          .catch((err) => console.warn('[IMPORT] Could not log audit event:', err.message));
       }
-      
+
       res.status(500).json({
         success: false,
         error: error.message,
-        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
       });
     }
   });
 }
 
 module.exports = createExportImportRoutes;
-

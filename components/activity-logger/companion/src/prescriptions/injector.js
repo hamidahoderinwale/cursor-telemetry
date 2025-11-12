@@ -1,6 +1,6 @@
 /**
  * Prescription Injector
- * 
+ *
  * Formats prescriptions for context injection into AI prompts.
  * Handles scope hierarchy, priority ordering, and clean formatting.
  */
@@ -19,17 +19,17 @@ class PrescriptionInjector {
    */
   inject(context = {}) {
     const prescriptions = this.manager.getActiveForContext(context);
-    
+
     if (prescriptions.length === 0) {
       return {
         formatted: '',
         prescriptions: [],
-        count: 0
+        count: 0,
       };
     }
 
     // Track applications
-    prescriptions.forEach(p => {
+    prescriptions.forEach((p) => {
       this.manager.recordApplication(p.id);
     });
 
@@ -38,7 +38,7 @@ class PrescriptionInjector {
     return {
       formatted,
       prescriptions,
-      count: prescriptions.length
+      count: prescriptions.length,
     };
   }
 
@@ -73,7 +73,7 @@ class PrescriptionInjector {
       CATEGORIES.COMMUNICATION,
       CATEGORIES.ALLOWLIST,
       CATEGORIES.BLOCKLIST,
-      CATEGORIES.CONSTRAINTS
+      CATEGORIES.CONSTRAINTS,
     ];
 
     for (const category of categoryOrder) {
@@ -102,20 +102,19 @@ class PrescriptionInjector {
       [CATEGORIES.COMMUNICATION]: '[CHAT]',
       [CATEGORIES.ALLOWLIST]: '[SUCCESS]',
       [CATEGORIES.BLOCKLIST]: '[BLOCK]',
-      [CATEGORIES.CONSTRAINTS]: '[WARN]'
+      [CATEGORIES.CONSTRAINTS]: '[WARN]',
     };
 
     const icon = icons[category] || '•';
     let section = `${icon} ${category.toUpperCase()}\n`;
-    
-    prescriptions.forEach(p => {
-      const priorityMarker = p.priority >= 80 ? '[HIGH] ' : 
-                            p.priority <= 30 ? '[LOW] ' : '';
+
+    prescriptions.forEach((p) => {
+      const priorityMarker = p.priority >= 80 ? '[HIGH] ' : p.priority <= 30 ? '[LOW] ' : '';
       const scopeMarker = p.scope !== 'global' ? ` [${p.scope}]` : '';
-      
+
       section += `  • ${priorityMarker}${p.prescription}${scopeMarker}\n`;
     });
-    
+
     section += '\n';
     return section;
   }
@@ -139,7 +138,7 @@ class PrescriptionInjector {
    */
   formatScopeInfo(context) {
     const parts = [];
-    
+
     if (context.workspace) {
       parts.push(`Workspace: ${this.truncatePath(context.workspace)}`);
     }
@@ -149,7 +148,7 @@ class PrescriptionInjector {
     if (context.filePath) {
       parts.push(`File: ${this.truncatePath(context.filePath)}`);
     }
-    
+
     return parts.join(' | ');
   }
 
@@ -158,10 +157,10 @@ class PrescriptionInjector {
    */
   truncatePath(path) {
     if (!path) return '';
-    
+
     const parts = path.split('/');
     if (parts.length <= 3) return path;
-    
+
     return `.../${parts.slice(-3).join('/')}`;
   }
 
@@ -180,8 +179,8 @@ class PrescriptionInjector {
 
     for (const [category, items] of Object.entries(grouped)) {
       markdown += `## ${category.charAt(0).toUpperCase() + category.slice(1)}\n\n`;
-      
-      items.forEach(p => {
+
+      items.forEach((p) => {
         markdown += `- **${p.title}**`;
         if (p.priority >= 80) markdown += ' [ERROR] HIGH PRIORITY';
         markdown += `\n  - ${p.prescription}\n`;
@@ -203,14 +202,14 @@ class PrescriptionInjector {
     return {
       count: prescriptions.length,
       categories: this.groupByCategory(prescriptions),
-      flat: prescriptions.map(p => ({
+      flat: prescriptions.map((p) => ({
         id: p.id,
         title: p.title,
         prescription: p.prescription,
         category: p.category,
         scope: p.scope,
-        priority: p.priority
-      }))
+        priority: p.priority,
+      })),
     };
   }
 
@@ -229,7 +228,7 @@ class PrescriptionInjector {
 
     for (const [category, items] of Object.entries(grouped)) {
       text += `${category.toUpperCase()}:\n`;
-      items.forEach(p => {
+      items.forEach((p) => {
         text += `- ${p.prescription}\n`;
       });
       text += '\n';
@@ -248,10 +247,9 @@ class PrescriptionInjector {
     return {
       ...result,
       preview: result.formatted,
-      examplePrompt: `${result.formatted}[User's actual prompt would appear here]`
+      examplePrompt: `${result.formatted}[User's actual prompt would appear here]`,
     };
   }
 }
 
 module.exports = PrescriptionInjector;
-

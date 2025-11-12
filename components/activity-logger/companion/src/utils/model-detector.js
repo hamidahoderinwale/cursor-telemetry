@@ -8,73 +8,58 @@ const PROVIDER_PATTERNS = [
   {
     provider: 'OpenAI',
     modelPatterns: [
-      /^gpt-/i,                    // gpt-3.5-turbo, gpt-4, etc.
-      /^o1-/i,                      // o1-preview, o1-mini
-      /^o3-/i,                      // o3-mini
-      /openai/i,                    // openai in name
-      /^text-(embedding|ada|babbage|curie|davinci)/i  // Legacy models
+      /^gpt-/i, // gpt-3.5-turbo, gpt-4, etc.
+      /^o1-/i, // o1-preview, o1-mini
+      /^o3-/i, // o3-mini
+      /openai/i, // openai in name
+      /^text-(embedding|ada|babbage|curie|davinci)/i, // Legacy models
     ],
     contentPatterns: [
-      /gpt-\d/i,                    // gpt-3, gpt-4
-      /openai/i
-    ]
+      /gpt-\d/i, // gpt-3, gpt-4
+      /openai/i,
+    ],
   },
   {
     provider: 'Anthropic',
     modelPatterns: [
-      /^claude/i,                   // claude-3-opus, claude-3-sonnet, etc.
-      /anthropic/i                  // anthropic in name
+      /^claude/i, // claude-3-opus, claude-3-sonnet, etc.
+      /anthropic/i, // anthropic in name
     ],
-    contentPatterns: [
-      /claude/i,
-      /anthropic/i
-    ]
+    contentPatterns: [/claude/i, /anthropic/i],
   },
   {
     provider: 'Google',
     modelPatterns: [
-      /^gemini/i,                   // gemini-pro, gemini-ultra, etc.
-      /^palm/i,                     // PaLM models
-      /google.*ai/i                 // google ai in name
+      /^gemini/i, // gemini-pro, gemini-ultra, etc.
+      /^palm/i, // PaLM models
+      /google.*ai/i, // google ai in name
     ],
-    contentPatterns: [
-      /gemini/i,
-      /palm/i,
-      /google.*ai/i
-    ]
+    contentPatterns: [/gemini/i, /palm/i, /google.*ai/i],
   },
   {
     provider: 'Meta',
     modelPatterns: [
-      /^llama/i,                    // llama-2, llama-3, etc.
-      /^meta-llama/i                // meta-llama-3-8b
+      /^llama/i, // llama-2, llama-3, etc.
+      /^meta-llama/i, // meta-llama-3-8b
     ],
-    contentPatterns: [
-      /llama/i,
-      /meta-llama/i
-    ]
+    contentPatterns: [/llama/i, /meta-llama/i],
   },
   {
     provider: 'Mistral',
     modelPatterns: [
-      /^mistral/i,                  // mistral-small, mistral-large, etc.
-      /^mixtral/i                   // mixtral-8x7b
+      /^mistral/i, // mistral-small, mistral-large, etc.
+      /^mixtral/i, // mixtral-8x7b
     ],
-    contentPatterns: [
-      /mistral/i,
-      /mixtral/i
-    ]
+    contentPatterns: [/mistral/i, /mixtral/i],
   },
   {
     provider: 'Cohere',
     modelPatterns: [
-      /^command/i,                  // command, command-light
-      /^cohere/i                    // cohere in name
+      /^command/i, // command, command-light
+      /^cohere/i, // cohere in name
     ],
-    contentPatterns: [
-      /cohere/i
-    ]
-  }
+    contentPatterns: [/cohere/i],
+  },
 ];
 
 /**
@@ -136,7 +121,7 @@ function extractModelInfo(data) {
       model: 'Unknown',
       mode: 'Unknown',
       provider: 'Unknown',
-      isAuto: false
+      isAuto: false,
     };
   }
 
@@ -144,28 +129,25 @@ function extractModelInfo(data) {
     model: 'Unknown',
     mode: 'Unknown',
     provider: 'Unknown',
-    isAuto: false
+    isAuto: false,
   };
 
   // Extract model name from various possible fields
-  const modelName = data.model || 
-                   data.ai_model || 
-                   data.assistant_model || 
-                   data.model_name ||
-                   data.modelName ||
-                   null;
+  const modelName =
+    data.model ||
+    data.ai_model ||
+    data.assistant_model ||
+    data.model_name ||
+    data.modelName ||
+    null;
 
   if (modelName) {
     modelInfo.model = String(modelName);
   }
 
   // Extract mode from various possible fields
-  const mode = data.mode || 
-              data.assistant_mode || 
-              data.ai_mode ||
-              data.mode_name ||
-              data.modeName ||
-              null;
+  const mode =
+    data.mode || data.assistant_mode || data.ai_mode || data.mode_name || data.modeName || null;
 
   if (mode) {
     modelInfo.mode = String(mode);
@@ -174,13 +156,14 @@ function extractModelInfo(data) {
   // Detect Auto mode from various indicators
   const modeLower = modelInfo.mode.toLowerCase();
   const modelLower = modelInfo.model.toLowerCase();
-  const hasAutoMode = modeLower.includes('auto') || 
-                      modelLower.includes('auto') ||
-                      data.auto_mode === true ||
-                      data.is_auto === true ||
-                      data.isAuto === true ||
-                      (data.content && data.content.toLowerCase().includes('auto mode')) ||
-                      (data.content && data.content.toLowerCase().includes('automatic model selection'));
+  const hasAutoMode =
+    modeLower.includes('auto') ||
+    modelLower.includes('auto') ||
+    data.auto_mode === true ||
+    data.is_auto === true ||
+    data.isAuto === true ||
+    (data.content && data.content.toLowerCase().includes('auto mode')) ||
+    (data.content && data.content.toLowerCase().includes('automatic model selection'));
 
   if (hasAutoMode) {
     modelInfo.isAuto = true;
@@ -215,6 +198,5 @@ module.exports = {
   extractModelInfo,
   detectProviderFromModel,
   detectProviderFromContent,
-  PROVIDER_PATTERNS
+  PROVIDER_PATTERNS,
 };
-

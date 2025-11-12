@@ -36,11 +36,12 @@ class SharingService {
       abstractionLevel = 1,
       filters = {},
       expirationDays = 7,
-      name = null
+      name = null,
     } = options;
 
     const shareId = this.generateShareId();
-    const expiresAt = expirationDays === 0 ? null : Date.now() + (expirationDays * 24 * 60 * 60 * 1000);
+    const expiresAt =
+      expirationDays === 0 ? null : Date.now() + expirationDays * 24 * 60 * 60 * 1000;
 
     const shareData = {
       id: shareId,
@@ -52,7 +53,7 @@ class SharingService {
       createdAt: Date.now(),
       expiresAt,
       accessCount: 0,
-      lastAccessed: null
+      lastAccessed: null,
     };
 
     // Store share link
@@ -70,7 +71,7 @@ class SharingService {
       shareId,
       shareUrl: `/api/share/${shareId}`,
       expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null,
-      qrCode: null // Could generate QR code here
+      qrCode: null, // Could generate QR code here
     };
   }
 
@@ -118,7 +119,7 @@ class SharingService {
     try {
       await this.persistentDB.updateShareLink(shareId, {
         accessCount: shareData.accessCount,
-        lastAccessed: shareData.lastAccessed
+        lastAccessed: shareData.lastAccessed,
       });
     } catch (err) {
       // Ignore
@@ -147,11 +148,10 @@ class SharingService {
   async listShareLinks() {
     try {
       const links = await this.persistentDB.getAllShareLinks();
-      return links.filter(link => Date.now() < link.expiresAt);
+      return links.filter((link) => Date.now() < link.expiresAt);
     } catch (err) {
       // Fallback to in-memory
-      return Array.from(this.shareLinks.values())
-        .filter(link => Date.now() < link.expiresAt);
+      return Array.from(this.shareLinks.values()).filter((link) => Date.now() < link.expiresAt);
     }
   }
 
@@ -184,7 +184,3 @@ class SharingService {
 }
 
 module.exports = SharingService;
-
-
-
-

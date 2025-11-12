@@ -1,23 +1,33 @@
 // Configuration for Cursor Telemetry Dashboard
-// This allows the frontend (hosted on Netlify) to connect to local companion service
+// When deployed to Netlify, connects to Render backend by default
+// Users can override with localStorage to use local companion service
+
+// Render backend URL (default for deployed dashboard)
+const RENDER_BACKEND_URL = 'https://cursor-telemetry.onrender.com';
+
+// Determine API base URL
+const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+const customApiUrl = (window.LocalStorageHelper?.get('COMPANION_API_URL', null, false)) || localStorage.getItem('COMPANION_API_URL');
+const defaultApiUrl = isLocal ? 'http://localhost:43917' : RENDER_BACKEND_URL;
+const apiBaseUrl = customApiUrl || defaultApiUrl;
 
 window.CONFIG = {
   // API Configuration
-  // When deployed to Netlify, users will connect to their local companion service
-  // When running locally, it uses localhost
-  API_BASE: window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-    ? 'http://localhost:43917'
-    : ((window.LocalStorageHelper?.get('COMPANION_API_URL', null, false)) || localStorage.getItem('COMPANION_API_URL') || 'http://localhost:43917'),
+  // When running locally, uses localhost
+  // When deployed, uses Render backend by default (can be overridden via localStorage)
+  API_BASE: apiBaseUrl,
   
   // Legacy alias for backward compatibility
-  API_BASE_URL: window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-    ? 'http://localhost:43917'
-    : ((window.LocalStorageHelper?.get('COMPANION_API_URL', null, false)) || localStorage.getItem('COMPANION_API_URL') || 'http://localhost:43917'),
+  API_BASE_URL: apiBaseUrl,
   
   // WebSocket Configuration
-  WS_URL: window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-    ? 'ws://localhost:43917'
-    : ((window.LocalStorageHelper?.get('COMPANION_WS_URL', null, false)) || localStorage.getItem('COMPANION_WS_URL') || 'ws://localhost:43917'),
+  WS_URL: (() => {
+    const customWsUrl = (window.LocalStorageHelper?.get('COMPANION_WS_URL', null, false)) || localStorage.getItem('COMPANION_WS_URL');
+    if (customWsUrl) return customWsUrl;
+    if (isLocal) return 'ws://localhost:43917';
+    // Convert Render HTTPS URL to WSS
+    return RENDER_BACKEND_URL.replace('https://', 'wss://').replace('http://', 'ws://');
+  })(),
   
   // App Configuration
   APP_NAME: 'Cursor Telemetry Dashboard',

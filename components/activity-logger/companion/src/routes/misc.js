@@ -3,17 +3,8 @@
  */
 
 function createMiscRoutes(deps) {
-  const {
-    app,
-    queue,
-    sequence,
-    entries,
-    events,
-    lunrIndex,
-    indexedDocs,
-    config,
-    privacyConfig
-  } = deps;
+  const { app, queue, sequence, entries, events, lunrIndex, indexedDocs, config, privacyConfig } =
+    deps;
 
   // Acknowledge queue
   app.post('/ack', (req, res) => {
@@ -23,25 +14,27 @@ function createMiscRoutes(deps) {
       // Only clean up items that are older than 1 hour AND have been acknowledged
       const oneHourAgo = Date.now() - 60 * 60 * 1000;
       const beforeCount = queue.length;
-      
+
       // Note: queue is passed by reference, so modifications will affect the original
-      const filteredQueue = queue.filter(item => {
+      const filteredQueue = queue.filter((item) => {
         const itemAge = Date.now() - new Date(item.payload.timestamp).getTime();
         return item.seq > ackSeq || itemAge < oneHourAgo;
       });
-      
+
       // Clear and repopulate queue
       queue.length = 0;
       queue.push(...filteredQueue);
-      
+
       // Update the legacy arrays for backward compatibility
       entries.length = 0;
-      entries.push(...queue.filter(item => item.kind === 'entry').map(item => item.payload));
+      entries.push(...queue.filter((item) => item.kind === 'entry').map((item) => item.payload));
       events.length = 0;
-      events.push(...queue.filter(item => item.kind === 'event').map(item => item.payload));
-      
+      events.push(...queue.filter((item) => item.kind === 'event').map((item) => item.payload));
+
       const afterCount = queue.length;
-      console.log(` Queue acknowledged up to seq ${ackSeq}. Cleaned up ${beforeCount - afterCount} old items. Remaining: ${queue.length} items`);
+      console.log(
+        ` Queue acknowledged up to seq ${ackSeq}. Cleaned up ${beforeCount - afterCount} old items. Remaining: ${queue.length} items`
+      );
     }
     res.json({ status: 'acknowledged', cursor: ackCursor });
   });
@@ -59,9 +52,9 @@ function createMiscRoutes(deps) {
       }
 
       const results = lunrIndex.search(query);
-      const hydratedResults = results.map(result => {
+      const hydratedResults = results.map((result) => {
         // Retrieve original document from indexedDocs based on ref (id)
-        const originalDoc = indexedDocs.find(doc => doc.id === result.ref);
+        const originalDoc = indexedDocs.find((doc) => doc.id === result.ref);
         return { ...originalDoc, score: result.score };
       });
 
@@ -107,32 +100,32 @@ function createMiscRoutes(deps) {
       enabled: privacyConfig.enabled,
       consentGiven: privacyConfig.consentGiven,
       sensitivityLevel: privacyConfig.sensitivityLevel,
-      redactionLevel: privacyConfig.redactionLevel
+      redactionLevel: privacyConfig.redactionLevel,
     });
   });
 
   // Data deletion endpoints
   app.delete('/privacy/delete-session/:sessionId', (req, res) => {
     const { sessionId } = req.params;
-    
+
     try {
       // Remove from in-memory storage
-      const sessionIndex = entries.findIndex(entry => entry.sessionId === sessionId);
+      const sessionIndex = entries.findIndex((entry) => entry.sessionId === sessionId);
       if (sessionIndex >= 0) {
         entries.splice(sessionIndex, 1);
       }
-      
-      const eventIndex = events.findIndex(event => event.sessionId === sessionId);
+
+      const eventIndex = events.findIndex((event) => event.sessionId === sessionId);
       if (eventIndex >= 0) {
         events.splice(eventIndex, 1);
       }
-      
+
       // Remove from queue
-      const queueIndex = queue.findIndex(item => item.payload.sessionId === sessionId);
+      const queueIndex = queue.findIndex((item) => item.payload.sessionId === sessionId);
       if (queueIndex >= 0) {
         queue.splice(queueIndex, 1);
       }
-      
+
       console.log(` Deleted session ${sessionId} from companion service`);
       res.json({ success: true, message: `Session ${sessionId} deleted` });
     } catch (error) {
@@ -148,7 +141,7 @@ function createMiscRoutes(deps) {
       events.length = 0;
       queue.length = 0;
       // Note: sequence reset should be handled by the caller if needed
-      
+
       console.log(' Deleted all data from companion service');
       res.json({ success: true, message: 'All data deleted' });
     } catch (error) {
@@ -159,52 +152,58 @@ function createMiscRoutes(deps) {
 
   app.post('/privacy/delete-sensitive', (req, res) => {
     const { patterns } = req.body;
-    
+
     try {
       let deletedCount = 0;
-      
+
       // Delete entries matching sensitive patterns
       for (let i = entries.length - 1; i >= 0; i--) {
         const entry = entries[i];
         const content = entry.content || entry.data || '';
-        
-        if (patterns.some(pattern => {
-          const regex = new RegExp(pattern, 'gi');
-          return regex.test(content);
-        })) {
+
+        if (
+          patterns.some((pattern) => {
+            const regex = new RegExp(pattern, 'gi');
+            return regex.test(content);
+          })
+        ) {
           entries.splice(i, 1);
           deletedCount++;
         }
       }
-      
+
       // Delete events matching sensitive patterns
       for (let i = events.length - 1; i >= 0; i--) {
         const event = events[i];
         const content = event.content || event.data || '';
-        
-        if (patterns.some(pattern => {
-          const regex = new RegExp(pattern, 'gi');
-          return regex.test(content);
-        })) {
+
+        if (
+          patterns.some((pattern) => {
+            const regex = new RegExp(pattern, 'gi');
+            return regex.test(content);
+          })
+        ) {
           events.splice(i, 1);
           deletedCount++;
         }
       }
-      
+
       // Delete queue items matching sensitive patterns
       for (let i = queue.length - 1; i >= 0; i--) {
         const item = queue[i];
         const content = item.payload.content || item.payload.data || '';
-        
-        if (patterns.some(pattern => {
-          const regex = new RegExp(pattern, 'gi');
-          return regex.test(content);
-        })) {
+
+        if (
+          patterns.some((pattern) => {
+            const regex = new RegExp(pattern, 'gi');
+            return regex.test(content);
+          })
+        ) {
           queue.splice(i, 1);
           deletedCount++;
         }
       }
-      
+
       console.log(` Deleted ${deletedCount} items matching sensitive patterns`);
       res.json({ success: true, deletedCount });
     } catch (error) {
@@ -215,4 +214,3 @@ function createMiscRoutes(deps) {
 }
 
 module.exports = createMiscRoutes;
-

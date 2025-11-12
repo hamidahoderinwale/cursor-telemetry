@@ -23,10 +23,10 @@ class ContextExtractor {
    */
   findCursorDatabases() {
     const basePath = path.join(os.homedir(), 'Library/Application Support/Cursor');
-    
+
     return {
       global: path.join(basePath, 'User/globalStorage/state.vscdb'),
-      workspaceStorage: path.join(basePath, 'User/workspaceStorage')
+      workspaceStorage: path.join(basePath, 'User/workspaceStorage'),
     };
   }
 
@@ -35,25 +35,25 @@ class ContextExtractor {
    */
   extractAtFiles(promptText) {
     if (!promptText) return [];
-    
+
     // Pattern to match @filename or @path/to/file
     const atFilePattern = /@([^\s,]+(?:\.[\w]+)?)/g;
     const atFiles = [];
     let match;
-    
+
     while ((match = atFilePattern.exec(promptText)) !== null) {
       const reference = match[0]; // Full match with @
-      const filePath = match[1];  // Just the file path
-      
+      const filePath = match[1]; // Just the file path
+
       atFiles.push({
         reference: reference,
         filePath: filePath,
         fileName: path.basename(filePath),
         position: match.index,
-        context: this.getContextAroundMatch(promptText, match.index, 50)
+        context: this.getContextAroundMatch(promptText, match.index, 50),
       });
     }
-    
+
     return atFiles;
   }
 
@@ -75,36 +75,36 @@ class ContextExtractor {
         referencedFiles: [],
         attachedFiles: [],
         codebaseFiles: [],
-        mentionedFiles: []
+        mentionedFiles: [],
       };
 
       if (!composerData) return contextFiles;
 
       // Extract from composer data structure
       if (composerData.files) {
-        contextFiles.attachedFiles = composerData.files.map(f => ({
+        contextFiles.attachedFiles = composerData.files.map((f) => ({
           path: f.path || f.filePath || f,
           name: path.basename(f.path || f.filePath || f),
-          type: 'attached'
+          type: 'attached',
         }));
       }
 
       // Extract from context array
       if (composerData.context) {
-        contextFiles.codebaseFiles = composerData.context.map(c => ({
+        contextFiles.codebaseFiles = composerData.context.map((c) => ({
           path: c.path || c.file || c,
           name: path.basename(c.path || c.file || c),
           type: 'codebase',
-          score: c.score || 0
+          score: c.score || 0,
         }));
       }
 
       // Extract from mentions
       if (composerData.mentions) {
-        contextFiles.mentionedFiles = composerData.mentions.map(m => ({
+        contextFiles.mentionedFiles = composerData.mentions.map((m) => ({
           path: m.path || m,
           name: path.basename(m.path || m),
-          type: 'mentioned'
+          type: 'mentioned',
         }));
       }
 
@@ -115,7 +115,7 @@ class ContextExtractor {
         referencedFiles: [],
         attachedFiles: [],
         codebaseFiles: [],
-        mentionedFiles: []
+        mentionedFiles: [],
       };
     }
   }
@@ -126,7 +126,7 @@ class ContextExtractor {
   async extractBrowserState() {
     try {
       const { global } = this.dbPaths;
-      
+
       if (!fs.existsSync(global)) {
         return this.getEmptyBrowserState();
       }
@@ -137,27 +137,28 @@ class ContextExtractor {
         "SELECT key, value FROM ItemTable WHERE key LIKE '%browser%'",
         "SELECT key, value FROM ItemTable WHERE key LIKE '%webview%'",
         "SELECT key, value FROM ItemTable WHERE key LIKE '%panel%'",
-        "SELECT key, value FROM ItemTable WHERE key LIKE '%view%'"
+        "SELECT key, value FROM ItemTable WHERE key LIKE '%view%'",
       ];
 
       const browserState = {
         tabs: [],
         panels: {},
         viewState: {},
-        timestamp: Date.now()
+        timestamp: Date.now(),
       };
 
       for (const query of queries) {
         try {
-          const { stdout } = await execAsync(
-            `sqlite3 "${global}" "${query}"`
-          );
+          const { stdout } = await execAsync(`sqlite3 "${global}" "${query}"`);
 
-          const lines = stdout.trim().split('\n').filter(l => l);
-          
+          const lines = stdout
+            .trim()
+            .split('\n')
+            .filter((l) => l);
+
           for (const line of lines) {
             const [key, valueBlob] = line.split('|', 2);
-            
+
             if (!valueBlob) continue;
 
             // Try to parse as JSON
@@ -196,18 +197,18 @@ class ContextExtractor {
         browserState.tabs.push({
           path: data.path,
           name: path.basename(data.path),
-          isActive: data.active || false
+          isActive: data.active || false,
         });
       }
     } else if (key.includes('panel')) {
       browserState.panels = {
         ...browserState.panels,
-        [key]: data
+        [key]: data,
       };
     } else if (key.includes('view')) {
       browserState.viewState = {
         ...browserState.viewState,
-        [key]: data
+        [key]: data,
       };
     }
   }
@@ -236,7 +237,7 @@ class ContextExtractor {
       tabs: [],
       panels: {},
       viewState: {},
-      timestamp: Date.now()
+      timestamp: Date.now(),
     };
   }
 
@@ -245,16 +246,16 @@ class ContextExtractor {
    */
   extractFilesFromResponse(responseText) {
     if (!responseText) return [];
-    
+
     // Pattern to match file paths in code blocks or references
     const filePatterns = [
-      /`([^`]+\.[a-zA-Z]+)`/g,  // Backtick wrapped files
-      /\b([a-zA-Z0-9_-]+\/[a-zA-Z0-9_\/-]+\.[a-zA-Z]+)\b/g,  // Path-like strings
-      /['"]([^'"]+\.[a-zA-Z]+)['"]/g  // Quoted files
+      /`([^`]+\.[a-zA-Z]+)`/g, // Backtick wrapped files
+      /\b([a-zA-Z0-9_-]+\/[a-zA-Z0-9_\/-]+\.[a-zA-Z]+)\b/g, // Path-like strings
+      /['"]([^'"]+\.[a-zA-Z]+)['"]/g, // Quoted files
     ];
-    
+
     const files = new Set();
-    
+
     for (const pattern of filePatterns) {
       let match;
       while ((match = pattern.exec(responseText)) !== null) {
@@ -264,11 +265,11 @@ class ContextExtractor {
         }
       }
     }
-    
-    return Array.from(files).map(f => ({
+
+    return Array.from(files).map((f) => ({
       path: f,
       name: path.basename(f),
-      source: 'ai-response'
+      source: 'ai-response',
     }));
   }
 
@@ -280,7 +281,7 @@ class ContextExtractor {
       primary: null,
       supporting: [],
       referenced: [],
-      generated: []
+      generated: [],
     };
 
     if (!contextFiles) return relationships;
@@ -311,20 +312,20 @@ class ContextExtractor {
       const context = {
         // Extract @ files from prompt text
         atFiles: this.extractAtFiles(promptData.text || promptData.content),
-        
+
         // Extract context files from composer data
         contextFiles: await this.extractContextFilesFromComposer(promptData.composerData),
-        
+
         // Extract files from AI response
         responseFiles: this.extractFilesFromResponse(promptData.response),
-        
+
         // Get browser/UI state
         browserState: await this.extractBrowserState(),
-        
+
         // Analyze relationships
         fileRelationships: null,
-        
-        timestamp: Date.now()
+
+        timestamp: Date.now(),
       };
 
       // Analyze file relationships
@@ -347,7 +348,7 @@ class ContextExtractor {
         referencedFiles: [],
         attachedFiles: [],
         codebaseFiles: [],
-        mentionedFiles: []
+        mentionedFiles: [],
       },
       responseFiles: [],
       browserState: this.getEmptyBrowserState(),
@@ -355,9 +356,9 @@ class ContextExtractor {
         primary: null,
         supporting: [],
         referenced: [],
-        generated: []
+        generated: [],
       },
-      timestamp: Date.now()
+      timestamp: Date.now(),
     };
   }
 
@@ -372,7 +373,7 @@ class ContextExtractor {
       totalResponseFiles: 0,
       averageFilesPerPrompt: 0,
       mostReferencedFiles: new Map(),
-      fileTypes: new Map()
+      fileTypes: new Map(),
     };
 
     for (const context of contexts) {
@@ -382,13 +383,13 @@ class ContextExtractor {
 
       // Track most referenced files
       this.trackReferencedFiles(context, stats.mostReferencedFiles);
-      
+
       // Track file types
       this.trackFileTypes(context, stats.fileTypes);
     }
 
-    stats.averageFilesPerPrompt = 
-      (stats.totalAtFiles + stats.totalContextFiles + stats.totalResponseFiles) / 
+    stats.averageFilesPerPrompt =
+      (stats.totalAtFiles + stats.totalContextFiles + stats.totalResponseFiles) /
       Math.max(contexts.length, 1);
 
     return stats;
@@ -414,11 +415,12 @@ class ContextExtractor {
     const allFiles = [
       ...(context.atFiles || []),
       ...(context.contextFiles?.attachedFiles || []),
-      ...(context.responseFiles || [])
+      ...(context.responseFiles || []),
     ];
 
     for (const file of allFiles) {
-      const fileName = file.fileName || file.name || path.basename(file.path || file.filePath || '');
+      const fileName =
+        file.fileName || file.name || path.basename(file.path || file.filePath || '');
       if (fileName) {
         referencedFilesMap.set(fileName, (referencedFilesMap.get(fileName) || 0) + 1);
       }
@@ -432,7 +434,7 @@ class ContextExtractor {
     const allFiles = [
       ...(context.atFiles || []),
       ...(context.contextFiles?.attachedFiles || []),
-      ...(context.responseFiles || [])
+      ...(context.responseFiles || []),
     ];
 
     for (const file of allFiles) {
@@ -446,4 +448,3 @@ class ContextExtractor {
 }
 
 module.exports = ContextExtractor;
-

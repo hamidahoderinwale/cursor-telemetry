@@ -7,7 +7,10 @@
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
     "reasoning-server": "node src/reasoning-server.js",
-    "test": "node --test src/**/*.test.js"
+    "test": "node --test src/**/*.test.js",
+    "format": "prettier --write \"src/**/*.js\" \"*.json\"",
+    "format:check": "prettier --check \"src/**/*.js\" \"*.json\"",
+    "lint": "prettier --check \"src/**/*.js\" \"*.json\""
   },
   "dependencies": {
     "chokidar": "^3.5.3",
@@ -26,7 +29,8 @@
     "uuid": "^9.0.1"
   },
   "devDependencies": {
-    "nodemon": "^3.0.2"
+    "nodemon": "^3.0.2",
+    "prettier": "^3.6.2"
   },
   "keywords": [
     "cursor",

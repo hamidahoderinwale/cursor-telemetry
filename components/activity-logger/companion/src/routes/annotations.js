@@ -14,16 +14,16 @@ function createAnnotationRoutes(deps) {
   app.post('/api/annotations/event', async (req, res) => {
     try {
       const { event, context } = req.body;
-      
+
       if (!event) {
         return res.status(400).json({
           success: false,
-          error: 'Event object is required'
+          error: 'Event object is required',
         });
       }
 
       const annotation = await annotationService.annotateEvent(event, context || {});
-      
+
       // Update event in database if it has an ID
       if (event.id) {
         try {
@@ -32,7 +32,7 @@ function createAnnotationRoutes(deps) {
             await persistentDB.saveEvent({
               ...existingEvent,
               annotation,
-              ai_generated: true
+              ai_generated: true,
             });
           }
         } catch (dbError) {
@@ -43,13 +43,13 @@ function createAnnotationRoutes(deps) {
       res.json({
         success: true,
         annotation,
-        eventId: event.id
+        eventId: event.id,
       });
     } catch (error) {
       console.error('[ANNOTATIONS] Error annotating event:', error);
       res.status(500).json({
         success: false,
-        error: error.message
+        error: error.message,
       });
     }
   });
@@ -60,16 +60,16 @@ function createAnnotationRoutes(deps) {
   app.post('/api/annotations/events/batch', async (req, res) => {
     try {
       const { events, context } = req.body;
-      
+
       if (!events || !Array.isArray(events) || events.length === 0) {
         return res.status(400).json({
           success: false,
-          error: 'Events array is required'
+          error: 'Events array is required',
         });
       }
 
       const annotatedEvents = await annotationService.annotateEventsBatch(events, context || {});
-      
+
       // Update events in database
       for (const event of annotatedEvents) {
         if (event.id && event.annotation) {
@@ -79,7 +79,7 @@ function createAnnotationRoutes(deps) {
               await persistentDB.saveEvent({
                 ...existingEvent,
                 annotation: event.annotation,
-                ai_generated: true
+                ai_generated: true,
               });
             }
           } catch (dbError) {
@@ -92,13 +92,13 @@ function createAnnotationRoutes(deps) {
       res.json({
         success: true,
         events: annotatedEvents,
-        count: annotatedEvents.length
+        count: annotatedEvents.length,
       });
     } catch (error) {
       console.error('[ANNOTATIONS] Error batch annotating events:', error);
       res.status(500).json({
         success: false,
-        error: error.message
+        error: error.message,
       });
     }
   });
@@ -109,25 +109,25 @@ function createAnnotationRoutes(deps) {
   app.post('/api/annotations/intent', async (req, res) => {
     try {
       const { events, context } = req.body;
-      
+
       if (!events || !Array.isArray(events)) {
         return res.status(400).json({
           success: false,
-          error: 'Events array is required'
+          error: 'Events array is required',
         });
       }
 
       const classification = await annotationService.classifyIntent(events, context || {});
-      
+
       res.json({
         success: true,
-        classification
+        classification,
       });
     } catch (error) {
       console.error('[ANNOTATIONS] Error classifying intent:', error);
       res.status(500).json({
         success: false,
-        error: error.message
+        error: error.message,
       });
     }
   });
@@ -138,25 +138,25 @@ function createAnnotationRoutes(deps) {
   app.post('/api/annotations/state-summary', async (req, res) => {
     try {
       const { events, fileChanges } = req.body;
-      
+
       if (!events || !Array.isArray(events)) {
         return res.status(400).json({
           success: false,
-          error: 'Events array is required'
+          error: 'Events array is required',
         });
       }
 
       const summary = await annotationService.generateStateSummary(events, fileChanges || []);
-      
+
       res.json({
         success: true,
-        summary
+        summary,
       });
     } catch (error) {
       console.error('[ANNOTATIONS] Error generating state summary:', error);
       res.status(500).json({
         success: false,
-        error: error.message
+        error: error.message,
       });
     }
   });
@@ -168,11 +168,11 @@ function createAnnotationRoutes(deps) {
     try {
       const { eventId } = req.params;
       const event = await persistentDB.getEvent(eventId);
-      
+
       if (!event) {
         return res.status(404).json({
           success: false,
-          error: 'Event not found'
+          error: 'Event not found',
         });
       }
 
@@ -182,15 +182,15 @@ function createAnnotationRoutes(deps) {
           id: event.id,
           annotation: event.annotation,
           intent: event.intent,
-          tags: typeof event.tags === 'string' ? JSON.parse(event.tags || '[]') : (event.tags || []),
-          ai_generated: event.ai_generated === 1
-        }
+          tags: typeof event.tags === 'string' ? JSON.parse(event.tags || '[]') : event.tags || [],
+          ai_generated: event.ai_generated === 1,
+        },
       });
     } catch (error) {
       console.error('[ANNOTATIONS] Error getting event annotations:', error);
       res.status(500).json({
         success: false,
-        error: error.message
+        error: error.message,
       });
     }
   });
@@ -201,22 +201,20 @@ function createAnnotationRoutes(deps) {
   app.post('/api/annotations/refresh', async (req, res) => {
     try {
       const { eventIds, sessionId } = req.body;
-      
+
       let events = [];
-      
+
       if (eventIds && Array.isArray(eventIds)) {
         // Get specific events
-        events = await Promise.all(
-          eventIds.map(id => persistentDB.getEvent(id))
-        );
-        events = events.filter(e => e);
+        events = await Promise.all(eventIds.map((id) => persistentDB.getEvent(id)));
+        events = events.filter((e) => e);
       } else if (sessionId) {
         // Get all events for session
         events = await persistentDB.getEventsBySession(sessionId);
       } else {
         return res.status(400).json({
           success: false,
-          error: 'Either eventIds array or sessionId is required'
+          error: 'Either eventIds array or sessionId is required',
         });
       }
 
@@ -224,13 +222,13 @@ function createAnnotationRoutes(deps) {
         return res.json({
           success: true,
           annotated: 0,
-          message: 'No events found'
+          message: 'No events found',
         });
       }
 
       // Annotate events
       const annotatedEvents = await annotationService.annotateEventsBatch(events);
-      
+
       // Update in database
       let updated = 0;
       for (const event of annotatedEvents) {
@@ -239,7 +237,7 @@ function createAnnotationRoutes(deps) {
             await persistentDB.saveEvent({
               ...event,
               annotation: event.annotation,
-              ai_generated: true
+              ai_generated: true,
             });
             updated++;
           } catch (dbError) {
@@ -251,17 +249,16 @@ function createAnnotationRoutes(deps) {
       res.json({
         success: true,
         annotated: updated,
-        total: events.length
+        total: events.length,
       });
     } catch (error) {
       console.error('[ANNOTATIONS] Error refreshing annotations:', error);
       res.status(500).json({
         success: false,
-        error: error.message
+        error: error.message,
       });
     }
   });
 }
 
 module.exports = createAnnotationRoutes;
-

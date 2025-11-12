@@ -28,7 +28,7 @@ class ErrorTracker {
       eslint: /\d+:\d+\s+error/i,
       test: /FAIL|Test failed|AssertionError/i,
       fileNotFound: /ENOENT|no such file/i,
-      permission: /EACCES|Permission denied/i
+      permission: /EACCES|Permission denied/i,
     };
   }
 
@@ -41,10 +41,9 @@ class ErrorTracker {
       const previousDiagnostics = this.linterStateCache.get(filePath) || [];
 
       // Find new errors
-      const newErrors = diagnostics.filter(d =>
-        !previousDiagnostics.some(prev =>
-          prev.message === d.message && prev.line === d.line
-        )
+      const newErrors = diagnostics.filter(
+        (d) =>
+          !previousDiagnostics.some((prev) => prev.message === d.message && prev.line === d.line)
       );
 
       if (newErrors.length > 0 && fileChange.source) {
@@ -53,17 +52,17 @@ class ErrorTracker {
           codeChangeId: fileChange.id,
           promptId: fileChange.linkedPromptId || fileChange.prompt_id,
           filePath: filePath,
-          errors: newErrors.map(e => ({
-            severity: e.severity,  // 0=Error, 1=Warning, 2=Info
+          errors: newErrors.map((e) => ({
+            severity: e.severity, // 0=Error, 1=Warning, 2=Info
             message: e.message,
             line: e.line,
             column: e.column,
             rule: e.ruleId,
-            source: e.source  // eslint, typescript, etc.
+            source: e.source, // eslint, typescript, etc.
           })),
           errorCount: newErrors.length,
           timestamp: Date.now(),
-          resolved: false
+          resolved: false,
         };
 
         this.linterErrors.push(errorRecord);
@@ -98,9 +97,9 @@ class ErrorTracker {
       failedCount: testOutput.failed || 0,
       passedCount: testOutput.passed || 0,
       failureRate: testOutput.total > 0 ? (testOutput.failed / testOutput.total) * 100 : 0,
-      relatedChanges: recentChanges.map(c => c.id),
+      relatedChanges: recentChanges.map((c) => c.id),
       output: testOutput.output ? testOutput.output.slice(0, 1000) : '',
-      timestamp: Date.now()
+      timestamp: Date.now(),
     };
 
     this.testFailures.push(testRecord);
@@ -119,14 +118,14 @@ class ErrorTracker {
    */
   trackTerminalError(command, output, exitCode) {
     const errorType = this.classifyError(output);
-    
+
     const errorRecord = {
       id: `term_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       command: command,
       exitCode: exitCode,
       errorType: errorType,
       output: output.slice(0, 500),
-      timestamp: Date.now()
+      timestamp: Date.now(),
     };
 
     this.terminalErrors.push(errorRecord);
@@ -160,9 +159,9 @@ class ErrorTracker {
       id: `rollback_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       gitCommand: gitCommand,
       affectedFiles: affectedFiles,
-      rolledBackChanges: rolledBackChanges.map(c => c.id),
+      rolledBackChanges: rolledBackChanges.map((c) => c.id),
       timestamp: Date.now(),
-      reason: 'git_revert'
+      reason: 'git_revert',
     };
 
     this.rollbacks.push(rollbackRecord);
@@ -185,7 +184,7 @@ class ErrorTracker {
       passed: 0,
       failed: 0,
       failures: [],
-      output: output
+      output: output,
     };
 
     // Jest/Vitest patterns
@@ -193,7 +192,7 @@ class ErrorTracker {
     const vitestPattern = /Test Files\s+(\d+)\s+failed.*?(\d+)\s+passed.*?(\d+)\s+total/i;
 
     let match = output.match(jestPattern) || output.match(vitestPattern);
-    
+
     if (match) {
       result.failed = parseInt(match[1]);
       result.passed = parseInt(match[2]);
@@ -210,7 +209,7 @@ class ErrorTracker {
   extractFailedTestNames(output) {
     const failures = [];
     const lines = output.split('\n');
-    
+
     lines.forEach((line, index) => {
       if (line.includes('FAIL') || line.includes('✕') || line.includes('×')) {
         // Extract test name (usually after the failure marker)
@@ -229,36 +228,36 @@ class ErrorTracker {
    */
   getErrorStats() {
     const now = Date.now();
-    const last24h = now - (24 * 60 * 60 * 1000);
-    const last7d = now - (7 * 24 * 60 * 60 * 1000);
+    const last24h = now - 24 * 60 * 60 * 1000;
+    const last7d = now - 7 * 24 * 60 * 60 * 1000;
 
-    const recentLinterErrors = this.linterErrors.filter(e => e.timestamp > last24h);
-    const recentTestFailures = this.testFailures.filter(t => t.timestamp > last24h);
-    const recentTerminalErrors = this.terminalErrors.filter(e => e.timestamp > last24h);
+    const recentLinterErrors = this.linterErrors.filter((e) => e.timestamp > last24h);
+    const recentTestFailures = this.testFailures.filter((t) => t.timestamp > last24h);
+    const recentTerminalErrors = this.terminalErrors.filter((e) => e.timestamp > last24h);
 
     return {
       linter: {
         total: this.linterErrors.length,
         last24h: recentLinterErrors.length,
-        last7d: this.linterErrors.filter(e => e.timestamp > last7d).length,
-        unresolved: this.linterErrors.filter(e => !e.resolved).length,
-        byFile: this.groupErrorsByFile(this.linterErrors)
+        last7d: this.linterErrors.filter((e) => e.timestamp > last7d).length,
+        unresolved: this.linterErrors.filter((e) => !e.resolved).length,
+        byFile: this.groupErrorsByFile(this.linterErrors),
       },
       tests: {
         total: this.testFailures.length,
         last24h: recentTestFailures.length,
         avgFailureRate: this.calculateAvgFailureRate(this.testFailures),
-        mostFailedTests: this.getMostFailedTests()
+        mostFailedTests: this.getMostFailedTests(),
       },
       terminal: {
         total: this.terminalErrors.length,
         last24h: recentTerminalErrors.length,
-        byType: this.groupErrorsByType(this.terminalErrors)
+        byType: this.groupErrorsByType(this.terminalErrors),
       },
       rollbacks: {
         total: this.rollbacks.length,
-        last24h: this.rollbacks.filter(r => r.timestamp > last24h).length
-      }
+        last24h: this.rollbacks.filter((r) => r.timestamp > last24h).length,
+      },
     };
   }
 
@@ -268,7 +267,7 @@ class ErrorTracker {
   groupErrorsByFile(errors) {
     const grouped = new Map();
 
-    errors.forEach(error => {
+    errors.forEach((error) => {
       const file = error.filePath;
       if (!grouped.has(file)) {
         grouped.set(file, { file, count: 0, errors: [] });
@@ -289,7 +288,7 @@ class ErrorTracker {
   groupErrorsByType(errors) {
     const grouped = {};
 
-    errors.forEach(error => {
+    errors.forEach((error) => {
       const type = error.errorType;
       grouped[type] = (grouped[type] || 0) + 1;
     });
@@ -312,8 +311,8 @@ class ErrorTracker {
   getMostFailedTests() {
     const testCounts = new Map();
 
-    this.testFailures.forEach(failure => {
-      failure.failedTests.forEach(testName => {
+    this.testFailures.forEach((failure) => {
+      failure.failedTests.forEach((testName) => {
         testCounts.set(testName, (testCounts.get(testName) || 0) + 1);
       });
     });
@@ -329,22 +328,20 @@ class ErrorTracker {
    */
   getRecentErrors(limit = 20) {
     const allErrors = [
-      ...this.linterErrors.map(e => ({ ...e, type: 'linter' })),
-      ...this.testFailures.map(e => ({ ...e, type: 'test' })),
-      ...this.terminalErrors.map(e => ({ ...e, type: 'terminal' })),
-      ...this.rollbacks.map(e => ({ ...e, type: 'rollback' }))
+      ...this.linterErrors.map((e) => ({ ...e, type: 'linter' })),
+      ...this.testFailures.map((e) => ({ ...e, type: 'test' })),
+      ...this.terminalErrors.map((e) => ({ ...e, type: 'terminal' })),
+      ...this.rollbacks.map((e) => ({ ...e, type: 'rollback' })),
     ];
 
-    return allErrors
-      .sort((a, b) => b.timestamp - a.timestamp)
-      .slice(0, limit);
+    return allErrors.sort((a, b) => b.timestamp - a.timestamp).slice(0, limit);
   }
 
   /**
    * Mark error as resolved
    */
   resolveError(errorId) {
-    const error = this.linterErrors.find(e => e.id === errorId);
+    const error = this.linterErrors.find((e) => e.id === errorId);
     if (error) {
       error.resolved = true;
       error.resolutionTime = Date.now() - error.timestamp;
@@ -356,14 +353,13 @@ class ErrorTracker {
    * Cleanup old data
    */
   cleanup() {
-    const cutoff = Date.now() - (30 * 24 * 60 * 60 * 1000); // 30 days
-    
-    this.linterErrors = this.linterErrors.filter(e => e.timestamp > cutoff);
-    this.testFailures = this.testFailures.filter(t => t.timestamp > cutoff);
-    this.terminalErrors = this.terminalErrors.filter(e => e.timestamp > cutoff);
-    this.rollbacks = this.rollbacks.filter(r => r.timestamp > cutoff);
+    const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000; // 30 days
+
+    this.linterErrors = this.linterErrors.filter((e) => e.timestamp > cutoff);
+    this.testFailures = this.testFailures.filter((t) => t.timestamp > cutoff);
+    this.terminalErrors = this.terminalErrors.filter((e) => e.timestamp > cutoff);
+    this.rollbacks = this.rollbacks.filter((r) => r.timestamp > cutoff);
   }
 }
 
 module.exports = ErrorTracker;
-

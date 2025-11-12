@@ -29,7 +29,7 @@ class ContextAnalyzer {
         implicitContext: [],
         tokenEstimate: 0,
         fileCount: 0,
-        truncated: false
+        truncated: false,
       };
 
       // Extract @ mentions from prompt text
@@ -41,18 +41,18 @@ class ContextAnalyzer {
         const composerContext = await this.contextExtractor.getPromptContext({
           text: text,
           content: text,
-          composerData: prompt.composerData || prompt.context
+          composerData: prompt.composerData || prompt.context,
         });
 
         // Add @ files
         if (composerContext.atFiles && Array.isArray(composerContext.atFiles)) {
-          composerContext.atFiles.forEach(f => {
-            const filePath = typeof f === 'string' ? f : (f.filePath || f.fileName || f.path);
+          composerContext.atFiles.forEach((f) => {
+            const filePath = typeof f === 'string' ? f : f.filePath || f.fileName || f.path;
             if (filePath && filePath.length > 0) {
               analysis.contextFiles.push({
                 path: filePath,
                 type: 'explicit',
-                source: 'at_mention'
+                source: 'at_mention',
               });
             }
           });
@@ -60,26 +60,36 @@ class ContextAnalyzer {
 
         // Add context files
         if (composerContext.contextFiles) {
-          if (typeof composerContext.contextFiles === 'object' && !Array.isArray(composerContext.contextFiles)) {
+          if (
+            typeof composerContext.contextFiles === 'object' &&
+            !Array.isArray(composerContext.contextFiles)
+          ) {
             Object.entries(composerContext.contextFiles).forEach(([path, info]) => {
-              if (path && path.length > 0 && !['attachedFiles', 'codebaseFiles', 'referencedFiles', 'mentionedFiles'].includes(path)) {
+              if (
+                path &&
+                path.length > 0 &&
+                !['attachedFiles', 'codebaseFiles', 'referencedFiles', 'mentionedFiles'].includes(
+                  path
+                )
+              ) {
                 analysis.contextFiles.push({
                   path: path,
                   type: 'implicit',
                   source: 'context_window',
                   lineCount: info?.lineCount,
-                  size: info?.size
+                  size: info?.size,
                 });
               }
             });
           } else if (Array.isArray(composerContext.contextFiles)) {
-            composerContext.contextFiles.forEach(file => {
-              const filePath = typeof file === 'string' ? file : (file.path || file.fileName || file.name);
+            composerContext.contextFiles.forEach((file) => {
+              const filePath =
+                typeof file === 'string' ? file : file.path || file.fileName || file.name;
               if (filePath && filePath.length > 0) {
                 analysis.contextFiles.push({
                   path: filePath,
                   type: 'implicit',
-                  source: 'context_window'
+                  source: 'context_window',
                 });
               }
             });
@@ -88,13 +98,18 @@ class ContextAnalyzer {
 
         // Add response files
         if (composerContext.responseFiles && Array.isArray(composerContext.responseFiles)) {
-          composerContext.responseFiles.forEach(file => {
-            const filePath = typeof file === 'string' ? file : (file.path || file.fileName || file.name);
-            if (filePath && filePath.length > 0 && !analysis.contextFiles.find(f => f.path === filePath)) {
+          composerContext.responseFiles.forEach((file) => {
+            const filePath =
+              typeof file === 'string' ? file : file.path || file.fileName || file.name;
+            if (
+              filePath &&
+              filePath.length > 0 &&
+              !analysis.contextFiles.find((f) => f.path === filePath)
+            ) {
               analysis.contextFiles.push({
                 path: filePath,
                 type: 'response',
-                source: 'ai_generated'
+                source: 'ai_generated',
               });
             }
           });
@@ -104,7 +119,7 @@ class ContextAnalyzer {
       // Calculate token estimate
       analysis.tokenEstimate = this.estimateTokens(analysis.contextFiles);
       analysis.fileCount = analysis.contextFiles.length;
-      
+
       // Check for truncation (Claude Sonnet 4.5 has 200k context)
       const MAX_TOKENS = 200000;
       analysis.truncated = analysis.tokenEstimate > MAX_TOKENS * 0.9;
@@ -158,7 +173,7 @@ class ContextAnalyzer {
   estimateTokens(contextFiles) {
     let totalTokens = 0;
 
-    contextFiles.forEach(file => {
+    contextFiles.forEach((file) => {
       // Rough estimate: 1 token ≈ 4 characters
       // Average lines: ~50 chars per line
       const estimatedChars = (file.lineCount || 50) * 50;
@@ -173,7 +188,7 @@ class ContextAnalyzer {
    * Track which files appear together in context
    */
   trackFileRelationships(contextFiles) {
-    const filePaths = contextFiles.map(f => f.path).filter(Boolean);
+    const filePaths = contextFiles.map((f) => f.path).filter(Boolean);
 
     // Create pairs
     for (let i = 0; i < filePaths.length; i++) {
@@ -187,7 +202,7 @@ class ContextAnalyzer {
             file1,
             file2,
             count: 0,
-            lastSeen: Date.now()
+            lastSeen: Date.now(),
           });
         }
 
@@ -198,13 +213,13 @@ class ContextAnalyzer {
     }
 
     // Track individual file usage
-    filePaths.forEach(file => {
+    filePaths.forEach((file) => {
       if (!this.fileContextHistory.has(file)) {
         this.fileContextHistory.set(file, {
           file,
           mentionCount: 0,
           firstSeen: Date.now(),
-          lastSeen: Date.now()
+          lastSeen: Date.now(),
         });
       }
 
@@ -225,13 +240,13 @@ class ContextAnalyzer {
     // Pre-filter and build in single pass for better performance
     for (const [key, data] of this.fileCoOccurrence.entries()) {
       if (data.count < minCount) continue; // Skip early
-      
+
       // Add edge
       edges.push({
         source: data.file1,
         target: data.file2,
         weight: data.count,
-        strength: data.count / snapshotCount
+        strength: data.count / snapshotCount,
       });
 
       // Add nodes (only if not already added)
@@ -241,17 +256,17 @@ class ContextAnalyzer {
           id: data.file1,
           label: data.file1.split('/').pop() || data.file1,
           mentions: history?.mentionCount || 0,
-          size: Math.min(50, 10 + (history?.mentionCount || 0))
+          size: Math.min(50, 10 + (history?.mentionCount || 0)),
         });
       }
-      
+
       if (!nodes.has(data.file2)) {
         const history = this.fileContextHistory.get(data.file2);
         nodes.set(data.file2, {
           id: data.file2,
           label: data.file2.split('/').pop() || data.file2,
           mentions: history?.mentionCount || 0,
-          size: Math.min(50, 10 + (history?.mentionCount || 0))
+          size: Math.min(50, 10 + (history?.mentionCount || 0)),
         });
       }
     }
@@ -263,8 +278,8 @@ class ContextAnalyzer {
         totalRelationships: this.fileCoOccurrence.size,
         filteredRelationships: edges.length,
         totalFiles: this.fileContextHistory.size,
-        includedFiles: nodes.size
-      }
+        includedFiles: nodes.size,
+      },
     };
   }
 
@@ -279,14 +294,17 @@ class ContextAnalyzer {
         avgTokensPerPrompt: 0,
         truncationRate: 0,
         mostReferencedFiles: [],
-        avgContextUtilization: 0
+        avgContextUtilization: 0,
       };
     }
 
     const totalFiles = this.contextSnapshots.reduce((sum, s) => sum + s.fileCount, 0);
     const totalTokens = this.contextSnapshots.reduce((sum, s) => sum + s.tokenEstimate, 0);
-    const truncated = this.contextSnapshots.filter(s => s.truncated).length;
-    const totalUtilization = this.contextSnapshots.reduce((sum, s) => sum + (s.utilizationPercent || 0), 0);
+    const truncated = this.contextSnapshots.filter((s) => s.truncated).length;
+    const totalUtilization = this.contextSnapshots.reduce(
+      (sum, s) => sum + (s.utilizationPercent || 0),
+      0
+    );
 
     // Get most referenced files
     const filesByMentions = Array.from(this.fileContextHistory.values())
@@ -301,7 +319,7 @@ class ContextAnalyzer {
       mostReferencedFiles: filesByMentions,
       avgContextUtilization: totalUtilization / this.contextSnapshots.length,
       fileRelationships: this.fileCoOccurrence.size,
-      uniqueFilesReferenced: this.fileContextHistory.size
+      uniqueFilesReferenced: this.fileContextHistory.size,
     };
   }
 
@@ -319,16 +337,16 @@ class ContextAnalyzer {
     // Group by hour
     const hourlyData = new Map();
 
-    this.contextSnapshots.forEach(snapshot => {
+    this.contextSnapshots.forEach((snapshot) => {
       const hour = Math.floor(snapshot.timestamp / (60 * 60 * 1000)) * (60 * 60 * 1000);
-      
+
       if (!hourlyData.has(hour)) {
         hourlyData.set(hour, {
           timestamp: hour,
           snapshots: 0,
           totalFiles: 0,
           totalTokens: 0,
-          truncations: 0
+          truncations: 0,
         });
       }
 
@@ -346,10 +364,10 @@ class ContextAnalyzer {
    * Clear old data
    */
   cleanup() {
-    const cutoff = Date.now() - (7 * 24 * 60 * 60 * 1000); // 7 days
-    
-    this.contextSnapshots = this.contextSnapshots.filter(s => s.timestamp > cutoff);
-    
+    const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000; // 7 days
+
+    this.contextSnapshots = this.contextSnapshots.filter((s) => s.timestamp > cutoff);
+
     // Clean up file co-occurrence
     this.fileCoOccurrence.forEach((data, key) => {
       if (data.lastSeen < cutoff) {
@@ -360,4 +378,3 @@ class ContextAnalyzer {
 }
 
 module.exports = ContextAnalyzer;
-

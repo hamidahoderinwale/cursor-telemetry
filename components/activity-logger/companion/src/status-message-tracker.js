@@ -27,7 +27,7 @@ class StatusMessageTracker extends EventEmitter {
    */
   start(intervalMs = 2000) {
     if (this.isActive) return;
-    
+
     this.isActive = true;
     this.monitorInterval = setInterval(async () => {
       try {
@@ -36,7 +36,7 @@ class StatusMessageTracker extends EventEmitter {
         console.warn('Error capturing status message:', error.message);
       }
     }, intervalMs);
-    
+
     console.log('[STATUS] Status message tracker started');
   }
 
@@ -59,14 +59,14 @@ class StatusMessageTracker extends EventEmitter {
     try {
       // Try to get status message from Cursor UI via AppleScript
       const statusText = await this.getCursorStatusText();
-      
+
       if (!statusText || statusText === this.lastStatus) {
         return; // No change
       }
 
       // Parse the status message
       const parsed = this.parseStatusMessage(statusText);
-      
+
       if (parsed) {
         const statusRecord = {
           id: `status-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
@@ -76,7 +76,7 @@ class StatusMessageTracker extends EventEmitter {
           action: parsed.action,
           filePath: parsed.filePath,
           fileName: parsed.fileName,
-          metadata: parsed.metadata
+          metadata: parsed.metadata,
         };
 
         // Store in memory
@@ -96,13 +96,13 @@ class StatusMessageTracker extends EventEmitter {
 
         // Emit event
         this.emit('statusMessage', statusRecord);
-        
+
         // Link to context changes if applicable
         if (parsed.type === 'file_read' && parsed.filePath) {
           this.emit('fileRead', {
             filePath: parsed.filePath,
             timestamp: statusRecord.timestamp,
-            statusId: statusRecord.id
+            statusId: statusRecord.id,
           });
         }
 
@@ -162,7 +162,7 @@ class StatusMessageTracker extends EventEmitter {
           end tell
         end tell
       `;
-      
+
       const { stdout } = await execAsync(`osascript -e '${script.replace(/'/g, "'\\''")}'`);
       return stdout.trim();
     } catch (error) {
@@ -180,7 +180,9 @@ class StatusMessageTracker extends EventEmitter {
     const lowerMessage = message.toLowerCase();
 
     // Pattern: "Read X file" or "Reading file"
-    const readFileMatch = message.match(/(?:read|reading)\s+(?:(\d+)\s+)?(?:file|files)?\s*(?:[:]?\s*)?([^\s]+(?:\.[a-zA-Z0-9]+)?)/i);
+    const readFileMatch = message.match(
+      /(?:read|reading)\s+(?:(\d+)\s+)?(?:file|files)?\s*(?:[:]?\s*)?([^\s]+(?:\.[a-zA-Z0-9]+)?)/i
+    );
     if (readFileMatch) {
       return {
         type: 'file_read',
@@ -189,8 +191,8 @@ class StatusMessageTracker extends EventEmitter {
         fileName: readFileMatch[2] || null,
         filePath: readFileMatch[2] || null,
         metadata: {
-          originalMessage: message
-        }
+          originalMessage: message,
+        },
       };
     }
 
@@ -200,8 +202,8 @@ class StatusMessageTracker extends EventEmitter {
         type: 'planning',
         action: 'planning',
         metadata: {
-          originalMessage: message
-        }
+          originalMessage: message,
+        },
       };
     }
 
@@ -212,8 +214,8 @@ class StatusMessageTracker extends EventEmitter {
         action: 'analyzing',
         metadata: {
           originalMessage: message,
-          analysisType: lowerMessage.includes('code') ? 'code' : 'general'
-        }
+          analysisType: lowerMessage.includes('code') ? 'code' : 'general',
+        },
       };
     }
 
@@ -223,8 +225,8 @@ class StatusMessageTracker extends EventEmitter {
         type: 'processing',
         action: 'processing',
         metadata: {
-          originalMessage: message
-        }
+          originalMessage: message,
+        },
       };
     }
 
@@ -234,8 +236,8 @@ class StatusMessageTracker extends EventEmitter {
         type: 'thinking',
         action: 'thinking',
         metadata: {
-          originalMessage: message
-        }
+          originalMessage: message,
+        },
       };
     }
 
@@ -245,8 +247,8 @@ class StatusMessageTracker extends EventEmitter {
         type: 'generating',
         action: 'generating_code',
         metadata: {
-          originalMessage: message
-        }
+          originalMessage: message,
+        },
       };
     }
 
@@ -258,8 +260,8 @@ class StatusMessageTracker extends EventEmitter {
         action: 'searching',
         metadata: {
           originalMessage: message,
-          searchQuery: searchMatch ? searchMatch[1] : null
-        }
+          searchQuery: searchMatch ? searchMatch[1] : null,
+        },
       };
     }
 
@@ -268,8 +270,8 @@ class StatusMessageTracker extends EventEmitter {
       type: 'status',
       action: 'unknown',
       metadata: {
-        originalMessage: message
-      }
+        originalMessage: message,
+      },
     };
   }
 
@@ -277,8 +279,8 @@ class StatusMessageTracker extends EventEmitter {
    * Get status messages for a time range
    */
   getStatusMessages(startTime, endTime) {
-    return this.statusHistory.filter(status => 
-      status.timestamp >= startTime && status.timestamp <= endTime
+    return this.statusHistory.filter(
+      (status) => status.timestamp >= startTime && status.timestamp <= endTime
     );
   }
 
@@ -302,8 +304,3 @@ class StatusMessageTracker extends EventEmitter {
 }
 
 module.exports = StatusMessageTracker;
-
-
-
-
-

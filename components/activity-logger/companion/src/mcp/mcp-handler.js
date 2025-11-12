@@ -15,14 +15,14 @@ class MCPHandler {
 
   setupStdin() {
     let buffer = '';
-    
+
     stdin.on('data', (data) => {
       buffer += data.toString();
-      
+
       // Process complete lines
       const lines = buffer.split('\n');
       buffer = lines.pop(); // Keep incomplete line in buffer
-      
+
       for (const line of lines) {
         if (line.trim()) {
           this.handleMessage(line.trim());
@@ -42,7 +42,7 @@ class MCPHandler {
 
   processMessage(message) {
     const { method, params, id } = message;
-    
+
     switch (method) {
       case 'initialize':
         this.handleInitialize(id);
@@ -77,87 +77,87 @@ class MCPHandler {
           logging: {
             promptResponse: true,
             codeChange: true,
-            events: true
-          }
+            events: true,
+          },
         },
         serverInfo: {
           name: 'cursor-companion',
-          version: '1.0.0'
-        }
-      }
+          version: '1.0.0',
+        },
+      },
     };
-    
+
     this.sendResponse(response);
   }
 
   handleLogPromptResponse(params, id) {
     const { session_id, timestamp, file_path, prompt, response } = params;
-    
+
     // Update session info
     if (session_id) {
       this.sessionId = session_id;
     }
-    
+
     // Send to companion service via HTTP
     this.sendToCompanion('POST', '/mcp/log-prompt-response', {
       session_id: this.sessionId,
       timestamp: timestamp || new Date().toISOString(),
       file_path: file_path || '',
       prompt: prompt || '',
-      response: response || ''
+      response: response || '',
     });
-    
+
     this.sendResponse({
       jsonrpc: '2.0',
       id,
-      result: { success: true }
+      result: { success: true },
     });
   }
 
   handleLogCodeChange(params, id) {
     const { session_id, timestamp, file_path, before_code, after_code } = params;
-    
+
     // Update session info
     if (session_id) {
       this.sessionId = session_id;
     }
-    
+
     // Send to companion service via HTTP
     this.sendToCompanion('POST', '/mcp/log-code-change', {
       session_id: this.sessionId,
       timestamp: timestamp || new Date().toISOString(),
       file_path: file_path || '',
       before_code: before_code || '',
-      after_code: after_code || ''
+      after_code: after_code || '',
     });
-    
+
     this.sendResponse({
       jsonrpc: '2.0',
       id,
-      result: { success: true }
+      result: { success: true },
     });
   }
 
   handleLogEvent(params, id) {
     const { session_id, timestamp, type, details } = params;
-    
+
     // Update session info
     if (session_id) {
       this.sessionId = session_id;
     }
-    
+
     // Send to companion service via HTTP
     this.sendToCompanion('POST', '/mcp/log-event', {
       session_id: this.sessionId,
       timestamp: timestamp || new Date().toISOString(),
       type: type || 'unknown',
-      details: details || {}
+      details: details || {},
     });
-    
+
     this.sendResponse({
       jsonrpc: '2.0',
       id,
-      result: { success: true }
+      result: { success: true },
     });
   }
 
@@ -168,19 +168,19 @@ class MCPHandler {
       result: {
         session_id: this.sessionId,
         name: this.sessionName || 'Unknown Session',
-        created_at: new Date().toISOString()
-      }
+        created_at: new Date().toISOString(),
+      },
     });
   }
 
   handleSetConfig(params, id) {
     // Send to companion service via HTTP
     this.sendToCompanion('POST', '/config', params);
-    
+
     this.sendResponse({
       jsonrpc: '2.0',
       id,
-      result: { success: true }
+      result: { success: true },
     });
   }
 
@@ -188,15 +188,15 @@ class MCPHandler {
     try {
       // Import fetch dynamically for Node.js compatibility
       const { default: fetch } = await import('node-fetch');
-      
+
       const response = await fetch(`http://127.0.0.1:43917${path}`, {
         method,
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
         },
-        body: JSON.stringify(data)
+        body: JSON.stringify(data),
       });
-      
+
       if (!response.ok) {
         console.error(` Companion API error: ${response.status}`);
       } else {
@@ -215,7 +215,7 @@ class MCPHandler {
     this.sendResponse({
       jsonrpc: '2.0',
       id,
-      error: { code, message }
+      error: { code, message },
     });
   }
 }

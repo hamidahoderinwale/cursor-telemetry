@@ -1,8 +1,8 @@
 /**
  * Prescription System Test Script
- * 
+ *
  * Run this to verify the prescription system is working correctly.
- * 
+ *
  * Usage: node src/prescriptions/test.js
  */
 
@@ -31,7 +31,7 @@ const createResult = system.manager.create({
   prescription: 'This is a test prescription for automated testing',
   category: 'behavior',
   scope: 'global',
-  priority: 50
+  priority: 50,
 });
 
 if (!createResult.success) {
@@ -53,7 +53,7 @@ console.log('[SUCCESS] Found', prescriptions.length, 'prescription\n');
 // Test 3: Update prescription
 console.log('4. Updating prescription...');
 const updateResult = system.manager.update(createResult.id, {
-  priority: 75
+  priority: 75,
 });
 
 if (!updateResult.success) {
@@ -72,7 +72,7 @@ console.log('[SUCCESS] Prescription updated\n');
 console.log('5. Testing injection...');
 const injection = system.injector.inject({
   workspace: '/test/workspace',
-  fileType: '.js'
+  fileType: '.js',
 });
 
 if (injection.count !== 1) {
@@ -102,7 +102,7 @@ const invalidResult = system.manager.create({
   title: 'X', // Too short
   prescription: 'Short', // Too short
   category: 'invalid-category', // Invalid
-  scope: 'global'
+  scope: 'global',
 });
 
 if (invalidResult.success) {
@@ -156,15 +156,15 @@ const importData = [
     prescription: 'First imported prescription',
     category: 'behavior',
     scope: 'global',
-    priority: 50
+    priority: 50,
   },
   {
     title: 'Import Test 2',
     prescription: 'Second imported prescription',
     category: 'formatting',
     scope: 'global',
-    priority: 60
-  }
+    priority: 60,
+  },
 ];
 
 const importResult = system.manager.bulkImport(importData);
@@ -192,15 +192,15 @@ system.manager.create({
   prescription: 'Always use semicolons in JavaScript',
   category: 'formatting',
   scope: 'global',
-  priority: 50
+  priority: 50,
 });
 
 system.manager.create({
   title: 'Never Use Semicolons',
-  prescription: "Never use semicolons in JavaScript",
+  prescription: 'Never use semicolons in JavaScript',
   category: 'formatting',
   scope: 'global',
-  priority: 50
+  priority: 50,
 });
 
 const conflicts = system.manager.detectConflicts();
@@ -221,4 +221,3 @@ console.log('You can now integrate it into your companion service.\n');
 
 db.close();
 process.exit(0);
-

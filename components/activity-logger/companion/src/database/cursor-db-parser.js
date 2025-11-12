@@ -20,11 +20,11 @@ class CursorDatabaseParser {
     this.cache = {
       conversations: [],
       prompts: [],
-      lastUpdate: 0
+      lastUpdate: 0,
     };
     this.updateInterval = 300000; // Update every 5 minutes (increased from 10s to reduce DB reads)
     this.contextExtractor = new ContextExtractor();
-    
+
     // Add mutex to prevent concurrent database reads (thundering herd)
     this.refreshPromise = null;
     this.isRefreshing = false;
@@ -37,7 +37,7 @@ class CursorDatabaseParser {
     const basePath = path.join(os.homedir(), 'Library/Application Support/Cursor');
     return {
       global: path.join(basePath, 'User/globalStorage/state.vscdb'),
-      workspaces: path.join(basePath, 'User/workspaceStorage')
+      workspaces: path.join(basePath, 'User/workspaceStorage'),
     };
   }
 
@@ -49,7 +49,7 @@ class CursorDatabaseParser {
       const { workspaces } = this.dbPaths;
       const workspaceDir = path.join(workspaces, workspaceId);
       const workspaceJsonPath = path.join(workspaceDir, 'workspace.json');
-      
+
       if (fs.existsSync(workspaceJsonPath)) {
         const workspaceJson = JSON.parse(fs.readFileSync(workspaceJsonPath, 'utf8'));
         if (workspaceJson.folder) {
@@ -60,7 +60,7 @@ class CursorDatabaseParser {
     } catch (error) {
       console.warn(`Could not resolve workspace path for ${workspaceId}:`, error.message);
     }
-    
+
     return null;
   }
 
@@ -84,15 +84,15 @@ class CursorDatabaseParser {
 
       // Extract aiService.prompts (user inputs)
       const promptQuery = `SELECT value FROM ItemTable WHERE key = 'aiService.prompts'`;
-      const { stdout: promptData } = await execAsync(
-        `sqlite3 "${dbPath}" "${promptQuery}"`
-      ).catch(() => ({ stdout: '' }));
+      const { stdout: promptData } = await execAsync(`sqlite3 "${dbPath}" "${promptQuery}"`).catch(
+        () => ({ stdout: '' })
+      );
 
       // Extract aiService.generations (AI responses)
       const genQuery = `SELECT value FROM ItemTable WHERE key = 'aiService.generations'`;
-      const { stdout: genData } = await execAsync(
-        `sqlite3 "${dbPath}" "${genQuery}"`
-      ).catch(() => ({ stdout: '' }));
+      const { stdout: genData } = await execAsync(`sqlite3 "${dbPath}" "${genQuery}"`).catch(
+        () => ({ stdout: '' })
+      );
 
       // Extract additional metadata that might contain context usage and model info
       // Query for keys that might contain context/token information
@@ -107,7 +107,7 @@ class CursorDatabaseParser {
       const { stdout: conversationData } = await execAsync(
         `sqlite3 "${dbPath}" "${conversationQuery}"`
       ).catch(() => ({ stdout: '' }));
-      
+
       let conversationMetadata = {};
       if (conversationData.trim()) {
         try {
@@ -116,27 +116,27 @@ class CursorDatabaseParser {
           // Use a regex that splits on the first tab only
           const lines = conversationData.trim().split('\n');
           const conversationsMap = new Map();
-          
+
           for (const line of lines) {
             if (!line) continue;
             // Split on first tab only (sqlite3 default separator)
             const tabIndex = line.indexOf('\t');
             if (tabIndex === -1) continue;
-            
+
             const key = line.substring(0, tabIndex);
             const value = line.substring(tabIndex + 1);
-            
+
             try {
               const parsed = JSON.parse(value);
               // If it's an array of conversations, store them
               if (Array.isArray(parsed)) {
-                parsed.forEach(conv => {
+                parsed.forEach((conv) => {
                   if (conv.id && !conversationsMap.has(conv.id)) {
                     conversationsMap.set(conv.id, conv);
                   }
                 });
               } else if (parsed.conversations && Array.isArray(parsed.conversations)) {
-                parsed.conversations.forEach(conv => {
+                parsed.conversations.forEach((conv) => {
                   if (conv.id && !conversationsMap.has(conv.id)) {
                     conversationsMap.set(conv.id, conv);
                   }
@@ -150,14 +150,14 @@ class CursorDatabaseParser {
               try {
                 const fullParsed = JSON.parse(value);
                 if (Array.isArray(fullParsed)) {
-                  fullParsed.forEach(conv => {
+                  fullParsed.forEach((conv) => {
                     if (conv.id && !conversationsMap.has(conv.id)) {
                       conversationsMap.set(conv.id, conv);
                     }
                   });
                 } else if (fullParsed.conversations) {
                   if (Array.isArray(fullParsed.conversations)) {
-                    fullParsed.conversations.forEach(conv => {
+                    fullParsed.conversations.forEach((conv) => {
                       if (conv.id && !conversationsMap.has(conv.id)) {
                         conversationsMap.set(conv.id, conv);
                       }
@@ -171,7 +171,7 @@ class CursorDatabaseParser {
               }
             }
           }
-          
+
           // Convert map to array or object structure
           if (conversationsMap.size > 0) {
             conversationMetadata.conversations = Array.from(conversationsMap.values());
@@ -201,7 +201,8 @@ class CursorDatabaseParser {
           const promptsArray = JSON.parse(promptData.trim());
           if (Array.isArray(promptsArray)) {
             promptsArray.forEach((item, idx) => {
-              const text = item.text || item.textDescription || item.prompt || item.content || item.message;
+              const text =
+                item.text || item.textDescription || item.prompt || item.content || item.message;
               if (text && text.trim()) {
                 prompts.push({
                   text: text.trim(),
@@ -210,11 +211,20 @@ class CursorDatabaseParser {
                   generationUUID: item.generationUUID,
                   commandType: item.commandType,
                   // Capture conversation title if available
-                  conversationTitle: item.title || item.conversationTitle || item.conversation?.title || item.metadata?.title || null,
-                  conversationId: item.conversationId || item.conversation?.id || item.metadata?.conversationId || null,
+                  conversationTitle:
+                    item.title ||
+                    item.conversationTitle ||
+                    item.conversation?.title ||
+                    item.metadata?.title ||
+                    null,
+                  conversationId:
+                    item.conversationId ||
+                    item.conversation?.id ||
+                    item.metadata?.conversationId ||
+                    null,
                   index: idx,
                   messageRole: 'user',
-                  source: 'aiService'
+                  source: 'aiService',
                 });
               }
             });
@@ -233,10 +243,10 @@ class CursorDatabaseParser {
             if (!line) continue;
             const tabIndex = line.indexOf('\t');
             if (tabIndex === -1) continue;
-            
+
             const key = line.substring(0, tabIndex);
             const value = line.substring(tabIndex + 1);
-            
+
             try {
               const parsed = JSON.parse(value);
               metadataMap.set(key, parsed);
@@ -260,30 +270,39 @@ class CursorDatabaseParser {
               if (text && text.trim()) {
                 // Extract model information - check for actual model used vs "auto"
                 const model = item.model || item.model_name || item.assistant_model || null;
-                const actualModel = item.actual_model || item.resolved_model || item.selected_model || model;
-                const isAuto = !model || model.toLowerCase() === 'auto' || model.toLowerCase().includes('auto');
-                
+                const actualModel =
+                  item.actual_model || item.resolved_model || item.selected_model || model;
+                const isAuto =
+                  !model || model.toLowerCase() === 'auto' || model.toLowerCase().includes('auto');
+
                 // Extract context usage from various possible fields
-                const contextUsage = item.context_usage || 
-                                    item.contextUsage || 
-                                    item.context_usage_percent ||
-                                    item.token_usage?.context_percent ||
-                                    item.usage?.context_percent ||
-                                    null;
-                
+                const contextUsage =
+                  item.context_usage ||
+                  item.contextUsage ||
+                  item.context_usage_percent ||
+                  item.token_usage?.context_percent ||
+                  item.usage?.context_percent ||
+                  null;
+
                 // Calculate context usage from token counts if available
                 let calculatedContextUsage = null;
-                if (!contextUsage && (item.prompt_tokens || item.total_tokens || item.token_count)) {
+                if (
+                  !contextUsage &&
+                  (item.prompt_tokens || item.total_tokens || item.token_count)
+                ) {
                   const promptTokens = item.prompt_tokens || item.token_count || 0;
                   const totalTokens = item.total_tokens || item.max_tokens || 0;
                   // Common context window sizes: 128k, 200k, 1M tokens
                   // Estimate based on prompt tokens (assuming 200k default)
                   const contextWindowSize = item.context_window_size || 200000;
                   if (promptTokens > 0 && contextWindowSize > 0) {
-                    calculatedContextUsage = Math.min(100, (promptTokens / contextWindowSize) * 100);
+                    calculatedContextUsage = Math.min(
+                      100,
+                      (promptTokens / contextWindowSize) * 100
+                    );
                   }
                 }
-                
+
                 generations.push({
                   text: text.trim(),
                   type: item.type || 'unknown',
@@ -304,7 +323,7 @@ class CursorDatabaseParser {
                   maxTokens: item.max_tokens,
                   index: idx,
                   messageRole: 'assistant',
-                  source: 'aiService'
+                  source: 'aiService',
                 });
               }
             });
@@ -314,7 +333,12 @@ class CursorDatabaseParser {
         }
       }
 
-      return { prompts, generations, conversationMetadata, metadata: Object.fromEntries(metadataMap) };
+      return {
+        prompts,
+        generations,
+        conversationMetadata,
+        metadata: Object.fromEntries(metadataMap),
+      };
     } catch (error) {
       console.warn('Error extracting AI service data:', error.message);
       return { prompts: [], generations: [], conversationMetadata: {} };
@@ -324,19 +348,18 @@ class CursorDatabaseParser {
   // REMOVED: Old extraction methods (extractComposerData, extractWorkspacePrompts, parsePersistentComposerData)
   // Now using extractAIServiceData which gets the actual message content from aiService.prompts + aiService.generations
 
-
   /**
    * Extract terminal blocks from text (code blocks with terminal output)
    */
   extractTerminalBlocks(text) {
     if (!text) return [];
-    
+
     const terminalBlocks = [];
-    
+
     // Pattern 1: Code blocks with bash/shell/terminal language
     const codeBlockPattern = /```(?:bash|shell|terminal|zsh|sh)?\n([\s\S]*?)```/g;
     let match;
-    
+
     while ((match = codeBlockPattern.exec(text)) !== null) {
       const content = match[1].trim();
       if (content.length > 0) {
@@ -344,50 +367,49 @@ class CursorDatabaseParser {
           type: 'code_block',
           content: content,
           hasPrompt: content.includes('$') || content.includes('%'),
-          position: match.index
+          position: match.index,
         });
       }
     }
-    
+
     // Pattern 2: Terminal-like patterns in plain text ($ or % prompts)
     const terminalLinePattern = /^[\$%]\s+(.+)$/gm;
     while ((match = terminalLinePattern.exec(text)) !== null) {
       terminalBlocks.push({
         type: 'terminal_line',
         content: match[1].trim(),
-        position: match.index
+        position: match.index,
       });
     }
-    
+
     // Pattern 3: Error messages
     const errorPatterns = [
       /Error:\s*(.+)/gi,
       /Exception:\s*(.+)/gi,
       /Failed:\s*(.+)/gi,
-      /\[ERROR\]\s*(.+)/gi
+      /\[ERROR\]\s*(.+)/gi,
     ];
-    
-    errorPatterns.forEach(pattern => {
+
+    errorPatterns.forEach((pattern) => {
       let errorMatch;
       while ((errorMatch = pattern.exec(text)) !== null) {
         terminalBlocks.push({
           type: 'error_message',
           content: errorMatch[1].trim(),
-          position: errorMatch.index
+          position: errorMatch.index,
         });
       }
     });
-    
+
     return terminalBlocks;
   }
-
 
   /**
    * Extract context information for prompts
    */
   async extractContextForPrompts(prompts) {
     const enrichedPrompts = [];
-    
+
     for (const prompt of prompts) {
       try {
         // Extract context using the context extractor
@@ -395,9 +417,9 @@ class CursorDatabaseParser {
           text: prompt.text,
           content: prompt.text,
           composerData: prompt.composerData || {},
-          response: prompt.response
+          response: prompt.response,
         });
-        
+
         // Enrich prompt with context information
         const enrichedPrompt = {
           ...prompt,
@@ -406,20 +428,19 @@ class CursorDatabaseParser {
             contextFiles: context.contextFiles || {},
             responseFiles: context.responseFiles || [],
             browserState: context.browserState || {},
-            fileRelationships: context.fileRelationships || {}
-          }
+            fileRelationships: context.fileRelationships || {},
+          },
         };
-        
+
         enrichedPrompts.push(enrichedPrompt);
       } catch (error) {
         console.warn(`Could not extract context for prompt ${prompt.composerId}:`, error.message);
         enrichedPrompts.push(prompt);
       }
     }
-    
+
     return enrichedPrompts;
   }
-
 
   /**
    * Get all workspaces (including stale/old ones)
@@ -427,7 +448,7 @@ class CursorDatabaseParser {
   async getAllWorkspaces() {
     try {
       const { workspaces } = this.dbPaths;
-      
+
       if (!fs.existsSync(workspaces)) {
         return [];
       }
@@ -439,20 +460,20 @@ class CursorDatabaseParser {
         try {
           const workspaceDir = path.join(workspaces, dir);
           const stat = fs.statSync(workspaceDir);
-          
+
           // Skip if not a directory
           if (!stat.isDirectory()) continue;
-          
+
           const workspacePath = this.getWorkspacePath(dir);
           const workspaceName = this.getWorkspaceName(workspacePath);
-          
+
           allWorkspaces.push({
             id: dir,
             path: workspacePath,
             name: workspaceName,
             lastAccessed: stat.mtime,
             created: stat.birthtime || stat.ctime,
-            exists: workspacePath ? fs.existsSync(workspacePath) : false
+            exists: workspacePath ? fs.existsSync(workspacePath) : false,
           });
         } catch (error) {
           // Skip workspaces that can't be read
@@ -462,10 +483,9 @@ class CursorDatabaseParser {
 
       // Sort by last accessed (most recent first)
       allWorkspaces.sort((a, b) => b.lastAccessed - a.lastAccessed);
-      
+
       console.log(`[FILE] Found ${allWorkspaces.length} total workspaces`);
       return allWorkspaces;
-
     } catch (error) {
       console.error('Error getting all workspaces:', error.message);
       return [];
@@ -478,7 +498,7 @@ class CursorDatabaseParser {
    */
   async getAllData() {
     const now = Date.now();
-    
+
     // Use cache if recent
     if (now - this.cache.lastUpdate < this.updateInterval) {
       return this.cache;
@@ -508,23 +528,25 @@ class CursorDatabaseParser {
 
         // Count unique conversations
         const uniqueConversations = new Set(
-          enrichedPrompts.map(p => p.parentConversationId).filter(Boolean)
+          enrichedPrompts.map((p) => p.parentConversationId).filter(Boolean)
         ).size;
 
         this.cache = {
-          conversations: [],  // No longer needed - messages are self-contained
+          conversations: [], // No longer needed - messages are self-contained
           prompts: enrichedPrompts,
           lastUpdate: Date.now(),
           stats: {
             totalConversations: uniqueConversations,
             totalPrompts: enrichedPrompts.length,
             aiServiceMessages: aiServiceMessages.length,
-            userMessages: enrichedPrompts.filter(p => p.messageRole === 'user').length,
-            assistantMessages: enrichedPrompts.filter(p => p.messageRole === 'assistant').length
-          }
+            userMessages: enrichedPrompts.filter((p) => p.messageRole === 'user').length,
+            assistantMessages: enrichedPrompts.filter((p) => p.messageRole === 'assistant').length,
+          },
         };
 
-        console.log(`[CACHE] Database refreshed: ${enrichedPrompts.length} prompts, ${uniqueConversations} workspaces`);
+        console.log(
+          `[CACHE] Database refreshed: ${enrichedPrompts.length} prompts, ${uniqueConversations} workspaces`
+        );
         return this.cache;
       } catch (error) {
         console.error('Error getting all data:', error.message);
@@ -544,35 +566,44 @@ class CursorDatabaseParser {
   async extractAllAIServiceData() {
     try {
       const { workspaces: workspaceRoot } = this.dbPaths;
-      
+
       if (!fs.existsSync(workspaceRoot)) {
         return [];
       }
 
-      const workspaceDirs = fs.readdirSync(workspaceRoot)
-        .filter(name => {
-          const dbPath = path.join(workspaceRoot, name, 'state.vscdb');
-          return fs.existsSync(dbPath);
-        });
+      const workspaceDirs = fs.readdirSync(workspaceRoot).filter((name) => {
+        const dbPath = path.join(workspaceRoot, name, 'state.vscdb');
+        return fs.existsSync(dbPath);
+      });
 
       console.log(`[AI-SERVICE] Extracting from ${workspaceDirs.length} workspaces...`);
 
       const allMessages = [];
-      
+
       for (const workspaceId of workspaceDirs) {
         const dbPath = path.join(workspaceRoot, workspaceId, 'state.vscdb');
-        const { prompts, generations, conversationMetadata } = await this.extractAIServiceData(dbPath);
-        
+        const { prompts, generations, conversationMetadata } =
+          await this.extractAIServiceData(dbPath);
+
         // Get workspace metadata
         const workspacePath = this.getWorkspacePath(workspaceId);
         const workspaceName = this.getWorkspaceName(workspacePath);
 
         // Link prompts to generations by UUID and create threaded conversations
-        const linked = this.linkPromptsToGenerations(prompts, generations, workspaceId, workspacePath, workspaceName, conversationMetadata);
+        const linked = this.linkPromptsToGenerations(
+          prompts,
+          generations,
+          workspaceId,
+          workspacePath,
+          workspaceName,
+          conversationMetadata
+        );
         allMessages.push(...linked);
       }
 
-      console.log(`[AI-SERVICE] Extracted ${allMessages.length} messages with conversation threading`);
+      console.log(
+        `[AI-SERVICE] Extracted ${allMessages.length} messages with conversation threading`
+      );
       return allMessages;
     } catch (error) {
       console.warn('Error extracting AI service data:', error.message);
@@ -583,12 +614,19 @@ class CursorDatabaseParser {
   /**
    * Link user prompts to AI generations and create conversation threads
    */
-  linkPromptsToGenerations(prompts, generations, workspaceId, workspacePath, workspaceName, conversationMetadata = {}) {
+  linkPromptsToGenerations(
+    prompts,
+    generations,
+    workspaceId,
+    workspacePath,
+    workspaceName,
+    conversationMetadata = {}
+  ) {
     const threaded = [];
     const genMap = new Map();
 
     // Build generation lookup by UUID
-    generations.forEach(gen => {
+    generations.forEach((gen) => {
       if (gen.generationUUID) {
         genMap.set(gen.generationUUID, gen);
       }
@@ -599,13 +637,16 @@ class CursorDatabaseParser {
     if (conversationMetadata && typeof conversationMetadata === 'object') {
       // If conversationMetadata is an array of conversations
       if (Array.isArray(conversationMetadata)) {
-        conversationMetadata.forEach(conv => {
+        conversationMetadata.forEach((conv) => {
           if (conv.id && conv.title) {
             conversationTitleMap.set(conv.id, conv.title);
           }
         });
-      } else if (conversationMetadata.conversations && Array.isArray(conversationMetadata.conversations)) {
-        conversationMetadata.conversations.forEach(conv => {
+      } else if (
+        conversationMetadata.conversations &&
+        Array.isArray(conversationMetadata.conversations)
+      ) {
+        conversationMetadata.conversations.forEach((conv) => {
           if (conv.id && conv.title) {
             conversationTitleMap.set(conv.id, conv.title);
           }
@@ -616,7 +657,7 @@ class CursorDatabaseParser {
     // Link prompts to their responses
     prompts.forEach((prompt, idx) => {
       const correspondingGen = genMap.get(prompt.generationUUID);
-      
+
       // Estimate timestamp if not available
       let timestamp = prompt.timestamp;
       if (!timestamp && correspondingGen && correspondingGen.timestamp) {
@@ -625,7 +666,7 @@ class CursorDatabaseParser {
 
       // Create stable conversation ID: prefer generationUUID (from Cursor DB), then conversationId, then create workspace-scoped ID
       let conversationId = prompt.generationUUID || prompt.conversationId;
-      
+
       // If no stable ID, create one based on workspace + a hash of first message
       if (!conversationId) {
         const firstMessageHash = require('crypto')
@@ -635,29 +676,34 @@ class CursorDatabaseParser {
           .substring(0, 8);
         conversationId = `${workspaceId}_${firstMessageHash}`;
       }
-      
+
       // Ensure conversation ID is workspace-scoped to prevent collisions
       if (workspaceId && !conversationId.includes(workspaceId)) {
         conversationId = `${workspaceId}:${conversationId}`;
       }
 
       // Determine conversation title: prefer explicit title, then metadata map, then smart extraction
-      let conversationTitle = prompt.conversationTitle || 
-                              conversationTitleMap.get(conversationId) ||
-                              conversationTitleMap.get(prompt.conversationId) ||
-                              null;
-      
+      let conversationTitle =
+        prompt.conversationTitle ||
+        conversationTitleMap.get(conversationId) ||
+        conversationTitleMap.get(prompt.conversationId) ||
+        null;
+
       // Smart title extraction: look for common patterns
       if (!conversationTitle && prompt.text) {
         const text = prompt.text.trim();
-        
+
         // Pattern 1: First line if it's short and looks like a title
         const firstLine = text.split('\n')[0];
         if (firstLine.length < 100 && firstLine.length > 10 && !firstLine.includes('```')) {
           conversationTitle = firstLine;
         }
         // Pattern 2: Extract from "Fix X", "Add Y", "Implement Z" patterns
-        else if (text.match(/^(fix|add|implement|create|update|refactor|remove|delete|improve|investigate|debug|test|write|build|design)\s+/i)) {
+        else if (
+          text.match(
+            /^(fix|add|implement|create|update|refactor|remove|delete|improve|investigate|debug|test|write|build|design)\s+/i
+          )
+        ) {
           const match = text.match(/^([A-Z][^.!?]{10,80})/);
           if (match) {
             conversationTitle = match[1].trim();
@@ -679,16 +725,18 @@ class CursorDatabaseParser {
       }
 
       // Extract model and context info from corresponding generation
-      const modelInfo = correspondingGen ? {
-        model: correspondingGen.model,
-        originalModel: correspondingGen.originalModel,
-        isAuto: correspondingGen.isAuto,
-        contextUsage: correspondingGen.contextUsage,
-        promptTokens: correspondingGen.promptTokens,
-        completionTokens: correspondingGen.completionTokens,
-        totalTokens: correspondingGen.totalTokens,
-        contextWindowSize: correspondingGen.contextWindowSize
-      } : {};
+      const modelInfo = correspondingGen
+        ? {
+            model: correspondingGen.model,
+            originalModel: correspondingGen.originalModel,
+            isAuto: correspondingGen.isAuto,
+            contextUsage: correspondingGen.contextUsage,
+            promptTokens: correspondingGen.promptTokens,
+            completionTokens: correspondingGen.completionTokens,
+            totalTokens: correspondingGen.totalTokens,
+            contextWindowSize: correspondingGen.contextWindowSize,
+          }
+        : {};
 
       // Add user message
       const isConversationThread = prompt.type === 'composer';
@@ -715,7 +763,7 @@ class CursorDatabaseParser {
         contextUsage: modelInfo.contextUsage || null,
         promptTokens: modelInfo.promptTokens || null,
         confidence: 'high',
-        status: 'captured'
+        status: 'captured',
       });
 
       // Add AI response if it exists
@@ -748,11 +796,12 @@ class CursorDatabaseParser {
           completionTokens: correspondingGen.completionTokens || null,
           totalTokens: correspondingGen.totalTokens || null,
           contextWindowSize: correspondingGen.contextWindowSize || null,
-          thinkingTimeSeconds: correspondingGen.timestamp && timestamp 
-            ? ((correspondingGen.timestamp - timestamp) / 1000).toFixed(2)
-            : null,
+          thinkingTimeSeconds:
+            correspondingGen.timestamp && timestamp
+              ? ((correspondingGen.timestamp - timestamp) / 1000).toFixed(2)
+              : null,
           confidence: 'high',
-          status: 'captured'
+          status: 'captured',
         });
       }
     });
@@ -765,9 +814,9 @@ class CursorDatabaseParser {
    */
   startMonitoring(callback) {
     console.log('[SEARCH] Starting Cursor database monitoring...');
-    
+
     // Initial extraction
-    this.getAllData().then(data => {
+    this.getAllData().then((data) => {
       if (callback) callback(data);
     });
 
@@ -798,19 +847,21 @@ module.exports = CursorDatabaseParser;
 // Test if run directly
 if (require.main === module) {
   const parser = new CursorDatabaseParser();
-  
-  parser.getAllData().then(data => {
-    console.log('\n[DATA] Cursor Database Extraction Results:');
-    console.log('=====================================');
-    console.log(`Conversations: ${data.conversations.length}`);
-    console.log(`Prompts: ${data.prompts.length}`);
-    console.log('\nSample Prompts:');
-    data.prompts.slice(0, 5).forEach((prompt, i) => {
-      const text = prompt.text || prompt.preview || 'No text';
-      console.log(`${i + 1}. ${text.substring(0, 100)}...`);
-    });
-  }).catch(error => {
-    console.error('Error:', error);
-  });
-}
 
+  parser
+    .getAllData()
+    .then((data) => {
+      console.log('\n[DATA] Cursor Database Extraction Results:');
+      console.log('=====================================');
+      console.log(`Conversations: ${data.conversations.length}`);
+      console.log(`Prompts: ${data.prompts.length}`);
+      console.log('\nSample Prompts:');
+      data.prompts.slice(0, 5).forEach((prompt, i) => {
+        const text = prompt.text || prompt.preview || 'No text';
+        console.log(`${i + 1}. ${text.substring(0, 100)}...`);
+      });
+    })
+    .catch((error) => {
+      console.error('Error:', error);
+    });
+}

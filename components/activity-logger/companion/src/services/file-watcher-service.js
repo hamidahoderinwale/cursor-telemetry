@@ -23,7 +23,7 @@ function createFileWatcherService(deps) {
     io,
     broadcastUpdate,
     enqueue,
-    getCurrentActiveTodo
+    getCurrentActiveTodo,
   } = deps;
 
   let watcher = null;
@@ -33,14 +33,14 @@ function createFileWatcherService(deps) {
     const diffThreshold = config.diff_threshold;
     const diffSize = Math.abs(text1.length - text2.length);
     const isSignificant = diffSize >= diffThreshold;
-    
+
     const lines1 = text1.split('\n');
     const lines2 = text2.split('\n');
     const linesAdded = Math.max(0, lines2.length - lines1.length);
     const linesRemoved = Math.max(0, lines1.length - lines2.length);
     const charsAdded = Math.max(0, text2.length - text1.length);
     const charsDeleted = Math.max(0, text1.length - text2.length);
-    
+
     return {
       diffSize,
       isSignificant,
@@ -50,47 +50,53 @@ function createFileWatcherService(deps) {
       charsAdded,
       charsDeleted,
       beforeContent: text1,
-      afterContent: text2
+      afterContent: text2,
     };
   }
 
   async function processFileChange(filePath) {
     console.log(` Processing file change: ${filePath}`);
-    
+
     const workspacePath = detectWorkspace(filePath);
     const workspaceSession = getWorkspaceSession(workspacePath);
-    
+
     checkSessionTimeout();
     updateActivityTime();
-    
+
     try {
       const stats = fs.statSync(filePath);
       const maxFileSizeMB = 5;
       const maxFileSizeBytes = maxFileSizeMB * 1024 * 1024;
-      
+
       if (stats.size > maxFileSizeBytes) {
-        console.log(`[WARNING] Skipping large file (${(stats.size / 1024 / 1024).toFixed(2)}MB): ${filePath}`);
+        console.log(
+          `[WARNING] Skipping large file (${(stats.size / 1024 / 1024).toFixed(2)}MB): ${filePath}`
+        );
         return;
       }
-      
+
       const content = fs.readFileSync(filePath, 'utf8');
       const relativePath = path.relative(workspacePath, filePath);
       const previousContent = fileSnapshots.get(filePath) || '';
-      
-      console.log(` File: ${relativePath}, Workspace: ${workspacePath}, Session: ${workspaceSession}`);
+
+      console.log(
+        ` File: ${relativePath}, Workspace: ${workspacePath}, Session: ${workspaceSession}`
+      );
       console.log(` Previous length: ${previousContent.length}, Current length: ${content.length}`);
-      
+
       if (content !== previousContent) {
         const diff = calculateDiff(previousContent, content);
-        console.log(` Diff: ${diff.summary}, Significant: ${diff.isSignificant}, Threshold: ${config.diff_threshold}`);
-        
+        console.log(
+          ` Diff: ${diff.summary}, Significant: ${diff.isSignificant}, Threshold: ${config.diff_threshold}`
+        );
+
         if (diff.isSignificant) {
           const modelInfo = extractModelInfo({
             file_path: relativePath,
             content: content,
-            before_content: previousContent
+            before_content: previousContent,
           });
-          
+
           const entry = queueSystem.addEntry({
             session_id: workspaceSession,
             workspace_path: workspacePath,
@@ -100,31 +106,33 @@ function createFileWatcherService(deps) {
             after_code: content,
             notes: `File change detected. Diff: ${diff.summary}`,
             tags: ['filewatcher-detected', 'code-change'],
-            modelInfo: modelInfo
+            modelInfo: modelInfo,
           });
-          
+
           try {
             await db.add('entries', entry);
             console.log(`Saved entry to database: ${entry.id} for workspace: ${workspacePath}`);
-            
+
             const currentActiveTodo = getCurrentActiveTodo ? getCurrentActiveTodo() : null;
             if (currentActiveTodo) {
               await persistentDB.addFileToTodo(currentActiveTodo, relativePath);
               await persistentDB.linkEventToTodo('file_change', entry.id);
-              console.log(`   [TODO] Linked file change ${entry.id} (${relativePath}) to TODO ${currentActiveTodo}`);
+              console.log(
+                `   [TODO] Linked file change ${entry.id} (${relativePath}) to TODO ${currentActiveTodo}`
+              );
             }
-            
+
             updateWorkspaceData(workspacePath, entry, null);
-            
+
             const ttfeMetrics = productivityTracker.trackFileEdit(entry);
-            
+
             if (entry.source === 'ai-generated' || entry.prompt_id) {
               productivityTracker.trackCodeChurn(entry);
             }
-            
+
             productivityTracker.detectDebugActivity(entry);
             productivityTracker.trackActivity('file_change');
-            
+
             io.emit('new-entry', entry);
             io.emit('entries-update', db.entries);
             broadcastUpdate('file-change', {
@@ -135,63 +143,65 @@ function createFileWatcherService(deps) {
               timestamp: new Date().toISOString(),
               beforeContent: previousContent,
               afterContent: content,
-              diff: diff.summary
+              diff: diff.summary,
             });
           } catch (error) {
             console.error('Error saving entry to database:', error);
           }
-          
+
           try {
             const entryTime = new Date(entry.timestamp).getTime();
-            const fiveMinutesAgo = entryTime - (5 * 60 * 1000);
-            
+            const fiveMinutesAgo = entryTime - 5 * 60 * 1000;
+
             const recentPrompts = await persistentDB.getPromptsInTimeRange(
               new Date(fiveMinutesAgo).toISOString(),
               new Date(entryTime).toISOString(),
               50
             );
-            
+
             const candidatePrompts = recentPrompts
-              .filter(p => {
+              .filter((p) => {
                 const status = p.status || 'captured';
                 const linkedEntryId = p.linked_entry_id || p.linkedEntryId;
                 return (status === 'pending' || status === 'captured') && !linkedEntryId;
               })
               .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-            
+
             const lastPrompt = candidatePrompts[0];
-            
+
             if (lastPrompt) {
               await persistentDB.updatePrompt(lastPrompt.id, {
                 status: 'linked',
-                linked_entry_id: entry.id
+                linked_entry_id: entry.id,
               });
-              
-              await persistentDB.updateEntry(entry.id, { 
-                prompt_id: lastPrompt.id 
+
+              await persistentDB.updateEntry(entry.id, {
+                prompt_id: lastPrompt.id,
               });
-              
-              const inMemoryPrompt = db.prompts.find(p => p.id === lastPrompt.id);
+
+              const inMemoryPrompt = db.prompts.find((p) => p.id === lastPrompt.id);
               if (inMemoryPrompt) {
                 inMemoryPrompt.status = 'linked';
                 inMemoryPrompt.linked_entry_id = entry.id;
               }
               entry.prompt_id = lastPrompt.id;
-              
+
               const promptText = lastPrompt.text || lastPrompt.prompt || lastPrompt.content || '';
-              console.log(`Linked prompt ${lastPrompt.id} ("${promptText.substring(0, 50)}...") to entry ${entry.id}`);
+              console.log(
+                `Linked prompt ${lastPrompt.id} ("${promptText.substring(0, 50)}...") to entry ${entry.id}`
+              );
             }
           } catch (error) {
             console.error('Error linking prompt to entry:', error);
           }
-          
+
           const event = {
             id: crypto.randomUUID(),
             session_id: workspaceSession,
             workspace_path: workspacePath,
             timestamp: entry.timestamp,
             type: 'code_change',
-            details: JSON.stringify({ 
+            details: JSON.stringify({
               file_path: relativePath,
               diff_summary: diff.summary,
               diff_size: diff.diffSize,
@@ -199,21 +209,27 @@ function createFileWatcherService(deps) {
               lines_removed: diff.linesRemoved,
               chars_added: diff.charsAdded,
               chars_deleted: diff.charsDeleted,
-              before_content: diff.beforeContent.length > 10000 ? diff.beforeContent.substring(0, 10000) + '\n... (truncated)' : diff.beforeContent,
-              after_content: diff.afterContent.length > 10000 ? diff.afterContent.substring(0, 10000) + '\n... (truncated)' : diff.afterContent
-            })
+              before_content:
+                diff.beforeContent.length > 10000
+                  ? diff.beforeContent.substring(0, 10000) + '\n... (truncated)'
+                  : diff.beforeContent,
+              after_content:
+                diff.afterContent.length > 10000
+                  ? diff.afterContent.substring(0, 10000) + '\n... (truncated)'
+                  : diff.afterContent,
+            }),
           };
-          
+
           enqueue('entry', entry);
           enqueue('event', event);
-          
+
           updateWorkspaceData(workspacePath, null, event);
-          
+
           console.log(`File change detected: ${relativePath} in workspace: ${workspacePath}`);
         } else {
           console.log(`Change too small for ${relativePath}: ${diff.summary}`);
         }
-        
+
         fileSnapshots.set(filePath, content);
       } else {
         console.log(`No content change for ${relativePath}`);
@@ -227,12 +243,14 @@ function createFileWatcherService(deps) {
     if (watcher) {
       watcher.close();
     }
-    
+
     const workspacesToWatch = config.workspace_roots || config.workspaces || [config.root_dir];
     const autoDetect = config.auto_detect_workspaces !== false;
-    
+
     if (autoDetect) {
-      console.log(` Starting automatic workspace detection from ${workspacesToWatch.length} root(s):`);
+      console.log(
+        ` Starting automatic workspace detection from ${workspacesToWatch.length} root(s):`
+      );
     } else {
       console.log(` Starting file watcher for ${workspacesToWatch.length} workspace(s):`);
     }
@@ -240,7 +258,7 @@ function createFileWatcherService(deps) {
       console.log(`   ${i + 1}. ${ws}`);
     });
     console.log(` Ignoring: ${config.ignore.join(', ')}`);
-    
+
     watcher = chokidar.watch(workspacesToWatch, {
       ignored: config.ignore,
       persistent: true,
@@ -248,10 +266,10 @@ function createFileWatcherService(deps) {
       depth: autoDetect ? 99 : 10,
       awaitWriteFinish: {
         stabilityThreshold: 300,
-        pollInterval: 100
-      }
+        pollInterval: 100,
+      },
     });
-    
+
     watcher
       .on('add', processFileChange)
       .on('change', processFileChange)
@@ -261,7 +279,7 @@ function createFileWatcherService(deps) {
         const relativePath = path.relative(detectedWorkspace || config.root_dir, filePath);
         console.log(` File deleted: ${relativePath} from workspace: ${detectedWorkspace}`);
       })
-      .on('error', error => console.error(` Watcher error: ${error}`))
+      .on('error', (error) => console.error(` Watcher error: ${error}`))
       .on('ready', () => {
         console.log(' File watcher ready');
       });
@@ -277,9 +295,8 @@ function createFileWatcherService(deps) {
   return {
     start,
     stop,
-    calculateDiff // Export for use elsewhere if needed
+    calculateDiff, // Export for use elsewhere if needed
   };
 }
 
 module.exports = createFileWatcherService;
-

@@ -1,6 +1,6 @@
 /**
  * Prescription System - Main Entry Point
- * 
+ *
  * Exports all prescription modules and provides initialization function.
  */
 
@@ -19,7 +19,7 @@ const createPrescriptionAPI = require('./api');
 function initializePrescriptionSystem(db, app = null) {
   // Initialize schema
   const schemaInitialized = initializePrescriptionSchema(db);
-  
+
   if (!schemaInitialized) {
     console.error('Failed to initialize prescription schema');
     return null;
@@ -27,13 +27,13 @@ function initializePrescriptionSystem(db, app = null) {
 
   // Create manager
   const manager = new PrescriptionManager(db);
-  
+
   // Create injector
   const injector = new PrescriptionInjector(manager);
-  
+
   // Create detector
   const detector = new PrescriptionDetector(db, manager);
-  
+
   // Create API router
   const apiRouter = createPrescriptionAPI(manager, injector, detector);
 
@@ -53,8 +53,8 @@ function initializePrescriptionSystem(db, app = null) {
     constants: {
       CATEGORIES,
       SCOPES,
-      SOURCES
-    }
+      SOURCES,
+    },
   };
 }
 
@@ -66,6 +66,5 @@ module.exports = {
   createPrescriptionAPI,
   CATEGORIES,
   SCOPES,
-  SOURCES
+  SOURCES,
 };
-

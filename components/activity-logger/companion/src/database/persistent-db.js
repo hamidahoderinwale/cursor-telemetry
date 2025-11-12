@@ -18,7 +18,7 @@ class PersistentDB {
    */
   async init() {
     if (this._initPromise) return this._initPromise;
-    
+
     this._initPromise = new Promise((resolve, reject) => {
       // Ensure data directory exists
       const dataDir = path.dirname(this.dbPath);
@@ -32,19 +32,21 @@ class PersistentDB {
           reject(err);
           return;
         }
-        
+
         console.log(`[SAVE] Connected to SQLite database: ${this.dbPath}`);
-        
+
         // Enable foreign key constraints
         this.db.run('PRAGMA foreign_keys = ON');
-        
+
         // Create tables - wait for all to complete before resolving
         this.db.serialize(() => {
           const tables = [];
-          
+
           // Entries table
-          tables.push(new Promise((res, rej) => {
-            this.db.run(`
+          tables.push(
+            new Promise((res, rej) => {
+              this.db.run(
+                `
               CREATE TABLE IF NOT EXISTS entries (
                 id INTEGER PRIMARY KEY,
                 session_id TEXT,
@@ -60,19 +62,24 @@ class PersistentDB {
                 modelInfo TEXT,
                 type TEXT
               )
-            `, (err) => {
-              if (err) {
-                console.error('Error creating entries table:', err);
-                rej(err);
-              } else {
-                res();
-              }
-            });
-          }));
+            `,
+                (err) => {
+                  if (err) {
+                    console.error('Error creating entries table:', err);
+                    rej(err);
+                  } else {
+                    res();
+                  }
+                }
+              );
+            })
+          );
 
           // Prompts table with rich metadata
-          tables.push(new Promise((res, rej) => {
-            this.db.run(`
+          tables.push(
+            new Promise((res, rej) => {
+              this.db.run(
+                `
               CREATE TABLE IF NOT EXISTS prompts (
                 id INTEGER PRIMARY KEY,
                 timestamp TEXT,
@@ -97,84 +104,100 @@ class PersistentDB {
                 confidence TEXT,
                 added_from_database INTEGER DEFAULT 0
               )
-            `, (err) => {
-              if (err) {
-                console.error('Error creating prompts table:', err);
-                rej(err);
-              } else {
-                // Add new columns to existing table if they don't exist
-                const alterQueries = [
-                  `ALTER TABLE prompts ADD COLUMN workspace_id TEXT`,
-                  `ALTER TABLE prompts ADD COLUMN workspace_path TEXT`,
-                  `ALTER TABLE prompts ADD COLUMN workspace_name TEXT`,
-                  `ALTER TABLE prompts ADD COLUMN composer_id TEXT`,
-                  `ALTER TABLE prompts ADD COLUMN subtitle TEXT`,
-                  `ALTER TABLE prompts ADD COLUMN lines_added INTEGER DEFAULT 0`,
-                  `ALTER TABLE prompts ADD COLUMN lines_removed INTEGER DEFAULT 0`,
-                  `ALTER TABLE prompts ADD COLUMN context_usage REAL DEFAULT 0`,
-                  `ALTER TABLE prompts ADD COLUMN mode TEXT`,
-                  `ALTER TABLE prompts ADD COLUMN model_type TEXT`,
-                  `ALTER TABLE prompts ADD COLUMN model_name TEXT`,
-                  `ALTER TABLE prompts ADD COLUMN force_mode TEXT`,
-                  `ALTER TABLE prompts ADD COLUMN is_auto INTEGER DEFAULT 0`,
-                  `ALTER TABLE prompts ADD COLUMN type TEXT`,
-                  `ALTER TABLE prompts ADD COLUMN confidence TEXT`,
-                  `ALTER TABLE prompts ADD COLUMN added_from_database INTEGER DEFAULT 0`,
-                  // NEW: Context files tracking
-                  `ALTER TABLE prompts ADD COLUMN context_files_json TEXT`,
-                  `ALTER TABLE prompts ADD COLUMN context_file_count INTEGER DEFAULT 0`,
-                  `ALTER TABLE prompts ADD COLUMN context_file_count_explicit INTEGER DEFAULT 0`,
-                  `ALTER TABLE prompts ADD COLUMN context_file_count_tabs INTEGER DEFAULT 0`,
-                  `ALTER TABLE prompts ADD COLUMN context_file_count_auto INTEGER DEFAULT 0`,
-                  // NEW: Enhanced context tracking
-                  `ALTER TABLE prompts ADD COLUMN thinking_time INTEGER DEFAULT 0`,
-                  `ALTER TABLE prompts ADD COLUMN thinking_time_seconds REAL DEFAULT 0`,
-                  `ALTER TABLE prompts ADD COLUMN terminal_blocks_json TEXT`,
-                  `ALTER TABLE prompts ADD COLUMN terminal_block_count INTEGER DEFAULT 0`,
-                  `ALTER TABLE prompts ADD COLUMN has_attachments INTEGER DEFAULT 0`,
-                  `ALTER TABLE prompts ADD COLUMN attachment_count INTEGER DEFAULT 0`,
-                  // NEW: Conversation tracking
-                  `ALTER TABLE prompts ADD COLUMN conversation_id TEXT`,
-                  `ALTER TABLE prompts ADD COLUMN conversation_index INTEGER`,
-                  `ALTER TABLE prompts ADD COLUMN conversation_title TEXT`,
-                  // NEW: Message role and parent conversation
-                  `ALTER TABLE prompts ADD COLUMN message_role TEXT`,
-                  `ALTER TABLE prompts ADD COLUMN parent_conversation_id TEXT`
-                ];
-                
-                // Try to add each column, ignore if already exists
-                Promise.all(alterQueries.map(query => {
-                  return new Promise((resolve) => {
-                    this.db.run(query, (alterErr) => {
-                      // Silently ignore "duplicate column" errors
-                      if (alterErr && !alterErr.message.includes('duplicate column')) {
-                        console.warn('Column may already exist:', alterErr.message);
-                      }
-                      resolve();
+            `,
+                (err) => {
+                  if (err) {
+                    console.error('Error creating prompts table:', err);
+                    rej(err);
+                  } else {
+                    // Add new columns to existing table if they don't exist
+                    const alterQueries = [
+                      `ALTER TABLE prompts ADD COLUMN workspace_id TEXT`,
+                      `ALTER TABLE prompts ADD COLUMN workspace_path TEXT`,
+                      `ALTER TABLE prompts ADD COLUMN workspace_name TEXT`,
+                      `ALTER TABLE prompts ADD COLUMN composer_id TEXT`,
+                      `ALTER TABLE prompts ADD COLUMN subtitle TEXT`,
+                      `ALTER TABLE prompts ADD COLUMN lines_added INTEGER DEFAULT 0`,
+                      `ALTER TABLE prompts ADD COLUMN lines_removed INTEGER DEFAULT 0`,
+                      `ALTER TABLE prompts ADD COLUMN context_usage REAL DEFAULT 0`,
+                      `ALTER TABLE prompts ADD COLUMN mode TEXT`,
+                      `ALTER TABLE prompts ADD COLUMN model_type TEXT`,
+                      `ALTER TABLE prompts ADD COLUMN model_name TEXT`,
+                      `ALTER TABLE prompts ADD COLUMN force_mode TEXT`,
+                      `ALTER TABLE prompts ADD COLUMN is_auto INTEGER DEFAULT 0`,
+                      `ALTER TABLE prompts ADD COLUMN type TEXT`,
+                      `ALTER TABLE prompts ADD COLUMN confidence TEXT`,
+                      `ALTER TABLE prompts ADD COLUMN added_from_database INTEGER DEFAULT 0`,
+                      // NEW: Context files tracking
+                      `ALTER TABLE prompts ADD COLUMN context_files_json TEXT`,
+                      `ALTER TABLE prompts ADD COLUMN context_file_count INTEGER DEFAULT 0`,
+                      `ALTER TABLE prompts ADD COLUMN context_file_count_explicit INTEGER DEFAULT 0`,
+                      `ALTER TABLE prompts ADD COLUMN context_file_count_tabs INTEGER DEFAULT 0`,
+                      `ALTER TABLE prompts ADD COLUMN context_file_count_auto INTEGER DEFAULT 0`,
+                      // NEW: Enhanced context tracking
+                      `ALTER TABLE prompts ADD COLUMN thinking_time INTEGER DEFAULT 0`,
+                      `ALTER TABLE prompts ADD COLUMN thinking_time_seconds REAL DEFAULT 0`,
+                      `ALTER TABLE prompts ADD COLUMN terminal_blocks_json TEXT`,
+                      `ALTER TABLE prompts ADD COLUMN terminal_block_count INTEGER DEFAULT 0`,
+                      `ALTER TABLE prompts ADD COLUMN has_attachments INTEGER DEFAULT 0`,
+                      `ALTER TABLE prompts ADD COLUMN attachment_count INTEGER DEFAULT 0`,
+                      // NEW: Conversation tracking
+                      `ALTER TABLE prompts ADD COLUMN conversation_id TEXT`,
+                      `ALTER TABLE prompts ADD COLUMN conversation_index INTEGER`,
+                      `ALTER TABLE prompts ADD COLUMN conversation_title TEXT`,
+                      // NEW: Message role and parent conversation
+                      `ALTER TABLE prompts ADD COLUMN message_role TEXT`,
+                      `ALTER TABLE prompts ADD COLUMN parent_conversation_id TEXT`,
+                    ];
+
+                    // Try to add each column, ignore if already exists
+                    Promise.all(
+                      alterQueries.map((query) => {
+                        return new Promise((resolve) => {
+                          this.db.run(query, (alterErr) => {
+                            // Silently ignore "duplicate column" errors
+                            if (alterErr && !alterErr.message.includes('duplicate column')) {
+                              console.warn('Column may already exist:', alterErr.message);
+                            }
+                            resolve();
+                          });
+                        });
+                      })
+                    ).then(() => {
+                      // Create indexes for conversation queries after columns are added
+                      this.db.run(
+                        `CREATE INDEX IF NOT EXISTS idx_prompts_conversation ON prompts(conversation_id)`,
+                        (idxErr) => {
+                          if (idxErr && !idxErr.message.includes('already exists')) {
+                            console.warn('Error creating prompts conversation index:', idxErr);
+                          }
+                        }
+                      );
+                      this.db.run(
+                        `CREATE INDEX IF NOT EXISTS idx_prompts_workspace_conversation ON prompts(workspace_id, conversation_id)`,
+                        (idxErr) => {
+                          if (idxErr && !idxErr.message.includes('already exists')) {
+                            console.warn(
+                              'Error creating prompts workspace_conversation index:',
+                              idxErr
+                            );
+                          }
+                        }
+                      );
                     });
-                  });
-                })).then(() => {
-                  // Create indexes for conversation queries after columns are added
-                  this.db.run(`CREATE INDEX IF NOT EXISTS idx_prompts_conversation ON prompts(conversation_id)`, (idxErr) => {
-                    if (idxErr && !idxErr.message.includes('already exists')) {
-                      console.warn('Error creating prompts conversation index:', idxErr);
-                    }
-                  });
-                  this.db.run(`CREATE INDEX IF NOT EXISTS idx_prompts_workspace_conversation ON prompts(workspace_id, conversation_id)`, (idxErr) => {
-                    if (idxErr && !idxErr.message.includes('already exists')) {
-                      console.warn('Error creating prompts workspace_conversation index:', idxErr);
-                    }
-                  });
-                });
-                
-                res();
-              }
-            });
-          }));
+
+                    res();
+                  }
+                }
+              );
+            })
+          );
 
           // Conversations table (explicit conversation entity)
-          tables.push(new Promise((res, rej) => {
-            this.db.run(`
+          tables.push(
+            new Promise((res, rej) => {
+              this.db.run(
+                `
               CREATE TABLE IF NOT EXISTS conversations (
                 id TEXT PRIMARY KEY,
                 workspace_id TEXT NOT NULL,
@@ -188,26 +211,39 @@ class PersistentDB {
                 last_message_at TEXT,
                 message_count INTEGER DEFAULT 0
               )
-            `, (err) => {
-              if (err) {
-                console.error('Error creating conversations table:', err);
-                rej(err);
-              } else {
-                // Create indexes
-                this.db.run(`CREATE INDEX IF NOT EXISTS idx_conversations_workspace ON conversations(workspace_id)`, (idxErr) => {
-                  if (idxErr) console.warn('Error creating conversations workspace index:', idxErr);
-                });
-                this.db.run(`CREATE INDEX IF NOT EXISTS idx_conversations_status ON conversations(status)`, (idxErr) => {
-                  if (idxErr) console.warn('Error creating conversations status index:', idxErr);
-                });
-                res();
-              }
-            });
-          }));
+            `,
+                (err) => {
+                  if (err) {
+                    console.error('Error creating conversations table:', err);
+                    rej(err);
+                  } else {
+                    // Create indexes
+                    this.db.run(
+                      `CREATE INDEX IF NOT EXISTS idx_conversations_workspace ON conversations(workspace_id)`,
+                      (idxErr) => {
+                        if (idxErr)
+                          console.warn('Error creating conversations workspace index:', idxErr);
+                      }
+                    );
+                    this.db.run(
+                      `CREATE INDEX IF NOT EXISTS idx_conversations_status ON conversations(status)`,
+                      (idxErr) => {
+                        if (idxErr)
+                          console.warn('Error creating conversations status index:', idxErr);
+                      }
+                    );
+                    res();
+                  }
+                }
+              );
+            })
+          );
 
           // Events table (for detailed event tracking)
-          tables.push(new Promise((res, rej) => {
-            this.db.run(`
+          tables.push(
+            new Promise((res, rej) => {
+              this.db.run(
+                `
               CREATE TABLE IF NOT EXISTS events (
                 id TEXT PRIMARY KEY,
                 session_id TEXT,
@@ -220,24 +256,32 @@ class PersistentDB {
                 tags TEXT,
                 ai_generated INTEGER DEFAULT 0
               )
-            `, (err) => {
-              if (err) {
-                console.error('Error creating events table:', err);
-                rej(err);
-              } else {
-                // Add new columns if they don't exist (migration)
-                this.db.run(`ALTER TABLE events ADD COLUMN annotation TEXT`, () => {});
-                this.db.run(`ALTER TABLE events ADD COLUMN intent TEXT`, () => {});
-                this.db.run(`ALTER TABLE events ADD COLUMN tags TEXT`, () => {});
-                this.db.run(`ALTER TABLE events ADD COLUMN ai_generated INTEGER DEFAULT 0`, () => {});
-                res();
-              }
-            });
-          }));
+            `,
+                (err) => {
+                  if (err) {
+                    console.error('Error creating events table:', err);
+                    rej(err);
+                  } else {
+                    // Add new columns if they don't exist (migration)
+                    this.db.run(`ALTER TABLE events ADD COLUMN annotation TEXT`, () => {});
+                    this.db.run(`ALTER TABLE events ADD COLUMN intent TEXT`, () => {});
+                    this.db.run(`ALTER TABLE events ADD COLUMN tags TEXT`, () => {});
+                    this.db.run(
+                      `ALTER TABLE events ADD COLUMN ai_generated INTEGER DEFAULT 0`,
+                      () => {}
+                    );
+                    res();
+                  }
+                }
+              );
+            })
+          );
 
           // Context snapshots table for persistent context analytics
-          tables.push(new Promise((res, rej) => {
-            this.db.run(`
+          tables.push(
+            new Promise((res, rej) => {
+              this.db.run(
+                `
               CREATE TABLE IF NOT EXISTS context_snapshots (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 prompt_id TEXT,
@@ -250,19 +294,24 @@ class PersistentDB {
                 at_mentions TEXT,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP
               )
-            `, (err) => {
-              if (err) {
-                console.error('Error creating context_snapshots table:', err);
-                rej(err);
-              } else {
-                res();
-              }
-            });
-          }));
+            `,
+                (err) => {
+                  if (err) {
+                    console.error('Error creating context_snapshots table:', err);
+                    rej(err);
+                  } else {
+                    res();
+                  }
+                }
+              );
+            })
+          );
 
           // Context changes table for tracking file additions/removals
-          tables.push(new Promise((res, rej) => {
-            this.db.run(`
+          tables.push(
+            new Promise((res, rej) => {
+              this.db.run(
+                `
               CREATE TABLE IF NOT EXISTS context_changes (
                 id TEXT PRIMARY KEY,
                 prompt_id TEXT,
@@ -279,24 +328,41 @@ class PersistentDB {
                 metadata TEXT,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP
               )
-            `, (err) => {
-              if (err) {
-                console.error('Error creating context_changes table:', err);
-                rej(err);
-              } else {
-                // Create indexes for faster queries
-                this.db.run(`CREATE INDEX IF NOT EXISTS idx_context_changes_prompt ON context_changes(prompt_id)`, () => {});
-                this.db.run(`CREATE INDEX IF NOT EXISTS idx_context_changes_event ON context_changes(event_id)`, () => {});
-                this.db.run(`CREATE INDEX IF NOT EXISTS idx_context_changes_task ON context_changes(task_id)`, () => {});
-                this.db.run(`CREATE INDEX IF NOT EXISTS idx_context_changes_timestamp ON context_changes(timestamp)`, () => {});
-                res();
-              }
-            });
-          }));
+            `,
+                (err) => {
+                  if (err) {
+                    console.error('Error creating context_changes table:', err);
+                    rej(err);
+                  } else {
+                    // Create indexes for faster queries
+                    this.db.run(
+                      `CREATE INDEX IF NOT EXISTS idx_context_changes_prompt ON context_changes(prompt_id)`,
+                      () => {}
+                    );
+                    this.db.run(
+                      `CREATE INDEX IF NOT EXISTS idx_context_changes_event ON context_changes(event_id)`,
+                      () => {}
+                    );
+                    this.db.run(
+                      `CREATE INDEX IF NOT EXISTS idx_context_changes_task ON context_changes(task_id)`,
+                      () => {}
+                    );
+                    this.db.run(
+                      `CREATE INDEX IF NOT EXISTS idx_context_changes_timestamp ON context_changes(timestamp)`,
+                      () => {}
+                    );
+                    res();
+                  }
+                }
+              );
+            })
+          );
 
           // Audit log table for import/export history
-          tables.push(new Promise((res, rej) => {
-            this.db.run(`
+          tables.push(
+            new Promise((res, rej) => {
+              this.db.run(
+                `
               CREATE TABLE IF NOT EXISTS audit_log (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 operation TEXT NOT NULL,
@@ -310,22 +376,36 @@ class PersistentDB {
                 error_message TEXT,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP
               )
-            `, (err) => {
-              if (err) {
-                console.error('Error creating audit_log table:', err);
-                rej(err);
-              } else {
-                this.db.run(`CREATE INDEX IF NOT EXISTS idx_audit_operation ON audit_log(operation_type)`, () => {});
-                this.db.run(`CREATE INDEX IF NOT EXISTS idx_audit_workspace ON audit_log(workspace_id)`, () => {});
-                this.db.run(`CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at)`, () => {});
-                res();
-              }
-            });
-          }));
+            `,
+                (err) => {
+                  if (err) {
+                    console.error('Error creating audit_log table:', err);
+                    rej(err);
+                  } else {
+                    this.db.run(
+                      `CREATE INDEX IF NOT EXISTS idx_audit_operation ON audit_log(operation_type)`,
+                      () => {}
+                    );
+                    this.db.run(
+                      `CREATE INDEX IF NOT EXISTS idx_audit_workspace ON audit_log(workspace_id)`,
+                      () => {}
+                    );
+                    this.db.run(
+                      `CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at)`,
+                      () => {}
+                    );
+                    res();
+                  }
+                }
+              );
+            })
+          );
 
           // Terminal commands table
-          tables.push(new Promise((res, rej) => {
-            this.db.run(`
+          tables.push(
+            new Promise((res, rej) => {
+              this.db.run(
+                `
               CREATE TABLE IF NOT EXISTS terminal_commands (
                 id TEXT PRIMARY KEY,
                 command TEXT NOT NULL,
@@ -341,19 +421,24 @@ class PersistentDB {
                 linked_prompt_id INTEGER,
                 session_id TEXT
               )
-            `, (err) => {
-              if (err) {
-                console.error('Error creating terminal_commands table:', err);
-                rej(err);
-              } else {
-                res();
-              }
-            });
-          }));
+            `,
+                (err) => {
+                  if (err) {
+                    console.error('Error creating terminal_commands table:', err);
+                    rej(err);
+                  } else {
+                    res();
+                  }
+                }
+              );
+            })
+          );
 
           // Share links table for workspace sharing
-          tables.push(new Promise((res, rej) => {
-            this.db.run(`
+          tables.push(
+            new Promise((res, rej) => {
+              this.db.run(
+                `
               CREATE TABLE IF NOT EXISTS share_links (
                 id TEXT PRIMARY KEY,
                 share_id TEXT UNIQUE NOT NULL,
@@ -366,21 +451,32 @@ class PersistentDB {
                 last_accessed INTEGER,
                 metadata TEXT
               )
-            `, (err) => {
-              if (err) {
-                console.error('Error creating share_links table:', err);
-                rej(err);
-              } else {
-                this.db.run(`CREATE INDEX IF NOT EXISTS idx_share_links_expires ON share_links(expires_at)`, () => {});
-                this.db.run(`CREATE INDEX IF NOT EXISTS idx_share_links_created ON share_links(created_at)`, () => {});
-                res();
-              }
-            });
-          }));
+            `,
+                (err) => {
+                  if (err) {
+                    console.error('Error creating share_links table:', err);
+                    rej(err);
+                  } else {
+                    this.db.run(
+                      `CREATE INDEX IF NOT EXISTS idx_share_links_expires ON share_links(expires_at)`,
+                      () => {}
+                    );
+                    this.db.run(
+                      `CREATE INDEX IF NOT EXISTS idx_share_links_created ON share_links(created_at)`,
+                      () => {}
+                    );
+                    res();
+                  }
+                }
+              );
+            })
+          );
 
           // NEW: Attachments table (for images and files)
-          tables.push(new Promise((res, rej) => {
-            this.db.run(`
+          tables.push(
+            new Promise((res, rej) => {
+              this.db.run(
+                `
               CREATE TABLE IF NOT EXISTS prompt_attachments (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 prompt_id INTEGER NOT NULL,
@@ -395,22 +491,30 @@ class PersistentDB {
                 timestamp INTEGER,
                 FOREIGN KEY (prompt_id) REFERENCES prompts(id)
               )
-            `, (err) => {
-              if (err) {
-                console.error('Error creating attachments table:', err);
-                rej(err);
-              } else {
-                // Create index for faster lookups
-                this.db.run(`CREATE INDEX IF NOT EXISTS idx_attachments_prompt_id ON prompt_attachments(prompt_id)`, () => {
-                  res();
-                });
-              }
-            });
-          }));
+            `,
+                (err) => {
+                  if (err) {
+                    console.error('Error creating attachments table:', err);
+                    rej(err);
+                  } else {
+                    // Create index for faster lookups
+                    this.db.run(
+                      `CREATE INDEX IF NOT EXISTS idx_attachments_prompt_id ON prompt_attachments(prompt_id)`,
+                      () => {
+                        res();
+                      }
+                    );
+                  }
+                }
+              );
+            })
+          );
 
           // TODO tracking tables
-          tables.push(new Promise((res, rej) => {
-            this.db.run(`
+          tables.push(
+            new Promise((res, rej) => {
+              this.db.run(
+                `
               CREATE TABLE IF NOT EXISTS todos (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 content TEXT NOT NULL,
@@ -423,18 +527,23 @@ class PersistentDB {
                 prompts_while_active TEXT,
                 files_modified TEXT
               )
-            `, (err) => {
-              if (err) {
-                console.error('Error creating todos table:', err);
-                rej(err);
-              } else {
-                res();
-              }
-            });
-          }));
+            `,
+                (err) => {
+                  if (err) {
+                    console.error('Error creating todos table:', err);
+                    rej(err);
+                  } else {
+                    res();
+                  }
+                }
+              );
+            })
+          );
 
-          tables.push(new Promise((res, rej) => {
-            this.db.run(`
+          tables.push(
+            new Promise((res, rej) => {
+              this.db.run(
+                `
               CREATE TABLE IF NOT EXISTS todo_events (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 todo_id INTEGER NOT NULL,
@@ -443,26 +552,40 @@ class PersistentDB {
                 timestamp INTEGER NOT NULL,
                 FOREIGN KEY (todo_id) REFERENCES todos(id)
               )
-            `, (err) => {
-              if (err) {
-                console.error('Error creating todo_events table:', err);
-                rej(err);
-              } else {
-                // Create indexes
-                this.db.run(`CREATE INDEX IF NOT EXISTS idx_todo_events_todo_id ON todo_events(todo_id)`, () => {
-                  this.db.run(`CREATE INDEX IF NOT EXISTS idx_todos_status ON todos(status)`, () => {
-                    this.db.run(`CREATE INDEX IF NOT EXISTS idx_todos_session ON todos(session_id)`, () => {
-                      res();
-                    });
-                  });
-                });
-              }
-            });
-          }));
+            `,
+                (err) => {
+                  if (err) {
+                    console.error('Error creating todo_events table:', err);
+                    rej(err);
+                  } else {
+                    // Create indexes
+                    this.db.run(
+                      `CREATE INDEX IF NOT EXISTS idx_todo_events_todo_id ON todo_events(todo_id)`,
+                      () => {
+                        this.db.run(
+                          `CREATE INDEX IF NOT EXISTS idx_todos_status ON todos(status)`,
+                          () => {
+                            this.db.run(
+                              `CREATE INDEX IF NOT EXISTS idx_todos_session ON todos(session_id)`,
+                              () => {
+                                res();
+                              }
+                            );
+                          }
+                        );
+                      }
+                    );
+                  }
+                }
+              );
+            })
+          );
 
           // Schema config table (for custom field configurations)
-          tables.push(new Promise((res, rej) => {
-            this.db.run(`
+          tables.push(
+            new Promise((res, rej) => {
+              this.db.run(
+                `
               CREATE TABLE IF NOT EXISTS schema_config (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 table_name TEXT NOT NULL,
@@ -478,37 +601,51 @@ class PersistentDB {
                 updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(table_name, field_name, workspace_id)
               )
-            `, (err) => {
-              if (err) {
-                console.error('Error creating schema_config table:', err);
-                rej(err);
-              } else {
-                // Try to add workspace columns if they don't exist (migration)
-                const alterQueries = [
-                  `ALTER TABLE schema_config ADD COLUMN workspace_id TEXT`,
-                  `ALTER TABLE schema_config ADD COLUMN workspace_path TEXT`
-                ];
-                
-                Promise.all(alterQueries.map(query => {
-                  return new Promise((resolve) => {
-                    this.db.run(query, (alterErr) => {
-                      // Silently ignore "duplicate column" errors
-                      if (alterErr && !alterErr.message.includes('duplicate column') && !alterErr.message.includes('already exists')) {
-                        console.warn('Error adding workspace column to schema_config:', alterErr.message);
-                      }
-                      resolve();
+            `,
+                (err) => {
+                  if (err) {
+                    console.error('Error creating schema_config table:', err);
+                    rej(err);
+                  } else {
+                    // Try to add workspace columns if they don't exist (migration)
+                    const alterQueries = [
+                      `ALTER TABLE schema_config ADD COLUMN workspace_id TEXT`,
+                      `ALTER TABLE schema_config ADD COLUMN workspace_path TEXT`,
+                    ];
+
+                    Promise.all(
+                      alterQueries.map((query) => {
+                        return new Promise((resolve) => {
+                          this.db.run(query, (alterErr) => {
+                            // Silently ignore "duplicate column" errors
+                            if (
+                              alterErr &&
+                              !alterErr.message.includes('duplicate column') &&
+                              !alterErr.message.includes('already exists')
+                            ) {
+                              console.warn(
+                                'Error adding workspace column to schema_config:',
+                                alterErr.message
+                              );
+                            }
+                            resolve();
+                          });
+                        });
+                      })
+                    ).then(() => {
+                      res();
                     });
-                  });
-                })).then(() => {
-                  res();
-                });
-              }
-            });
-          }));
+                  }
+                }
+              );
+            })
+          );
 
           // Whiteboards table (for saved whiteboard configurations)
-          tables.push(new Promise((res, rej) => {
-            this.db.run(`
+          tables.push(
+            new Promise((res, rej) => {
+              this.db.run(
+                `
               CREATE TABLE IF NOT EXISTS whiteboards (
                 id TEXT PRIMARY KEY,
                 name TEXT NOT NULL,
@@ -517,42 +654,61 @@ class PersistentDB {
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 updated_at TEXT DEFAULT CURRENT_TIMESTAMP
               )
-            `, (err) => {
-              if (err) {
-                console.error('Error creating whiteboards table:', err);
-                rej(err);
-              } else {
-                res();
-              }
-            });
-          }));
+            `,
+                (err) => {
+                  if (err) {
+                    console.error('Error creating whiteboards table:', err);
+                    rej(err);
+                  } else {
+                    res();
+                  }
+                }
+              );
+            })
+          );
 
           // Create indexes for better query performance
           this.db.run(`CREATE INDEX IF NOT EXISTS idx_entries_session ON entries(session_id)`);
           this.db.run(`CREATE INDEX IF NOT EXISTS idx_entries_timestamp ON entries(timestamp)`);
-          this.db.run(`CREATE INDEX IF NOT EXISTS idx_entries_workspace ON entries(workspace_path)`);
+          this.db.run(
+            `CREATE INDEX IF NOT EXISTS idx_entries_workspace ON entries(workspace_path)`
+          );
           this.db.run(`CREATE INDEX IF NOT EXISTS idx_entries_prompt_id ON entries(prompt_id)`);
           this.db.run(`CREATE INDEX IF NOT EXISTS idx_entries_file_path ON entries(file_path)`);
-          
+
           this.db.run(`CREATE INDEX IF NOT EXISTS idx_prompts_timestamp ON prompts(timestamp)`);
-          this.db.run(`CREATE INDEX IF NOT EXISTS idx_prompts_linked_entry ON prompts(linked_entry_id)`);
+          this.db.run(
+            `CREATE INDEX IF NOT EXISTS idx_prompts_linked_entry ON prompts(linked_entry_id)`
+          );
           this.db.run(`CREATE INDEX IF NOT EXISTS idx_prompts_status ON prompts(status)`);
-          this.db.run(`CREATE INDEX IF NOT EXISTS idx_prompts_workspace ON prompts(workspace_path)`);
-          
+          this.db.run(
+            `CREATE INDEX IF NOT EXISTS idx_prompts_workspace ON prompts(workspace_path)`
+          );
+
           this.db.run(`CREATE INDEX IF NOT EXISTS idx_events_timestamp ON events(timestamp)`);
           this.db.run(`CREATE INDEX IF NOT EXISTS idx_events_session ON events(session_id)`);
           this.db.run(`CREATE INDEX IF NOT EXISTS idx_events_type ON events(type)`);
-          
-          this.db.run(`CREATE INDEX IF NOT EXISTS idx_terminal_timestamp ON terminal_commands(timestamp)`);
-          this.db.run(`CREATE INDEX IF NOT EXISTS idx_terminal_workspace ON terminal_commands(workspace)`);
-          this.db.run(`CREATE INDEX IF NOT EXISTS idx_terminal_exit_code ON terminal_commands(exit_code)`);
-          this.db.run(`CREATE INDEX IF NOT EXISTS idx_terminal_session ON terminal_commands(session_id)`);
-          
+
+          this.db.run(
+            `CREATE INDEX IF NOT EXISTS idx_terminal_timestamp ON terminal_commands(timestamp)`
+          );
+          this.db.run(
+            `CREATE INDEX IF NOT EXISTS idx_terminal_workspace ON terminal_commands(workspace)`
+          );
+          this.db.run(
+            `CREATE INDEX IF NOT EXISTS idx_terminal_exit_code ON terminal_commands(exit_code)`
+          );
+          this.db.run(
+            `CREATE INDEX IF NOT EXISTS idx_terminal_session ON terminal_commands(session_id)`
+          );
+
           // Wait for all tables to be created
-          Promise.all(tables).then(() => {
-            console.log('[SUCCESS] Database tables initialized');
-            resolve();
-          }).catch(reject);
+          Promise.all(tables)
+            .then(() => {
+              console.log('[SUCCESS] Database tables initialized');
+              resolve();
+            })
+            .catch(reject);
         });
       });
     });
@@ -565,14 +721,14 @@ class PersistentDB {
    */
   async saveEntry(entry) {
     await this.init();
-    
+
     return new Promise((resolve, reject) => {
       const stmt = this.db.prepare(`
         INSERT OR REPLACE INTO entries 
         (id, session_id, workspace_path, file_path, source, before_code, after_code, notes, timestamp, tags, prompt_id, modelInfo, type)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
-      
+
       stmt.run(
         entry.id,
         entry.session_id,
@@ -588,7 +744,7 @@ class PersistentDB {
         typeof entry.modelInfo === 'object' ? JSON.stringify(entry.modelInfo) : entry.modelInfo,
         entry.type
       );
-      
+
       stmt.finalize((err) => {
         if (err) {
           console.error('Error saving entry:', err);
@@ -605,16 +761,20 @@ class PersistentDB {
    */
   async savePrompt(prompt) {
     await this.init();
-    
+
     return new Promise((resolve, reject) => {
       // Extract context files data
-      const contextFiles = prompt.contextFiles || { files: [], count: 0, countBySource: { explicit: 0, tabs: 0, auto: 0 } };
+      const contextFiles = prompt.contextFiles || {
+        files: [],
+        count: 0,
+        countBySource: { explicit: 0, tabs: 0, auto: 0 },
+      };
       const contextFilesJson = JSON.stringify(contextFiles.files || []);
-      
+
       // Extract terminal blocks
       const terminalBlocks = prompt.terminalBlocks || [];
       const terminalBlocksJson = JSON.stringify(terminalBlocks);
-      
+
       const stmt = this.db.prepare(`
         INSERT OR REPLACE INTO prompts 
         (id, timestamp, text, status, linked_entry_id, source,
@@ -629,10 +789,11 @@ class PersistentDB {
          conversation_id, conversation_index)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
-      
+
       // Ensure conversation_id is set (use composerId or parentConversationId as fallback)
-      const conversationId = prompt.conversationId || prompt.composerId || prompt.parentConversationId || null;
-      
+      const conversationId =
+        prompt.conversationId || prompt.composerId || prompt.parentConversationId || null;
+
       stmt.run(
         prompt.id,
         prompt.timestamp,
@@ -673,14 +834,19 @@ class PersistentDB {
         conversationId,
         prompt.conversationIndex || null
       );
-      
+
       // Update conversation if conversation_id is set
       if (conversationId && prompt.workspaceId) {
-        this.updateConversationMetadata(conversationId, prompt.workspaceId, prompt.workspacePath, prompt.conversationTitle).catch(err => {
+        this.updateConversationMetadata(
+          conversationId,
+          prompt.workspaceId,
+          prompt.workspacePath,
+          prompt.conversationTitle
+        ).catch((err) => {
           console.warn('[DB] Could not update conversation metadata:', err.message);
         });
       }
-      
+
       stmt.finalize((err) => {
         if (err) {
           console.error('Error saving prompt:', err);
@@ -697,14 +863,14 @@ class PersistentDB {
    */
   async saveEvent(event) {
     await this.init();
-    
+
     return new Promise((resolve, reject) => {
       const stmt = this.db.prepare(`
         INSERT OR REPLACE INTO events 
         (id, session_id, workspace_path, timestamp, type, details, annotation, intent, tags, ai_generated)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
-      
+
       stmt.run(
         event.id,
         event.session_id,
@@ -714,10 +880,10 @@ class PersistentDB {
         typeof event.details === 'object' ? JSON.stringify(event.details) : event.details,
         event.annotation || null,
         event.intent || null,
-        Array.isArray(event.tags) ? JSON.stringify(event.tags) : (event.tags || null),
+        Array.isArray(event.tags) ? JSON.stringify(event.tags) : event.tags || null,
         event.ai_generated ? 1 : 0
       );
-      
+
       stmt.finalize((err) => {
         if (err) {
           console.error('Error saving event:', err);
@@ -734,27 +900,23 @@ class PersistentDB {
    */
   async getEvent(eventId) {
     await this.init();
-    
+
     return new Promise((resolve, reject) => {
-      this.db.get(
-        `SELECT * FROM events WHERE id = ?`,
-        [eventId],
-        (err, row) => {
-          if (err) {
-            console.error('Error getting event:', err);
-            reject(err);
-          } else if (!row) {
-            resolve(null);
-          } else {
-            resolve({
-              ...row,
-              details: row.details ? JSON.parse(row.details) : {},
-              tags: row.tags ? JSON.parse(row.tags || '[]') : [],
-              ai_generated: row.ai_generated === 1
-            });
-          }
+      this.db.get(`SELECT * FROM events WHERE id = ?`, [eventId], (err, row) => {
+        if (err) {
+          console.error('Error getting event:', err);
+          reject(err);
+        } else if (!row) {
+          resolve(null);
+        } else {
+          resolve({
+            ...row,
+            details: row.details ? JSON.parse(row.details) : {},
+            tags: row.tags ? JSON.parse(row.tags || '[]') : [],
+            ai_generated: row.ai_generated === 1,
+          });
         }
-      );
+      });
     });
   }
 
@@ -763,7 +925,7 @@ class PersistentDB {
    */
   async getEventsBySession(sessionId) {
     await this.init();
-    
+
     return new Promise((resolve, reject) => {
       this.db.all(
         `SELECT * FROM events WHERE session_id = ? ORDER BY timestamp ASC`,
@@ -773,12 +935,14 @@ class PersistentDB {
             console.error('Error getting events by session:', err);
             reject(err);
           } else {
-            resolve(rows.map(row => ({
-              ...row,
-              details: row.details ? JSON.parse(row.details) : {},
-              tags: row.tags ? JSON.parse(row.tags || '[]') : [],
-              ai_generated: row.ai_generated === 1
-            })));
+            resolve(
+              rows.map((row) => ({
+                ...row,
+                details: row.details ? JSON.parse(row.details) : {},
+                tags: row.tags ? JSON.parse(row.tags || '[]') : [],
+                ai_generated: row.ai_generated === 1,
+              }))
+            );
           }
         }
       );
@@ -790,25 +954,23 @@ class PersistentDB {
    */
   async getRecentEvents(limit = 50) {
     await this.init();
-    
+
     return new Promise((resolve, reject) => {
-      this.db.all(
-        `SELECT * FROM events ORDER BY timestamp DESC LIMIT ?`,
-        [limit],
-        (err, rows) => {
-          if (err) {
-            console.error('Error getting recent events:', err);
-            reject(err);
-          } else {
-            resolve(rows.map(row => ({
+      this.db.all(`SELECT * FROM events ORDER BY timestamp DESC LIMIT ?`, [limit], (err, rows) => {
+        if (err) {
+          console.error('Error getting recent events:', err);
+          reject(err);
+        } else {
+          resolve(
+            rows.map((row) => ({
               ...row,
               details: row.details ? JSON.parse(row.details) : {},
               tags: row.tags ? JSON.parse(row.tags || '[]') : [],
-              ai_generated: row.ai_generated === 1
-            })));
-          }
+              ai_generated: row.ai_generated === 1,
+            }))
+          );
         }
-      );
+      });
     });
   }
 
@@ -817,14 +979,14 @@ class PersistentDB {
    */
   async saveTerminalCommand(command) {
     await this.init();
-    
+
     return new Promise((resolve, reject) => {
       const stmt = this.db.prepare(`
         INSERT OR REPLACE INTO terminal_commands 
         (id, command, shell, source, timestamp, workspace, output, exit_code, duration, error, linked_entry_id, linked_prompt_id, session_id)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
-      
+
       stmt.run(
         command.id,
         command.command,
@@ -840,7 +1002,7 @@ class PersistentDB {
         command.linkedPromptId || null,
         command.sessionId || null
       );
-      
+
       stmt.finalize((err) => {
         if (err) {
           console.error('Error saving terminal command:', err);
@@ -857,7 +1019,7 @@ class PersistentDB {
    */
   async getAllTerminalCommands(limit = 500) {
     await this.init();
-    
+
     return new Promise((resolve, reject) => {
       this.db.all(
         `SELECT * FROM terminal_commands ORDER BY timestamp DESC LIMIT ?`,
@@ -879,34 +1041,34 @@ class PersistentDB {
    */
   async getTerminalCommands(options = {}) {
     await this.init();
-    
+
     const { limit = 100, source, since, workspace, exitCode } = options;
     let query = 'SELECT * FROM terminal_commands WHERE 1=1';
     const params = [];
-    
+
     if (source) {
       query += ' AND source = ?';
       params.push(source);
     }
-    
+
     if (since) {
       query += ' AND timestamp >= ?';
       params.push(since);
     }
-    
+
     if (workspace) {
       query += ' AND workspace = ?';
       params.push(workspace);
     }
-    
+
     if (exitCode !== undefined) {
       query += ' AND exit_code = ?';
       params.push(exitCode);
     }
-    
+
     query += ' ORDER BY timestamp DESC LIMIT ?';
     params.push(limit);
-    
+
     return new Promise((resolve, reject) => {
       this.db.all(query, params, (err, rows) => {
         if (err) {
@@ -924,7 +1086,7 @@ class PersistentDB {
    */
   async getAllEntries() {
     await this.init();
-    
+
     return new Promise((resolve, reject) => {
       this.db.all(`SELECT * FROM entries ORDER BY timestamp DESC`, (err, rows) => {
         if (err) {
@@ -932,10 +1094,10 @@ class PersistentDB {
           reject(err);
         } else {
           // Parse JSON fields
-          const entries = rows.map(row => ({
+          const entries = rows.map((row) => ({
             ...row,
             tags: row.tags ? JSON.parse(row.tags) : [],
-            modelInfo: row.modelInfo ? JSON.parse(row.modelInfo) : null
+            modelInfo: row.modelInfo ? JSON.parse(row.modelInfo) : null,
           }));
           resolve(entries);
         }
@@ -948,7 +1110,7 @@ class PersistentDB {
    */
   async getTotalEntriesCount() {
     await this.init();
-    
+
     return new Promise((resolve, reject) => {
       this.db.get(`SELECT COUNT(*) as count FROM entries`, [], (err, row) => {
         if (err) {
@@ -966,10 +1128,10 @@ class PersistentDB {
    */
   async getRecentEntries(limit = 500, entryId = null) {
     await this.init();
-    
+
     return new Promise((resolve, reject) => {
       let query, params;
-      
+
       if (entryId !== null) {
         // Fetch specific entry by ID (used for TODO events)
         query = `
@@ -993,41 +1155,41 @@ class PersistentDB {
         `;
         params = [limit];
       }
-      
+
       this.db.all(query, params, (err, rows) => {
         if (err) {
           console.error('Error loading recent entries:', err);
           reject(err);
         } else {
           // Parse JSON fields
-          const entries = rows.map(row => ({
+          const entries = rows.map((row) => ({
             ...row,
             tags: row.tags ? JSON.parse(row.tags) : [],
-            modelInfo: row.modelInfo ? JSON.parse(row.modelInfo) : null
+            modelInfo: row.modelInfo ? JSON.parse(row.modelInfo) : null,
           }));
           resolve(entries);
         }
       });
     });
   }
-  
+
   /**
    * Get entries within a time range (optionally filtered by workspace)
    */
   async getEntriesInTimeRange(since, until, workspacePath = null, limit = 100) {
     await this.init();
-    
+
     return new Promise((resolve, reject) => {
       // Convert timestamps to ISO strings for TEXT column comparison
       const sinceISO = since ? new Date(since).toISOString() : null;
       const untilISO = until ? new Date(until).toISOString() : null;
-      
+
       let query = `
         SELECT * FROM entries 
         WHERE 1=1
       `;
       const params = [];
-      
+
       if (sinceISO) {
         query += ` AND timestamp >= ?`;
         params.push(sinceISO);
@@ -1036,24 +1198,24 @@ class PersistentDB {
         query += ` AND timestamp <= ?`;
         params.push(untilISO);
       }
-      
+
       if (workspacePath) {
         query += ` AND workspace_path = ?`;
         params.push(workspacePath);
       }
-      
+
       query += ` ORDER BY timestamp DESC LIMIT ?`;
       params.push(limit);
-      
+
       this.db.all(query, params, (err, rows) => {
         if (err) {
           console.error('Error loading entries in time range:', err);
           reject(err);
         } else {
-          const entries = rows.map(row => ({
+          const entries = rows.map((row) => ({
             ...row,
             tags: row.tags ? JSON.parse(row.tags) : [],
-            modelInfo: row.modelInfo ? JSON.parse(row.modelInfo) : null
+            modelInfo: row.modelInfo ? JSON.parse(row.modelInfo) : null,
           }));
           resolve(entries);
         }
@@ -1067,31 +1229,35 @@ class PersistentDB {
    */
   async getEntriesWithCode(limit = 1000) {
     await this.init();
-    
+
     return new Promise((resolve, reject) => {
-      this.db.all(`
+      this.db.all(
+        `
         SELECT 
           id, session_id, workspace_path, file_path, source, 
           before_code, after_code, notes, timestamp, tags, prompt_id, modelInfo, type
         FROM entries 
         ORDER BY timestamp DESC 
         LIMIT ?
-      `, [limit], (err, rows) => {
-        if (err) {
-          console.error('Error loading entries with code:', err);
-          reject(err);
-        } else {
-          // Parse JSON fields
-          const entries = rows.map(row => ({
-            ...row,
-            tags: row.tags ? JSON.parse(row.tags) : [],
-            modelInfo: row.modelInfo ? JSON.parse(row.modelInfo) : null,
-            before_content: row.before_code,  // Alias for compatibility
-            after_content: row.after_code     // Alias for compatibility
-          }));
-          resolve(entries);
+      `,
+        [limit],
+        (err, rows) => {
+          if (err) {
+            console.error('Error loading entries with code:', err);
+            reject(err);
+          } else {
+            // Parse JSON fields
+            const entries = rows.map((row) => ({
+              ...row,
+              tags: row.tags ? JSON.parse(row.tags) : [],
+              modelInfo: row.modelInfo ? JSON.parse(row.modelInfo) : null,
+              before_content: row.before_code, // Alias for compatibility
+              after_content: row.after_code, // Alias for compatibility
+            }));
+            resolve(entries);
+          }
         }
-      });
+      );
     });
   }
 
@@ -1100,9 +1266,10 @@ class PersistentDB {
    */
   async getFileContents(limit = 500) {
     await this.init();
-    
+
     return new Promise((resolve, reject) => {
-      this.db.all(`
+      this.db.all(
+        `
         SELECT 
           id, file_path, after_code, timestamp
         FROM entries 
@@ -1111,14 +1278,17 @@ class PersistentDB {
           AND file_path NOT LIKE '%.git/%'
         ORDER BY timestamp DESC 
         LIMIT ?
-      `, [limit], (err, rows) => {
-        if (err) {
-          console.error('Error loading file contents:', err);
-          reject(err);
-        } else {
-          resolve(rows);
+      `,
+        [limit],
+        (err, rows) => {
+          if (err) {
+            console.error('Error loading file contents:', err);
+            reject(err);
+          } else {
+            resolve(rows);
+          }
         }
-      });
+      );
     });
   }
 
@@ -1127,7 +1297,7 @@ class PersistentDB {
    */
   async getRecentPrompts(limit = 200) {
     await this.init();
-    
+
     return new Promise((resolve, reject) => {
       this.db.all(`SELECT * FROM prompts ORDER BY timestamp DESC LIMIT ?`, [limit], (err, rows) => {
         if (err) {
@@ -1135,13 +1305,13 @@ class PersistentDB {
           reject(err);
         } else {
           // Map database column names (snake_case) to camelCase
-          const mapped = rows.map(row => this._mapPromptRow(row));
+          const mapped = rows.map((row) => this._mapPromptRow(row));
           resolve(mapped);
         }
       });
     });
   }
-  
+
   /**
    * Map database row (snake_case) to camelCase object
    */
@@ -1183,7 +1353,7 @@ class PersistentDB {
       parentConversationId: row.parent_conversation_id,
       // Parse JSON fields if present
       contextFiles: row.context_files_json ? JSON.parse(row.context_files_json) : [],
-      terminalBlocks: row.terminal_blocks_json ? JSON.parse(row.terminal_blocks_json) : []
+      terminalBlocks: row.terminal_blocks_json ? JSON.parse(row.terminal_blocks_json) : [],
     };
   }
 
@@ -1192,20 +1362,23 @@ class PersistentDB {
    */
   async getMaxIds() {
     await this.init();
-    
+
     return new Promise((resolve, reject) => {
-      this.db.get(`
+      this.db.get(
+        `
         SELECT 
           (SELECT COALESCE(MAX(id), 0) FROM entries) as entryId,
           (SELECT COALESCE(MAX(id), 0) FROM prompts) as promptId
-      `, (err, row) => {
-        if (err) {
-          console.error('Error getting max IDs:', err);
-          reject(err);
-        } else {
-          resolve(row || { entryId: 0, promptId: 0 });
+      `,
+        (err, row) => {
+          if (err) {
+            console.error('Error getting max IDs:', err);
+            reject(err);
+          } else {
+            resolve(row || { entryId: 0, promptId: 0 });
+          }
         }
-      });
+      );
     });
   }
 
@@ -1214,18 +1387,18 @@ class PersistentDB {
    */
   async getPromptsInTimeRange(since, until, limit = 100) {
     await this.init();
-    
+
     return new Promise((resolve, reject) => {
       // Convert timestamps to ISO strings for TEXT column comparison
       const sinceISO = since ? new Date(since).toISOString() : null;
       const untilISO = until ? new Date(until).toISOString() : null;
-      
+
       let query = `
         SELECT * FROM prompts 
         WHERE 1=1
       `;
       const params = [];
-      
+
       if (sinceISO) {
         query += ` AND timestamp >= ?`;
         params.push(sinceISO);
@@ -1234,16 +1407,16 @@ class PersistentDB {
         query += ` AND timestamp <= ?`;
         params.push(untilISO);
       }
-      
+
       query += ` ORDER BY timestamp DESC LIMIT ?`;
       params.push(limit);
-      
+
       this.db.all(query, params, (err, rows) => {
         if (err) {
           console.error('Error loading prompts in time range:', err);
           reject(err);
         } else {
-          const mapped = rows.map(row => this._mapPromptRow(row));
+          const mapped = rows.map((row) => this._mapPromptRow(row));
           resolve(mapped);
         }
       });
@@ -1255,7 +1428,7 @@ class PersistentDB {
    */
   async getAllPrompts() {
     await this.init();
-    
+
     return new Promise((resolve, reject) => {
       this.db.all(`SELECT * FROM prompts ORDER BY timestamp DESC`, (err, rows) => {
         if (err) {
@@ -1263,7 +1436,7 @@ class PersistentDB {
           reject(err);
         } else {
           // Map database column names (snake_case) to camelCase
-          const mapped = rows.map(row => this._mapPromptRow(row));
+          const mapped = rows.map((row) => this._mapPromptRow(row));
           resolve(mapped);
         }
       });
@@ -1275,7 +1448,7 @@ class PersistentDB {
    */
   async getAllEvents() {
     await this.init();
-    
+
     return new Promise((resolve, reject) => {
       this.db.all(`SELECT * FROM events ORDER BY timestamp DESC`, (err, rows) => {
         if (err) {
@@ -1293,23 +1466,21 @@ class PersistentDB {
    */
   async updateEntry(id, updates) {
     await this.init();
-    
-    const fields = Object.keys(updates).map(key => `${key} = ?`).join(', ');
+
+    const fields = Object.keys(updates)
+      .map((key) => `${key} = ?`)
+      .join(', ');
     const values = Object.values(updates);
-    
+
     return new Promise((resolve, reject) => {
-      this.db.run(
-        `UPDATE entries SET ${fields} WHERE id = ?`,
-        [...values, id],
-        (err) => {
-          if (err) {
-            console.error('Error updating entry:', err);
-            reject(err);
-          } else {
-            resolve();
-          }
+      this.db.run(`UPDATE entries SET ${fields} WHERE id = ?`, [...values, id], (err) => {
+        if (err) {
+          console.error('Error updating entry:', err);
+          reject(err);
+        } else {
+          resolve();
         }
-      );
+      });
     });
   }
 
@@ -1318,23 +1489,21 @@ class PersistentDB {
    */
   async updatePrompt(id, updates) {
     await this.init();
-    
-    const fields = Object.keys(updates).map(key => `${key} = ?`).join(', ');
+
+    const fields = Object.keys(updates)
+      .map((key) => `${key} = ?`)
+      .join(', ');
     const values = Object.values(updates);
-    
+
     return new Promise((resolve, reject) => {
-      this.db.run(
-        `UPDATE prompts SET ${fields} WHERE id = ?`,
-        [...values, id],
-        (err) => {
-          if (err) {
-            console.error('Error updating prompt:', err);
-            reject(err);
-          } else {
-            resolve();
-          }
+      this.db.run(`UPDATE prompts SET ${fields} WHERE id = ?`, [...values, id], (err) => {
+        if (err) {
+          console.error('Error updating prompt:', err);
+          reject(err);
+        } else {
+          resolve();
         }
-      );
+      });
     });
   }
 
@@ -1343,9 +1512,10 @@ class PersistentDB {
    */
   async getStats() {
     await this.init();
-    
+
     return new Promise((resolve, reject) => {
-      this.db.get(`
+      this.db.get(
+        `
         SELECT 
           (SELECT COUNT(*) FROM entries) as entries,
           (SELECT COUNT(*) FROM prompts) as prompts,
@@ -1353,27 +1523,32 @@ class PersistentDB {
           (SELECT COUNT(*) FROM entries WHERE prompt_id IS NOT NULL) as linked_entries,
           (SELECT COUNT(*) FROM prompts WHERE linked_entry_id IS NOT NULL) as linked_prompts,
           (SELECT COUNT(DISTINCT session_id) FROM entries WHERE session_id IS NOT NULL) as unique_sessions
-      `, (err, row) => {
-        if (err) {
-          reject(err);
-        } else {
-          // Calculate percentages
-          row.linked_entries_percent = row.entries > 0 ? (row.linked_entries / row.entries * 100).toFixed(2) : 0;
-          row.linked_prompts_percent = row.prompts > 0 ? (row.linked_prompts / row.prompts * 100).toFixed(2) : 0;
-          resolve(row);
+      `,
+        (err, row) => {
+          if (err) {
+            reject(err);
+          } else {
+            // Calculate percentages
+            row.linked_entries_percent =
+              row.entries > 0 ? ((row.linked_entries / row.entries) * 100).toFixed(2) : 0;
+            row.linked_prompts_percent =
+              row.prompts > 0 ? ((row.linked_prompts / row.prompts) * 100).toFixed(2) : 0;
+            resolve(row);
+          }
         }
-      });
+      );
     });
   }
-  
+
   /**
    * Get entries with their linked prompts
    */
   async getEntriesWithPrompts(limit = 100) {
     await this.init();
-    
+
     return new Promise((resolve, reject) => {
-      this.db.all(`
+      this.db.all(
+        `
         SELECT 
           e.*,
           p.text as prompt_text,
@@ -1386,24 +1561,28 @@ class PersistentDB {
         LEFT JOIN prompts p ON e.prompt_id = p.id
         ORDER BY e.timestamp DESC
         LIMIT ?
-      `, [limit], (err, rows) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(rows);
+      `,
+        [limit],
+        (err, rows) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve(rows);
+          }
         }
-      });
+      );
     });
   }
-  
+
   /**
    * Get prompts with their linked entries
    */
   async getPromptsWithEntries(limit = 100) {
     await this.init();
-    
+
     return new Promise((resolve, reject) => {
-      this.db.all(`
+      this.db.all(
+        `
         SELECT 
           p.*,
           e.file_path as entry_file_path,
@@ -1413,13 +1592,16 @@ class PersistentDB {
         LEFT JOIN entries e ON p.linked_entry_id = e.id
         ORDER BY p.timestamp DESC
         LIMIT ?
-      `, [limit], (err, rows) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(rows);
+      `,
+        [limit],
+        (err, rows) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve(rows);
+          }
         }
-      });
+      );
     });
   }
 
@@ -1428,21 +1610,24 @@ class PersistentDB {
    */
   async getPromptsWithLinkedEntries() {
     await this.init();
-    
+
     return new Promise((resolve, reject) => {
-      this.db.all(`
+      this.db.all(
+        `
         SELECT * FROM prompts 
         WHERE linked_entry_id IS NOT NULL
         ORDER BY timestamp DESC
-      `, (err, rows) => {
-        if (err) {
-          console.error('Error loading prompts with linked entries:', err);
-          reject(err);
-        } else {
-          const mapped = rows.map(row => this._mapPromptRow(row));
-          resolve(mapped);
+      `,
+        (err, rows) => {
+          if (err) {
+            console.error('Error loading prompts with linked entries:', err);
+            reject(err);
+          } else {
+            const mapped = rows.map((row) => this._mapPromptRow(row));
+            resolve(mapped);
+          }
         }
-      });
+      );
     });
   }
 
@@ -1451,16 +1636,15 @@ class PersistentDB {
    */
   async getEntryById(entryId) {
     await this.init();
-    
+
     return new Promise((resolve, reject) => {
       // Try both numeric ID and string ID (UUID)
-      const query = typeof entryId === 'number' 
-        ? `SELECT * FROM entries WHERE id = ?`
-        : `SELECT * FROM entries WHERE id = ? OR CAST(id AS TEXT) = ?`;
-      const params = typeof entryId === 'number' 
-        ? [entryId]
-        : [entryId, entryId];
-      
+      const query =
+        typeof entryId === 'number'
+          ? `SELECT * FROM entries WHERE id = ?`
+          : `SELECT * FROM entries WHERE id = ? OR CAST(id AS TEXT) = ?`;
+      const params = typeof entryId === 'number' ? [entryId] : [entryId, entryId];
+
       this.db.get(query, params, (err, row) => {
         if (err) {
           console.error('Error loading entry by ID:', err);
@@ -1474,66 +1658,76 @@ class PersistentDB {
           const entry = {
             ...row,
             tags: row.tags ? JSON.parse(row.tags) : [],
-            modelInfo: row.modelInfo ? JSON.parse(row.modelInfo) : null
+            modelInfo: row.modelInfo ? JSON.parse(row.modelInfo) : null,
           };
           resolve(entry);
         }
       });
     });
   }
-  
+
   /**
    * Validate database integrity
    */
   async validateIntegrity() {
     await this.init();
-    
+
     return new Promise((resolve, reject) => {
       const checks = {
         orphaned_entry_prompts: 0,
         orphaned_prompt_entries: 0,
         null_timestamps: 0,
-        duplicate_ids: 0
+        duplicate_ids: 0,
       };
-      
+
       // Check for orphaned references
-      this.db.get(`
+      this.db.get(
+        `
         SELECT COUNT(*) as count 
         FROM entries 
         WHERE prompt_id IS NOT NULL 
           AND prompt_id NOT IN (SELECT id FROM prompts)
-      `, (err, row) => {
-        if (err) return reject(err);
-        checks.orphaned_entry_prompts = row.count;
-        
-        this.db.get(`
+      `,
+        (err, row) => {
+          if (err) return reject(err);
+          checks.orphaned_entry_prompts = row.count;
+
+          this.db.get(
+            `
           SELECT COUNT(*) as count 
           FROM prompts 
           WHERE linked_entry_id IS NOT NULL 
             AND linked_entry_id NOT IN (SELECT id FROM entries)
-        `, (err2, row2) => {
-          if (err2) return reject(err2);
-          checks.orphaned_prompt_entries = row2.count;
-          
-          // Check for null timestamps
-          this.db.get(`
+        `,
+            (err2, row2) => {
+              if (err2) return reject(err2);
+              checks.orphaned_prompt_entries = row2.count;
+
+              // Check for null timestamps
+              this.db.get(
+                `
             SELECT 
               (SELECT COUNT(*) FROM entries WHERE timestamp IS NULL) +
               (SELECT COUNT(*) FROM prompts WHERE timestamp IS NULL) +
               (SELECT COUNT(*) FROM events WHERE timestamp IS NULL) as count
-          `, (err3, row3) => {
-            if (err3) return reject(err3);
-            checks.null_timestamps = row3.count;
-            
-            resolve({
-              valid: checks.orphaned_entry_prompts === 0 && 
-                     checks.orphaned_prompt_entries === 0 && 
-                     checks.null_timestamps === 0,
-              checks
-            });
-          });
-        });
-      });
+          `,
+                (err3, row3) => {
+                  if (err3) return reject(err3);
+                  checks.null_timestamps = row3.count;
+
+                  resolve({
+                    valid:
+                      checks.orphaned_entry_prompts === 0 &&
+                      checks.orphaned_prompt_entries === 0 &&
+                      checks.null_timestamps === 0,
+                    checks,
+                  });
+                }
+              );
+            }
+          );
+        }
+      );
     });
   }
 
@@ -1556,14 +1750,14 @@ class PersistentDB {
    */
   async saveContextSnapshot(snapshot) {
     await this.init();
-    
+
     return new Promise((resolve, reject) => {
       const stmt = this.db.prepare(`
         INSERT INTO context_snapshots 
         (prompt_id, timestamp, file_count, token_estimate, truncated, utilization_percent, context_files, at_mentions)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `);
-      
+
       stmt.run(
         snapshot.promptId || null,
         snapshot.timestamp,
@@ -1574,7 +1768,7 @@ class PersistentDB {
         JSON.stringify(snapshot.contextFiles || []),
         JSON.stringify(snapshot.atMentions || [])
       );
-      
+
       stmt.finalize((err) => {
         if (err) {
           console.error('Error saving context snapshot:', err);
@@ -1591,9 +1785,9 @@ class PersistentDB {
    */
   async getContextSnapshots(options = {}) {
     await this.init();
-    
+
     const { limit = 100, since = 0 } = options;
-    
+
     return new Promise((resolve, reject) => {
       this.db.all(
         `SELECT * FROM context_snapshots 
@@ -1606,7 +1800,7 @@ class PersistentDB {
             console.error('Error fetching context snapshots:', err);
             reject(err);
           } else {
-            const snapshots = rows.map(row => ({
+            const snapshots = rows.map((row) => ({
               id: row.id,
               promptId: row.prompt_id,
               timestamp: row.timestamp,
@@ -1616,7 +1810,7 @@ class PersistentDB {
               utilizationPercent: row.utilization_percent,
               contextFiles: JSON.parse(row.context_files || '[]'),
               atMentions: JSON.parse(row.at_mentions || '[]'),
-              createdAt: row.created_at
+              createdAt: row.created_at,
             }));
             resolve(snapshots);
           }
@@ -1630,7 +1824,7 @@ class PersistentDB {
    */
   async getContextAnalytics() {
     await this.init();
-    
+
     return new Promise((resolve, reject) => {
       // Get all context snapshots with actual data
       this.db.all(
@@ -1643,44 +1837,45 @@ class PersistentDB {
             reject(err);
             return;
           }
-          
+
           let totalAtFiles = 0;
           let totalContextFiles = 0;
           let totalUIStates = 0;
           const atFileSet = new Set();
-          
-          rows.forEach(row => {
+
+          rows.forEach((row) => {
             try {
               // Count @ mentions
               if (row.at_mentions) {
                 const mentions = JSON.parse(row.at_mentions);
                 if (Array.isArray(mentions)) {
                   totalAtFiles += mentions.length;
-                  mentions.forEach(m => atFileSet.add(m));
+                  mentions.forEach((m) => atFileSet.add(m));
                 }
               }
-              
+
               // Count context files
               if (row.context_files) {
                 const files = JSON.parse(row.context_files);
                 if (Array.isArray(files)) {
                   totalContextFiles += files.length;
                 } else if (files.attachedFiles || files.codebaseFiles) {
-                  totalContextFiles += (files.attachedFiles?.length || 0) + (files.codebaseFiles?.length || 0);
+                  totalContextFiles +=
+                    (files.attachedFiles?.length || 0) + (files.codebaseFiles?.length || 0);
                 }
               }
             } catch (e) {
               // Skip malformed JSON
             }
           });
-          
+
           resolve({
             totalAtFiles,
             totalContextFiles,
             totalUIStates,
             withContext: rows.length,
             uniqueAtFiles: atFileSet.size,
-            totalSnapshots: rows.length
+            totalSnapshots: rows.length,
           });
         }
       );
@@ -1692,7 +1887,7 @@ class PersistentDB {
    */
   async saveContextChange(changeRecord) {
     await this.init();
-    
+
     return new Promise((resolve, reject) => {
       const stmt = this.db.prepare(`
         INSERT OR REPLACE INTO context_changes 
@@ -1701,7 +1896,7 @@ class PersistentDB {
          unchanged_files, net_change, metadata)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
-      
+
       stmt.run(
         changeRecord.id,
         changeRecord.promptId || null,
@@ -1717,7 +1912,7 @@ class PersistentDB {
         changeRecord.netChange || 0,
         JSON.stringify(changeRecord.metadata || {})
       );
-      
+
       stmt.finalize((err) => {
         if (err) {
           console.error('Error saving context change:', err);
@@ -1734,7 +1929,7 @@ class PersistentDB {
    */
   async getContextChanges(options = {}) {
     await this.init();
-    
+
     const {
       promptId = null,
       eventId = null,
@@ -1742,52 +1937,52 @@ class PersistentDB {
       sessionId = null,
       startTime = null,
       endTime = null,
-      limit = 100
+      limit = 100,
     } = options;
-    
+
     return new Promise((resolve, reject) => {
       let query = 'SELECT * FROM context_changes WHERE 1=1';
       const params = [];
-      
+
       if (promptId) {
         query += ' AND prompt_id = ?';
         params.push(promptId);
       }
-      
+
       if (eventId) {
         query += ' AND event_id = ?';
         params.push(eventId);
       }
-      
+
       if (taskId) {
         query += ' AND task_id = ?';
         params.push(taskId);
       }
-      
+
       if (sessionId) {
         query += ' AND session_id = ?';
         params.push(sessionId);
       }
-      
+
       if (startTime) {
         query += ' AND timestamp >= ?';
         params.push(startTime);
       }
-      
+
       if (endTime) {
         query += ' AND timestamp <= ?';
         params.push(endTime);
       }
-      
+
       query += ' ORDER BY timestamp DESC LIMIT ?';
       params.push(limit);
-      
+
       this.db.all(query, params, (err, rows) => {
         if (err) {
           console.error('Error fetching context changes:', err);
           reject(err);
         } else {
-          const changes = rows.map(row => ({
+          const changes = rows.map((row) => ({
             id: row.id,
             promptId: row.prompt_id,
             eventId: row.event_id,
@@ -1801,7 +1996,7 @@ class PersistentDB {
             unchangedFiles: JSON.parse(row.unchanged_files || '[]'),
             netChange: row.net_change,
             metadata: JSON.parse(row.metadata || '{}'),
-            createdAt: row.created_at
+            createdAt: row.created_at,
           }));
           resolve(changes);
         }
@@ -1818,7 +2013,7 @@ class PersistentDB {
    */
   async getSchema() {
     await this.init();
-    
+
     return new Promise((resolve, reject) => {
       this.db.all(
         `SELECT name FROM sqlite_master WHERE type='table' ORDER BY name`,
@@ -1828,40 +2023,37 @@ class PersistentDB {
             reject(err);
             return;
           }
-          
+
           const schema = {
             tables: [],
             version: '1.0.0',
-            timestamp: Date.now()
+            timestamp: Date.now(),
           };
-          
+
           // Get details for each table
-          const tablePromises = tables.map(table => {
+          const tablePromises = tables.map((table) => {
             return new Promise((res, rej) => {
-              this.db.all(
-                `PRAGMA table_info(${table.name})`,
-                (tableErr, columns) => {
-                  if (tableErr) {
-                    rej(tableErr);
-                  } else {
-                    res({
-                      name: table.name,
-                      columns: columns.map(col => ({
-                        name: col.name,
-                        type: col.type,
-                        notnull: col.notnull === 1,
-                        defaultValue: col.dflt_value,
-                        primaryKey: col.pk === 1
-                      }))
-                    });
-                  }
+              this.db.all(`PRAGMA table_info(${table.name})`, (tableErr, columns) => {
+                if (tableErr) {
+                  rej(tableErr);
+                } else {
+                  res({
+                    name: table.name,
+                    columns: columns.map((col) => ({
+                      name: col.name,
+                      type: col.type,
+                      notnull: col.notnull === 1,
+                      defaultValue: col.dflt_value,
+                      primaryKey: col.pk === 1,
+                    })),
+                  });
                 }
-              );
+              });
             });
           });
-          
+
           Promise.all(tablePromises)
-            .then(tableDetails => {
+            .then((tableDetails) => {
               schema.tables = tableDetails;
               resolve(schema);
             })
@@ -1876,28 +2068,25 @@ class PersistentDB {
    */
   async getTableSchema(tableName) {
     await this.init();
-    
+
     return new Promise((resolve, reject) => {
-      this.db.all(
-        `PRAGMA table_info(${tableName})`,
-        (err, columns) => {
-          if (err) {
-            console.error(`Error fetching table schema for ${tableName}:`, err);
-            reject(err);
-          } else {
-            resolve({
-              name: tableName,
-              columns: columns.map(col => ({
-                name: col.name,
-                type: col.type,
-                notnull: col.notnull === 1,
-                defaultValue: col.dflt_value,
-                primaryKey: col.pk === 1
-              }))
-            });
-          }
+      this.db.all(`PRAGMA table_info(${tableName})`, (err, columns) => {
+        if (err) {
+          console.error(`Error fetching table schema for ${tableName}:`, err);
+          reject(err);
+        } else {
+          resolve({
+            name: tableName,
+            columns: columns.map((col) => ({
+              name: col.name,
+              type: col.type,
+              notnull: col.notnull === 1,
+              defaultValue: col.dflt_value,
+              primaryKey: col.pk === 1,
+            })),
+          });
         }
-      );
+      });
     });
   }
 
@@ -1906,20 +2095,20 @@ class PersistentDB {
    */
   async addColumn(tableName, columnDef) {
     await this.init();
-    
+
     return new Promise((resolve, reject) => {
       const { name, type, notnull = false, defaultValue = null } = columnDef;
-      
+
       let sql = `ALTER TABLE ${tableName} ADD COLUMN ${name} ${type}`;
-      
+
       if (notnull) {
         sql += ' NOT NULL';
       }
-      
+
       if (defaultValue !== null) {
         sql += ` DEFAULT ${defaultValue}`;
       }
-      
+
       this.db.run(sql, (err) => {
         if (err) {
           console.error(`Error adding column ${name} to ${tableName}:`, err);
@@ -1939,10 +2128,11 @@ class PersistentDB {
    */
   async saveCustomFieldConfig(config) {
     await this.init();
-    
+
     // Create a table to store custom field configurations if it doesn't exist
     return new Promise((resolve, reject) => {
-      this.db.run(`
+      this.db.run(
+        `
         CREATE TABLE IF NOT EXISTS schema_config (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           table_name TEXT NOT NULL,
@@ -1958,87 +2148,95 @@ class PersistentDB {
           updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
           UNIQUE(table_name, field_name, workspace_id)
         )
-      `, (err) => {
-        if (err) {
-          reject(err);
-          return;
-        }
-        
-        // Add workspace columns to existing table if they don't exist (migration)
-        const alterQueries = [
-          `ALTER TABLE schema_config ADD COLUMN workspace_id TEXT`,
-          `ALTER TABLE schema_config ADD COLUMN workspace_path TEXT`
-        ];
-        
-        Promise.all(alterQueries.map(query => {
-          return new Promise((resolveAlter) => {
-            this.db.run(query, (alterErr) => {
-              // Silently ignore "duplicate column" errors
-              if (alterErr && !alterErr.message.includes('duplicate column') && !alterErr.message.includes('already exists')) {
-                console.warn('Error adding workspace column:', alterErr.message);
-              }
-              resolveAlter();
-            });
-          });
-        })).then(() => {
-          // Handle uniqueness: SQLite UNIQUE constraint allows multiple NULLs,
-          // so we need to explicitly delete existing configs before inserting
-          // This ensures only one config exists per (table_name, field_name, workspace_id) combination
-          const workspaceId = config.workspaceId || null;
-          
-          // Delete existing config with same table, field, and workspace (including NULL for global)
-          let deleteQuery = 'DELETE FROM schema_config WHERE table_name = ? AND field_name = ?';
-          const deleteParams = [config.tableName, config.fieldName];
-          
-          if (workspaceId === null) {
-            // Delete global configs (workspace_id IS NULL)
-            deleteQuery += ' AND workspace_id IS NULL';
-          } else {
-            // Delete workspace-specific config
-            deleteQuery += ' AND workspace_id = ?';
-            deleteParams.push(workspaceId);
+      `,
+        (err) => {
+          if (err) {
+            reject(err);
+            return;
           }
-          
-          this.db.run(deleteQuery, deleteParams, (deleteErr) => {
-            if (deleteErr) {
-              console.warn('Error deleting existing config before insert:', deleteErr);
-              // Continue anyway - INSERT OR REPLACE will handle it
+
+          // Add workspace columns to existing table if they don't exist (migration)
+          const alterQueries = [
+            `ALTER TABLE schema_config ADD COLUMN workspace_id TEXT`,
+            `ALTER TABLE schema_config ADD COLUMN workspace_path TEXT`,
+          ];
+
+          Promise.all(
+            alterQueries.map((query) => {
+              return new Promise((resolveAlter) => {
+                this.db.run(query, (alterErr) => {
+                  // Silently ignore "duplicate column" errors
+                  if (
+                    alterErr &&
+                    !alterErr.message.includes('duplicate column') &&
+                    !alterErr.message.includes('already exists')
+                  ) {
+                    console.warn('Error adding workspace column:', alterErr.message);
+                  }
+                  resolveAlter();
+                });
+              });
+            })
+          ).then(() => {
+            // Handle uniqueness: SQLite UNIQUE constraint allows multiple NULLs,
+            // so we need to explicitly delete existing configs before inserting
+            // This ensures only one config exists per (table_name, field_name, workspace_id) combination
+            const workspaceId = config.workspaceId || null;
+
+            // Delete existing config with same table, field, and workspace (including NULL for global)
+            let deleteQuery = 'DELETE FROM schema_config WHERE table_name = ? AND field_name = ?';
+            const deleteParams = [config.tableName, config.fieldName];
+
+            if (workspaceId === null) {
+              // Delete global configs (workspace_id IS NULL)
+              deleteQuery += ' AND workspace_id IS NULL';
+            } else {
+              // Delete workspace-specific config
+              deleteQuery += ' AND workspace_id = ?';
+              deleteParams.push(workspaceId);
             }
-            
-            // Now insert the new configuration
-            const insertStmt = this.db.prepare(`
+
+            this.db.run(deleteQuery, deleteParams, (deleteErr) => {
+              if (deleteErr) {
+                console.warn('Error deleting existing config before insert:', deleteErr);
+                // Continue anyway - INSERT OR REPLACE will handle it
+              }
+
+              // Now insert the new configuration
+              const insertStmt = this.db.prepare(`
               INSERT INTO schema_config 
               (table_name, field_name, field_type, display_name, description, enabled, config_json, workspace_id, workspace_path, updated_at)
               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
             `);
-            
-            insertStmt.run(
-              config.tableName,
-              config.fieldName,
-              config.fieldType,
-              config.displayName || config.fieldName,
-              config.description || '',
-              config.enabled !== false ? 1 : 0,
-              JSON.stringify(config.config || {}),
-              workspaceId,
-              config.workspacePath || null,
-              (insertErr) => {
-                if (insertErr) {
-                  reject(insertErr);
-                } else {
-                  insertStmt.finalize((finalizeErr) => {
-                    if (finalizeErr) {
-                      reject(finalizeErr);
-                    } else {
-                      resolve({ success: true, config });
-                    }
-                  });
+
+              insertStmt.run(
+                config.tableName,
+                config.fieldName,
+                config.fieldType,
+                config.displayName || config.fieldName,
+                config.description || '',
+                config.enabled !== false ? 1 : 0,
+                JSON.stringify(config.config || {}),
+                workspaceId,
+                config.workspacePath || null,
+                (insertErr) => {
+                  if (insertErr) {
+                    reject(insertErr);
+                  } else {
+                    insertStmt.finalize((finalizeErr) => {
+                      if (finalizeErr) {
+                        reject(finalizeErr);
+                      } else {
+                        resolve({ success: true, config });
+                      }
+                    });
+                  }
                 }
-              }
-            );
+              );
+            });
           });
-        });
-      });
+        }
+      );
     });
   }
 
@@ -2051,7 +2249,7 @@ class PersistentDB {
    */
   async getCustomFieldConfigs(tableName = null, workspaceId = null, includeGlobal = true) {
     await this.init();
-    
+
     return new Promise((resolve, reject) => {
       // Build query with workspace-aware logic
       // Priority: workspace-specific configs override global configs
@@ -2060,12 +2258,12 @@ class PersistentDB {
         WHERE 1=1
       `;
       const params = [];
-      
+
       if (tableName) {
         query += ' AND table_name = ?';
         params.push(tableName);
       }
-      
+
       if (workspaceId) {
         if (includeGlobal) {
           // Get workspace-specific OR global (NULL) configs
@@ -2080,10 +2278,10 @@ class PersistentDB {
         // If no workspace specified, get all configs (workspace-specific + global)
         // This maintains backward compatibility
       }
-      
+
       query += ' ORDER BY table_name, field_name, workspace_id IS NULL, workspace_id';
       // This ordering ensures workspace-specific configs come before global ones
-      
+
       this.db.all(query, params, (err, rows) => {
         if (err) {
           console.error('Error fetching custom field configs:', err);
@@ -2092,11 +2290,11 @@ class PersistentDB {
           // Deduplicate: if both workspace-specific and global configs exist for same table+field,
           // prefer workspace-specific
           const configMap = new Map();
-          
-          rows.forEach(row => {
+
+          rows.forEach((row) => {
             const key = `${row.table_name}:${row.field_name}`;
             const existing = configMap.get(key);
-            
+
             // Prefer workspace-specific over global
             if (!existing || (row.workspace_id && !existing.workspaceId)) {
               configMap.set(key, {
@@ -2111,11 +2309,11 @@ class PersistentDB {
                 workspaceId: row.workspace_id || null,
                 workspacePath: row.workspace_path || null,
                 createdAt: row.created_at,
-                updatedAt: row.updated_at
+                updatedAt: row.updated_at,
               });
             }
           });
-          
+
           const configs = Array.from(configMap.values());
           resolve(configs);
         }
@@ -2132,11 +2330,11 @@ class PersistentDB {
    */
   async deleteCustomFieldConfig(tableName, fieldName, workspaceId = null) {
     await this.init();
-    
+
     return new Promise((resolve, reject) => {
       let query = 'DELETE FROM schema_config WHERE table_name = ? AND field_name = ?';
       const params = [tableName, fieldName];
-      
+
       if (workspaceId !== null && workspaceId !== undefined) {
         // Delete only workspace-specific config
         query += ' AND workspace_id = ?';
@@ -2146,7 +2344,7 @@ class PersistentDB {
         // This allows deleting global configs explicitly
         query += ' AND workspace_id IS NULL';
       }
-      
+
       this.db.run(query, params, (err) => {
         if (err) {
           console.error('Error deleting custom field config:', err);
@@ -2167,10 +2365,11 @@ class PersistentDB {
    */
   async saveStatusMessage(statusRecord) {
     await this.init();
-    
+
     // Create status_messages table if it doesn't exist
     return new Promise((resolve, reject) => {
-      this.db.run(`
+      this.db.run(
+        `
         CREATE TABLE IF NOT EXISTS status_messages (
           id TEXT PRIMARY KEY,
           timestamp INTEGER NOT NULL,
@@ -2182,38 +2381,40 @@ class PersistentDB {
           metadata TEXT,
           created_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
-      `, (err) => {
-        if (err && !err.message.includes('already exists')) {
-          reject(err);
-          return;
-        }
-        
-        // Insert status message
-        const stmt = this.db.prepare(`
+      `,
+        (err) => {
+          if (err && !err.message.includes('already exists')) {
+            reject(err);
+            return;
+          }
+
+          // Insert status message
+          const stmt = this.db.prepare(`
           INSERT OR REPLACE INTO status_messages 
           (id, timestamp, message, type, action, file_path, file_name, metadata)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         `);
-        
-        stmt.run(
-          statusRecord.id,
-          statusRecord.timestamp,
-          statusRecord.message,
-          statusRecord.type || null,
-          statusRecord.action || null,
-          statusRecord.filePath || null,
-          statusRecord.fileName || null,
-          JSON.stringify(statusRecord.metadata || {})
-        );
-        
-        stmt.finalize((finalizeErr) => {
-          if (finalizeErr) {
-            reject(finalizeErr);
-          } else {
-            resolve({ success: true, statusRecord });
-          }
-        });
-      });
+
+          stmt.run(
+            statusRecord.id,
+            statusRecord.timestamp,
+            statusRecord.message,
+            statusRecord.type || null,
+            statusRecord.action || null,
+            statusRecord.filePath || null,
+            statusRecord.fileName || null,
+            JSON.stringify(statusRecord.metadata || {})
+          );
+
+          stmt.finalize((finalizeErr) => {
+            if (finalizeErr) {
+              reject(finalizeErr);
+            } else {
+              resolve({ success: true, statusRecord });
+            }
+          });
+        }
+      );
     });
   }
 
@@ -2222,94 +2423,93 @@ class PersistentDB {
    */
   async getStatusMessages(options = {}) {
     await this.init();
-    
-    const {
-      startTime = null,
-      endTime = null,
-      type = null,
-      action = null,
-      limit = 100
-    } = options;
-    
+
+    const { startTime = null, endTime = null, type = null, action = null, limit = 100 } = options;
+
     return new Promise((resolve, reject) => {
       // Check if table exists first
-      this.db.get("SELECT name FROM sqlite_master WHERE type='table' AND name='status_messages'", (tableErr, tableRow) => {
-        if (tableErr) {
-          console.error('Error checking status_messages table:', tableErr);
-          reject(tableErr);
-          return;
-        }
-        
-        // If table doesn't exist, return empty array
-        if (!tableRow) {
-          console.warn('[STATUS-MESSAGES] Table status_messages does not exist, returning empty array');
-          resolve([]);
-          return;
-        }
-        
-        let query = 'SELECT * FROM status_messages WHERE 1=1';
-        const params = [];
-        
-        if (startTime) {
-          query += ' AND timestamp >= ?';
-          params.push(startTime);
-        }
-        
-        if (endTime) {
-          query += ' AND timestamp <= ?';
-          params.push(endTime);
-        }
-        
-        if (type) {
-          query += ' AND type = ?';
-          params.push(type);
-        }
-        
-        if (action) {
-          query += ' AND action = ?';
-          params.push(action);
-        }
-        
-        query += ' ORDER BY timestamp DESC LIMIT ?';
-        params.push(limit);
-        
-        this.db.all(query, params, (err, rows) => {
-          if (err) {
-            console.error('Error fetching status messages:', err);
-            reject(err);
-          } else {
-            const messages = rows.map(row => {
-              try {
-                return {
-                  id: row.id,
-                  timestamp: row.timestamp,
-                  message: row.message,
-                  type: row.type,
-                  action: row.action,
-                  filePath: row.file_path,
-                  fileName: row.file_name,
-                  metadata: JSON.parse(row.metadata || '{}'),
-                  createdAt: row.created_at
-                };
-              } catch (parseErr) {
-                console.warn('[STATUS-MESSAGES] Error parsing row metadata:', parseErr);
-                return {
-                  id: row.id,
-                  timestamp: row.timestamp,
-                  message: row.message,
-                  type: row.type,
-                  action: row.action,
-                  filePath: row.file_path,
-                  fileName: row.file_name,
-                  metadata: {},
-                  createdAt: row.created_at
-                };
-              }
-            });
-            resolve(messages);
+      this.db.get(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='status_messages'",
+        (tableErr, tableRow) => {
+          if (tableErr) {
+            console.error('Error checking status_messages table:', tableErr);
+            reject(tableErr);
+            return;
           }
-        });
-      });
+
+          // If table doesn't exist, return empty array
+          if (!tableRow) {
+            console.warn(
+              '[STATUS-MESSAGES] Table status_messages does not exist, returning empty array'
+            );
+            resolve([]);
+            return;
+          }
+
+          let query = 'SELECT * FROM status_messages WHERE 1=1';
+          const params = [];
+
+          if (startTime) {
+            query += ' AND timestamp >= ?';
+            params.push(startTime);
+          }
+
+          if (endTime) {
+            query += ' AND timestamp <= ?';
+            params.push(endTime);
+          }
+
+          if (type) {
+            query += ' AND type = ?';
+            params.push(type);
+          }
+
+          if (action) {
+            query += ' AND action = ?';
+            params.push(action);
+          }
+
+          query += ' ORDER BY timestamp DESC LIMIT ?';
+          params.push(limit);
+
+          this.db.all(query, params, (err, rows) => {
+            if (err) {
+              console.error('Error fetching status messages:', err);
+              reject(err);
+            } else {
+              const messages = rows.map((row) => {
+                try {
+                  return {
+                    id: row.id,
+                    timestamp: row.timestamp,
+                    message: row.message,
+                    type: row.type,
+                    action: row.action,
+                    filePath: row.file_path,
+                    fileName: row.file_name,
+                    metadata: JSON.parse(row.metadata || '{}'),
+                    createdAt: row.created_at,
+                  };
+                } catch (parseErr) {
+                  console.warn('[STATUS-MESSAGES] Error parsing row metadata:', parseErr);
+                  return {
+                    id: row.id,
+                    timestamp: row.timestamp,
+                    message: row.message,
+                    type: row.type,
+                    action: row.action,
+                    filePath: row.file_path,
+                    fileName: row.file_name,
+                    metadata: {},
+                    createdAt: row.created_at,
+                  };
+                }
+              });
+              resolve(messages);
+            }
+          });
+        }
+      );
     });
   }
 
@@ -2318,10 +2518,11 @@ class PersistentDB {
    */
   async linkStatusToContextChange(statusId, contextChangeId) {
     await this.init();
-    
+
     // Create linking table if it doesn't exist
     return new Promise((resolve, reject) => {
-      this.db.run(`
+      this.db.run(
+        `
         CREATE TABLE IF NOT EXISTS status_context_links (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           status_id TEXT NOT NULL,
@@ -2329,27 +2530,29 @@ class PersistentDB {
           created_at TEXT DEFAULT CURRENT_TIMESTAMP,
           UNIQUE(status_id, context_change_id)
         )
-      `, (err) => {
-        if (err && !err.message.includes('already exists')) {
-          reject(err);
-          return;
-        }
-        
-        const stmt = this.db.prepare(`
+      `,
+        (err) => {
+          if (err && !err.message.includes('already exists')) {
+            reject(err);
+            return;
+          }
+
+          const stmt = this.db.prepare(`
           INSERT OR IGNORE INTO status_context_links (status_id, context_change_id)
           VALUES (?, ?)
         `);
-        
-        stmt.run(statusId, contextChangeId, (runErr) => {
-          if (runErr) {
-            reject(runErr);
-          } else {
-            resolve({ success: true });
-          }
-        });
-        
-        stmt.finalize();
-      });
+
+          stmt.run(statusId, contextChangeId, (runErr) => {
+            if (runErr) {
+              reject(runErr);
+            } else {
+              resolve({ success: true });
+            }
+          });
+
+          stmt.finalize();
+        }
+      );
     });
   }
 
@@ -2362,7 +2565,7 @@ class PersistentDB {
    */
   async saveTodo(todo) {
     await this.init();
-    
+
     return new Promise((resolve, reject) => {
       const stmt = this.db.prepare(`
         INSERT INTO todos (
@@ -2370,7 +2573,7 @@ class PersistentDB {
           prompts_while_active, files_modified
         ) VALUES (?, ?, ?, ?, ?, ?, ?)
       `);
-      
+
       stmt.run(
         todo.content,
         todo.status || 'pending',
@@ -2379,7 +2582,7 @@ class PersistentDB {
         todo.session_id || this._getCurrentSessionId(),
         JSON.stringify(todo.prompts_while_active || []),
         JSON.stringify(todo.files_modified || []),
-        function(err) {
+        function (err) {
           if (err) {
             console.error('Error saving todo:', err);
             reject(err);
@@ -2398,36 +2601,34 @@ class PersistentDB {
    */
   async updateTodoStatus(todoId, status) {
     await this.init();
-    
+
     const updates = { status };
     const now = Date.now();
-    
+
     // Get current todo to check if started_at exists
     const todo = await this._getTodo(todoId);
-    
+
     if (status === 'in_progress' && !todo.started_at) {
       updates.started_at = now;
     } else if (status === 'completed' && !todo.completed_at) {
       updates.completed_at = now;
     }
-    
+
     return new Promise((resolve, reject) => {
-      const fields = Object.keys(updates).map(k => `${k} = ?`).join(', ');
+      const fields = Object.keys(updates)
+        .map((k) => `${k} = ?`)
+        .join(', ');
       const values = Object.values(updates);
-      
-      this.db.run(
-        `UPDATE todos SET ${fields} WHERE id = ?`,
-        [...values, todoId],
-        (err) => {
-          if (err) {
-            console.error('Error updating todo status:', err);
-            reject(err);
-          } else {
-            console.log(`[TODO] Updated status for ID ${todoId}: ${status}`);
-            resolve();
-          }
+
+      this.db.run(`UPDATE todos SET ${fields} WHERE id = ?`, [...values, todoId], (err) => {
+        if (err) {
+          console.error('Error updating todo status:', err);
+          reject(err);
+        } else {
+          console.log(`[TODO] Updated status for ID ${todoId}: ${status}`);
+          resolve();
         }
-      );
+      });
     });
   }
 
@@ -2436,7 +2637,7 @@ class PersistentDB {
    */
   async getActiveTodo() {
     await this.init();
-    
+
     return new Promise((resolve, reject) => {
       this.db.get(
         `SELECT * FROM todos WHERE status = 'in_progress' ORDER BY started_at DESC LIMIT 1`,
@@ -2457,9 +2658,9 @@ class PersistentDB {
    */
   async getCurrentSessionTodos() {
     await this.init();
-    
+
     const sessionId = this._getCurrentSessionId();
-    
+
     return new Promise((resolve, reject) => {
       this.db.all(
         `SELECT * FROM todos WHERE session_id = ? ORDER BY order_index ASC, created_at ASC`,
@@ -2469,7 +2670,7 @@ class PersistentDB {
             console.error('Error getting session todos:', err);
             reject(err);
           } else {
-            resolve(rows ? rows.map(r => this._mapTodoRow(r)) : []);
+            resolve(rows ? rows.map((r) => this._mapTodoRow(r)) : []);
           }
         }
       );
@@ -2481,15 +2682,15 @@ class PersistentDB {
    */
   async linkEventToTodo(eventType, eventId) {
     await this.init();
-    
+
     const activeTodo = await this.getActiveTodo();
     if (!activeTodo) return null;
-    
+
     return new Promise((resolve, reject) => {
       this.db.run(
         `INSERT INTO todo_events (todo_id, event_type, event_id, timestamp) VALUES (?, ?, ?, ?)`,
         [activeTodo.id, eventType, eventId, Date.now()],
-        function(err) {
+        function (err) {
           if (err) {
             console.error('Error linking event to todo:', err);
             reject(err);
@@ -2506,14 +2707,14 @@ class PersistentDB {
    */
   async addPromptToTodo(todoId, promptId) {
     await this.init();
-    
+
     const todo = await this._getTodo(todoId);
     if (!todo) return;
-    
+
     const prompts = JSON.parse(todo.prompts_while_active || '[]');
     if (!prompts.includes(promptId)) {
       prompts.push(promptId);
-      
+
       return new Promise((resolve, reject) => {
         this.db.run(
           `UPDATE todos SET prompts_while_active = ? WHERE id = ?`,
@@ -2536,14 +2737,14 @@ class PersistentDB {
    */
   async addFileToTodo(todoId, filePath) {
     await this.init();
-    
+
     const todo = await this._getTodo(todoId);
     if (!todo) return;
-    
+
     const files = JSON.parse(todo.files_modified || '[]');
     if (!files.includes(filePath)) {
       files.push(filePath);
-      
+
       return new Promise((resolve, reject) => {
         this.db.run(
           `UPDATE todos SET files_modified = ? WHERE id = ?`,
@@ -2566,7 +2767,7 @@ class PersistentDB {
    */
   async getTodoEvents(todoId) {
     await this.init();
-    
+
     return new Promise((resolve, reject) => {
       this.db.all(
         `SELECT * FROM todo_events WHERE todo_id = ? ORDER BY timestamp ASC`,
@@ -2588,7 +2789,7 @@ class PersistentDB {
    */
   async getTodoById(todoId) {
     await this.init();
-    
+
     const todo = await this._getTodo(todoId);
     return todo ? this._mapTodoRow(todo) : null;
   }
@@ -2598,20 +2799,16 @@ class PersistentDB {
    */
   async getPromptById(promptId) {
     await this.init();
-    
+
     return new Promise((resolve, reject) => {
-      this.db.get(
-        `SELECT * FROM prompts WHERE id = ?`,
-        [promptId],
-        (err, row) => {
-          if (err) {
-            console.error('Error getting prompt by ID:', err);
-            reject(err);
-          } else {
-            resolve(row ? this._mapPromptRow(row) : null);
-          }
+      this.db.get(`SELECT * FROM prompts WHERE id = ?`, [promptId], (err, row) => {
+        if (err) {
+          console.error('Error getting prompt by ID:', err);
+          reject(err);
+        } else {
+          resolve(row ? this._mapPromptRow(row) : null);
         }
-      );
+      });
     });
   }
 
@@ -2629,7 +2826,7 @@ class PersistentDB {
       orderIndex: row.order_index,
       sessionId: row.session_id,
       promptsWhileActive: JSON.parse(row.prompts_while_active || '[]'),
-      filesModified: JSON.parse(row.files_modified || '[]')
+      filesModified: JSON.parse(row.files_modified || '[]'),
     };
   }
 
@@ -2661,7 +2858,7 @@ class PersistentDB {
    */
   async saveConversation(conversation) {
     await this.init();
-    
+
     return new Promise((resolve, reject) => {
       const now = new Date().toISOString();
       const stmt = this.db.prepare(`
@@ -2671,34 +2868,38 @@ class PersistentDB {
         VALUES (?, ?, ?, ?, ?, ?, ?, 
                 COALESCE(?, ?), ?, ?, ?)
       `);
-      
+
       // If updating, preserve original created_at
-      this.db.get(`SELECT created_at FROM conversations WHERE id = ?`, [conversation.id], (err, row) => {
-        const createdAt = row ? row.created_at : now;
-        
-        stmt.run(
-          conversation.id,
-          conversation.workspaceId || conversation.workspace_id,
-          conversation.workspacePath || conversation.workspace_path,
-          conversation.title,
-          conversation.status || 'active',
-          conversation.tags ? JSON.stringify(conversation.tags) : null,
-          conversation.metadata ? JSON.stringify(conversation.metadata) : null,
-          createdAt,
-          now,
-          conversation.lastMessageAt || conversation.last_message_at || now,
-          conversation.messageCount || conversation.message_count || 0
-        );
-        
-        stmt.finalize((finalErr) => {
-          if (finalErr) {
-            console.error('Error saving conversation:', finalErr);
-            reject(finalErr);
-          } else {
-            resolve(conversation);
-          }
-        });
-      });
+      this.db.get(
+        `SELECT created_at FROM conversations WHERE id = ?`,
+        [conversation.id],
+        (err, row) => {
+          const createdAt = row ? row.created_at : now;
+
+          stmt.run(
+            conversation.id,
+            conversation.workspaceId || conversation.workspace_id,
+            conversation.workspacePath || conversation.workspace_path,
+            conversation.title,
+            conversation.status || 'active',
+            conversation.tags ? JSON.stringify(conversation.tags) : null,
+            conversation.metadata ? JSON.stringify(conversation.metadata) : null,
+            createdAt,
+            now,
+            conversation.lastMessageAt || conversation.last_message_at || now,
+            conversation.messageCount || conversation.message_count || 0
+          );
+
+          stmt.finalize((finalErr) => {
+            if (finalErr) {
+              console.error('Error saving conversation:', finalErr);
+              reject(finalErr);
+            } else {
+              resolve(conversation);
+            }
+          });
+        }
+      );
     });
   }
 
@@ -2707,7 +2908,7 @@ class PersistentDB {
    */
   async updateConversationMetadata(conversationId, workspaceId, workspacePath, title) {
     await this.init();
-    
+
     return new Promise((resolve, reject) => {
       // Get current message count
       this.db.get(
@@ -2718,10 +2919,10 @@ class PersistentDB {
             reject(err);
             return;
           }
-          
+
           const messageCount = row ? row.count : 0;
           const now = new Date().toISOString();
-          
+
           // Get or create conversation
           this.db.get(
             `SELECT * FROM conversations WHERE id = ?`,
@@ -2731,7 +2932,7 @@ class PersistentDB {
                 reject(getErr);
                 return;
               }
-              
+
               if (existing) {
                 // Update existing
                 this.db.run(
@@ -2773,7 +2974,7 @@ class PersistentDB {
    */
   async getConversationsByWorkspace(workspaceId, limit = 100) {
     await this.init();
-    
+
     return new Promise((resolve, reject) => {
       this.db.all(
         `SELECT * FROM conversations 
@@ -2786,19 +2987,21 @@ class PersistentDB {
             console.error('Error getting conversations:', err);
             reject(err);
           } else {
-            resolve(rows.map(row => ({
-              id: row.id,
-              workspaceId: row.workspace_id,
-              workspacePath: row.workspace_path,
-              title: row.title,
-              status: row.status,
-              tags: row.tags ? JSON.parse(row.tags) : [],
-              metadata: row.metadata ? JSON.parse(row.metadata) : {},
-              createdAt: row.created_at,
-              updatedAt: row.updated_at,
-              lastMessageAt: row.last_message_at,
-              messageCount: row.message_count
-            })));
+            resolve(
+              rows.map((row) => ({
+                id: row.id,
+                workspaceId: row.workspace_id,
+                workspacePath: row.workspace_path,
+                title: row.title,
+                status: row.status,
+                tags: row.tags ? JSON.parse(row.tags) : [],
+                metadata: row.metadata ? JSON.parse(row.metadata) : {},
+                createdAt: row.created_at,
+                updatedAt: row.updated_at,
+                lastMessageAt: row.last_message_at,
+                messageCount: row.message_count,
+              }))
+            );
           }
         }
       );
@@ -2810,33 +3013,29 @@ class PersistentDB {
    */
   async getConversationById(conversationId) {
     await this.init();
-    
+
     return new Promise((resolve, reject) => {
-      this.db.get(
-        `SELECT * FROM conversations WHERE id = ?`,
-        [conversationId],
-        (err, row) => {
-          if (err) {
-            reject(err);
-          } else if (!row) {
-            resolve(null);
-          } else {
-            resolve({
-              id: row.id,
-              workspaceId: row.workspace_id,
-              workspacePath: row.workspace_path,
-              title: row.title,
-              status: row.status,
-              tags: row.tags ? JSON.parse(row.tags) : [],
-              metadata: row.metadata ? JSON.parse(row.metadata) : {},
-              createdAt: row.created_at,
-              updatedAt: row.updated_at,
-              lastMessageAt: row.last_message_at,
-              messageCount: row.message_count
-            });
-          }
+      this.db.get(`SELECT * FROM conversations WHERE id = ?`, [conversationId], (err, row) => {
+        if (err) {
+          reject(err);
+        } else if (!row) {
+          resolve(null);
+        } else {
+          resolve({
+            id: row.id,
+            workspaceId: row.workspace_id,
+            workspacePath: row.workspace_path,
+            title: row.title,
+            status: row.status,
+            tags: row.tags ? JSON.parse(row.tags) : [],
+            metadata: row.metadata ? JSON.parse(row.metadata) : {},
+            createdAt: row.created_at,
+            updatedAt: row.updated_at,
+            lastMessageAt: row.last_message_at,
+            messageCount: row.message_count,
+          });
         }
-      );
+      });
     });
   }
 
@@ -2845,14 +3044,14 @@ class PersistentDB {
    */
   async logAuditEvent(operation, operationType, details = {}) {
     await this.init();
-    
+
     return new Promise((resolve, reject) => {
       const stmt = this.db.prepare(`
         INSERT INTO audit_log 
         (operation, operation_type, target_type, target_id, workspace_id, user_id, details, status, error_message)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
-      
+
       stmt.run(
         operation,
         operationType, // 'import', 'export', 'delete', 'update', etc.
@@ -2864,7 +3063,7 @@ class PersistentDB {
         details.status || 'success',
         details.errorMessage || null
       );
-      
+
       stmt.finalize((err) => {
         if (err) {
           console.error('Error logging audit event:', err);
@@ -2881,43 +3080,45 @@ class PersistentDB {
    */
   async getAuditLog(options = {}) {
     await this.init();
-    
+
     const { workspaceId, operationType, limit = 100, offset = 0 } = options;
-    
+
     return new Promise((resolve, reject) => {
       let query = `SELECT * FROM audit_log WHERE 1=1`;
       const params = [];
-      
+
       if (workspaceId) {
         query += ` AND workspace_id = ?`;
         params.push(workspaceId);
       }
-      
+
       if (operationType) {
         query += ` AND operation_type = ?`;
         params.push(operationType);
       }
-      
+
       query += ` ORDER BY created_at DESC LIMIT ? OFFSET ?`;
       params.push(limit, offset);
-      
+
       this.db.all(query, params, (err, rows) => {
         if (err) {
           reject(err);
         } else {
-          resolve(rows.map(row => ({
-            id: row.id,
-            operation: row.operation,
-            operationType: row.operation_type,
-            targetType: row.target_type,
-            targetId: row.target_id,
-            workspaceId: row.workspace_id,
-            userId: row.user_id,
-            details: row.details ? JSON.parse(row.details) : {},
-            status: row.status,
-            errorMessage: row.error_message,
-            createdAt: row.created_at
-          })));
+          resolve(
+            rows.map((row) => ({
+              id: row.id,
+              operation: row.operation,
+              operationType: row.operation_type,
+              targetType: row.target_type,
+              targetId: row.target_id,
+              workspaceId: row.workspace_id,
+              userId: row.user_id,
+              details: row.details ? JSON.parse(row.details) : {},
+              status: row.status,
+              errorMessage: row.error_message,
+              createdAt: row.created_at,
+            }))
+          );
         }
       });
     });
@@ -2928,14 +3129,14 @@ class PersistentDB {
    */
   async saveShareLink(shareData) {
     await this.init();
-    
+
     return new Promise((resolve, reject) => {
       const stmt = this.db.prepare(`
         INSERT OR REPLACE INTO share_links 
         (id, share_id, workspaces, abstraction_level, filters, created_at, expires_at, access_count, last_accessed, metadata)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
-      
+
       stmt.run(
         shareData.id || shareData.shareId,
         shareData.shareId,
@@ -2946,15 +3147,16 @@ class PersistentDB {
         shareData.expiresAt,
         shareData.accessCount || 0,
         shareData.lastAccessed || null,
-        JSON.stringify(shareData.metadata || {})
-      , (err) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(shareData);
+        JSON.stringify(shareData.metadata || {}),
+        (err) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve(shareData);
+          }
         }
-      });
-      
+      );
+
       stmt.finalize();
     });
   }
@@ -2964,32 +3166,28 @@ class PersistentDB {
    */
   async getShareLink(shareId) {
     await this.init();
-    
+
     return new Promise((resolve, reject) => {
-      this.db.get(
-        `SELECT * FROM share_links WHERE share_id = ?`,
-        [shareId],
-        (err, row) => {
-          if (err) {
-            reject(err);
-          } else if (!row) {
-            resolve(null);
-          } else {
-            resolve({
-              id: row.id,
-              shareId: row.share_id,
-              workspaces: JSON.parse(row.workspaces || '[]'),
-              abstractionLevel: row.abstraction_level,
-              filters: JSON.parse(row.filters || '{}'),
-              createdAt: row.created_at,
-              expiresAt: row.expires_at,
-              accessCount: row.access_count,
-              lastAccessed: row.last_accessed,
-              metadata: JSON.parse(row.metadata || '{}')
-            });
-          }
+      this.db.get(`SELECT * FROM share_links WHERE share_id = ?`, [shareId], (err, row) => {
+        if (err) {
+          reject(err);
+        } else if (!row) {
+          resolve(null);
+        } else {
+          resolve({
+            id: row.id,
+            shareId: row.share_id,
+            workspaces: JSON.parse(row.workspaces || '[]'),
+            abstractionLevel: row.abstraction_level,
+            filters: JSON.parse(row.filters || '{}'),
+            createdAt: row.created_at,
+            expiresAt: row.expires_at,
+            accessCount: row.access_count,
+            lastAccessed: row.last_accessed,
+            metadata: JSON.parse(row.metadata || '{}'),
+          });
         }
-      );
+      });
     });
   }
 
@@ -2998,11 +3196,11 @@ class PersistentDB {
    */
   async updateShareLink(shareId, updates) {
     await this.init();
-    
+
     return new Promise((resolve, reject) => {
       const fields = [];
       const values = [];
-      
+
       if (updates.accessCount !== undefined) {
         fields.push('access_count = ?');
         values.push(updates.accessCount);
@@ -3019,14 +3217,14 @@ class PersistentDB {
         fields.push('filters = ?');
         values.push(JSON.stringify(updates.filters));
       }
-      
+
       if (fields.length === 0) {
         resolve();
         return;
       }
-      
+
       values.push(shareId);
-      
+
       this.db.run(
         `UPDATE share_links SET ${fields.join(', ')} WHERE share_id = ?`,
         values,
@@ -3046,19 +3244,15 @@ class PersistentDB {
    */
   async deleteShareLink(shareId) {
     await this.init();
-    
+
     return new Promise((resolve, reject) => {
-      this.db.run(
-        `DELETE FROM share_links WHERE share_id = ?`,
-        [shareId],
-        (err) => {
-          if (err) {
-            reject(err);
-          } else {
-            resolve();
-          }
+      this.db.run(`DELETE FROM share_links WHERE share_id = ?`, [shareId], (err) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve();
         }
-      );
+      });
     });
   }
 
@@ -3067,16 +3261,14 @@ class PersistentDB {
    */
   async getAllShareLinks() {
     await this.init();
-    
+
     return new Promise((resolve, reject) => {
-      this.db.all(
-        `SELECT * FROM share_links ORDER BY created_at DESC`,
-        [],
-        (err, rows) => {
-          if (err) {
-            reject(err);
-          } else {
-            resolve(rows.map(row => ({
+      this.db.all(`SELECT * FROM share_links ORDER BY created_at DESC`, [], (err, rows) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(
+            rows.map((row) => ({
               id: row.id,
               shareId: row.share_id,
               workspaces: JSON.parse(row.workspaces || '[]'),
@@ -3086,14 +3278,13 @@ class PersistentDB {
               expiresAt: row.expires_at,
               accessCount: row.access_count,
               lastAccessed: row.last_accessed,
-              metadata: JSON.parse(row.metadata || '{}')
-            })));
-          }
+              metadata: JSON.parse(row.metadata || '{}'),
+            }))
+          );
         }
-      );
+      });
     });
   }
 }
 
 module.exports = PersistentDB;
-

@@ -37,13 +37,13 @@ class StateManager {
       metadata: {
         ...metadata,
         intent: metadata.intent || 'general',
-        tags: metadata.tags || []
-      }
+        tags: metadata.tags || [],
+      },
     };
 
     // Save to database
     await this.saveState(state);
-    
+
     return state;
   }
 
@@ -61,7 +61,7 @@ class StateManager {
       ...metadata,
       parent_id: sourceStateId,
       forked_from: sourceStateId,
-      original_name: sourceState.name
+      original_name: sourceState.name,
     });
 
     // Copy snapshot if it exists
@@ -88,13 +88,11 @@ class StateManager {
       throw new Error(`Target state not found: ${targetStateId}`);
     }
 
-    const sourceStates = await Promise.all(
-      sourceStateIds.map(id => this.getState(id))
-    );
+    const sourceStates = await Promise.all(sourceStateIds.map((id) => this.getState(id)));
 
-    const missingStates = sourceStates.filter(s => !s);
+    const missingStates = sourceStates.filter((s) => !s);
     if (missingStates.length > 0) {
-      throw new Error(`Source states not found: ${missingStates.map(s => s?.id).join(', ')}`);
+      throw new Error(`Source states not found: ${missingStates.map((s) => s?.id).join(', ')}`);
     }
 
     // For now, return merge plan (actual file merging will be implemented later)
@@ -103,7 +101,7 @@ class StateManager {
       sources: sourceStates,
       strategy,
       conflicts: [],
-      files_to_merge: []
+      files_to_merge: [],
     };
 
     // Store merge operation
@@ -113,7 +111,7 @@ class StateManager {
       source_state_ids: sourceStateIds,
       strategy,
       status: 'pending',
-      created_at: new Date().toISOString()
+      created_at: new Date().toISOString(),
     });
 
     return mergePlan;
@@ -137,7 +135,7 @@ class StateManager {
     }
 
     if (filters.tags && filters.tags.length > 0) {
-      filters.tags.forEach(tag => {
+      filters.tags.forEach((tag) => {
         query += ' AND metadata LIKE ?';
         params.push(`%"${tag}"%`);
       });
@@ -155,9 +153,9 @@ class StateManager {
         if (err) {
           reject(err);
         } else {
-          const states = rows.map(row => ({
+          const states = rows.map((row) => ({
             ...row,
-            metadata: JSON.parse(row.metadata || '{}')
+            metadata: JSON.parse(row.metadata || '{}'),
           }));
 
           // Apply semantic search if query provided
@@ -176,22 +174,18 @@ class StateManager {
    */
   async getState(stateId) {
     return new Promise((resolve, reject) => {
-      this.db.db.get(
-        'SELECT * FROM states WHERE id = ?',
-        [stateId],
-        (err, row) => {
-          if (err) {
-            reject(err);
-          } else if (!row) {
-            resolve(null);
-          } else {
-            resolve({
-              ...row,
-              metadata: JSON.parse(row.metadata || '{}')
-            });
-          }
+      this.db.db.get('SELECT * FROM states WHERE id = ?', [stateId], (err, row) => {
+        if (err) {
+          reject(err);
+        } else if (!row) {
+          resolve(null);
+        } else {
+          resolve({
+            ...row,
+            metadata: JSON.parse(row.metadata || '{}'),
+          });
         }
-      );
+      });
     });
   }
 
@@ -235,7 +229,8 @@ class StateManager {
    */
   async ensureStatesTable() {
     return new Promise((resolve, reject) => {
-      this.db.db.run(`
+      this.db.db.run(
+        `
         CREATE TABLE IF NOT EXISTS states (
           id TEXT PRIMARY KEY,
           name TEXT NOT NULL,
@@ -246,16 +241,24 @@ class StateManager {
           snapshot_hash TEXT,
           metadata TEXT
         )
-      `, (err) => {
-        if (err) {
-          reject(err);
-        } else {
-          // Create indexes
-          this.db.db.run('CREATE INDEX IF NOT EXISTS idx_states_workspace ON states(workspace_path)', () => {});
-          this.db.db.run('CREATE INDEX IF NOT EXISTS idx_states_parent ON states(parent_id)', () => {});
-          resolve();
+      `,
+        (err) => {
+          if (err) {
+            reject(err);
+          } else {
+            // Create indexes
+            this.db.db.run(
+              'CREATE INDEX IF NOT EXISTS idx_states_workspace ON states(workspace_path)',
+              () => {}
+            );
+            this.db.db.run(
+              'CREATE INDEX IF NOT EXISTS idx_states_parent ON states(parent_id)',
+              () => {}
+            );
+            resolve();
+          }
         }
-      });
+      );
     });
   }
 
@@ -278,18 +281,33 @@ class StateManager {
       state_id: stateId,
       workspace_path: workspacePath,
       timestamp: new Date().toISOString(),
-      files: {}
+      files: {},
     };
 
     // Walk directory and snapshot code files
-    const codeExtensions = ['.js', '.ts', '.jsx', '.tsx', '.py', '.java', '.go', '.rs', '.cpp', '.c', '.h', '.json', '.yaml', '.yml'];
-    
+    const codeExtensions = [
+      '.js',
+      '.ts',
+      '.jsx',
+      '.tsx',
+      '.py',
+      '.java',
+      '.go',
+      '.rs',
+      '.cpp',
+      '.c',
+      '.h',
+      '.json',
+      '.yaml',
+      '.yml',
+    ];
+
     const walkDir = (dir, baseDir = workspacePath) => {
       const files = fs.readdirSync(dir);
-      files.forEach(file => {
+      files.forEach((file) => {
         const filePath = path.join(dir, file);
         const stat = fs.statSync(filePath);
-        
+
         if (stat.isDirectory()) {
           // Skip common ignore directories
           if (!['node_modules', '.git', 'dist', 'build', '.next', '.cache'].includes(file)) {
@@ -304,7 +322,7 @@ class StateManager {
               snapshot.files[relativePath] = {
                 content: content.substring(0, 10000), // Limit size
                 size: stat.size,
-                modified: stat.mtime.toISOString()
+                modified: stat.mtime.toISOString(),
               };
             } catch (err) {
               // Skip files that can't be read
@@ -317,11 +335,12 @@ class StateManager {
     walkDir(workspacePath);
 
     // Save snapshot
-    const snapshotHash = crypto.createHash('sha256')
+    const snapshotHash = crypto
+      .createHash('sha256')
       .update(JSON.stringify(snapshot))
       .digest('hex')
       .substring(0, 16);
-    
+
     const snapshotPath = this.getSnapshotPath(snapshotHash);
     fs.writeFileSync(snapshotPath, JSON.stringify(snapshot, null, 2));
 
@@ -351,10 +370,12 @@ class StateManager {
     }
 
     // Load snapshots
-    const snapshot1 = state1.snapshot_hash ? 
-      JSON.parse(fs.readFileSync(this.getSnapshotPath(state1.snapshot_hash), 'utf8')) : null;
-    const snapshot2 = state2.snapshot_hash ?
-      JSON.parse(fs.readFileSync(this.getSnapshotPath(state2.snapshot_hash), 'utf8')) : null;
+    const snapshot1 = state1.snapshot_hash
+      ? JSON.parse(fs.readFileSync(this.getSnapshotPath(state1.snapshot_hash), 'utf8'))
+      : null;
+    const snapshot2 = state2.snapshot_hash
+      ? JSON.parse(fs.readFileSync(this.getSnapshotPath(state2.snapshot_hash), 'utf8'))
+      : null;
 
     if (!snapshot1 || !snapshot2) {
       return { error: 'One or both states have no snapshot' };
@@ -364,9 +385,9 @@ class StateManager {
     const files1 = new Set(Object.keys(snapshot1.files || {}));
     const files2 = new Set(Object.keys(snapshot2.files || {}));
 
-    const added = [...files2].filter(f => !files1.has(f));
-    const removed = [...files1].filter(f => !files2.has(f));
-    const modified = [...files1].filter(f => {
+    const added = [...files2].filter((f) => !files1.has(f));
+    const removed = [...files1].filter((f) => !files2.has(f));
+    const modified = [...files1].filter((f) => {
       if (!files2.has(f)) return false;
       return snapshot1.files[f].content !== snapshot2.files[f].content;
     });
@@ -375,7 +396,9 @@ class StateManager {
       added,
       removed,
       modified,
-      unchanged: [...files1].filter(f => files2.has(f) && snapshot1.files[f].content === snapshot2.files[f].content)
+      unchanged: [...files1].filter(
+        (f) => files2.has(f) && snapshot1.files[f].content === snapshot2.files[f].content
+      ),
     };
   }
 
@@ -413,7 +436,8 @@ class StateManager {
    */
   async ensureMergesTable() {
     return new Promise((resolve) => {
-      this.db.db.run(`
+      this.db.db.run(
+        `
         CREATE TABLE IF NOT EXISTS state_merges (
           id TEXT PRIMARY KEY,
           target_state_id TEXT,
@@ -422,7 +446,9 @@ class StateManager {
           status TEXT,
           created_at TEXT
         )
-      `, () => resolve());
+      `,
+        () => resolve()
+      );
     });
   }
 
@@ -447,16 +473,18 @@ class StateManager {
 
     // Fallback to text matching
     const queryLower = query.toLowerCase();
-    return states.filter(state => {
+    return states.filter((state) => {
       const name = (state.name || '').toLowerCase();
       const desc = (state.description || '').toLowerCase();
       const intent = (state.metadata?.intent || '').toLowerCase();
       const tags = (state.metadata?.tags || []).join(' ').toLowerCase();
-      
-      return name.includes(queryLower) || 
-             desc.includes(queryLower) || 
-             intent.includes(queryLower) ||
-             tags.includes(queryLower);
+
+      return (
+        name.includes(queryLower) ||
+        desc.includes(queryLower) ||
+        intent.includes(queryLower) ||
+        tags.includes(queryLower)
+      );
     });
   }
 
@@ -466,21 +494,22 @@ class StateManager {
   async semanticSearchWithEmbeddings(states, query) {
     const fetchModule = (await import('node-fetch')).default;
     const openRouterKey = process.env.OPENROUTER_API_KEY;
-    const embeddingModel = process.env.OPENROUTER_EMBEDDING_MODEL || 'openai/text-embedding-3-small';
+    const embeddingModel =
+      process.env.OPENROUTER_EMBEDDING_MODEL || 'openai/text-embedding-3-small';
 
     // Generate query embedding
     const queryResponse = await fetchModule('https://openrouter.ai/api/v1/embeddings', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${openRouterKey}`,
+        Authorization: `Bearer ${openRouterKey}`,
         'Content-Type': 'application/json',
         'HTTP-Referer': 'http://localhost:43917',
-        'X-Title': 'Cursor Telemetry Dashboard'
+        'X-Title': 'Cursor Telemetry Dashboard',
       },
       body: JSON.stringify({
         model: embeddingModel,
-        input: query
-      })
+        input: query,
+      }),
     });
 
     if (!queryResponse.ok) {
@@ -491,22 +520,22 @@ class StateManager {
     const queryEmbedding = queryData.data[0].embedding;
 
     // Generate embeddings for states (batch)
-    const stateTexts = states.map(s => 
-      `${s.name} ${s.description || ''} ${(s.metadata?.tags || []).join(' ')}`
+    const stateTexts = states.map(
+      (s) => `${s.name} ${s.description || ''} ${(s.metadata?.tags || []).join(' ')}`
     );
 
     const statesResponse = await fetchModule('https://openrouter.ai/api/v1/embeddings', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${openRouterKey}`,
+        Authorization: `Bearer ${openRouterKey}`,
         'Content-Type': 'application/json',
         'HTTP-Referer': 'http://localhost:43917',
-        'X-Title': 'Cursor Telemetry Dashboard'
+        'X-Title': 'Cursor Telemetry Dashboard',
       },
       body: JSON.stringify({
         model: embeddingModel,
-        input: stateTexts
-      })
+        input: stateTexts,
+      }),
     });
 
     if (!statesResponse.ok) {
@@ -514,7 +543,7 @@ class StateManager {
     }
 
     const statesData = await statesResponse.json();
-    const stateEmbeddings = statesData.data.map(d => d.embedding);
+    const stateEmbeddings = statesData.data.map((d) => d.embedding);
 
     // Calculate cosine similarity
     const scoredStates = states.map((state, i) => {
@@ -524,9 +553,9 @@ class StateManager {
 
     // Sort by similarity and filter low scores
     return scoredStates
-      .filter(s => s.similarity > 0.3) // Minimum similarity threshold
+      .filter((s) => s.similarity > 0.3) // Minimum similarity threshold
       .sort((a, b) => b.similarity - a.similarity)
-      .map(s => s.state);
+      .map((s) => s.state);
   }
 
   /**
@@ -553,4 +582,3 @@ class StateManager {
 }
 
 module.exports = StateManager;
-

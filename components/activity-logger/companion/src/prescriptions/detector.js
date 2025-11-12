@@ -1,6 +1,6 @@
 /**
  * Prescription Pattern Detector
- * 
+ *
  * Analyzes prompt history and code patterns to auto-suggest prescriptions.
  * Learns from repeated instructions and coding patterns.
  */
@@ -21,14 +21,18 @@ class PrescriptionDetector {
   async suggestFromPrompts(options = {}) {
     const days = options.days || 7;
     const minOccurrences = options.minOccurrences || 3;
-    const cutoffTime = Date.now() - (days * 24 * 60 * 60 * 1000);
+    const cutoffTime = Date.now() - days * 24 * 60 * 60 * 1000;
 
     // Get recent prompts
-    const prompts = this.db.prepare(`
+    const prompts = this.db
+      .prepare(
+        `
       SELECT text FROM prompts 
       WHERE timestamp > ? 
       ORDER BY timestamp DESC
-    `).all(cutoffTime);
+    `
+      )
+      .all(cutoffTime);
 
     const suggestions = [];
     const patterns = this.getDetectionPatterns();
@@ -51,11 +55,11 @@ class PrescriptionDetector {
     // Generate suggestions for patterns that occur frequently
     for (const pattern of patterns) {
       const count = patternCounts.get(pattern.id) || 0;
-      
+
       if (count >= minOccurrences) {
         // Check if similar prescription already exists
         const existing = this.findSimilarPrescription(pattern.title);
-        
+
         if (!existing) {
           suggestions.push({
             title: pattern.title,
@@ -66,7 +70,7 @@ class PrescriptionDetector {
             confidence: Math.min(count / (minOccurrences * 2), 1.0),
             occurrences: count,
             source: SOURCES.AUTO_DETECTED,
-            reason: `Detected ${count} times in last ${days} days`
+            reason: `Detected ${count} times in last ${days} days`,
           });
         }
       }
@@ -83,28 +87,32 @@ class PrescriptionDetector {
     const suggestions = [];
 
     // Get recent file entries with code
-    const entries = this.db.prepare(`
+    const entries = this.db
+      .prepare(
+        `
       SELECT file_path, after_code 
       FROM entries 
       WHERE after_code IS NOT NULL 
       ORDER BY timestamp DESC 
       LIMIT 100
-    `).all();
+    `
+      )
+      .all();
 
     if (entries.length === 0) return suggestions;
 
     // Analyze code patterns
-    const jsFiles = entries.filter(e => e.file_path?.match(/\.(js|jsx|ts|tsx)$/i));
-    const pyFiles = entries.filter(e => e.file_path?.match(/\.py$/i));
+    const jsFiles = entries.filter((e) => e.file_path?.match(/\.(js|jsx|ts|tsx)$/i));
+    const pyFiles = entries.filter((e) => e.file_path?.match(/\.py$/i));
 
     // JavaScript/TypeScript patterns
     if (jsFiles.length > 10) {
-      const jsCode = jsFiles.map(f => f.after_code).join('\n');
-      
+      const jsCode = jsFiles.map((f) => f.after_code).join('\n');
+
       // Check semicolon usage
       const withSemicolons = (jsCode.match(/;[\s]*$/gm) || []).length;
       const statements = (jsCode.match(/[}\)]\s*$/gm) || []).length;
-      
+
       if (statements > 20 && withSemicolons / statements < 0.2) {
         suggestions.push({
           title: 'No Semicolons',
@@ -113,14 +121,14 @@ class PrescriptionDetector {
           scope: 'file-type',
           scope_value: '.js',
           confidence: 0.8,
-          reason: 'Code rarely uses semicolons'
+          reason: 'Code rarely uses semicolons',
         });
       }
 
       // Check quote style
       const singleQuotes = (jsCode.match(/'/g) || []).length;
       const doubleQuotes = (jsCode.match(/"/g) || []).length;
-      
+
       if (singleQuotes + doubleQuotes > 50) {
         if (singleQuotes > doubleQuotes * 2) {
           suggestions.push({
@@ -130,7 +138,7 @@ class PrescriptionDetector {
             scope: 'file-type',
             scope_value: '.js',
             confidence: 0.7,
-            reason: 'Code predominantly uses single quotes'
+            reason: 'Code predominantly uses single quotes',
           });
         }
       }
@@ -143,15 +151,15 @@ class PrescriptionDetector {
           category: CATEGORIES.DOMAIN,
           scope: 'global',
           confidence: 0.9,
-          reason: 'TypeScript syntax detected'
+          reason: 'TypeScript syntax detected',
         });
       }
     }
 
     // Python patterns
     if (pyFiles.length > 10) {
-      const pyCode = pyFiles.map(f => f.after_code).join('\n');
-      
+      const pyCode = pyFiles.map((f) => f.after_code).join('\n');
+
       // Check for type hints
       if (pyCode.match(/def \w+\([^)]*:\s*(str|int|float|bool|List|Dict)/)) {
         suggestions.push({
@@ -161,7 +169,7 @@ class PrescriptionDetector {
           scope: 'file-type',
           scope_value: '.py',
           confidence: 0.8,
-          reason: 'Type hints used consistently'
+          reason: 'Type hints used consistently',
         });
       }
     }
@@ -182,9 +190,9 @@ class PrescriptionDetector {
         title: 'No Markdown Files',
         prescription: "Don't create markdown files unless explicitly requested",
         category: CATEGORIES.BEHAVIOR,
-        priority: 70
+        priority: 70,
       },
-      
+
       // Conciseness
       {
         id: 'be-concise',
@@ -192,9 +200,9 @@ class PrescriptionDetector {
         title: 'Concise Responses',
         prescription: 'Be concise, avoid lengthy explanations unless asked',
         category: CATEGORIES.COMMUNICATION,
-        priority: 60
+        priority: 60,
       },
-      
+
       // Show diffs
       {
         id: 'show-diffs',
@@ -202,9 +210,9 @@ class PrescriptionDetector {
         title: 'Show Code Diffs',
         prescription: 'Always show code diffs, not full file rewrites',
         category: CATEGORIES.BEHAVIOR,
-        priority: 70
+        priority: 70,
       },
-      
+
       // TypeScript
       {
         id: 'typescript-project',
@@ -212,9 +220,9 @@ class PrescriptionDetector {
         title: 'TypeScript Project',
         prescription: 'This is a TypeScript project - use strict typing',
         category: CATEGORIES.DOMAIN,
-        priority: 80
+        priority: 80,
       },
-      
+
       // Python version
       {
         id: 'python-version',
@@ -222,9 +230,9 @@ class PrescriptionDetector {
         title: 'Python Version',
         prescription: 'Use Python 3.x syntax and features',
         category: CATEGORIES.DOMAIN,
-        priority: 80
+        priority: 80,
       },
-      
+
       // React framework
       {
         id: 'react-project',
@@ -232,9 +240,9 @@ class PrescriptionDetector {
         title: 'React Project',
         prescription: 'This is a React project - follow React best practices',
         category: CATEGORIES.DOMAIN,
-        priority: 80
+        priority: 80,
       },
-      
+
       // Testing requirement
       {
         id: 'run-tests',
@@ -242,9 +250,9 @@ class PrescriptionDetector {
         title: 'Run Tests',
         prescription: 'Run tests after making changes',
         category: CATEGORIES.WORKFLOW,
-        priority: 60
+        priority: 60,
       },
-      
+
       // No console logs
       {
         id: 'no-console',
@@ -252,9 +260,9 @@ class PrescriptionDetector {
         title: 'No Console Logs',
         prescription: 'Check for and remove console.log statements before finishing',
         category: CATEGORIES.WORKFLOW,
-        priority: 50
+        priority: 50,
       },
-      
+
       // API key security
       {
         id: 'no-api-keys',
@@ -262,9 +270,9 @@ class PrescriptionDetector {
         title: 'No Real API Keys',
         prescription: 'Never include real API keys in code examples',
         category: CATEGORIES.SECURITY,
-        priority: 90
+        priority: 90,
       },
-      
+
       // ESM vs CommonJS
       {
         id: 'commonjs-only',
@@ -272,9 +280,9 @@ class PrescriptionDetector {
         title: 'CommonJS Only',
         prescription: 'Use CommonJS (require/module.exports), not ES modules',
         category: CATEGORIES.FORMATTING,
-        priority: 70
+        priority: 70,
       },
-      
+
       // Formatting tool
       {
         id: 'prettier',
@@ -282,9 +290,9 @@ class PrescriptionDetector {
         title: 'Use Prettier',
         prescription: 'Code should follow Prettier formatting standards',
         category: CATEGORIES.FORMATTING,
-        priority: 60
+        priority: 60,
       },
-      
+
       // Code style guide
       {
         id: 'airbnb-style',
@@ -292,8 +300,8 @@ class PrescriptionDetector {
         title: 'Airbnb Style Guide',
         prescription: 'Follow Airbnb JavaScript Style Guide',
         category: CATEGORIES.FORMATTING,
-        priority: 60
-      }
+        priority: 60,
+      },
     ];
   }
 
@@ -304,30 +312,30 @@ class PrescriptionDetector {
    */
   findSimilarPrescription(title) {
     const existing = this.manager.getAll({ active: true });
-    
-    return existing.find(p => 
-      p.title.toLowerCase() === title.toLowerCase() ||
-      this.similarityScore(p.title, title) > 0.8
+
+    return existing.find(
+      (p) =>
+        p.title.toLowerCase() === title.toLowerCase() || this.similarityScore(p.title, title) > 0.8
     );
   }
 
   /**
    * Calculate similarity score between two strings
-   * @param {string} str1 
-   * @param {string} str2 
+   * @param {string} str1
+   * @param {string} str2
    * @returns {number} Similarity score 0-1
    */
   similarityScore(str1, str2) {
     const s1 = str1.toLowerCase();
     const s2 = str2.toLowerCase();
-    
+
     if (s1 === s2) return 1.0;
-    
+
     const longer = s1.length > s2.length ? s1 : s2;
     const shorter = s1.length > s2.length ? s2 : s1;
-    
+
     if (longer.length === 0) return 1.0;
-    
+
     const editDistance = this.levenshteinDistance(s1, s2);
     return (longer.length - editDistance) / longer.length;
   }
@@ -370,7 +378,7 @@ class PrescriptionDetector {
   async getAllSuggestions() {
     const [fromPrompts, fromCode] = await Promise.all([
       this.suggestFromPrompts(),
-      this.suggestFromCode()
+      this.suggestFromCode(),
     ]);
 
     // Combine and deduplicate
@@ -388,10 +396,9 @@ class PrescriptionDetector {
     return {
       fromPrompts,
       fromCode,
-      combined: combined.sort((a, b) => b.confidence - a.confidence)
+      combined: combined.sort((a, b) => b.confidence - a.confidence),
     };
   }
 }
 
 module.exports = PrescriptionDetector;
-

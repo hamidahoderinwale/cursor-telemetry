@@ -212,21 +212,28 @@ async function loadFromCache() {
   // Check if persistentStorage is available
   if (!window.persistentStorage) {
     console.warn('[WARNING] PersistentStorage not available, skipping cache load');
+    // Initialize empty state and continue
+    if (!window.state) {
+      window.state = { data: { events: [], prompts: [] } };
+    } else if (!window.state.data) {
+      window.state.data = { events: [], prompts: [] };
+    }
     return;
   }
   
   // Initialize database with timeout - don't block if it's slow
   let dbInitialized = false;
   try {
-    // Use Promise.race to timeout after 2 seconds (increased from 1s for better reliability)
+    // Use Promise.race to timeout after 1 second (reduced for faster failure)
     // IndexedDB will continue initializing in background
     const initPromise = window.persistentStorage.init();
     const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error('IndexedDB init timeout')), 2000)
+      setTimeout(() => reject(new Error('IndexedDB init timeout')), 1000)
     );
     
     await Promise.race([initPromise, timeoutPromise]);
     dbInitialized = true;
+    console.log('[CACHE] IndexedDB initialized successfully');
   } catch (initError) {
     // If init times out, try to load data anyway (IndexedDB might be ready)
     // Don't return early - try to load data even if init seemed slow
@@ -236,14 +243,26 @@ async function loadFromCache() {
   
   // Try to load data even if init timed out (IndexedDB might be ready by now)
   if (!dbInitialized) {
-    // Give IndexedDB a moment, then try again
-    await new Promise(resolve => setTimeout(resolve, 500));
+    // Give IndexedDB a moment, then try again with shorter timeout
+    await new Promise(resolve => setTimeout(resolve, 300));
     try {
-      await window.persistentStorage.init();
+      const retryPromise = window.persistentStorage.init();
+      const retryTimeout = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Retry timeout')), 500)
+      );
+      await Promise.race([retryPromise, retryTimeout]);
       dbInitialized = true;
+      console.log('[CACHE] IndexedDB initialized on retry');
     } catch (retryError) {
       // Still not ready, but continue to try loading
-      console.log('[CACHE] IndexedDB still not ready, will retry in background');
+      console.log('[CACHE] IndexedDB still not ready, will skip cache and continue');
+      // Initialize empty state and continue
+      if (!window.state) {
+        window.state = { data: { events: [], prompts: [] } };
+      } else if (!window.state.data) {
+        window.state.data = { events: [], prompts: [] };
+      }
+      return; // Exit early if IndexedDB is not available
     }
   }
   
@@ -262,31 +281,63 @@ async function loadFromCache() {
   
   try {
     // Load only most recent events (limit to 20 for ultra-fast load)
+    // Add timeout to prevent hanging
     if (window.persistentStorage.getAllEvents) {
-      // Use getAllEvents with limit for fastest query
-      const lastEvents = await window.persistentStorage.getAllEvents(20);
-      if (lastEvents && lastEvents.length > 0) {
-        window.state.data.events = lastEvents;
-        console.log(`[SUCCESS] Loaded ${lastEvents.length} events from cache`);
-      } else {
-        console.log(`[CACHE] No events found in cache (tried to load 20)`);
+      const eventsPromise = window.persistentStorage.getAllEvents(20);
+      const eventsTimeout = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('getAllEvents timeout')), 2000)
+      );
+      
+      try {
+        const lastEvents = await Promise.race([eventsPromise, eventsTimeout]);
+        if (lastEvents && lastEvents.length > 0) {
+          window.state.data.events = lastEvents;
+          console.log(`[SUCCESS] Loaded ${lastEvents.length} events from cache`);
+        } else {
+          console.log(`[CACHE] No events found in cache (tried to load 20)`);
+        }
+      } catch (eventsError) {
+        console.warn('[CACHE] Failed to load events:', eventsError.message);
+        // Continue with empty events array
+        if (!window.state.data.events) {
+          window.state.data.events = [];
+        }
       }
     } else {
       console.warn('[CACHE] getAllEvents method not available');
+      if (!window.state.data.events) {
+        window.state.data.events = [];
+      }
     }
     
     // Load only most recent prompts (limit to 20 for ultra-fast load)
+    // Add timeout to prevent hanging
     if (window.persistentStorage.getAllPrompts) {
-      // Use getAllPrompts with limit for fastest query
-      const lastPrompts = await window.persistentStorage.getAllPrompts(20);
-      if (lastPrompts && lastPrompts.length > 0) {
-        window.state.data.prompts = lastPrompts;
-        console.log(`[SUCCESS] Loaded ${lastPrompts.length} prompts from cache`);
-      } else {
-        console.log(`[CACHE] No prompts found in cache (tried to load 20)`);
+      const promptsPromise = window.persistentStorage.getAllPrompts(20);
+      const promptsTimeout = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('getAllPrompts timeout')), 2000)
+      );
+      
+      try {
+        const lastPrompts = await Promise.race([promptsPromise, promptsTimeout]);
+        if (lastPrompts && lastPrompts.length > 0) {
+          window.state.data.prompts = lastPrompts;
+          console.log(`[SUCCESS] Loaded ${lastPrompts.length} prompts from cache`);
+        } else {
+          console.log(`[CACHE] No prompts found in cache (tried to load 20)`);
+        }
+      } catch (promptsError) {
+        console.warn('[CACHE] Failed to load prompts:', promptsError.message);
+        // Continue with empty prompts array
+        if (!window.state.data.prompts) {
+          window.state.data.prompts = [];
+        }
       }
     } else {
       console.warn('[CACHE] getAllPrompts method not available');
+      if (!window.state.data.prompts) {
+        window.state.data.prompts = [];
+      }
     }
     
     // Log final state

@@ -10,7 +10,7 @@ function createAnalyticsRoutes(deps) {
     contextChangeTracker,
     errorTracker,
     productivityTracker,
-    queryCache
+    queryCache,
   } = deps;
 
   // Cache helper function
@@ -47,19 +47,19 @@ function createAnalyticsRoutes(deps) {
       const limit = parseInt(req.query.limit) || 50;
       const since = parseInt(req.query.since) || 0;
       const source = req.query.source || 'memory';
-      
+
       let snapshots;
       if (source === 'database') {
         snapshots = await persistentDB.getContextSnapshots({ limit, since });
       } else {
         snapshots = contextAnalyzer.getRecentSnapshots(limit);
       }
-      
+
       res.json({
         success: true,
         data: snapshots,
         count: snapshots.length,
-        source
+        source,
       });
     } catch (error) {
       console.error('Error getting context snapshots:', error);
@@ -73,7 +73,7 @@ function createAnalyticsRoutes(deps) {
       res.json({
         success: true,
         data: analytics,
-        source: 'database'
+        source: 'database',
       });
     } catch (error) {
       console.error('Error getting historical context analytics:', error);
@@ -96,32 +96,32 @@ function createAnalyticsRoutes(deps) {
       // Default to minCount=1 for faster response (includes more files)
       const minCount = parseInt(req.query.minCount) || 1;
       const cacheKey = `graph:${minCount}`;
-      
+
       const cached = fileGraphCache.get(cacheKey);
       if (cached && Date.now() - cached.timestamp < GRAPH_CACHE_TTL) {
         res.set('X-Cache', 'HIT');
         return res.json({
           success: true,
           data: cached.data,
-          cached: true
+          cached: true,
         });
       }
-      
+
       // Get graph data (this is fast - uses pre-computed co-occurrence data)
       const graph = contextAnalyzer.getFileRelationshipGraph(minCount);
-      
+
       // Cache the result
       fileGraphCache.set(cacheKey, {
         data: graph,
-        timestamp: Date.now()
+        timestamp: Date.now(),
       });
-      
+
       // Limit cache size
       if (fileGraphCache.size > 10) {
         const oldestKey = Array.from(fileGraphCache.keys())[0];
         fileGraphCache.delete(oldestKey);
       }
-      
+
       res.set('X-Cache', 'MISS');
       res.json({ success: true, data: graph });
     } catch (error) {
@@ -139,7 +139,7 @@ function createAnalyticsRoutes(deps) {
         sessionId = null,
         startTime = null,
         endTime = null,
-        limit = parseInt(req.query.limit) || 100
+        limit = parseInt(req.query.limit) || 100,
       } = req.query;
 
       const options = {
@@ -149,16 +149,16 @@ function createAnalyticsRoutes(deps) {
         sessionId: sessionId || null,
         startTime: startTime ? parseInt(startTime) : null,
         endTime: endTime ? parseInt(endTime) : null,
-        limit: parseInt(limit)
+        limit: parseInt(limit),
       };
 
       const changes = await persistentDB.getContextChanges(options);
-      
+
       res.json({
         success: true,
         data: changes,
         count: changes.length,
-        filters: options
+        filters: options,
       });
     } catch (error) {
       console.error('Error getting context changes:', error);
@@ -170,12 +170,12 @@ function createAnalyticsRoutes(deps) {
     try {
       const promptId = req.params.id;
       const changes = await contextChangeTracker.getContextChangesForPrompt(promptId);
-      
+
       res.json({
         success: true,
         data: changes,
         count: changes.length,
-        promptId
+        promptId,
       });
     } catch (error) {
       console.error('Error getting context changes for prompt:', error);
@@ -187,12 +187,12 @@ function createAnalyticsRoutes(deps) {
     try {
       const eventId = req.params.id;
       const changes = await contextChangeTracker.getContextChangesForEvent(eventId);
-      
+
       res.json({
         success: true,
         data: changes,
         count: changes.length,
-        eventId
+        eventId,
       });
     } catch (error) {
       console.error('Error getting context changes for event:', error);
@@ -231,7 +231,7 @@ function createAnalyticsRoutes(deps) {
       res.json({
         success: true,
         data: errors,
-        count: errors.length
+        count: errors.length,
       });
     } catch (error) {
       console.error('Error getting recent errors:', error);
@@ -257,26 +257,30 @@ function createAnalyticsRoutes(deps) {
   app.get('/api/analytics/file-usage', async (req, res) => {
     try {
       const prompts = await persistentDB.getAllPrompts();
-      
+
       const fileUsage = new Map();
       let totalFileCount = 0;
       let totalPrompts = 0;
       let explicitCount = 0;
       let autoCount = 0;
-      
-      prompts.forEach(prompt => {
+
+      prompts.forEach((prompt) => {
         if (prompt.context_file_count > 0) {
           totalFileCount += prompt.context_file_count;
           totalPrompts++;
           explicitCount += prompt.context_file_count_explicit || 0;
           autoCount += prompt.context_file_count_auto || 0;
-          
+
           if (prompt.context_files_json) {
             try {
               const files = JSON.parse(prompt.context_files_json);
-              files.forEach(file => {
+              files.forEach((file) => {
                 const filePath = file.path || file;
-                const existing = fileUsage.get(filePath) || { count: 0, sources: new Set(), name: file.name || filePath };
+                const existing = fileUsage.get(filePath) || {
+                  count: 0,
+                  sources: new Set(),
+                  name: file.name || filePath,
+                };
                 existing.count++;
                 existing.sources.add(file.source || 'unknown');
                 fileUsage.set(filePath, existing);
@@ -287,25 +291,25 @@ function createAnalyticsRoutes(deps) {
           }
         }
       });
-      
+
       const sortedFiles = Array.from(fileUsage.entries())
         .map(([path, data]) => ({
           path,
           name: data.name,
           count: data.count,
-          sources: Array.from(data.sources)
+          sources: Array.from(data.sources),
         }))
         .sort((a, b) => b.count - a.count);
-      
+
       const distribution = {
-        '0': 0,
+        0: 0,
         '1-5': 0,
         '6-10': 0,
         '11-20': 0,
-        '20+': 0
+        '20+': 0,
       };
-      
-      prompts.forEach(p => {
+
+      prompts.forEach((p) => {
         const count = p.context_file_count || 0;
         if (count === 0) distribution['0']++;
         else if (count <= 5) distribution['1-5']++;
@@ -313,7 +317,7 @@ function createAnalyticsRoutes(deps) {
         else if (count <= 20) distribution['11-20']++;
         else distribution['20+']++;
       });
-      
+
       res.json({
         success: true,
         data: {
@@ -324,9 +328,9 @@ function createAnalyticsRoutes(deps) {
           explicitVsAuto: {
             explicit: explicitCount,
             auto: autoCount,
-            ratio: autoCount > 0 ? (explicitCount / autoCount).toFixed(2) : 0
-          }
-        }
+            ratio: autoCount > 0 ? (explicitCount / autoCount).toFixed(2) : 0,
+          },
+        },
       });
     } catch (error) {
       console.error('Error getting file usage stats:', error);
@@ -336,4 +340,3 @@ function createAnalyticsRoutes(deps) {
 }
 
 module.exports = createAnalyticsRoutes;
-

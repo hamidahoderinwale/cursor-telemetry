@@ -1,6 +1,6 @@
 /**
  * Prescription Database Schema
- * 
+ *
  * Prescriptions are behavioral rules and instructions that guide AI behavior.
  * They're lightweight, prescriptive (not retrospective), and auto-applied to prompts.
  */
@@ -40,21 +40,21 @@ const CATEGORIES = {
   COMMUNICATION: 'communication',
   CONSTRAINTS: 'constraints',
   ALLOWLIST: 'allowlist',
-  BLOCKLIST: 'blocklist'
+  BLOCKLIST: 'blocklist',
 };
 
 const SCOPES = {
   GLOBAL: 'global',
   WORKSPACE: 'workspace',
   FILE_TYPE: 'file-type',
-  FILE: 'file'
+  FILE: 'file',
 };
 
 const SOURCES = {
   MANUAL: 'manual',
   AUTO_DETECTED: 'auto-detected',
   IMPORTED: 'imported',
-  TEMPLATE: 'template'
+  TEMPLATE: 'template',
 };
 
 /**
@@ -83,7 +83,7 @@ function getValidationRules() {
     category: { type: 'enum', required: true, values: Object.values(CATEGORIES) },
     scope: { type: 'enum', required: true, values: Object.values(SCOPES) },
     priority: { type: 'number', min: 1, max: 100 },
-    active: { type: 'boolean' }
+    active: { type: 'boolean' },
   };
 }
 
@@ -95,17 +95,17 @@ function getValidationRules() {
 function validatePrescription(data) {
   const errors = [];
   const rules = getValidationRules();
-  
+
   for (const [field, rule] of Object.entries(rules)) {
     const value = data[field];
-    
+
     if (rule.required && (value === undefined || value === null || value === '')) {
       errors.push(`${field} is required`);
       continue;
     }
-    
+
     if (value === undefined || value === null) continue;
-    
+
     if (rule.type === 'string') {
       if (typeof value !== 'string') {
         errors.push(`${field} must be a string`);
@@ -121,7 +121,7 @@ function validatePrescription(data) {
         }
       }
     }
-    
+
     if (rule.type === 'number') {
       if (typeof value !== 'number') {
         errors.push(`${field} must be a number`);
@@ -134,20 +134,20 @@ function validatePrescription(data) {
         }
       }
     }
-    
+
     if (rule.type === 'enum') {
       if (!rule.values.includes(value)) {
         errors.push(`${field} must be one of: ${rule.values.join(', ')}`);
       }
     }
-    
+
     if (rule.type === 'boolean') {
       if (typeof value !== 'boolean' && value !== 0 && value !== 1) {
         errors.push(`${field} must be a boolean`);
       }
     }
   }
-  
+
   // Scope-specific validation
   if (data.scope === SCOPES.WORKSPACE && !data.scope_value) {
     errors.push('scope_value is required for workspace scope');
@@ -158,10 +158,10 @@ function validatePrescription(data) {
   if (data.scope === SCOPES.FILE && !data.scope_value) {
     errors.push('scope_value is required for file scope');
   }
-  
+
   return {
     valid: errors.length === 0,
-    errors
+    errors,
   };
 }
 
@@ -172,6 +172,5 @@ module.exports = {
   SOURCES,
   initializePrescriptionSchema,
   validatePrescription,
-  getValidationRules
+  getValidationRules,
 };
-

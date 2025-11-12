@@ -5,8 +5,8 @@
 
 // Use dynamic import for node-fetch v3 (ESM)
 let fetchModule;
-const fetchPromise = import('node-fetch').then(mod => {
-    fetchModule = mod.default;
+const fetchPromise = import('node-fetch').then((mod) => {
+  fetchModule = mod.default;
 });
 
 class EventAnnotationService {
@@ -38,36 +38,37 @@ class EventAnnotationService {
       await fetchPromise;
 
       const prompt = this.buildAnnotationPrompt(event, context);
-      
+
       const response = await fetchModule(`${this.openRouterEndpoint}/chat/completions`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${this.openRouterKey}`,
+          Authorization: `Bearer ${this.openRouterKey}`,
           'Content-Type': 'application/json',
           'HTTP-Referer': 'http://localhost:43917',
-          'X-Title': 'Cursor Telemetry Dashboard'
+          'X-Title': 'Cursor Telemetry Dashboard',
         },
         body: JSON.stringify({
           model: this.chatModel,
           messages: [
             {
               role: 'system',
-              content: 'You are a code analysis assistant. Generate concise, meaningful descriptions of development events. Be specific and technical. Use present tense. Maximum 15 words.'
+              content:
+                'You are a code analysis assistant. Generate concise, meaningful descriptions of development events. Be specific and technical. Use present tense. Maximum 15 words.',
             },
             {
               role: 'user',
-              content: prompt
-            }
+              content: prompt,
+            },
           ],
           temperature: 0.3, // Lower temperature for more consistent annotations
-          max_tokens: 50
-        })
+          max_tokens: 50,
+        }),
       });
 
       if (response.ok) {
         const data = await response.json();
         const annotation = data.choices[0].message.content.trim();
-        
+
         // Cache result
         this.cache.set(cacheKey, annotation);
         return annotation;
@@ -86,25 +87,30 @@ class EventAnnotationService {
    */
   buildAnnotationPrompt(event, context) {
     const parts = [];
-    
+
     // Event type
     parts.push(`Event type: ${event.type || 'unknown'}`);
-    
+
     // File information
     if (event.file_path || event.details?.file_path) {
       const filePath = event.file_path || event.details?.file_path;
       parts.push(`File: ${filePath}`);
-      
+
       // File extension for context
       const ext = filePath.split('.').pop();
       if (ext) parts.push(`File type: ${ext}`);
     }
-    
+
     // Code changes
-    if (event.before_code || event.after_code || event.details?.before_code || event.details?.after_code) {
+    if (
+      event.before_code ||
+      event.after_code ||
+      event.details?.before_code ||
+      event.details?.after_code
+    ) {
       const before = event.before_code || event.details?.before_code || '';
       const after = event.after_code || event.details?.after_code || '';
-      
+
       if (before && after) {
         // Show snippet of what changed
         const beforeLines = before.split('\n').slice(0, 5).join('\n');
@@ -116,23 +122,23 @@ class EventAnnotationService {
         parts.push(`Removed code:\n${before.split('\n').slice(0, 10).join('\n')}`);
       }
     }
-    
+
     // Source/context
     if (event.source) {
       parts.push(`Source: ${event.source}`);
     }
-    
+
     // Notes if available
     if (event.notes) {
       parts.push(`Notes: ${event.notes}`);
     }
-    
+
     // Context from surrounding events
     if (context.recentEvents && context.recentEvents.length > 0) {
-      const recentTypes = context.recentEvents.map(e => e.type).join(', ');
+      const recentTypes = context.recentEvents.map((e) => e.type).join(', ');
       parts.push(`Recent context: ${recentTypes}`);
     }
-    
+
     return `Analyze this development event and generate a concise description:\n\n${parts.join('\n\n')}\n\nDescription:`;
   }
 
@@ -142,12 +148,12 @@ class EventAnnotationService {
   generateFallbackAnnotation(event) {
     const type = event.type || 'unknown';
     const filePath = event.file_path || event.details?.file_path;
-    
+
     if (filePath) {
       const fileName = filePath.split('/').pop();
       return `${this.formatEventType(type)} in ${fileName}`;
     }
-    
+
     return this.formatEventType(type);
   }
 
@@ -156,16 +162,16 @@ class EventAnnotationService {
    */
   formatEventType(type) {
     const typeMap = {
-      'file_change': 'File changed',
-      'code_change': 'Code modified',
-      'entry_created': 'Entry created',
-      'session_start': 'Session started',
-      'session_end': 'Session ended',
-      'prompt': 'AI prompt',
-      'response': 'AI response'
+      file_change: 'File changed',
+      code_change: 'Code modified',
+      entry_created: 'Entry created',
+      session_start: 'Session started',
+      session_end: 'Session ended',
+      prompt: 'AI prompt',
+      response: 'AI response',
     };
-    
-    return typeMap[type] || type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+
+    return typeMap[type] || type.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
   }
 
   /**
@@ -177,7 +183,7 @@ class EventAnnotationService {
     let hash = 0;
     for (let i = 0; i < key.length; i++) {
       const char = key.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
+      hash = (hash << 5) - hash + char;
       hash = hash & hash;
     }
     return hash.toString();
@@ -188,18 +194,20 @@ class EventAnnotationService {
    */
   async annotateEventsBatch(events, context = {}) {
     if (!this.openRouterKey || events.length === 0) {
-      return events.map(e => ({ ...e, annotation: this.generateFallbackAnnotation(e) }));
+      return events.map((e) => ({ ...e, annotation: this.generateFallbackAnnotation(e) }));
     }
 
     try {
       await fetchPromise;
 
       // Build batch prompt
-      const eventSummaries = events.map((e, i) => {
-        const filePath = e.file_path || e.details?.file_path || 'unknown';
-        const type = e.type || 'unknown';
-        return `${i + 1}. ${type} in ${filePath.split('/').pop()}`;
-      }).join('\n');
+      const eventSummaries = events
+        .map((e, i) => {
+          const filePath = e.file_path || e.details?.file_path || 'unknown';
+          const type = e.type || 'unknown';
+          return `${i + 1}. ${type} in ${filePath.split('/').pop()}`;
+        })
+        .join('\n');
 
       const prompt = `Analyze these ${events.length} development events and generate concise descriptions (max 15 words each):
 
@@ -211,32 +219,33 @@ Respond with JSON array of descriptions in order:
       const response = await fetchModule(`${this.openRouterEndpoint}/chat/completions`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${this.openRouterKey}`,
+          Authorization: `Bearer ${this.openRouterKey}`,
           'Content-Type': 'application/json',
           'HTTP-Referer': 'http://localhost:43917',
-          'X-Title': 'Cursor Telemetry Dashboard'
+          'X-Title': 'Cursor Telemetry Dashboard',
         },
         body: JSON.stringify({
           model: this.chatModel,
           messages: [
             {
               role: 'system',
-              content: 'You are a code analysis assistant. Generate concise descriptions of development events. Respond with JSON array only.'
+              content:
+                'You are a code analysis assistant. Generate concise descriptions of development events. Respond with JSON array only.',
             },
             {
               role: 'user',
-              content: prompt
-            }
+              content: prompt,
+            },
           ],
           temperature: 0.3,
-          max_tokens: 200
-        })
+          max_tokens: 200,
+        }),
       });
 
       if (response.ok) {
         const data = await response.json();
         const content = data.choices[0].message.content.trim();
-        
+
         // Try to parse JSON array
         try {
           const jsonMatch = content.match(/\[[\s\S]*\]/);
@@ -244,7 +253,7 @@ Respond with JSON array of descriptions in order:
             const annotations = JSON.parse(jsonMatch[0]);
             return events.map((e, i) => ({
               ...e,
-              annotation: annotations[i] || this.generateFallbackAnnotation(e)
+              annotation: annotations[i] || this.generateFallbackAnnotation(e),
             }));
           }
         } catch (parseError) {
@@ -256,9 +265,9 @@ Respond with JSON array of descriptions in order:
     }
 
     // Fallback to individual annotations
-    return Promise.all(events.map(e => 
-      this.annotateEvent(e, context).then(annotation => ({ ...e, annotation }))
-    ));
+    return Promise.all(
+      events.map((e) => this.annotateEvent(e, context).then((annotation) => ({ ...e, annotation })))
+    );
   }
 
   /**
@@ -273,11 +282,14 @@ Respond with JSON array of descriptions in order:
       await fetchPromise;
 
       // Summarize events for intent classification
-      const eventSummary = events.slice(0, 10).map(e => {
-        const filePath = e.file_path || e.details?.file_path || 'unknown';
-        const type = e.type || 'unknown';
-        return `- ${type} in ${filePath.split('/').pop()}`;
-      }).join('\n');
+      const eventSummary = events
+        .slice(0, 10)
+        .map((e) => {
+          const filePath = e.file_path || e.details?.file_path || 'unknown';
+          const type = e.type || 'unknown';
+          return `- ${type} in ${filePath.split('/').pop()}`;
+        })
+        .join('\n');
 
       const prompt = `Analyze this development activity and classify the intent:
 
@@ -297,32 +309,33 @@ Respond with JSON:
       const response = await fetchModule(`${this.openRouterEndpoint}/chat/completions`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${this.openRouterKey}`,
+          Authorization: `Bearer ${this.openRouterKey}`,
           'Content-Type': 'application/json',
           'HTTP-Referer': 'http://localhost:43917',
-          'X-Title': 'Cursor Telemetry Dashboard'
+          'X-Title': 'Cursor Telemetry Dashboard',
         },
         body: JSON.stringify({
           model: this.chatModel,
           messages: [
             {
               role: 'system',
-              content: 'You are a code analysis assistant. Classify development intent accurately. Respond with valid JSON only.'
+              content:
+                'You are a code analysis assistant. Classify development intent accurately. Respond with valid JSON only.',
             },
             {
               role: 'user',
-              content: prompt
-            }
+              content: prompt,
+            },
           ],
           temperature: 0.4,
-          max_tokens: 150
-        })
+          max_tokens: 150,
+        }),
       });
 
       if (response.ok) {
         const data = await response.json();
         const content = data.choices[0].message.content.trim();
-        
+
         try {
           const jsonMatch = content.match(/\{[\s\S]*\}/);
           if (jsonMatch) {
@@ -337,7 +350,12 @@ Respond with JSON:
     }
 
     // Fallback
-    return { intent: 'general', confidence: 0.5, tags: [], summary: 'General development activity' };
+    return {
+      intent: 'general',
+      confidence: 0.5,
+      tags: [],
+      summary: 'General development activity',
+    };
   }
 
   /**
@@ -352,14 +370,20 @@ Respond with JSON:
       await fetchPromise;
 
       // Build summary of changes
-      const fileSummary = fileChanges.slice(0, 10).map(f => {
-        return `- ${f.file_path || f.path || 'unknown'}`;
-      }).join('\n');
+      const fileSummary = fileChanges
+        .slice(0, 10)
+        .map((f) => {
+          return `- ${f.file_path || f.path || 'unknown'}`;
+        })
+        .join('\n');
 
-      const eventSummary = events.slice(0, 10).map(e => {
-        const type = e.type || 'unknown';
-        return `- ${type}`;
-      }).join('\n');
+      const eventSummary = events
+        .slice(0, 10)
+        .map((e) => {
+          const type = e.type || 'unknown';
+          return `- ${type}`;
+        })
+        .join('\n');
 
       const prompt = `Summarize this development state/session:
 
@@ -374,26 +398,27 @@ Generate a concise summary (max 20 words) describing what was accomplished.`;
       const response = await fetchModule(`${this.openRouterEndpoint}/chat/completions`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${this.openRouterKey}`,
+          Authorization: `Bearer ${this.openRouterKey}`,
           'Content-Type': 'application/json',
           'HTTP-Referer': 'http://localhost:43917',
-          'X-Title': 'Cursor Telemetry Dashboard'
+          'X-Title': 'Cursor Telemetry Dashboard',
         },
         body: JSON.stringify({
           model: this.chatModel,
           messages: [
             {
               role: 'system',
-              content: 'You are a code analysis assistant. Generate concise, meaningful summaries of development work.'
+              content:
+                'You are a code analysis assistant. Generate concise, meaningful summaries of development work.',
             },
             {
               role: 'user',
-              content: prompt
-            }
+              content: prompt,
+            },
           ],
           temperature: 0.5,
-          max_tokens: 100
-        })
+          max_tokens: 100,
+        }),
       });
 
       if (response.ok) {
@@ -416,4 +441,3 @@ Generate a concise summary (max 20 words) describing what was accomplished.`;
 }
 
 module.exports = EventAnnotationService;
-

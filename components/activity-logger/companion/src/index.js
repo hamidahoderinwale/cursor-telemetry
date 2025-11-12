@@ -2,38 +2,51 @@
 
 const path = require('path');
 
-// Load environment variables from the primary .env file location
-// Primary location: /Users/hamidaho/new_cursor/.env (workspace root)
-const primaryEnvPath = '/Users/hamidaho/new_cursor/.env';
-const companionEnvPath = path.resolve(__dirname, '../.env');
+// Load environment variables from .env file (if available)
+// In production (Render, Docker, etc.), environment variables are set directly
+// and .env files are not needed
+const isProduction = process.env.NODE_ENV === 'production';
+const isRender = process.env.RENDER === 'true' || process.env.RENDER_SERVICE_NAME;
 
-// Try primary location first (the correct one)
-let envLoaded = false;
-const primaryResult = require('dotenv').config({ path: primaryEnvPath });
-if (!primaryResult.error) {
-  console.log(`[ENV] ✓ Loaded .env from primary location: ${primaryEnvPath}`);
-  envLoaded = true;
-}
-
-// Fallback to companion directory if primary not found
-if (!envLoaded) {
-  const companionResult = require('dotenv').config({ path: companionEnvPath });
-  if (!companionResult.error) {
-    console.log(`[ENV] ✓ Loaded .env from companion directory: ${companionEnvPath}`);
-    envLoaded = true;
-  }
-}
-
-// Fallback to workspace root calculation if neither found
-if (!envLoaded) {
+if (!isProduction && !isRender) {
+  // Only try to load .env in development
+  const primaryEnvPath = process.env.HOME
+    ? path.join(process.env.HOME, 'new_cursor', '.env')
+    : null;
+  const companionEnvPath = path.resolve(__dirname, '../.env');
   const workspaceEnvPath = path.resolve(__dirname, '../../../../../.env');
-  const workspaceResult = require('dotenv').config({ path: workspaceEnvPath });
-  if (!workspaceResult.error) {
-    console.log(`[ENV] ✓ Loaded .env from calculated workspace root: ${workspaceEnvPath}`);
-  } else {
-    console.warn(`[ENV] ⚠ No .env file found. Expected at: ${primaryEnvPath}`);
-    console.warn(`[ENV]   Create .env file at workspace root for configuration.`);
+
+  let envLoaded = false;
+
+  // Try primary location first
+  if (primaryEnvPath) {
+    const primaryResult = require('dotenv').config({ path: primaryEnvPath });
+    if (!primaryResult.error) {
+      console.log(`[ENV] ✓ Loaded .env from primary location: ${primaryEnvPath}`);
+      envLoaded = true;
+    }
   }
+
+  // Fallback to companion directory if primary not found
+  if (!envLoaded) {
+    const companionResult = require('dotenv').config({ path: companionEnvPath });
+    if (!companionResult.error) {
+      console.log(`[ENV] ✓ Loaded .env from companion directory: ${companionEnvPath}`);
+      envLoaded = true;
+    }
+  }
+
+  // Fallback to workspace root calculation if neither found
+  if (!envLoaded) {
+    const workspaceResult = require('dotenv').config({ path: workspaceEnvPath });
+    if (!workspaceResult.error) {
+      console.log(`[ENV] ✓ Loaded .env from calculated workspace root: ${workspaceEnvPath}`);
+    } else {
+      console.log(`[ENV] No .env file found - using environment variables directly`);
+    }
+  }
+} else {
+  console.log(`[ENV] Production mode - using environment variables directly`);
 }
 
 const express = require('express');
@@ -50,10 +63,10 @@ const { queue: queueSystem } = require('./utils/queue.js');
 const { clipboardMonitor } = require('./monitors/clipboardMonitor.js');
 
 // Initialize query cache (30 second TTL, check every 60s for expired)
-const queryCache = new NodeCache({ 
-  stdTTL: 30, 
+const queryCache = new NodeCache({
+  stdTTL: 30,
   checkperiod: 60,
-  useClones: false // Better performance, less memory
+  useClones: false, // Better performance, less memory
 });
 
 // Enhanced raw data capture modules
@@ -145,60 +158,68 @@ const errorTracker = new ErrorTracker();
 const productivityTracker = new ProductivityTracker();
 const terminalMonitor = new TerminalMonitor({
   captureOutput: false, // Don't execute commands, just monitor
-  debug: false
+  debug: false,
 });
 const abstractionEngine = new AbstractionEngine();
 
 // Simple in-memory database for companion service (with persistent backup)
 const db = {
-    _entries: [],
-    _prompts: [],
-    nextId: 1,
-    
-    get entries() { return this._entries; },
-    set entries(val) { this._entries = val; },
-    
-    get prompts() { return this._prompts; },
-    set prompts(val) { this._prompts = val; },
-    
-    async add(table, data) {
-        const item = { ...data, id: this.nextId++ };
-        this[table].push(item);
-        
-        // Persist to disk
-        try {
-            if (table === 'entries') {
-                await persistentDB.saveEntry(item);
-            } else if (table === 'prompts') {
-                await persistentDB.savePrompt(item);
-            }
-        } catch (error) {
-            console.error(`Error persisting ${table} item:`, error);
-        }
-        
-        return item;
-    },
-    
-    async update(table, id, updates) {
-        const index = this[table].findIndex(item => item.id === id);
-        if (index >= 0) {
-            this[table][index] = { ...this[table][index], ...updates };
-            
-            // Persist to disk
-            try {
-                if (table === 'entries') {
-                    await persistentDB.updateEntry(id, updates);
-                } else if (table === 'prompts') {
-                    await persistentDB.updatePrompt(id, updates);
-                }
-            } catch (error) {
-                console.error(`Error updating ${table} item:`, error);
-            }
-            
-            return this[table][index];
-        }
-        return null;
+  _entries: [],
+  _prompts: [],
+  nextId: 1,
+
+  get entries() {
+    return this._entries;
+  },
+  set entries(val) {
+    this._entries = val;
+  },
+
+  get prompts() {
+    return this._prompts;
+  },
+  set prompts(val) {
+    this._prompts = val;
+  },
+
+  async add(table, data) {
+    const item = { ...data, id: this.nextId++ };
+    this[table].push(item);
+
+    // Persist to disk
+    try {
+      if (table === 'entries') {
+        await persistentDB.saveEntry(item);
+      } else if (table === 'prompts') {
+        await persistentDB.savePrompt(item);
+      }
+    } catch (error) {
+      console.error(`Error persisting ${table} item:`, error);
     }
+
+    return item;
+  },
+
+  async update(table, id, updates) {
+    const index = this[table].findIndex((item) => item.id === id);
+    if (index >= 0) {
+      this[table][index] = { ...this[table][index], ...updates };
+
+      // Persist to disk
+      try {
+        if (table === 'entries') {
+          await persistentDB.updateEntry(id, updates);
+        } else if (table === 'prompts') {
+          await persistentDB.updatePrompt(id, updates);
+        }
+      } catch (error) {
+        console.error(`Error updating ${table} item:`, error);
+      }
+
+      return this[table][index];
+    }
+    return null;
+  },
 };
 
 const PORT = process.env.PORT || 43917;
@@ -210,9 +231,9 @@ const { Server } = require('socket.io');
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: "*",
-    methods: ["GET", "POST"]
-  }
+    origin: '*',
+    methods: ['GET', 'POST'],
+  },
 });
 
 // Track active conversation streams (defined early for use in broadcast functions)
@@ -221,7 +242,7 @@ const conversationStreams = new Map();
 // Real-time broadcast function with cache invalidation
 function broadcastUpdate(type, data) {
   io.emit('activityUpdate', { type, data });
-  
+
   // Invalidate relevant caches when data changes
   if (type === 'file-change' || type === 'new-entry') {
     invalidateCache('activity_');
@@ -239,34 +260,38 @@ function broadcastUpdate(type, data) {
 function broadcastConversationUpdate(conversationId, data) {
   const stream = conversationStreams.get(conversationId);
   if (stream && stream.subscribers) {
-    stream.subscribers.forEach(socketId => {
+    stream.subscribers.forEach((socketId) => {
       const socket = io.sockets.sockets.get(socketId);
       if (socket) {
         socket.emit('conversation-stream', {
           conversation_id: conversationId,
           data: data,
-          timestamp: Date.now()
+          timestamp: Date.now(),
         });
       }
     });
-    
+
     // Update stream stats
     stream.messageCount++;
   }
 }
 
 // Middleware
-app.use(compression({ 
-  threshold: 1024, // Only compress responses > 1KB
-  level: 6 // Balance between compression ratio and speed
-}));
+app.use(
+  compression({
+    threshold: 1024, // Only compress responses > 1KB
+    level: 6, // Balance between compression ratio and speed
+  })
+);
 // CORS configuration - explicitly allow all origins and methods
-app.use(cors({ 
-  origin: '*',
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-  credentials: false // No credentials needed for local API
-}));
+app.use(
+  cors({
+    origin: '*',
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    credentials: false, // No credentials needed for local API
+  })
+);
 
 // Handle preflight requests
 app.options('*', cors());
@@ -275,15 +300,17 @@ app.use(express.json({ limit: '10mb' })); // Increase JSON payload limit
 
 // Serve static files from public directory with explicit MIME types
 const publicPath = path.join(__dirname, '../../public');
-app.use(express.static(publicPath, {
-  setHeaders: (res, filePath) => {
-    if (filePath.endsWith('.css')) {
-      res.setHeader('Content-Type', 'text/css');
-    } else if (filePath.endsWith('.js')) {
-      res.setHeader('Content-Type', 'application/javascript');
-    }
-  }
-}));
+app.use(
+  express.static(publicPath, {
+    setHeaders: (res, filePath) => {
+      if (filePath.endsWith('.css')) {
+        res.setHeader('Content-Type', 'text/css');
+      } else if (filePath.endsWith('.js')) {
+        res.setHeader('Content-Type', 'application/javascript');
+      }
+    },
+  })
+);
 console.log(`[FILE] Serving static files from: ${publicPath}`);
 
 let ideStateCapture = new IDEStateCapture(); // Changed from const to let
@@ -300,16 +327,16 @@ screenshotMonitor.start((action, screenshotData) => {
   // Link screenshots to recent prompts/events
   if (action === 'added') {
     console.log(`Screenshot captured: ${screenshotData.fileName}`);
-    
+
     // Find prompts/events near this time
-    const recentPrompts = db.prompts.filter(p => {
+    const recentPrompts = db.prompts.filter((p) => {
       const promptTime = new Date(p.timestamp).getTime();
       const screenshotTime = new Date(screenshotData.timestamp).getTime();
       return Math.abs(screenshotTime - promptTime) <= 5 * 60 * 1000; // 5 minutes
     });
-    
+
     // Link screenshot to prompts
-    recentPrompts.forEach(prompt => {
+    recentPrompts.forEach((prompt) => {
       screenshotMonitor.linkScreenshotToEvent(screenshotData.id, prompt.id, 'prompt');
     });
   }
@@ -331,29 +358,29 @@ let rawData = {
   fileSystem: {
     changes: [],
     access: [],
-    structure: []
+    structure: [],
   },
   systemResources: [],
   gitData: {
     status: [],
     commits: [],
-    changes: []
+    changes: [],
   },
   cursorDatabase: {
     conversations: [],
     chatHistory: [],
-    fileContexts: []
+    fileContexts: [],
   },
   appleScript: {
     appState: [],
     editorState: [],
-    debugState: []
+    debugState: [],
   },
   logs: {
     cursor: [],
     extensions: [],
-    errors: []
-  }
+    errors: [],
+  },
 };
 
 // Initialize session manager
@@ -396,12 +423,12 @@ function shouldCaptureData(content, type) {
   if (!privacyConfig.enabled || !privacyConfig.consentGiven) {
     return true; // Capture everything if privacy not enabled
   }
-  
+
   // Check sensitivity level
   if (privacyConfig.sensitivityLevel === 'high' && type === 'clipboard') {
     return false; // Don't capture clipboard for high sensitivity
   }
-  
+
   return true;
 }
 
@@ -409,29 +436,35 @@ function applyPrivacyRedaction(content) {
   if (!privacyConfig.enabled || !privacyConfig.consentGiven) {
     return content; // No redaction if privacy not enabled
   }
-  
+
   let redactedContent = content;
-  
+
   // Redact names
   if (privacyConfig.redactNames) {
     redactedContent = redactedContent.replace(/\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b/g, '[NAME]');
   }
-  
+
   // Redact emails
   if (privacyConfig.redactEmails) {
-    redactedContent = redactedContent.replace(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g, '[EMAIL]');
+    redactedContent = redactedContent.replace(
+      /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g,
+      '[EMAIL]'
+    );
   }
-  
+
   // Redact numbers
   if (privacyConfig.redactNumbers) {
     redactedContent = redactedContent.replace(/\b\d+(?:\.\d+)?\b/g, '[NUMBER]');
   }
-  
+
   // Redact file paths
   if (privacyConfig.redactFilePaths) {
-    redactedContent = redactedContent.replace(/(?:[a-zA-Z]:)?[\\\/](?:[^\\\/\n]+[\\\/])*[^\\\/\n]*/g, '[FILEPATH]');
+    redactedContent = redactedContent.replace(
+      /(?:[a-zA-Z]:)?[\\\/](?:[^\\\/\n]+[\\\/])*[^\\\/\n]*/g,
+      '[FILEPATH]'
+    );
   }
-  
+
   return redactedContent;
 }
 
@@ -442,7 +475,7 @@ function enqueue(kind, payload) {
     console.log(` Privacy filter blocked ${kind} capture`);
     return;
   }
-  
+
   // Apply privacy redaction
   if (payload.content) {
     payload.content = applyPrivacyRedaction(payload.content);
@@ -450,40 +483,40 @@ function enqueue(kind, payload) {
   if (payload.data) {
     payload.data = applyPrivacyRedaction(payload.data);
   }
-  
+
   const item = { seq: ++sequence, kind, payload };
   queue.push(item);
-  
+
   // Also maintain the old arrays for backward compatibility
   if (kind === 'entry') {
     entries.push(payload);
   } else if (kind === 'event') {
     events.push(payload);
     // Persist events to disk
-    persistentDB.saveEvent(payload).catch(err => 
-      console.error('Error persisting event:', err.message)
-    );
-    
+    persistentDB
+      .saveEvent(payload)
+      .catch((err) => console.error('Error persisting event:', err.message));
+
     // Annotate event asynchronously (non-blocking)
     if (process.env.OPENROUTER_API_KEY) {
       setTimeout(async () => {
         try {
           const EventAnnotationService = require('./services/event-annotation-service.js');
           const annotationService = new EventAnnotationService();
-          
+
           // Get recent events for context
-          const recentEvents = events.slice(-5).filter(e => e.id !== payload.id);
-          
+          const recentEvents = events.slice(-5).filter((e) => e.id !== payload.id);
+
           const annotation = await annotationService.annotateEvent(payload, {
-            recentEvents
+            recentEvents,
           });
-          
+
           if (annotation) {
             // Update event with annotation
             payload.annotation = annotation;
             payload.ai_generated = true;
             await persistentDB.saveEvent(payload);
-            
+
             // Broadcast update
             broadcastUpdate('event-annotated', { eventId: payload.id, annotation });
           }
@@ -494,7 +527,7 @@ function enqueue(kind, payload) {
       }, 100); // Small delay to avoid blocking
     }
   }
-  
+
   console.log(`� Enqueued ${kind} #${sequence}: ${payload.id || payload.type}`);
   updateLunrIndex(item); // Update Lunr index with the new item
 }
@@ -507,19 +540,26 @@ function addToLunrIndex(item) {
   if (item.kind === 'entry') {
     doc = {
       id: item.payload.id,
-      content: item.payload.prompt + ' ' + item.payload.response + ' ' + item.payload.before_code + ' ' + item.payload.after_code,
+      content:
+        item.payload.prompt +
+        ' ' +
+        item.payload.response +
+        ' ' +
+        item.payload.before_code +
+        ' ' +
+        item.payload.after_code,
       filePath: item.payload.file_path,
-      type: 'entry'
+      type: 'entry',
     };
   } else if (item.kind === 'event') {
     doc = {
       id: item.payload.id,
       content: item.payload.details ? JSON.stringify(item.payload.details) : '',
       filePath: item.payload.details ? JSON.parse(item.payload.details).file_path : '',
-      type: item.payload.type
+      type: item.payload.type,
     };
   }
-  
+
   if (doc.id) {
     indexedDocs.push(doc); // Keep track of indexed documents for retrieval
     console.log(`[SEARCH] Added ${item.kind} ${item.payload.id} to Lunr index.`);
@@ -533,23 +573,25 @@ function buildLunrIndex() {
     this.field('filePath');
     this.field('type');
   });
-  
+
   // Add existing entries and events to the index
-  entries.forEach(entry => {
+  entries.forEach((entry) => {
     addToLunrIndex({
       kind: 'entry',
-      payload: entry
+      payload: entry,
     });
   });
 
-  events.forEach(event => {
+  events.forEach((event) => {
     addToLunrIndex({
       kind: 'event',
-      payload: event
+      payload: event,
     });
   });
-  
-  console.log(`[SEARCH] Lunr index built with ${entries.length} entries and ${events.length} events.`);
+
+  console.log(
+    `[SEARCH] Lunr index built with ${entries.length} entries and ${events.length} events.`
+  );
 }
 
 function updateLunrIndex(item) {
@@ -572,7 +614,7 @@ let captureIntervals = {
   gitStatus: null,
   appleScript: null,
   cursorDatabase: null,
-  logs: null
+  logs: null,
 };
 
 // IDE state capture service
@@ -587,7 +629,7 @@ async function captureSystemResources() {
     const memUsage = process.memoryUsage();
     const cpuUsage = process.cpuUsage();
     const loadAvg = os.loadavg();
-    
+
     const resourceData = {
       timestamp: Date.now(),
       memory: {
@@ -595,11 +637,11 @@ async function captureSystemResources() {
         heapTotal: memUsage.heapTotal,
         heapUsed: memUsage.heapUsed,
         external: memUsage.external,
-        arrayBuffers: memUsage.arrayBuffers
+        arrayBuffers: memUsage.arrayBuffers,
       },
       cpu: {
         user: cpuUsage.user,
-        system: cpuUsage.system
+        system: cpuUsage.system,
       },
       system: {
         loadAverage: loadAvg,
@@ -607,18 +649,20 @@ async function captureSystemResources() {
         totalMemory: os.totalmem(),
         uptime: os.uptime(),
         platform: os.platform(),
-        arch: os.arch()
-      }
+        arch: os.arch(),
+      },
     };
-    
+
     rawData.systemResources.push(resourceData);
-    
+
     // Keep only last 1000 entries
     if (rawData.systemResources.length > 1000) {
       rawData.systemResources = rawData.systemResources.slice(-1000);
     }
-    
-    console.log(`[DATA] Captured system resources: ${Math.round(memUsage.heapUsed / 1024 / 1024)}MB memory`);
+
+    console.log(
+      `[DATA] Captured system resources: ${Math.round(memUsage.heapUsed / 1024 / 1024)}MB memory`
+    );
   } catch (error) {
     console.error('Error capturing system resources:', error);
   }
@@ -631,21 +675,27 @@ async function captureGitData() {
     const { stdout: gitStatus } = await execAsync('git status --porcelain');
     const { stdout: gitBranch } = await execAsync('git branch --show-current');
     const { stdout: gitLog } = await execAsync('git log --oneline -10');
-    
+
     const gitData = {
       timestamp: Date.now(),
       branch: gitBranch.trim(),
-      status: gitStatus.trim().split('\n').filter(line => line),
-      recentCommits: gitLog.trim().split('\n').filter(line => line)
+      status: gitStatus
+        .trim()
+        .split('\n')
+        .filter((line) => line),
+      recentCommits: gitLog
+        .trim()
+        .split('\n')
+        .filter((line) => line),
     };
-    
+
     rawData.gitData.status.push(gitData);
-    
+
     // Keep only last 100 entries
     if (rawData.gitData.status.length > 100) {
       rawData.gitData.status = rawData.gitData.status.slice(-100);
     }
-    
+
     console.log(`[NOTE] Captured git data: branch ${gitBranch.trim()}`);
   } catch (error) {
     console.warn('Git data capture failed (not a git repository?):', error.message);
@@ -667,24 +717,27 @@ async function captureCursorAppState() {
         end if
       end tell
     `;
-    
+
     const { stdout } = await execAsync(`osascript -e '${script}'`);
-    const [isActive, windowCount] = stdout.trim().split(',').map(v => v.trim());
-    
+    const [isActive, windowCount] = stdout
+      .trim()
+      .split(',')
+      .map((v) => v.trim());
+
     const appState = {
       timestamp: Date.now(),
       isActive: isActive === 'true',
       windowCount: parseInt(windowCount) || 0,
-      processName: 'Cursor'
+      processName: 'Cursor',
     };
-    
+
     rawData.appleScript.appState.push(appState);
-    
+
     // Keep only last 500 entries
     if (rawData.appleScript.appState.length > 500) {
       rawData.appleScript.appState = rawData.appleScript.appState.slice(-500);
     }
-    
+
     console.log(`[APPLE] Captured Cursor app state: active=${isActive}, windows=${windowCount}`);
   } catch (error) {
     console.warn('AppleScript capture failed:', error.message);
@@ -697,35 +750,39 @@ async function captureCursorDatabase() {
     const possiblePaths = [
       path.join(process.env.HOME || '', 'Library/Application Support/Cursor/User/workspaceStorage'),
       path.join(process.env.HOME || '', 'Library/Application Support/Cursor/User/globalStorage'),
-      path.join(process.env.HOME || '', 'Library/Application Support/Cursor/logs')
+      path.join(process.env.HOME || '', 'Library/Application Support/Cursor/logs'),
     ];
-    
+
     for (const basePath of possiblePaths) {
       if (fs.existsSync(basePath)) {
         const dbFiles = findSQLiteFiles(basePath);
         if (dbFiles.length > 0) {
           const dbPath = dbFiles[0];
           console.log(`[DATA] Found Cursor database: ${dbPath}`);
-          
+
           // Try to read basic database info
           try {
             const { stdout: tableInfo } = await execAsync(`sqlite3 "${dbPath}" ".tables"`);
-            const tables = tableInfo.trim().split(/\s+/).filter(t => t);
-            
+            const tables = tableInfo
+              .trim()
+              .split(/\s+/)
+              .filter((t) => t);
+
             const dbInfo = {
               timestamp: Date.now(),
               path: dbPath,
               tables: tables,
-              size: fs.statSync(dbPath).size
+              size: fs.statSync(dbPath).size,
             };
-            
+
             rawData.cursorDatabase.conversations.push(dbInfo);
-            
+
             // Keep only last 50 entries
             if (rawData.cursorDatabase.conversations.length > 50) {
-              rawData.cursorDatabase.conversations = rawData.cursorDatabase.conversations.slice(-50);
+              rawData.cursorDatabase.conversations =
+                rawData.cursorDatabase.conversations.slice(-50);
             }
-            
+
             console.log(`[DATA] Captured Cursor database info: ${tables.length} tables`);
             break;
           } catch (dbError) {
@@ -754,48 +811,52 @@ async function syncPromptsFromCursorDB() {
     console.log('[SYNC] Skipping - sync already in progress');
     return;
   }
-  
+
   // After initial sync, only sync new prompts (not full rescan)
   if (initialSyncComplete && syncedPromptIds.size > 0) {
-    console.log('[SYNC] Initial sync complete - skipping periodic full rescan (use API for real-time data)');
+    console.log(
+      '[SYNC] Initial sync complete - skipping periodic full rescan (use API for real-time data)'
+    );
     return;
   }
-  
+
   syncInProgress = true;
-  
+
   try {
     console.log('[SYNC] Starting prompt sync cycle...');
-    
+
     // Extract prompts directly without enrichment for faster sync
     const startTime = Date.now();
-    
+
     // Direct extraction without expensive enrichment
     const aiServiceMessages = await cursorDbParser.extractAllAIServiceData();
     const prompts = aiServiceMessages || [];
-    
+
     const duration = ((Date.now() - startTime) / 1000).toFixed(1);
     console.log(`[SYNC] Extracted ${prompts.length} prompts from Cursor DB in ${duration}s`);
-    
+
     if (prompts.length === 0) {
       console.log('[SYNC] No prompts to sync');
       return;
     }
-    
+
     let newPrompts = 0;
     let skippedPrompts = 0;
     const promptsToSave = [];
-    
+
     // Filter and prepare prompts (fast, in-memory only)
     for (const prompt of prompts) {
       // Create a unique ID based on content and timestamp
-      const promptId = prompt.id || `${prompt.composerId || ''}_${prompt.timestamp || Date.now()}_${prompt.messageRole || 'user'}`;
-      
+      const promptId =
+        prompt.id ||
+        `${prompt.composerId || ''}_${prompt.timestamp || Date.now()}_${prompt.messageRole || 'user'}`;
+
       // Skip if already synced
       if (syncedPromptIds.has(promptId)) {
         skippedPrompts++;
         continue;
       }
-      
+
       // Prepare prompt for database storage
       const dbPrompt = {
         id: db.nextId++,
@@ -815,7 +876,11 @@ async function syncPromptsFromCursorDB() {
         modelType: prompt.modelType,
         modelName: prompt.modelName || prompt.model || prompt.originalModel || null,
         originalModel: prompt.originalModel || prompt.model || null, // Store original (might be "auto")
-        isAuto: prompt.isAuto !== undefined ? prompt.isAuto : (prompt.modelName?.toLowerCase().includes('auto') || prompt.model?.toLowerCase().includes('auto')),
+        isAuto:
+          prompt.isAuto !== undefined
+            ? prompt.isAuto
+            : prompt.modelName?.toLowerCase().includes('auto') ||
+              prompt.model?.toLowerCase().includes('auto'),
         forceMode: prompt.forceMode,
         type: prompt.type || 'unknown',
         confidence: prompt.confidence || 'high',
@@ -835,43 +900,45 @@ async function syncPromptsFromCursorDB() {
         contextFiles: prompt.contextFiles || prompt.context?.contextFiles,
         terminalBlocks: prompt.terminalBlocks || [],
         hasAttachments: prompt.hasAttachments || false,
-        attachmentCount: prompt.attachmentCount || 0
+        attachmentCount: prompt.attachmentCount || 0,
       };
-      
+
       promptsToSave.push({ promptId, dbPrompt });
       syncedPromptIds.add(promptId);
     }
-    
+
     // Batch save to database (if any new prompts)
     if (promptsToSave.length > 0) {
       console.log(`[SYNC] Saving ${promptsToSave.length} prompts to database...`);
-      
+
       for (const { promptId, dbPrompt } of promptsToSave) {
         try {
           await persistentDB.savePrompt(dbPrompt);
           newPrompts++;
-          
+
           // Link to active TODO if one exists (skip for performance)
           // if (currentActiveTodo) {
           //   await persistentDB.addPromptToTodo(currentActiveTodo, dbPrompt.id);
           //   await persistentDB.linkEventToTodo('prompt', dbPrompt.id);
           // }
-          
         } catch (saveError) {
           console.warn(`[SYNC] Error saving prompt ${promptId}:`, saveError.message);
           syncedPromptIds.delete(promptId); // Remove from cache if save failed
         }
       }
     }
-    
-    console.log(`[SYNC] Sync complete: ${newPrompts} new, ${skippedPrompts} skipped, ${syncedPromptIds.size} total tracked (${prompts.length} available in Cursor DB)`);
-    
+
+    console.log(
+      `[SYNC] Sync complete: ${newPrompts} new, ${skippedPrompts} skipped, ${syncedPromptIds.size} total tracked (${prompts.length} available in Cursor DB)`
+    );
+
     // Mark initial sync as complete
     if (!initialSyncComplete && syncedPromptIds.size > 0) {
       initialSyncComplete = true;
-      console.log('[SYNC] Initial sync complete - future syncs disabled (prompts available via API)');
+      console.log(
+        '[SYNC] Initial sync complete - future syncs disabled (prompts available via API)'
+      );
     }
-    
   } catch (error) {
     console.error('[SYNC] Error syncing prompts from Cursor database:', error.message);
     if (error.stack) console.error(error.stack);
@@ -885,35 +952,36 @@ async function captureLogData() {
   try {
     const logPaths = [
       path.join(process.env.HOME || '', 'Library/Application Support/Cursor/logs'),
-      path.join(process.env.HOME || '', 'Library/Logs/Cursor')
+      path.join(process.env.HOME || '', 'Library/Logs/Cursor'),
     ];
-    
+
     for (const logPath of logPaths) {
       if (fs.existsSync(logPath)) {
-        const logFiles = fs.readdirSync(logPath)
-          .filter(file => file.endsWith('.log'))
+        const logFiles = fs
+          .readdirSync(logPath)
+          .filter((file) => file.endsWith('.log'))
           .slice(-5); // Get last 5 log files
-        
+
         for (const logFile of logFiles) {
           const fullPath = path.join(logPath, logFile);
           const stats = fs.statSync(fullPath);
-          
+
           const logInfo = {
             timestamp: Date.now(),
             path: fullPath,
             size: stats.size,
             modified: stats.mtime,
-            name: logFile
+            name: logFile,
           };
-          
+
           rawData.logs.cursor.push(logInfo);
         }
-        
+
         // Keep only last 100 entries
         if (rawData.logs.cursor.length > 100) {
           rawData.logs.cursor = rawData.logs.cursor.slice(-100);
         }
-        
+
         console.log(`Captured log data: ${logFiles.length} files`);
         break;
       }
@@ -931,7 +999,7 @@ function findSQLiteFiles(dir) {
     for (const item of items) {
       const fullPath = path.join(dir, item);
       const stat = fs.statSync(fullPath);
-      
+
       if (stat.isDirectory()) {
         files.push(...findSQLiteFiles(fullPath));
       } else if (item.endsWith('.db') || item.endsWith('.sqlite') || item.endsWith('.sqlite3')) {
@@ -939,35 +1007,35 @@ function findSQLiteFiles(dir) {
       }
     }
   } catch (error) {
-      // Ignore errors
-    }
+    // Ignore errors
+  }
   return files;
 }
 
 // Start raw data capture intervals
 function startRawDataCapture() {
   console.log('[LAUNCH] Starting enhanced raw data capture...');
-  
+
   // Initialize IDE state capture
   ideStateCapture = new IDEStateCapture();
   ideStateCapture.start(2000); // Capture every 2 seconds
-  
+
   // Initialize prompt capture system
   promptCaptureSystem = new PromptCaptureSystem();
-  
+
   // Start status message tracking
   statusMessageTracker.start(2000); // Check every 2 seconds
-  
+
   // Link status messages to context changes
   statusMessageTracker.on('fileRead', async (data) => {
     // Try to find recent context changes that might be related
     try {
       const recentChanges = await persistentDB.getContextChanges({
         startTime: data.timestamp - 5000, // 5 seconds before
-        endTime: data.timestamp + 5000,   // 5 seconds after
-        limit: 10
+        endTime: data.timestamp + 5000, // 5 seconds after
+        limit: 10,
       });
-      
+
       // Link to context changes that added this file
       for (const change of recentChanges) {
         if (change.addedFiles && change.addedFiles.includes(data.filePath)) {
@@ -979,25 +1047,25 @@ function startRawDataCapture() {
       console.warn('Error linking status to context change:', error);
     }
   });
-  
+
   // System resources every 5 seconds
   captureIntervals.systemResources = setInterval(captureSystemResources, 5000);
-  
+
   // Git data every 30 seconds
   captureIntervals.gitStatus = setInterval(captureGitData, 30000);
-  
+
   // AppleScript every 2 seconds
   captureIntervals.appleScript = setInterval(captureCursorAppState, 2000);
-  
+
   // Cursor database every 5 seconds
   captureIntervals.cursorDatabase = setInterval(captureCursorDatabase, 5000);
-  
+
   // Logs every 60 seconds
   captureIntervals.logs = setInterval(captureLogData, 60000);
-  
+
   // NEW: Sync prompts from Cursor database every 30 seconds
   captureIntervals.promptSync = setInterval(syncPromptsFromCursorDB, 30000);
-  
+
   // Initial capture
   captureSystemResources();
   captureGitData();
@@ -1005,7 +1073,7 @@ function startRawDataCapture() {
   captureCursorDatabase();
   captureLogData();
   syncPromptsFromCursorDB(); // Initial sync
-  
+
   console.log('[SUCCESS] Enhanced raw data capture started');
 }
 
@@ -1019,7 +1087,7 @@ let privacyConfig = {
   redactNumbers: true,
   redactEmails: true,
   redactFilePaths: false,
-  consentGiven: false
+  consentGiven: false,
 };
 
 try {
@@ -1030,9 +1098,9 @@ try {
   config = {
     root_dir: process.cwd(),
     ignore: [
-      'node_modules/**', 
-      'dist/**', 
-      '.git/**', 
+      'node_modules/**',
+      'dist/**',
+      '.git/**',
       '.cursor/**',
       '**/node_modules/**',
       '**/package-lock.json',
@@ -1043,10 +1111,10 @@ try {
       '**/coverage/**',
       '**/build/**',
       '**/tmp/**',
-      '**/temp/**'
+      '**/temp/**',
     ],
     diff_threshold: 12,
-    enable_clipboard: false
+    enable_clipboard: false,
   };
 }
 
@@ -1059,7 +1127,7 @@ console.log(' Configuration:', {
   workspace_roots: workspacesToWatch.length,
   auto_detect: autoDetect,
   ignore_count: config.ignore.length,
-  diff_threshold: config.diff_threshold
+  diff_threshold: config.diff_threshold,
 });
 
 // Set initial workspace (will be detected dynamically from file paths)
@@ -1081,8 +1149,8 @@ let dataCaptureService;
 // Cache invalidation helper
 function invalidateCache(pattern) {
   const keys = queryCache.keys();
-  const matching = keys.filter(k => k.includes(pattern));
-  matching.forEach(k => queryCache.del(k));
+  const matching = keys.filter((k) => k.includes(pattern));
+  matching.forEach((k) => queryCache.del(k));
   if (matching.length > 0) {
     console.log(`[CACHE] Invalidated ${matching.length} entries matching: ${pattern}`);
   }
@@ -1094,7 +1162,7 @@ async function withCache(key, ttl, asyncFn) {
   if (cached !== undefined) {
     return cached;
   }
-  
+
   const result = await asyncFn();
   queryCache.set(key, result, ttl || 30);
   return result;
@@ -1109,7 +1177,7 @@ createCoreRoutes({
   rawData,
   queueSystem,
   clipboardMonitor,
-  queryCache
+  queryCache,
 });
 
 createWorkspaceRoutes({
@@ -1119,17 +1187,17 @@ createWorkspaceRoutes({
   workspaceData,
   workspaceSessions,
   knownWorkspaces,
-  entries
+  entries,
 });
 
 createRawDataRoutes({
   app,
-  rawData
+  rawData,
 });
 
 createIDEStateRoutes({
   app,
-  ideStateCapture
+  ideStateCapture,
 });
 
 createAnalyticsRoutes({
@@ -1139,34 +1207,34 @@ createAnalyticsRoutes({
   contextChangeTracker,
   errorTracker,
   productivityTracker,
-  queryCache
+  queryCache,
 });
 
 createDatabaseRoutes({
   app,
-  persistentDB
+  persistentDB,
 });
 
 createSchemaRoutes({
   app,
-  persistentDB
+  persistentDB,
 });
 
 createWhiteboardRoutes({
   app,
-  persistentDB
+  persistentDB,
 });
 
 createTerminalRoutes({
   app,
   persistentDB,
-  terminalMonitor
+  terminalMonitor,
 });
 
 const todosRoutes = createTodosRoutes({
   app,
   persistentDB,
-  broadcastUpdate
+  broadcastUpdate,
 });
 
 // Initialize services
@@ -1184,11 +1252,11 @@ const fileWatcherService = createFileWatcherService({
   io,
   broadcastUpdate,
   enqueue,
-  getCurrentActiveTodo: todosRoutes.getCurrentActiveTodo
+  getCurrentActiveTodo: todosRoutes.getCurrentActiveTodo,
 });
 
 const dbRepairService = createDbRepairService({
-  persistentDB
+  persistentDB,
 });
 
 const startupService = createStartupService({
@@ -1212,12 +1280,12 @@ const startupService = createStartupService({
   contextChangeTracker,
   productivityTracker,
   todosRoutes,
-  activeSession
+  activeSession,
 });
 
 createStatusRoutes({
   app,
-  persistentDB
+  persistentDB,
 });
 
 createActivityRoutes({
@@ -1226,12 +1294,12 @@ createActivityRoutes({
   sequence,
   queryCache,
   calculateDiff,
-  cursorDbParser
+  cursorDbParser,
 });
 
 createScreenshotRoutes({
   app,
-  screenshotMonitor
+  screenshotMonitor,
 });
 
 createPromptRoutes({
@@ -1239,7 +1307,7 @@ createPromptRoutes({
   db,
   persistentDB,
   getCurrentWorkspace: currentWorkspace,
-  getCurrentActiveTodo: todosRoutes.getCurrentActiveTodo
+  getCurrentActiveTodo: todosRoutes.getCurrentActiveTodo,
 });
 
 createMiscRoutes({
@@ -1251,12 +1319,12 @@ createMiscRoutes({
   lunrIndex,
   indexedDocs,
   config,
-  privacyConfig
+  privacyConfig,
 });
 
 createFileContentsRoutes({
   app,
-  persistentDB
+  persistentDB,
 });
 
 createMCPRoutes({
@@ -1272,7 +1340,7 @@ createMCPRoutes({
   enqueue,
   broadcastUpdate,
   broadcastConversationUpdate,
-  conversationStreams
+  conversationStreams,
 });
 
 createExportImportRoutes({
@@ -1280,7 +1348,7 @@ createExportImportRoutes({
   persistentDB,
   db,
   abstractionEngine,
-  schemaMigrations
+  schemaMigrations,
 });
 
 // Sharing routes
@@ -1288,24 +1356,24 @@ createSharingRoutes({
   app,
   sharingService,
   persistentDB,
-  cursorDbParser
+  cursorDbParser,
 });
 
 // AI routes (OpenRouter embeddings and chat)
 createAIRoutes({
-  app
+  app,
 });
 
 // Annotation routes (event annotation, intent classification, state summarization)
 createAnnotationRoutes({
   app,
-  persistentDB
+  persistentDB,
 });
 
 // State management routes (natural language commands, fork/merge, semantic search)
 createStateRoutes({
   app,
-  persistentDB
+  persistentDB,
 });
 
 // Health check
@@ -1313,12 +1381,12 @@ app.get('/health', (req, res) => {
   const queueStats = queueSystem.getStats();
   const clipboardStats = clipboardMonitor.getStats();
   const cacheStats = queryCache.getStats();
-  
+
   // No caching for health check
   res.set('Cache-Control', 'no-cache');
-  
-  res.json({ 
-    status: 'running', 
+
+  res.json({
+    status: 'running',
     timestamp: new Date().toISOString(),
     entries: db.entries.length,
     prompts: db.prompts.length,
@@ -1331,50 +1399,52 @@ app.get('/health', (req, res) => {
       gitData: rawData.gitData.status.length,
       cursorDatabase: rawData.cursorDatabase.conversations.length,
       appleScript: rawData.appleScript.appState.length,
-      logs: rawData.logs.cursor.length
+      logs: rawData.logs.cursor.length,
     },
     cache_stats: {
       keys: queryCache.keys().length,
       hits: cacheStats.hits,
       misses: cacheStats.misses,
-      hitRate: cacheStats.hits / (cacheStats.hits + cacheStats.misses) || 0
-    }
+      hitRate: cacheStats.hits / (cacheStats.hits + cacheStats.misses) || 0,
+    },
   });
 });
 
 // Get queue
 app.get('/queue', (req, res) => {
   const since = Number(req.query.since || 0);
-  
+
   console.log(`� Queue request: since=${since}, queue_length=${queue.length}`);
-  
-  const newItems = queue.filter(item => item.seq > since);
-  const newEntries = newItems.filter(item => item.kind === 'entry').map(item => item.payload);
-  const newEvents = newItems.filter(item => item.kind === 'event').map(item => item.payload);
-  
-  console.log(`� Queue response: ${newEntries.length} entries, ${newEvents.length} events since seq ${since}`);
-  
+
+  const newItems = queue.filter((item) => item.seq > since);
+  const newEntries = newItems.filter((item) => item.kind === 'entry').map((item) => item.payload);
+  const newEvents = newItems.filter((item) => item.kind === 'event').map((item) => item.payload);
+
+  console.log(
+    `� Queue response: ${newEntries.length} entries, ${newEvents.length} events since seq ${since}`
+  );
+
   // Use all available data for comprehensive analysis
   const limitedEntries = newEntries; // No limit - use all entries
   const limitedEvents = newEvents; // No limit - use all events
-  
+
   // Use full content for comprehensive analysis
-  const cleanedEntries = limitedEntries.map(entry => ({
+  const cleanedEntries = limitedEntries.map((entry) => ({
     ...entry,
     content: entry.content || '', // Use full content
     before_code: entry.before_code || '',
-    after_code: entry.after_code || ''
+    after_code: entry.after_code || '',
   }));
-  
-  const cleanedEvents = limitedEvents.map(event => ({
+
+  const cleanedEvents = limitedEvents.map((event) => ({
     ...event,
-    details: event.details ? JSON.stringify(JSON.parse(event.details || '{}')) : '{}'
+    details: event.details ? JSON.stringify(JSON.parse(event.details || '{}')) : '{}',
   }));
-  
+
   res.json({
     entries: cleanedEntries,
     events: cleanedEvents,
-    cursor: sequence
+    cursor: sequence,
   });
 });
 
@@ -1384,19 +1454,19 @@ app.get('/api/workspaces/:workspaceId/conversations', async (req, res) => {
   try {
     const { workspaceId } = req.params;
     const limit = parseInt(req.query.limit) || 100;
-    
+
     const conversations = await persistentDB.getConversationsByWorkspace(workspaceId, limit);
-    
+
     res.json({
       success: true,
       data: conversations,
-      count: conversations.length
+      count: conversations.length,
     });
   } catch (error) {
     console.error('Error getting conversations:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: error.message,
     });
   }
 });
@@ -1408,21 +1478,21 @@ app.get('/api/audit-log', async (req, res) => {
       workspaceId: req.query.workspaceId || null,
       operationType: req.query.operationType || null,
       limit: parseInt(req.query.limit) || 100,
-      offset: parseInt(req.query.offset) || 0
+      offset: parseInt(req.query.offset) || 0,
     };
-    
+
     const auditLog = await persistentDB.getAuditLog(options);
-    
+
     res.json({
       success: true,
       data: auditLog,
-      count: auditLog.length
+      count: auditLog.length,
     });
   } catch (error) {
     console.error('Error getting audit log:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: error.message,
     });
   }
 });
@@ -1431,18 +1501,18 @@ app.get('/api/workspaces', async (req, res) => {
   try {
     // Get ALL workspaces from Cursor (including old/stale ones)
     const allCursorWorkspaces = await cursorDbParser.getAllWorkspaces();
-    
+
     // Get prompt data to enrich workspace info
     const cursorData = await cursorDbParser.getAllData();
-    
+
     // Build workspace list from Cursor database first (this is the source of truth)
-    const workspaces = allCursorWorkspaces.map(ws => {
+    const workspaces = allCursorWorkspaces.map((ws) => {
       // Count prompts for this workspace
-      const wsPrompts = cursorData.prompts.filter(p => p.workspaceId === ws.id);
-      
+      const wsPrompts = cursorData.prompts.filter((p) => p.workspaceId === ws.id);
+
       // Check if we have activity data for this workspace
       const activityData = workspaceData.get(ws.path);
-      
+
       return {
         id: ws.id,
         path: ws.path || `Unknown (${ws.id.substring(0, 8)})`,
@@ -1456,13 +1526,13 @@ app.get('/api/workspaces', async (req, res) => {
         sessionId: workspaceSessions.get(ws.path),
         active: activityData ? true : false,
         exists: ws.exists,
-        fromCursorDb: true
+        fromCursorDb: true,
       };
     });
-    
+
     // Add any workspaces from knownWorkspaces that weren't in Cursor DB
-    Array.from(knownWorkspaces).forEach(wsPath => {
-      if (!workspaces.find(w => w.path === wsPath)) {
+    Array.from(knownWorkspaces).forEach((wsPath) => {
+      if (!workspaces.find((w) => w.path === wsPath)) {
         const activityData = workspaceData.get(wsPath);
         workspaces.push({
           path: wsPath,
@@ -1474,18 +1544,18 @@ app.get('/api/workspaces', async (req, res) => {
           sessionId: workspaceSessions.get(wsPath),
           active: activityData ? true : false,
           exists: true,
-          fromCursorDb: false
+          fromCursorDb: false,
         });
       }
     });
-    
+
     // Sort by lastActivity/lastAccessed (most recent first)
     workspaces.sort((a, b) => {
       const aTime = a.lastActivity || a.lastAccessed || 0;
       const bTime = b.lastActivity || b.lastAccessed || 0;
       return new Date(bTime) - new Date(aTime);
     });
-    
+
     res.json(workspaces);
   } catch (error) {
     console.error('Error getting workspaces:', error);
@@ -1502,14 +1572,14 @@ app.get('/api/workspace/:workspacePath/activity', (req, res) => {
   res.json({
     entries: data.entries,
     events: data.events,
-    lastActivity: data.lastActivity
+    lastActivity: data.lastActivity,
   });
 });
 
 app.get('/api/workspace/:workspacePath/sessions', (req, res) => {
   const { workspacePath } = req.params;
-  const workspaceEntries = entries.filter(entry => entry.workspace_path === workspacePath);
-  const sessionIds = [...new Set(workspaceEntries.map(entry => entry.session_id))];
+  const workspaceEntries = entries.filter((entry) => entry.workspace_path === workspacePath);
+  const sessionIds = [...new Set(workspaceEntries.map((entry) => entry.session_id))];
   res.json(sessionIds);
 });
 
@@ -1524,23 +1594,26 @@ app.get('/api/workspace/:workspacePath/sessions', (req, res) => {
 // Helper to resolve Git object hash to actual content/name
 function resolveGitObject(hash, filePath) {
   if (!hash || hash.length !== 40) return null;
-  
+
   try {
     // Try to get the type and content of the Git object
-    const typeResult = execSync(`git cat-file -t ${hash} 2>/dev/null`, { 
+    const typeResult = execSync(`git cat-file -t ${hash} 2>/dev/null`, {
       encoding: 'utf-8',
       cwd: process.cwd(),
-      stdio: ['pipe', 'pipe', 'ignore']
+      stdio: ['pipe', 'pipe', 'ignore'],
     }).trim();
-    
+
     if (typeResult === 'blob') {
       // It's a file - try to find its name from git show
-      const showResult = execSync(`git show --name-only --format="" ${hash} 2>/dev/null || echo ""`, {
-        encoding: 'utf-8',
-        cwd: process.cwd(),
-        stdio: ['pipe', 'pipe', 'ignore']
-      }).trim();
-      
+      const showResult = execSync(
+        `git show --name-only --format="" ${hash} 2>/dev/null || echo ""`,
+        {
+          encoding: 'utf-8',
+          cwd: process.cwd(),
+          stdio: ['pipe', 'pipe', 'ignore'],
+        }
+      ).trim();
+
       if (showResult) {
         return showResult.split('\n')[0]; // First line is the filename
       }
@@ -1549,9 +1622,9 @@ function resolveGitObject(hash, filePath) {
       const commitMsg = execSync(`git log --format=%s -n 1 ${hash} 2>/dev/null || echo ""`, {
         encoding: 'utf-8',
         cwd: process.cwd(),
-        stdio: ['pipe', 'pipe', 'ignore']
+        stdio: ['pipe', 'pipe', 'ignore'],
       }).trim();
-      
+
       return commitMsg ? `Commit: ${commitMsg}` : `Commit ${hash.substring(0, 7)}`;
     } else if (typeResult === 'tree') {
       return `Tree ${hash.substring(0, 7)}`;
@@ -1560,7 +1633,7 @@ function resolveGitObject(hash, filePath) {
     // Git command failed, object doesn't exist in repo
     return null;
   }
-  
+
   return null;
 }
 
@@ -1586,7 +1659,7 @@ function decodeGitRef(filePath, content) {
     const type = filePath.split('/').pop();
     return `Git ${type}`;
   }
-  
+
   return null;
 }
 
@@ -1599,13 +1672,13 @@ app.post('/api/repair/links', async (req, res) => {
     const result = await dbRepairService.repairDatabaseLinks();
     res.json({
       success: true,
-      ...result
+      ...result,
     });
   } catch (error) {
     console.error('[API] Error in repair links:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: error.message,
     });
   }
 });
@@ -1623,29 +1696,29 @@ app.post('/debug/enqueue', (req, res) => {
     prompt: 'Hello',
     response: 'World',
     before_code: null,
-    after_code: null
+    after_code: null,
   };
   enqueue('entry', entry);
-  
+
   const event = {
     id: crypto.randomUUID(),
     session_id: 'debug',
     timestamp: entry.timestamp,
     type: 'entry_created',
-    details: '{}'
+    details: '{}',
   };
   enqueue('event', event);
-  
+
   res.json({ success: true, entry, event });
 });
 
 // Socket.IO connection handling with conversation streaming
 io.on('connection', (socket) => {
   console.log(`Client connected: ${socket.id}`);
-  
+
   // Track client's subscribed conversation streams
   const clientStreams = new Set();
-  
+
   // Send initial data when client connects
   socket.emit('initial-data', {
     entries: db.entries,
@@ -1653,31 +1726,31 @@ io.on('connection', (socket) => {
     queue: queueSystem.getQueue(),
     ideState: ideStateCapture ? ideStateCapture.getLatestState() : null,
     activeStreams: Array.from(conversationStreams.keys()),
-    timestamp: Date.now()
+    timestamp: Date.now(),
   });
-  
+
   socket.on('disconnect', () => {
     console.log(`Client disconnected: ${socket.id}`);
     // Clean up client streams
     clientStreams.clear();
   });
-  
+
   // Subscribe to conversation stream
   socket.on('subscribe-conversation', (conversationId) => {
     if (conversationId) {
       clientStreams.add(conversationId);
       console.log(`[WS] Client ${socket.id} subscribed to conversation: ${conversationId}`);
-      
+
       // Enable streaming for this conversation if not already enabled
       if (!conversationStreams.has(conversationId)) {
         conversationStreams.set(conversationId, {
           id: conversationId,
           enabled: true,
           startTime: Date.now(),
-          subscribers: new Set()
+          subscribers: new Set(),
         });
       }
-      
+
       // Add this client to the conversation's subscriber list
       const stream = conversationStreams.get(conversationId);
       if (stream && stream.subscribers) {
@@ -1685,7 +1758,7 @@ io.on('connection', (socket) => {
       }
     }
   });
-  
+
   // Unsubscribe from conversation stream
   socket.on('unsubscribe-conversation', (conversationId) => {
     if (conversationId) {
@@ -1732,10 +1805,10 @@ function startFileWatcher() {
 // Socket.IO connection handling with conversation streaming
 io.on('connection', (socket) => {
   console.log(`Client connected: ${socket.id}`);
-  
+
   // Track client's subscribed conversation streams
   const clientStreams = new Set();
-  
+
   // Send initial data when client connects
   socket.emit('initial-data', {
     entries: db.entries,
@@ -1743,21 +1816,21 @@ io.on('connection', (socket) => {
     queue: queueSystem.getQueue(),
     ideState: ideStateCapture ? ideStateCapture.getLatestState() : null,
     activeStreams: Array.from(conversationStreams.keys()),
-    timestamp: Date.now()
+    timestamp: Date.now(),
   });
-  
+
   socket.on('disconnect', () => {
     console.log(`Client disconnected: ${socket.id}`);
     // Clean up client streams
     clientStreams.clear();
   });
-  
+
   // Subscribe to conversation stream
   socket.on('subscribe-conversation', (conversationId) => {
     if (conversationId) {
       clientStreams.add(conversationId);
       console.log(`[WS] Client ${socket.id} subscribed to conversation: ${conversationId}`);
-      
+
       // Enable streaming for this conversation if not already enabled
       if (!conversationStreams.has(conversationId)) {
         conversationStreams.set(conversationId, {
@@ -1765,22 +1838,22 @@ io.on('connection', (socket) => {
           enabled: true,
           startTime: Date.now(),
           messageCount: 0,
-          subscribers: new Set([socket.id])
+          subscribers: new Set([socket.id]),
         });
       } else {
         conversationStreams.get(conversationId).subscribers.add(socket.id);
       }
-      
+
       socket.emit('conversation-subscribed', { conversation_id: conversationId });
     }
   });
-  
+
   // Unsubscribe from conversation stream
   socket.on('unsubscribe-conversation', (conversationId) => {
     if (conversationId && clientStreams.has(conversationId)) {
       clientStreams.delete(conversationId);
       console.log(`[WS] Client ${socket.id} unsubscribed from conversation: ${conversationId}`);
-      
+
       const stream = conversationStreams.get(conversationId);
       if (stream && stream.subscribers) {
         stream.subscribers.delete(socket.id);
@@ -1788,11 +1861,11 @@ io.on('connection', (socket) => {
           conversationStreams.delete(conversationId);
         }
       }
-      
+
       socket.emit('conversation-unsubscribed', { conversation_id: conversationId });
     }
   });
-  
+
   // Handle client requests for specific data
   socket.on('request-data', async (dataType) => {
     try {
@@ -1812,13 +1885,13 @@ io.on('connection', (socket) => {
         case 'conversations':
           // Get all conversations from prompts
           const conversations = {};
-          (db.prompts || []).forEach(prompt => {
+          (db.prompts || []).forEach((prompt) => {
             if (prompt.conversation_id) {
               if (!conversations[prompt.conversation_id]) {
                 conversations[prompt.conversation_id] = {
                   id: prompt.conversation_id,
                   title: prompt.conversation_title,
-                  messages: []
+                  messages: [],
                 };
               }
               conversations[prompt.conversation_id].messages.push(prompt);
@@ -1833,7 +1906,7 @@ io.on('connection', (socket) => {
             queue: queueSystem.getQueue(),
             ideState: ideStateCapture.getLatestState(),
             activeStreams: Array.from(conversationStreams.keys()),
-            timestamp: Date.now()
+            timestamp: Date.now(),
           });
           break;
       }
@@ -1841,13 +1914,13 @@ io.on('connection', (socket) => {
       socket.emit('error', { message: `Failed to fetch ${dataType}`, error: error.message });
     }
   });
-  
+
   // Send current data to newly connected client
   socket.emit('initial-data', {
     entries: db.entries,
     events: events,
     queue: queue,
-    activeStreams: Array.from(conversationStreams.keys())
+    activeStreams: Array.from(conversationStreams.keys()),
   });
 });
 
@@ -1857,21 +1930,29 @@ io.on('connection', (socket) => {
 // Graceful shutdown
 process.on('SIGINT', () => {
   console.log('\n Shutting down companion service...');
-  if (watcher) {
-    watcher.close();
+
+  // Stop file watcher service
+  if (fileWatcherService && typeof fileWatcherService.stop === 'function') {
+    fileWatcherService.stop();
   }
+
   clipboardMonitor.stop();
-  
+
   // Clear capture intervals
-  Object.values(captureIntervals).forEach(interval => {
+  Object.values(captureIntervals).forEach((interval) => {
     if (interval) clearInterval(interval);
   });
-  
+
   // Stop IDE state capture
   if (ideStateCapture) {
     ideStateCapture.stop();
   }
-  
+
+  // Stop screenshot monitor
+  if (screenshotMonitor) {
+    screenshotMonitor.stop();
+  }
+
   server.close(() => {
     console.log(' Companion service stopped');
     process.exit(0);
@@ -1880,21 +1961,29 @@ process.on('SIGINT', () => {
 
 process.on('SIGTERM', () => {
   console.log('\n Shutting down companion service...');
-  if (watcher) {
-    watcher.close();
+
+  // Stop file watcher service
+  if (fileWatcherService && typeof fileWatcherService.stop === 'function') {
+    fileWatcherService.stop();
   }
+
   clipboardMonitor.stop();
-  
+
   // Clear capture intervals
-  Object.values(captureIntervals).forEach(interval => {
+  Object.values(captureIntervals).forEach((interval) => {
     if (interval) clearInterval(interval);
   });
-  
+
   // Stop IDE state capture
   if (ideStateCapture) {
     ideStateCapture.stop();
   }
-  
+
+  // Stop screenshot monitor
+  if (screenshotMonitor) {
+    screenshotMonitor.stop();
+  }
+
   server.close(() => {
     console.log(' Companion service stopped');
     process.exit(0);
@@ -1914,6 +2003,6 @@ async function repairDatabaseLinks() {
 }
 
 // Start the server using startup service
-startupService.startServer().catch(error => {
+startupService.startServer().catch((error) => {
   console.error('Failed to start server:', error);
 });

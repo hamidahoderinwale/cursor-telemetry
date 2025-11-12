@@ -1,0 +1,16 @@
+node_modules
+dist
+build
+coverage
+*.log
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+.git
+.cursor
+package-lock.json
+yarn.lock
+*.min.js
+*.min.css
+

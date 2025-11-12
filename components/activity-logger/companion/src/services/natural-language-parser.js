@@ -6,8 +6,8 @@
 
 // Use dynamic import for node-fetch v3 (ESM)
 let fetchModule;
-const fetchPromise = import('node-fetch').then(mod => {
-    fetchModule = mod.default;
+const fetchPromise = import('node-fetch').then((mod) => {
+  fetchModule = mod.default;
 });
 
 class NaturalLanguageParser {
@@ -79,32 +79,33 @@ Respond with JSON only:
     const response = await fetchModule(`${this.openRouterEndpoint}/chat/completions`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${this.openRouterKey}`,
+        Authorization: `Bearer ${this.openRouterKey}`,
         'Content-Type': 'application/json',
         'HTTP-Referer': 'http://localhost:43917',
-        'X-Title': 'Cursor Telemetry Dashboard'
+        'X-Title': 'Cursor Telemetry Dashboard',
       },
       body: JSON.stringify({
         model: this.chatModel,
         messages: [
           {
             role: 'system',
-            content: 'You are a command parser for a development state management system. Parse natural language commands into structured JSON. Always respond with valid JSON only.'
+            content:
+              'You are a command parser for a development state management system. Parse natural language commands into structured JSON. Always respond with valid JSON only.',
           },
           {
             role: 'user',
-            content: prompt
-          }
+            content: prompt,
+          },
         ],
         temperature: 0.3,
-        max_tokens: 200
-      })
+        max_tokens: 200,
+      }),
     });
 
     if (response.ok) {
       const data = await response.json();
       const content = data.choices[0].message.content.trim();
-      
+
       try {
         const jsonMatch = content.match(/\{[\s\S]*\}/);
         if (jsonMatch) {
@@ -131,13 +132,16 @@ Respond with JSON only:
       target: null,
       filters: {},
       name: null,
-      description: null
+      description: null,
     };
 
     // Fork commands
-    if (cmd.includes('fork') || cmd.includes('create') && (cmd.includes('from') || cmd.includes('based'))) {
+    if (
+      cmd.includes('fork') ||
+      (cmd.includes('create') && (cmd.includes('from') || cmd.includes('based')))
+    ) {
       result.action = 'fork';
-      
+
       // Extract intent
       if (cmd.includes('experiment') || cmd.includes('try') || cmd.includes('test')) {
         result.intent = 'experiment';
@@ -166,7 +170,7 @@ Respond with JSON only:
     // Merge commands
     else if (cmd.includes('merge') || cmd.includes('combine')) {
       result.action = 'merge';
-      
+
       // Extract source and target
       const intoMatch = cmd.match(/(.+?)\s+into\s+(.+)/);
       if (intoMatch) {
@@ -182,18 +186,28 @@ Respond with JSON only:
       }
     }
     // Switch commands
-    else if (cmd.includes('switch') || cmd.includes('change to') || cmd.includes('go to') || cmd.includes('use')) {
+    else if (
+      cmd.includes('switch') ||
+      cmd.includes('change to') ||
+      cmd.includes('go to') ||
+      cmd.includes('use')
+    ) {
       result.action = 'switch';
-      
+
       const toMatch = cmd.match(/(?:to|state)\s+(.+)/);
       if (toMatch) {
         result.target = toMatch[1].trim();
       }
     }
     // Search commands
-    else if (cmd.includes('show') || cmd.includes('find') || cmd.includes('search') || cmd.includes('where')) {
+    else if (
+      cmd.includes('show') ||
+      cmd.includes('find') ||
+      cmd.includes('search') ||
+      cmd.includes('where')
+    ) {
       result.action = 'search';
-      
+
       // Extract filters
       if (cmd.includes('bug') || cmd.includes('fix')) {
         result.filters.type = 'bug-fix';
@@ -220,7 +234,7 @@ Respond with JSON only:
     // Create commands
     else if (cmd.startsWith('create') || cmd.startsWith('new state')) {
       result.action = 'create';
-      
+
       const nameMatch = cmd.match(/(?:called|named)\s+(.+?)(?:\s+for|\s+with|$)/);
       if (nameMatch) {
         result.name = nameMatch[1].trim();
@@ -235,7 +249,7 @@ Respond with JSON only:
    */
   extractIntent(command) {
     const cmd = command.toLowerCase();
-    
+
     if (cmd.includes('experiment') || cmd.includes('try') || cmd.includes('test')) {
       return 'experiment';
     } else if (cmd.includes('feature') || cmd.includes('add') || cmd.includes('new')) {
@@ -251,7 +265,7 @@ Respond with JSON only:
     } else if (cmd.includes('test')) {
       return 'test';
     }
-    
+
     return 'general';
   }
 
@@ -262,7 +276,7 @@ Respond with JSON only:
     // Look for patterns like "for X", "about X", "working on X"
     const patterns = [
       /(?:for|about|working on|trying)\s+(.+?)(?:\s+approach|\s+method|\s+way|\s+bug|\s+feature|$)/i,
-      /(?:the|a|an)\s+(.+?)\s+(?:bug|feature|refactor|optimization|experiment)/i
+      /(?:the|a|an)\s+(.+?)\s+(?:bug|feature|refactor|optimization|experiment)/i,
     ];
 
     for (const pattern of patterns) {
@@ -277,4 +291,3 @@ Respond with JSON only:
 }
 
 module.exports = NaturalLanguageParser;
-

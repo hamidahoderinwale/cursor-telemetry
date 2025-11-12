@@ -13,9 +13,9 @@ class Queue {
     const entryWithId = {
       id: uuidv4(),
       timestamp: new Date().toISOString(),
-      ...entry
+      ...entry,
     };
-    
+
     // Try to link with pending prompt if this is a code change
     if (entry.source === 'filewatcher' && entry.before_code && entry.after_code) {
       const linkedPrompt = this.linkPendingPrompt(entryWithId);
@@ -25,16 +25,16 @@ class Queue {
         console.log(`Linked prompt to code change: ${entryWithId.id}`);
       }
     }
-    
+
     this.entries.push(entryWithId);
     console.log(`Added entry: ${entryWithId.id} (${entry.source})`);
-    
+
     // Add corresponding event
     this.addEvent({
       type: 'entry_created',
-      details: { entry_id: entryWithId.id, source: entry.source }
+      details: { entry_id: entryWithId.id, source: entry.source },
     });
-    
+
     return entryWithId;
   }
 
@@ -43,12 +43,12 @@ class Queue {
     const eventWithId = {
       id: uuidv4(),
       timestamp: new Date().toISOString(),
-      ...event
+      ...event,
     };
-    
+
     this.events.push(eventWithId);
     console.log(`Added event: ${eventWithId.type}`);
-    
+
     return eventWithId;
   }
 
@@ -58,17 +58,17 @@ class Queue {
       id: uuidv4(),
       timestamp: new Date().toISOString(),
       text: prompt,
-      status: 'pending'
+      status: 'pending',
     };
-    
+
     this.pendingPrompts.push(promptWithId);
     console.log(` Added pending prompt: ${promptWithId.id}`);
-    
+
     // Keep only last 10 pending prompts to prevent memory issues
     if (this.pendingPrompts.length > 10) {
       this.pendingPrompts = this.pendingPrompts.slice(-10);
     }
-    
+
     return promptWithId;
   }
 
@@ -77,12 +77,12 @@ class Queue {
     if (this.pendingPrompts.length === 0) {
       return null;
     }
-    
+
     // Find the most recent pending prompt
     const prompt = this.pendingPrompts.pop();
     prompt.status = 'linked';
     prompt.linked_entry_id = entry.id;
-    
+
     console.log(`� Linked prompt ${prompt.id} to entry ${entry.id}`);
     return prompt;
   }
@@ -90,19 +90,15 @@ class Queue {
   // Get entries and events since cursor
   getSince(since) {
     const sinceDate = new Date(since);
-    
-    const filteredEntries = this.entries.filter(entry => 
-      new Date(entry.timestamp) > sinceDate
-    );
-    
-    const filteredEvents = this.events.filter(event => 
-      new Date(event.timestamp) > sinceDate
-    );
-    
+
+    const filteredEntries = this.entries.filter((entry) => new Date(entry.timestamp) > sinceDate);
+
+    const filteredEvents = this.events.filter((event) => new Date(event.timestamp) > sinceDate);
+
     return {
       entries: filteredEntries,
       events: filteredEvents,
-      cursor: new Date().toISOString()
+      cursor: new Date().toISOString(),
     };
   }
 
@@ -120,7 +116,7 @@ class Queue {
       pending_prompts: this.pendingPrompts.length,
       cursor: this.cursor,
       oldest_entry: this.entries[0]?.timestamp,
-      newest_entry: this.entries[this.entries.length - 1]?.timestamp
+      newest_entry: this.entries[this.entries.length - 1]?.timestamp,
     };
   }
 
@@ -130,7 +126,7 @@ class Queue {
       entries: this.entries,
       events: this.events,
       pending_prompts: this.pendingPrompts,
-      cursor: this.cursor
+      cursor: this.cursor,
     };
   }
 

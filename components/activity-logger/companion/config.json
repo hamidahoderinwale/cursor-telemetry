@@ -15,6 +15,7 @@
     "dist/**",
     "build/**",
     ".git/**",
+    "**/.git/**",
     ".cursor/**",
     "**/package-lock.json",
     "**/yarn.lock",
@@ -31,7 +32,13 @@
     "**/*.cache",
     "**/.cache/**",
     "**/spa.log",
-    "**/companion.log"
+    "**/companion.log",
+    "**/*.db-journal",
+    "**/*.db-wal",
+    "**/*.db-shm",
+    "**/data/**/*.db-journal",
+    "**/data/**/*.db-wal",
+    "**/data/**/*.db-shm"
   ],
   "diff_threshold": 12,
   "enable_clipboard": true,

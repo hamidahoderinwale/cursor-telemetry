@@ -18,12 +18,12 @@ class IdleDetector {
 
     this.isRunning = true;
     this.lastActivity = Date.now();
-    
+
     // Check for idle every 30 seconds
     this.cronJob = cron.schedule('*/30 * * * * *', () => {
       this.checkIdleStatus();
     });
-    
+
     console.log('[WEB] Idle detector started');
   }
 
@@ -38,18 +38,18 @@ class IdleDetector {
 
   updateActivity() {
     this.lastActivity = Date.now();
-    
+
     // If we were idle and now have activity, resume logging
     if (this.isIdle) {
       this.isIdle = false;
       console.log('[WEB]Activity resumed - logging enabled');
-      
+
       queue.addEvent({
         type: 'resume_logging',
-        details: { 
+        details: {
           reason: 'user_activity',
-          idle_duration: Date.now() - this.lastActivity
-        }
+          idle_duration: Date.now() - this.lastActivity,
+        },
       });
     }
   }
@@ -57,18 +57,18 @@ class IdleDetector {
   checkIdleStatus() {
     const now = Date.now();
     const timeSinceActivity = now - this.lastActivity;
-    
+
     if (timeSinceActivity >= this.idleThreshold && !this.isIdle) {
       this.isIdle = true;
       console.log('[WEB]User idle - pausing logging');
-      
+
       queue.addEvent({
         type: 'pause_logging',
-        details: { 
+        details: {
           reason: 'user_idle',
           idle_threshold: this.idleThreshold,
-          idle_duration: timeSinceActivity
-        }
+          idle_duration: timeSinceActivity,
+        },
       });
     }
   }
@@ -89,7 +89,7 @@ class IdleDetector {
       is_idle: this.isIdle,
       last_activity: new Date(this.lastActivity).toISOString(),
       time_since_activity: Date.now() - this.lastActivity,
-      idle_threshold: this.idleThreshold
+      idle_threshold: this.idleThreshold,
     };
   }
 }

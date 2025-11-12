@@ -11,7 +11,7 @@ const execAsync = promisify(exec);
 
 /**
  * Terminal Monitor - Captures terminal commands and output
- * 
+ *
  * Strategies:
  * 1. Shell history monitoring (bash/zsh)
  * 2. PTY wrapper for active sessions
@@ -21,20 +21,20 @@ const execAsync = promisify(exec);
 class TerminalMonitor extends EventEmitter {
   constructor(options = {}) {
     super();
-    
+
     this.options = {
       historyInterval: options.historyInterval || 5000, // Check history every 5s
-      captureOutput: options.captureOutput !== false,   // Capture command output
-      maxOutputSize: options.maxOutputSize || 10000,    // Max 10KB per output
+      captureOutput: options.captureOutput !== false, // Capture command output
+      maxOutputSize: options.maxOutputSize || 10000, // Max 10KB per output
       shellTypes: options.shellTypes || ['bash', 'zsh', 'sh'],
-      ...options
+      ...options,
     };
-    
+
     this.isMonitoring = false;
     this.historyCache = new Map(); // shell -> last command index
     this.commandHistory = [];
     this.activeCommands = new Map(); // pid -> command info
-    
+
     // Track last seen command to avoid duplicates
     this.lastSeenCommands = new Set();
     this.maxCacheSize = 1000;
@@ -76,22 +76,22 @@ class TerminalMonitor extends EventEmitter {
    */
   stop() {
     this.isMonitoring = false;
-    
+
     if (this.historyTimer) {
       clearInterval(this.historyTimer);
       this.historyTimer = null;
     }
-    
+
     if (this.cursorTerminalTimer) {
       clearInterval(this.cursorTerminalTimer);
       this.cursorTerminalTimer = null;
     }
-    
+
     if (this.processTimer) {
       clearInterval(this.processTimer);
       this.processTimer = null;
     }
-    
+
     console.log('Terminal monitor stopped');
   }
 
@@ -101,7 +101,7 @@ class TerminalMonitor extends EventEmitter {
   startHistoryMonitoring() {
     this.historyTimer = setInterval(async () => {
       if (!this.isMonitoring) return;
-      
+
       try {
         await this.checkShellHistory();
       } catch (error) {
@@ -121,26 +121,32 @@ class TerminalMonitor extends EventEmitter {
     const historyFiles = {
       bash: path.join(homeDir, '.bash_history'),
       zsh: path.join(homeDir, '.zsh_history'),
-      sh: path.join(homeDir, '.sh_history')
+      sh: path.join(homeDir, '.sh_history'),
     };
 
     for (const [shell, historyPath] of Object.entries(historyFiles)) {
       if (!this.options.shellTypes.includes(shell)) continue;
-      
+
       try {
-        const exists = await fs.access(historyPath).then(() => true).catch(() => false);
+        const exists = await fs
+          .access(historyPath)
+          .then(() => true)
+          .catch(() => false);
         if (!exists) continue;
 
         const content = await fs.readFile(historyPath, 'utf-8');
-        const lines = content.trim().split('\n').filter(l => l.trim());
-        
+        const lines = content
+          .trim()
+          .split('\n')
+          .filter((l) => l.trim());
+
         // Get last seen index for this shell
         const lastIndex = this.historyCache.get(shell) || 0;
-        
+
         if (lines.length > lastIndex) {
           // New commands detected
           const newCommands = lines.slice(lastIndex);
-          
+
           for (const line of newCommands) {
             const command = this.parseHistoryLine(line, shell);
             if (command && !this.lastSeenCommands.has(command)) {
@@ -149,11 +155,11 @@ class TerminalMonitor extends EventEmitter {
                 shell: shell,
                 source: 'history',
                 timestamp: Date.now(),
-                workspace: process.cwd()
+                workspace: process.cwd(),
               });
-              
+
               this.lastSeenCommands.add(command);
-              
+
               // Keep cache size manageable
               if (this.lastSeenCommands.size > this.maxCacheSize) {
                 const firstItem = this.lastSeenCommands.values().next().value;
@@ -161,7 +167,7 @@ class TerminalMonitor extends EventEmitter {
               }
             }
           }
-          
+
           // Update cache
           this.historyCache.set(shell, lines.length);
         }
@@ -179,13 +185,13 @@ class TerminalMonitor extends EventEmitter {
    */
   parseHistoryLine(line, shell) {
     if (!line || line.trim().length === 0) return null;
-    
+
     // Zsh extended history format: ": timestamp:0;command"
     if (shell === 'zsh' && line.startsWith(':')) {
       const match = line.match(/^:\s*\d+:\d+;(.+)$/);
       if (match) return match[1].trim();
     }
-    
+
     // Bash/sh: plain commands
     return line.trim();
   }
@@ -195,10 +201,10 @@ class TerminalMonitor extends EventEmitter {
    */
   startCursorTerminalMonitoring() {
     if (process.platform !== 'darwin') return;
-    
+
     this.cursorTerminalTimer = setInterval(async () => {
       if (!this.isMonitoring) return;
-      
+
       try {
         const terminalContent = await this.getCursorTerminalContent();
         if (terminalContent) {
@@ -243,7 +249,7 @@ class TerminalMonitor extends EventEmitter {
     // Look for command prompts ($ or %)
     const commandPattern = /[$%]\s+(.+?)(?=\n|$)/g;
     const matches = [...content.matchAll(commandPattern)];
-    
+
     for (const match of matches) {
       const command = match[1].trim();
       if (command && !this.lastSeenCommands.has(command)) {
@@ -251,9 +257,9 @@ class TerminalMonitor extends EventEmitter {
           command: command,
           source: 'cursor_terminal',
           timestamp: Date.now(),
-          workspace: process.cwd()
+          workspace: process.cwd(),
         });
-        
+
         this.lastSeenCommands.add(command);
       }
     }
@@ -265,7 +271,7 @@ class TerminalMonitor extends EventEmitter {
   startProcessMonitoring() {
     this.processTimer = setInterval(async () => {
       if (!this.isMonitoring) return;
-      
+
       try {
         await this.checkRunningProcesses();
       } catch (error) {
@@ -283,25 +289,25 @@ class TerminalMonitor extends EventEmitter {
     try {
       const { stdout } = await execAsync('ps aux');
       const lines = stdout.split('\n');
-      
+
       // Look for common dev commands
       const devCommands = ['npm', 'node', 'python', 'pytest', 'jest', 'cargo', 'go', 'make'];
-      
+
       for (const line of lines) {
         for (const cmd of devCommands) {
           if (line.includes(cmd) && !line.includes('grep')) {
             // Extract command
             const parts = line.trim().split(/\s+/);
             const command = parts.slice(10).join(' '); // Command is after the first 10 fields
-            
+
             if (command && !this.lastSeenCommands.has(command)) {
               await this.captureCommand({
                 command: command,
                 source: 'process_monitor',
                 timestamp: Date.now(),
-                workspace: process.cwd()
+                workspace: process.cwd(),
               });
-              
+
               this.lastSeenCommands.add(command);
             }
           }
@@ -326,7 +332,7 @@ class TerminalMonitor extends EventEmitter {
       output: null,
       exitCode: null,
       duration: null,
-      error: null
+      error: null,
     };
 
     // Try to capture output if enabled
@@ -345,7 +351,7 @@ class TerminalMonitor extends EventEmitter {
 
     // Store in history
     this.commandHistory.push(record);
-    
+
     // Keep only last 500 commands
     if (this.commandHistory.length > 500) {
       this.commandHistory = this.commandHistory.slice(-500);
@@ -353,9 +359,11 @@ class TerminalMonitor extends EventEmitter {
 
     // Emit event for external listeners
     this.emit('command', record);
-    
-    console.log(`[TERMINAL] Captured: ${record.command.slice(0, 60)}${record.command.length > 60 ? '...' : ''} (${record.source})`);
-    
+
+    console.log(
+      `[TERMINAL] Captured: ${record.command.slice(0, 60)}${record.command.length > 60 ? '...' : ''} (${record.source})`
+    );
+
     return record;
   }
 
@@ -364,7 +372,7 @@ class TerminalMonitor extends EventEmitter {
    */
   async executeAndCapture(command) {
     const startTime = Date.now();
-    
+
     return new Promise((resolve) => {
       // Set timeout to avoid hanging
       const timeout = setTimeout(() => {
@@ -372,22 +380,26 @@ class TerminalMonitor extends EventEmitter {
           output: '[Command timeout]',
           exitCode: null,
           duration: Date.now() - startTime,
-          error: 'Timeout'
+          error: 'Timeout',
         });
       }, 5000);
 
-      exec(command, { timeout: 5000, maxBuffer: this.options.maxOutputSize }, (error, stdout, stderr) => {
-        clearTimeout(timeout);
-        
-        const output = (stdout + stderr).slice(0, this.options.maxOutputSize);
-        
-        resolve({
-          output: output,
-          exitCode: error ? error.code : 0,
-          duration: Date.now() - startTime,
-          error: error ? error.message : null
-        });
-      });
+      exec(
+        command,
+        { timeout: 5000, maxBuffer: this.options.maxOutputSize },
+        (error, stdout, stderr) => {
+          clearTimeout(timeout);
+
+          const output = (stdout + stderr).slice(0, this.options.maxOutputSize);
+
+          resolve({
+            output: output,
+            exitCode: error ? error.code : 0,
+            duration: Date.now() - startTime,
+            error: error ? error.message : null,
+          });
+        }
+      );
     });
   }
 
@@ -398,20 +410,18 @@ class TerminalMonitor extends EventEmitter {
     const limit = options.limit || 100;
     const source = options.source;
     const since = options.since;
-    
+
     let filtered = [...this.commandHistory];
-    
+
     if (source) {
-      filtered = filtered.filter(cmd => cmd.source === source);
+      filtered = filtered.filter((cmd) => cmd.source === source);
     }
-    
+
     if (since) {
-      filtered = filtered.filter(cmd => cmd.timestamp >= since);
+      filtered = filtered.filter((cmd) => cmd.timestamp >= since);
     }
-    
-    return filtered
-      .sort((a, b) => b.timestamp - a.timestamp)
-      .slice(0, limit);
+
+    return filtered.sort((a, b) => b.timestamp - a.timestamp).slice(0, limit);
   }
 
   /**
@@ -419,31 +429,31 @@ class TerminalMonitor extends EventEmitter {
    */
   getStats() {
     const now = Date.now();
-    const last24h = now - (24 * 60 * 60 * 1000);
-    const recentCommands = this.commandHistory.filter(cmd => cmd.timestamp > last24h);
-    
+    const last24h = now - 24 * 60 * 60 * 1000;
+    const recentCommands = this.commandHistory.filter((cmd) => cmd.timestamp > last24h);
+
     // Count by source
     const bySource = {};
-    this.commandHistory.forEach(cmd => {
+    this.commandHistory.forEach((cmd) => {
       bySource[cmd.source] = (bySource[cmd.source] || 0) + 1;
     });
-    
+
     // Count errors
-    const errorCount = this.commandHistory.filter(cmd => 
-      cmd.exitCode !== null && cmd.exitCode !== 0
+    const errorCount = this.commandHistory.filter(
+      (cmd) => cmd.exitCode !== null && cmd.exitCode !== 0
     ).length;
-    
+
     return {
       total: this.commandHistory.length,
       last24h: recentCommands.length,
       bySource: bySource,
       errorCount: errorCount,
-      errorRate: this.commandHistory.length > 0 
-        ? (errorCount / this.commandHistory.length * 100).toFixed(2) 
-        : 0
+      errorRate:
+        this.commandHistory.length > 0
+          ? ((errorCount / this.commandHistory.length) * 100).toFixed(2)
+          : 0,
     };
   }
 }
 
 module.exports = TerminalMonitor;
-
