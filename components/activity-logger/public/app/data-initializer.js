@@ -1020,8 +1020,16 @@ window.checkForShareLink = checkForShareLink;
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', () => {
     setTimeout(checkForShareLink, 1000);
+    // Check and show landing page modal on first visit
+    if (window.checkAndShowLandingPage) {
+      setTimeout(() => window.checkAndShowLandingPage(), 1500);
+    }
   });
 } else {
   setTimeout(checkForShareLink, 1000);
+  // Check and show landing page modal on first visit
+  if (window.checkAndShowLandingPage) {
+    setTimeout(() => window.checkAndShowLandingPage(), 1500);
+  }
 }
 
