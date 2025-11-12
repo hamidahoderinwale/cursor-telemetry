@@ -2148,7 +2148,6 @@ function renderCommitGroup(commitGroup, timelineItems = null) {
     <div class="timeline-item commit-group" data-commit-id="${commitId}">
       <div class="commit-group-header" onclick="toggleCommitGroup('${commitId}')">
         <div class="commit-group-info">
-          <span class="commit-icon">📦</span>
           <div class="commit-group-details">
             <div class="commit-message">${message}</div>
             <div class="commit-meta">
