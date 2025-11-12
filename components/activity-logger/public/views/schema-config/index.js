@@ -5,10 +5,11 @@
 
 class SchemaConfigView {
   constructor() {
-    this.apiBase = window.CONFIG?.API_BASE_URL || 'http://localhost:43917';
+    this.apiBase = window.CONFIG?.API_BASE_URL || window.CONFIG?.API_BASE || 'http://localhost:43917';
     this.schema = null;
     this.customFields = [];
     this.selectedTable = null;
+    this.connectionError = null;
   }
 
   async init() {
@@ -19,13 +20,31 @@ class SchemaConfigView {
 
   async loadSchema() {
     try {
-      const response = await fetch(`${this.apiBase}/api/schema`);
+      // Create abort controller for timeout (compatible with older browsers)
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      
+      const response = await fetch(`${this.apiBase}/api/schema`, {
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
       const result = await response.json();
       if (result.success) {
         this.schema = result.data;
+        this.connectionError = null; // Clear any previous errors
+      } else {
+        throw new Error(result.error || 'Failed to load schema');
       }
     } catch (error) {
       console.error('Error loading schema:', error);
+      this.connectionError = error;
+      // Set empty schema so UI can show error message
+      this.schema = { tables: [] };
     }
   }
 
@@ -34,13 +53,31 @@ class SchemaConfigView {
       const url = tableName 
         ? `${this.apiBase}/api/schema/config/fields?tableName=${tableName}`
         : `${this.apiBase}/api/schema/config/fields`;
-      const response = await fetch(url);
+      
+      // Create abort controller for timeout (compatible with older browsers)
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      
+      const response = await fetch(url, {
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
       const result = await response.json();
       if (result.success) {
         this.customFields = result.data;
+      } else {
+        // Don't throw - custom fields are optional
+        this.customFields = [];
       }
     } catch (error) {
       console.error('Error loading custom fields:', error);
+      // Don't set connectionError here - schema loading is the main indicator
+      this.customFields = [];
     }
   }
 
@@ -314,6 +351,72 @@ class SchemaConfigView {
   }
 
   renderWelcome() {
+    // Show connection error if present
+    if (this.connectionError) {
+      const errorMessage = this.connectionError.message || 'Unknown error';
+      const isNetworkError = errorMessage.includes('Failed to fetch') || 
+                            errorMessage.includes('NetworkError') ||
+                            errorMessage.includes('timeout') ||
+                            this.connectionError.name === 'AbortError' ||
+                            this.connectionError.name === 'TypeError';
+      
+      return `
+        <div class="welcome-message" style="max-width: 600px; margin: 0 auto; padding: var(--space-xl);">
+          <div style="text-align: center; margin-bottom: var(--space-lg);">
+            <div style="font-size: 48px; margin-bottom: var(--space-md); opacity: 0.5;">⚠️</div>
+            <h3 style="color: var(--color-error); margin-bottom: var(--space-sm);">Cannot connect to companion service</h3>
+            <p style="color: var(--color-text-muted); margin-bottom: var(--space-md);">
+              ${isNetworkError 
+                ? `Cannot connect to companion service at <code style="background: var(--color-bg-alt); padding: 2px 6px; border-radius: 4px;">${this.apiBase}</code>. Please ensure the service is running.`
+                : `Error: ${errorMessage}`
+              }
+            </p>
+          </div>
+          
+          <div style="background: var(--color-bg-alt); border-radius: var(--radius-md); padding: var(--space-md); margin-bottom: var(--space-md);">
+            <h4 style="margin: 0 0 var(--space-sm) 0; font-size: var(--text-md);">How to start the companion service:</h4>
+            <ol style="margin: 0; padding-left: 20px; color: var(--color-text-muted); font-size: var(--text-sm); line-height: 1.8;">
+              <li>Navigate to the companion directory:
+                <code style="display: block; margin-top: var(--space-xs); background: var(--color-bg); padding: var(--space-xs); border-radius: var(--radius-sm); font-size: 11px;">
+                  cd cursor-telemetry/components/activity-logger/companion
+                </code>
+              </li>
+              <li>Install dependencies (if not already done):
+                <code style="display: block; margin-top: var(--space-xs); background: var(--color-bg); padding: var(--space-xs); border-radius: var(--radius-sm); font-size: 11px;">
+                  npm install
+                </code>
+              </li>
+              <li>Start the service:
+                <code style="display: block; margin-top: var(--space-xs); background: var(--color-bg); padding: var(--space-xs); border-radius: var(--radius-sm); font-size: 11px;">
+                  npm start
+                </code>
+                or
+                <code style="display: block; margin-top: var(--space-xs); background: var(--color-bg); padding: var(--space-xs); border-radius: var(--radius-sm); font-size: 11px;">
+                  node src/index.js
+                </code>
+              </li>
+              <li>Wait for the service to start (you should see "Server listening on port 43917")</li>
+              <li>Refresh this page or click the retry button below</li>
+            </ol>
+          </div>
+          
+          <div style="display: flex; gap: var(--space-sm); justify-content: center;">
+            <button class="btn btn-primary" onclick="schemaConfigView.testConnection()" style="min-width: 120px;">
+              Test Connection
+            </button>
+            <button class="btn btn-secondary" onclick="schemaConfigView.init()" style="min-width: 120px;">
+              Retry
+            </button>
+          </div>
+          
+          <div style="margin-top: var(--space-md); padding: var(--space-sm); background: var(--color-bg-alt); border-radius: var(--radius-sm); font-size: var(--text-xs); color: var(--color-text-muted); text-align: center;">
+            <strong>Note:</strong> The companion service must be running for schema configuration to work. 
+            The service provides API access to the database schema and field configurations.
+          </div>
+        </div>
+      `;
+    }
+    
     if (!this.schema || !this.schema.tables || this.schema.tables.length === 0) {
       return `
         <div class="welcome-message">
@@ -805,6 +908,56 @@ class SchemaConfigView {
       }
     } catch (error) {
       this.showNotification('Error deleting configuration: ' + error.message, 'error');
+    }
+  }
+
+  async testConnection() {
+    const container = document.getElementById('schema-config-container');
+    if (!container) return;
+    
+    // Show testing message
+    const welcomeMsg = container.querySelector('.welcome-message');
+    if (welcomeMsg) {
+      welcomeMsg.innerHTML = `
+        <div style="text-align: center; padding: var(--space-xl);">
+          <div class="loading-spinner" style="margin: 0 auto var(--space-md);"></div>
+          <h3>Testing connection...</h3>
+          <p style="color: var(--color-text-muted);">Checking if companion service is available at ${this.apiBase}</p>
+        </div>
+      `;
+    }
+    
+    try {
+      // Test health endpoint first (faster)
+      const healthController = new AbortController();
+      const healthTimeoutId = setTimeout(() => healthController.abort(), 3000);
+      
+      const healthResponse = await fetch(`${this.apiBase}/health`, {
+        signal: healthController.signal
+      });
+      
+      clearTimeout(healthTimeoutId);
+      
+      if (!healthResponse.ok) {
+        throw new Error(`Service returned HTTP ${healthResponse.status}`);
+      }
+      
+      // If health check passes, try loading schema
+      await this.loadSchema();
+      await this.loadCustomFields();
+      
+      if (this.connectionError) {
+        throw this.connectionError;
+      }
+      
+      // Success - re-render
+      this.render();
+      this.showNotification('Successfully connected to companion service!', 'success');
+    } catch (error) {
+      console.error('Connection test failed:', error);
+      this.connectionError = error;
+      this.render();
+      this.showNotification(`Connection failed: ${error.message}`, 'error');
     }
   }
 

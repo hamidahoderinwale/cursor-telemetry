@@ -24,7 +24,9 @@ const navigatorState = {
   miniMapViewport: null,
   miniMapScale: 0.2,
   isInitializing: false,
-  isInitialized: false
+  isInitialized: false,
+  searchResults: [],
+  searchQuery: null
 };
 
 /**
@@ -450,8 +452,8 @@ async function initializeNavigator() {
           navigatorState.latentPositions.set(n.id, { x: n.x, y: n.y });
         });
         
-        // Detect latent clusters
-        navigatorState.clusters = window.detectLatentClusters(latentNodes, links);
+        // Detect latent clusters (now async)
+        navigatorState.clusters = await window.detectLatentClusters(latentNodes, links);
         
         // Re-render with both layouts available
         window.renderNavigator(container, physicalNodes, links);

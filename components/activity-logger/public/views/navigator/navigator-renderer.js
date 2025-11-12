@@ -146,6 +146,11 @@ function renderNavigator(container, nodes, links) {
   navigatorState.nodeElements = node;
   navigatorState.linkElements = link;
   
+  // Render cluster boundaries (convex hulls) if clusters are available
+  if (navigatorState.clusters && navigatorState.clusters.length > 0) {
+    renderClusterBoundaries(g, navigatorState.clusters);
+  }
+  
   // Update positions
   window.updateNodePositions();
   
@@ -414,6 +419,30 @@ function navigateToMiniMapPosition(x, y) {
  * Update navigator statistics
  */
 function updateNavigatorStats() {
+  // Update quality metrics if available
+  if (window.navigatorState && window.navigatorState.clusterQuality) {
+    const quality = window.navigatorState.clusterQuality;
+    
+    const silhouetteEl = document.getElementById('navSilhouette');
+    if (silhouetteEl) {
+      const score = quality.silhouette || 0;
+      silhouetteEl.textContent = score.toFixed(3);
+      silhouetteEl.className = 'mini-map-stat-value ' + 
+        (score > 0.5 ? 'success' : score > 0.3 ? 'warning' : 'error');
+    }
+    
+    const cohesionEl = document.getElementById('navCohesion');
+    if (cohesionEl) {
+      cohesionEl.textContent = quality.cohesion ? quality.cohesion.toFixed(3) : '-';
+    }
+    
+    const separationEl = document.getElementById('navSeparation');
+    if (separationEl) {
+      separationEl.textContent = quality.separation ? quality.separation.toFixed(3) : '-';
+    }
+  }
+  
+  // Update file and cluster counts
   if (!window.navigatorState) return;
   const navigatorState = window.navigatorState;
   
@@ -472,6 +501,11 @@ function updateNavigatorStats() {
     coherenceEl.textContent = `${coherence.toFixed(0)}%`;
   }
   
+  // Render cluster boundaries when clusters are updated
+  if (navigatorState.g && navigatorState.clusters && navigatorState.clusters.length > 0) {
+    renderClusterBoundaries(navigatorState.g, navigatorState.clusters);
+  }
+  
   // Update cluster legend with hierarchical support
   const legend = document.getElementById('clusterLegend');
   if (legend) {
@@ -495,6 +529,15 @@ function updateNavigatorStats() {
       if (cluster.category && cluster.category !== 'unknown') {
         tooltipParts.push(`Category: ${cluster.category}`);
       }
+      if (cluster.technologies && cluster.technologies.length > 0) {
+        tooltipParts.push(`Technologies: ${cluster.technologies.join(', ')}`);
+      }
+      if (cluster.quality) {
+        tooltipParts.push(`Size: ${cluster.quality.size} files`);
+        if (cluster.quality.silhouette !== undefined) {
+          tooltipParts.push(`Silhouette: ${cluster.quality.silhouette.toFixed(3)}`);
+        }
+      }
       const tooltip = escapeHtml(tooltipParts.join('\n'));
       
       let html = `
@@ -510,9 +553,11 @@ function updateNavigatorStats() {
           <span class="cluster-legend-label" title="${tooltip}" style="cursor: help; flex: 1;">
             ${escapeHtml(cluster.name || `Cluster ${cluster.id}`)} 
             <span style="color: var(--color-text-muted); font-size: 11px;">(${cluster.nodes.length})</span>
+            ${cluster.category && cluster.category !== 'unknown' ? `<span style="color: var(--color-text-muted); font-size: 10px; margin-left: 4px; padding: 1px 4px; background: var(--color-bg-alt); border-radius: 3px;">${cluster.category}</span>` : ''}
           </span>
         </div>
         ${cluster.description && level === 0 ? `<div class="cluster-description" style="font-size: 11px; color: var(--color-text-muted); margin-top: 2px; margin-left: 24px; line-height: 1.3;">${escapeHtml(cluster.description.substring(0, 80))}${cluster.description.length > 80 ? '...' : ''}</div>` : ''}
+        ${cluster.technologies && cluster.technologies.length > 0 && level === 0 ? `<div style="font-size: 10px; color: var(--color-text-muted); margin-top: 2px; margin-left: 24px;">Tech: ${cluster.technologies.slice(0, 3).join(', ')}${cluster.technologies.length > 3 ? '...' : ''}</div>` : ''}
         ${hasChildren && isExpanded ? `
           <div class="cluster-children" id="children-${cluster.id}" style="margin-top: 4px;">
             ${cluster.children.map(child => renderCluster(child, level + 1)).join('')}
@@ -962,6 +1007,129 @@ function hideNavigatorFileTooltip() {
 }
 
 /**
+ * Render cluster boundaries (convex hulls) around clusters
+ */
+function renderClusterBoundaries(g, clusters) {
+  // Remove existing boundaries
+  g.selectAll('.cluster-boundary').remove();
+  g.selectAll('.cluster-label').remove();
+  
+  clusters.forEach(cluster => {
+    if (!cluster.nodes || cluster.nodes.length < 3) return; // Need at least 3 points for hull
+    
+    // Get node positions
+    const points = cluster.nodes
+      .filter(n => typeof n.x === 'number' && typeof n.y === 'number')
+      .map(n => [n.x, n.y]);
+    
+    if (points.length < 3) return;
+    
+    // Compute convex hull using Graham scan algorithm
+    const hull = computeConvexHull(points);
+    
+    if (hull.length < 3) return;
+    
+    // Create path for convex hull
+    const pathData = d3.line()
+      .x(d => d[0])
+      .y(d => d[1])
+      .curve(d3.curveLinearClosed)(hull);
+    
+    // Draw boundary
+    g.append('path')
+      .attr('class', 'cluster-boundary')
+      .attr('d', pathData)
+      .attr('fill', cluster.color)
+      .attr('fill-opacity', 0.1)
+      .attr('stroke', cluster.color)
+      .attr('stroke-width', 2)
+      .attr('stroke-opacity', 0.6)
+      .attr('stroke-dasharray', '4,4')
+      .style('pointer-events', 'none')
+      .lower(); // Render behind nodes
+    
+    // Add cluster label at centroid
+    if (cluster.centroid) {
+      const label = g.append('text')
+        .attr('class', 'cluster-label')
+        .attr('x', cluster.centroid.x)
+        .attr('y', cluster.centroid.y)
+        .attr('text-anchor', 'middle')
+        .attr('dominant-baseline', 'middle')
+        .style('font-size', '12px')
+        .style('font-weight', '600')
+        .style('fill', cluster.color)
+        .style('pointer-events', 'none')
+        .text(cluster.name || `Cluster ${cluster.id}`);
+      
+      // Add background for better visibility
+      const bbox = label.node().getBBox();
+      g.insert('rect', '.cluster-label')
+        .attr('class', 'cluster-label-bg')
+        .attr('x', bbox.x - 4)
+        .attr('y', bbox.y - 2)
+        .attr('width', bbox.width + 8)
+        .attr('height', bbox.height + 4)
+        .attr('fill', 'var(--color-bg)')
+        .attr('fill-opacity', 0.9)
+        .attr('rx', 4)
+        .lower();
+    }
+  });
+}
+
+/**
+ * Compute convex hull using Graham scan algorithm
+ */
+function computeConvexHull(points) {
+  if (points.length < 3) return points;
+  
+  // Find bottom-most point (or leftmost in case of tie)
+  let bottom = 0;
+  for (let i = 1; i < points.length; i++) {
+    if (points[i][1] < points[bottom][1] || 
+        (points[i][1] === points[bottom][1] && points[i][0] < points[bottom][0])) {
+      bottom = i;
+    }
+  }
+  
+  // Swap bottom point to first position
+  [points[0], points[bottom]] = [points[bottom], points[0]];
+  
+  // Sort points by polar angle with respect to bottom point
+  const pivot = points[0];
+  points.slice(1).sort((a, b) => {
+    const angleA = Math.atan2(a[1] - pivot[1], a[0] - pivot[0]);
+    const angleB = Math.atan2(b[1] - pivot[1], b[0] - pivot[0]);
+    if (angleA !== angleB) return angleA - angleB;
+    // If same angle, keep closer point
+    const distA = (a[0] - pivot[0]) ** 2 + (a[1] - pivot[1]) ** 2;
+    const distB = (b[0] - pivot[0]) ** 2 + (b[1] - pivot[1]) ** 2;
+    return distA - distB;
+  });
+  
+  // Graham scan
+  const hull = [points[0], points[1]];
+  
+  for (let i = 2; i < points.length; i++) {
+    while (hull.length > 1 && 
+           crossProduct(hull[hull.length - 2], hull[hull.length - 1], points[i]) <= 0) {
+      hull.pop();
+    }
+    hull.push(points[i]);
+  }
+  
+  return hull;
+}
+
+/**
+ * Compute cross product for three points (for convex hull)
+ */
+function crossProduct(o, a, b) {
+  return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+}
+
+/**
  * Toggle navigator labels visibility
  */
 function toggleNavigatorLabels() {
@@ -994,7 +1162,153 @@ window.renderMiniMap = renderMiniMap;
 window.updateMiniMapViewport = updateMiniMapViewport;
 window.navigateToMiniMapPosition = navigateToMiniMapPosition;
 window.updateNavigatorStats = updateNavigatorStats;
+window.renderClusterBoundaries = renderClusterBoundaries;
+window.computeConvexHull = computeConvexHull;
 window.generateSemanticInsights = generateSemanticInsights;
+
+/**
+ * Handle semantic search in navigator
+ */
+async function handleNavigatorSearch(event) {
+  if (event.key !== 'Enter' && event.type !== 'click') return;
+  
+  const input = document.getElementById('navigatorSearchInput');
+  if (!input || !window.navigatorState) return;
+  
+  const query = input.value.trim();
+  
+  if (!query) {
+    clearNavigatorSearch();
+    return;
+  }
+  
+  if (!window.semanticSearchService) {
+    console.warn('[NAVIGATOR] Semantic search service not available');
+    return;
+  }
+  
+  // Show loading
+  input.style.opacity = '0.6';
+  
+  try {
+    const results = await window.semanticSearchService.search(
+      query,
+      window.navigatorState.nodes,
+      { limit: 20, threshold: 0.3 }
+    );
+    
+    window.navigatorState.searchResults = results;
+    window.navigatorState.searchQuery = query;
+    
+    // Highlight search results
+    highlightSearchResults(results);
+    
+    // Zoom to first result
+    if (results.length > 0 && window.navigatorState.svg) {
+      const firstResult = results[0];
+      if (typeof firstResult.x === 'number' && typeof firstResult.y === 'number') {
+        zoomToNode(firstResult);
+      }
+    }
+    
+    console.log(`[NAVIGATOR] Found ${results.length} search results`);
+  } catch (error) {
+    console.warn('[NAVIGATOR] Search failed:', error.message);
+  } finally {
+    input.style.opacity = '1';
+  }
+}
+
+/**
+ * Clear search and reset highlights
+ */
+function clearNavigatorSearch() {
+  const input = document.getElementById('navigatorSearchInput');
+  if (input) {
+    input.value = '';
+  }
+  
+  if (window.semanticSearchService) {
+    window.semanticSearchService.clear();
+  }
+  
+  if (window.navigatorState) {
+    window.navigatorState.searchResults = [];
+    window.navigatorState.searchQuery = null;
+  }
+  
+  // Remove highlights
+  if (window.navigatorState && window.navigatorState.nodeElements) {
+    window.navigatorState.nodeElements
+      .selectAll('circle')
+      .attr('stroke-width', d => d.workspace ? 2.5 : 2)
+      .attr('stroke', d => d.workspace ? '#3b82f6' : '#fff')
+      .attr('r', d => Math.max(6, Math.min(15, Math.sqrt(d.changes) * 2)));
+  }
+  
+  // Re-render to update positions
+  if (window.navigatorState && window.navigatorState.g) {
+    window.updateNodePositions();
+  }
+}
+
+/**
+ * Highlight search results
+ */
+function highlightSearchResults(results) {
+  if (!window.navigatorState || !window.navigatorState.nodeElements) return;
+  
+  const resultIds = new Set(results.map(r => r.id || r.path));
+  
+  window.navigatorState.nodeElements
+    .selectAll('circle')
+    .attr('stroke-width', d => {
+      if (resultIds.has(d.id || d.path)) {
+        return 4; // Thicker border for matches
+      }
+      return d.workspace ? 2.5 : 2;
+    })
+    .attr('stroke', d => {
+      if (resultIds.has(d.id || d.path)) {
+        return '#f59e0b'; // Orange for search matches
+      }
+      return d.workspace ? '#3b82f6' : '#fff';
+    })
+    .attr('r', d => {
+      if (resultIds.has(d.id || d.path)) {
+        return Math.max(10, Math.min(20, Math.sqrt(d.changes) * 2.5)); // Larger for matches
+      }
+      return Math.max(6, Math.min(15, Math.sqrt(d.changes) * 2));
+    });
+}
+
+/**
+ * Zoom to a specific node
+ */
+function zoomToNode(node) {
+  if (!window.navigatorState || !window.navigatorState.svg || !window.navigatorState.zoom) return;
+  
+  const width = window.navigatorState.svg.node().clientWidth || 800;
+  const height = window.navigatorState.svg.node().clientHeight || 700;
+  
+  const scale = 2; // Zoom level
+  const translateX = width / 2 - node.x * scale;
+  const translateY = height / 2 - node.y * scale;
+  
+  window.navigatorState.svg
+    .transition()
+    .duration(750)
+    .call(
+      window.navigatorState.zoom.transform,
+      d3.zoomIdentity.translate(translateX, translateY).scale(scale)
+    );
+}
+
+// Export search functions
+window.handleNavigatorSearch = handleNavigatorSearch;
+window.clearNavigatorSearch = clearNavigatorSearch;
+window.highlightSearchResults = highlightSearchResults;
+window.zoomToNode = zoomToNode;
 window.zoomToFitNavigator = zoomToFitNavigator;
 window.resetNavigatorView = resetNavigatorView;
 window.toggleNavigatorLabels = toggleNavigatorLabels;

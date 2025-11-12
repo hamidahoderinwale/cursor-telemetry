@@ -340,102 +340,146 @@ function createFeatureVector(file) {
 }
 
 /**
- * UMAP-like latent layout: kNN graph + attractive/repulsive optimization (optimized)
+ * Enhanced UMAP latent layout using proper UMAP algorithm
+ * Uses code embeddings and proper fuzzy simplicial sets
  */
 async function computeLatentLayoutUMAP(files) {
   const width = 800, height = 700;
   const padding = 100;
   
-  // Create feature vectors with progress updates and cache them on nodes
-  const vectors = [];
-  for (let i = 0; i < files.length; i++) {
-    const vector = createFeatureVector(files[i]);
-    vectors.push(vector);
-    // Cache feature vector on node for use in sub-clustering
-    files[i].featureVector = vector;
-    // Yield every 100 files
-    if (i % 100 === 0 && i > 0) {
-      await new Promise(resolve => {
-        if (typeof requestIdleCallback !== 'undefined') {
-          requestIdleCallback(() => resolve(), { timeout: 10 });
-        } else {
-          setTimeout(resolve, 0);
-        }
-      });
+  console.log(`[UMAP] Computing latent layout for ${files.length} files...`);
+  
+  // Step 1: Generate embeddings (use enhanced embedding service if available)
+  let embeddings = [];
+  let useEnhancedEmbeddings = false;
+  
+  if (window.codeEmbeddingService) {
+    try {
+      console.log('[UMAP] Using enhanced code embedding service...');
+      await window.codeEmbeddingService.initialize();
+      
+      if (window.codeEmbeddingService.isInitialized) {
+        embeddings = await window.codeEmbeddingService.generateEmbeddingsBatch(files, {
+          batchSize: 32,
+          onProgress: (current, total) => {
+            if (current % 100 === 0) {
+              console.log(`[UMAP] Generated embeddings: ${current}/${total}`);
+            }
+          }
+        });
+        useEnhancedEmbeddings = true;
+        console.log(`[UMAP] Generated ${embeddings.length} embeddings (${window.codeEmbeddingService.getDimension()}D)`);
+      }
+    } catch (error) {
+      console.warn('[UMAP] Enhanced embeddings failed, using fallback:', error.message);
     }
   }
-  console.log(`[UMAP] Building feature space for ${vectors.length} nodes`);
-
-  // Build kNN graph using cosine similarity (now async)
-  const k = Math.min(15, Math.max(5, Math.floor(Math.sqrt(files.length))));
-  const neighbors = await buildKNN(vectors, k);
-  console.log(`[UMAP] kNN graph built with k=${k}`);
-
-  // Initialize positions (PCA-lite via random small circle)
-  const positions = vectors.map((_, i) => {
-    const angle = (2 * Math.PI * i) / vectors.length;
-    return [Math.cos(angle) * 0.01, Math.sin(angle) * 0.01];
-  });
-
-  // Optimize (epochs) - significantly reduced for speed
-  // Adaptive epochs: fewer for larger datasets
-  const baseEpochs = files.length < 200 ? 30 : files.length < 500 ? 20 : 15;
-  const epochs = Math.min(baseEpochs, 10 + Math.floor(files.length / 100));
-  const learningRate = 0.15; // Slightly higher for faster convergence
-  const minDist = 0.1;
-  const negSamples = 2; // Reduced from 3
   
-  console.log(`[UMAP] Running ${epochs} optimization epochs...`);
-  
-  for (let e = 0; e < epochs; e++) {
-    for (let i = 0; i < vectors.length; i++) {
-      const pi = positions[i];
-      // Attractive forces for neighbors (optimized for large graphs)
-      // Use adaptive force strength based on graph size
-      const neigh = neighbors[i];
-      for (let n = 0; n < neigh.length; n++) {
-        const j = neigh[n].index;
-        const pj = positions[j];
-        const dx = pi[0] - pj[0];
-        const dy = pi[1] - pj[1];
-        const dist2 = dx * dx + dy * dy + 1e-6;
-        const grad = (dist2 > minDist ? (dist2 - minDist) : 0) * learningRate;
-        // Move closer (attractive)
-        pi[0] -= grad * dx;
-        pi[1] -= grad * dy;
-        pj[0] += grad * dx;
-        pj[1] += grad * dy;
-      }
-      // Negative sampling: mild repulsion from random nodes (reduced)
-      for (let s = 0; s < negSamples; s++) {
-        const j = Math.floor(Math.random() * vectors.length);
-        if (j === i) continue;
-        const pj = positions[j];
-        const dx = pi[0] - pj[0];
-        const dy = pi[1] - pj[1];
-        const dist2 = dx * dx + dy * dy + 1e-6;
-        const inv = learningRate / Math.sqrt(dist2);
-        // Push apart slightly
-        pi[0] += inv * dx * 0.01;
-        pi[1] += inv * dy * 0.01;
-        pj[0] -= inv * dx * 0.01;
-        pj[1] -= inv * dy * 0.01;
+  // Fallback: Use feature vectors
+  if (!useEnhancedEmbeddings || embeddings.length === 0) {
+    console.log('[UMAP] Using feature vectors (fallback)...');
+    for (let i = 0; i < files.length; i++) {
+      const vector = createFeatureVector(files[i]);
+      embeddings.push(vector);
+      files[i].featureVector = vector;
+      
+      if (i % 100 === 0 && i > 0) {
+        await new Promise(resolve => {
+          if (typeof requestIdleCallback !== 'undefined') {
+            requestIdleCallback(() => resolve(), { timeout: 10 });
+          } else {
+            setTimeout(resolve, 0);
+          }
+        });
       }
     }
-    
-    // Yield to browser every epoch for large datasets
-    if (files.length > 300 && e < epochs - 1) {
-      await new Promise(resolve => {
-        if (typeof requestIdleCallback !== 'undefined') {
-          requestIdleCallback(() => resolve(), { timeout: 10 });
-        } else {
-          setTimeout(resolve, 0);
-        }
+  } else {
+    // Cache embeddings on files
+    files.forEach((file, i) => {
+      file.featureVector = embeddings[i];
+      file.embedding = embeddings[i]; // Store full embedding
+    });
+  }
+  
+  // Step 2: Use enhanced UMAP service if available
+  let positions;
+  if (window.umapService && useEnhancedEmbeddings) {
+    try {
+      console.log('[UMAP] Using enhanced UMAP service...');
+      positions = await window.umapService.computeUMAP(embeddings, {
+        nNeighbors: Math.min(15, Math.max(5, Math.floor(Math.sqrt(files.length)))),
+        nComponents: 2,
+        minDist: 0.1,
+        spread: 1.0,
+        metric: 'cosine',
+        randomState: 42
       });
+      console.log('[UMAP] Enhanced UMAP layout complete');
+    } catch (error) {
+      console.warn('[UMAP] Enhanced UMAP failed, using fallback:', error.message);
+      positions = null;
     }
+  }
+  
+  // Fallback: Use original UMAP-like algorithm
+  if (!positions) {
+    console.log('[UMAP] Using fallback UMAP-like algorithm...');
+    const k = Math.min(15, Math.max(5, Math.floor(Math.sqrt(files.length))));
+    const neighbors = await buildKNN(embeddings, k);
     
-    if (e % 5 === 0 || e === epochs - 1) {
-      console.log(`[UMAP] Epoch ${e + 1}/${epochs}`);
+    positions = embeddings.map((_, i) => {
+      const angle = (2 * Math.PI * i) / embeddings.length;
+      return [Math.cos(angle) * 0.01, Math.sin(angle) * 0.01];
+    });
+    
+    const baseEpochs = files.length < 200 ? 30 : files.length < 500 ? 20 : 15;
+    const epochs = Math.min(baseEpochs, 10 + Math.floor(files.length / 100));
+    const learningRate = 0.15;
+    const minDist = 0.1;
+    const negSamples = 2;
+    
+    for (let e = 0; e < epochs; e++) {
+      for (let i = 0; i < embeddings.length; i++) {
+        const pi = positions[i];
+        const neigh = neighbors[i];
+        for (let n = 0; n < neigh.length; n++) {
+          const j = neigh[n].index;
+          const pj = positions[j];
+          const dx = pi[0] - pj[0];
+          const dy = pi[1] - pj[1];
+          const dist2 = dx * dx + dy * dy + 1e-6;
+          const grad = (dist2 > minDist ? (dist2 - minDist) : 0) * learningRate;
+          pi[0] -= grad * dx;
+          pi[1] -= grad * dy;
+          pj[0] += grad * dx;
+          pj[1] += grad * dy;
+        }
+        for (let s = 0; s < negSamples; s++) {
+          const j = Math.floor(Math.random() * embeddings.length);
+          if (j === i) continue;
+          const pj = positions[j];
+          const dx = pi[0] - pj[0];
+          const dy = pi[1] - pj[1];
+          const dist2 = dx * dx + dy * dy + 1e-6;
+          const inv = learningRate / Math.sqrt(dist2);
+          pi[0] += inv * dx * 0.01;
+          pi[1] += inv * dy * 0.01;
+          pj[0] -= inv * dx * 0.01;
+          pj[1] -= inv * dy * 0.01;
+        }
+      }
+      if (files.length > 300 && e < epochs - 1) {
+        await new Promise(resolve => {
+          if (typeof requestIdleCallback !== 'undefined') {
+            requestIdleCallback(() => resolve(), { timeout: 10 });
+          } else {
+            setTimeout(resolve, 0);
+          }
+        });
+      }
+      if (e % 5 === 0 || e === epochs - 1) {
+        console.log(`[UMAP] Epoch ${e + 1}/${epochs}`);
+      }
     }
   }
 
@@ -456,10 +500,10 @@ async function computeLatentLayoutUMAP(files) {
 }
 
 /**
- * Detect latent clusters using k-means on latent positions
- * Enhanced with workspace and directory awareness
+ * Enhanced cluster detection with auto-optimization
+ * Uses auto-optimized K-means with silhouette scores
  */
-function detectLatentClusters(nodes, links) {
+async function detectLatentClusters(nodes, links) {
   // Helper function for semantic k-means sub-clustering using content similarity
   function kMeansClustering(nodes, links, k) {
     if (nodes.length === 0 || k <= 0) return nodes.map(() => 0);
@@ -675,43 +719,129 @@ function detectLatentClusters(nodes, links) {
     return clusters;
   }
   
-  // Fall back to k-means on latent positions
-  // More aggressive clustering: aim for 3-8 clusters based on file count
-  let k;
-  if (nodes.length < 6) {
-    k = Math.max(1, Math.floor(nodes.length / 2)); // 2-3 nodes per cluster for small sets
-  } else if (nodes.length < 20) {
-    k = Math.min(5, Math.max(3, Math.ceil(nodes.length / 4))); // 3-5 clusters
-  } else {
-    k = Math.min(8, Math.max(4, Math.ceil(nodes.length / 8))); // 4-8 clusters for larger sets
-  }
-  
-  // Use a different variable name to avoid any potential scope conflicts
+  // Enhanced clustering: Use auto-optimized K-means if available
   const fallbackClusters = [];
   
   if (nodes.length === 0) return fallbackClusters;
   
-  console.log(`[TARGET] Detecting ${k} latent clusters from ${nodes.length} files`);
-  
-  // Initialize centroids randomly
-  const centroids = [];
-  const used = new Set();
-  for (let i = 0; i < k; i++) {
-    let idx;
-    do {
-      idx = Math.floor(Math.random() * nodes.length);
-    } while (used.has(idx) && used.size < nodes.length);
-    used.add(idx);
-    centroids.push({ x: nodes[idx].x, y: nodes[idx].y });
+  // Try to use enhanced clustering service
+  if (window.clusteringService && nodes.length > 20) {
+    try {
+      console.log('[CLUSTER] Using enhanced auto-optimized clustering...');
+      
+      // Get embeddings from nodes (use cached embeddings if available)
+      const embeddings = nodes.map(node => {
+        if (node.embedding) {
+          return node.embedding; // Use cached embedding
+        }
+        if (node.featureVector) {
+          return node.featureVector; // Use feature vector
+        }
+        return createFeatureVector(node); // Generate fallback
+      });
+      
+      // Auto-optimize K
+      const result = window.clusteringService.autoOptimizeKMeans(embeddings, {
+        minK: Math.max(20, Math.floor(nodes.length / 40)),
+        maxK: Math.min(60, Math.floor(nodes.length / 10)),
+        step: 5
+      });
+      
+      const assignments = result.clusters;
+      const k = result.k;
+      const quality = window.clusteringService.computeQualityMetrics(embeddings, assignments);
+      
+      console.log(`[CLUSTER] Auto-optimized to K=${k} (silhouette: ${result.silhouette.toFixed(3)})`);
+      console.log(`[CLUSTER] Quality - Cohesion: ${quality.cohesion.toFixed(3)}, Separation: ${quality.separation.toFixed(3)}, Balance: ${quality.balance.toFixed(3)}`);
+      
+      // Create cluster objects with quality metrics
+      for (let i = 0; i < k; i++) {
+        const clusterNodes = nodes.filter((_, idx) => assignments[idx] === i);
+        if (clusterNodes.length > 0) {
+          clusterNodes.forEach(n => n.cluster = `latent-${i}`);
+          
+          const cluster = {
+            id: `latent-${i}`,
+            name: `Cluster ${i + 1}`, // Will be updated by annotator
+            nodes: clusterNodes,
+            color: clusterColors[i % clusterColors.length],
+            centroid: {
+              x: d3.mean(clusterNodes, d => d.x),
+              y: d3.mean(clusterNodes, d => d.y)
+            },
+            description: '',
+            keywords: [],
+            category: 'unknown',
+            quality: {
+              size: clusterNodes.length,
+              cohesion: quality.cohesion,
+              silhouette: result.silhouette
+            }
+          };
+          
+          fallbackClusters.push(cluster);
+        }
+      }
+      
+      // Store quality metrics globally
+      window.navigatorState.clusterQuality = quality;
+      window.navigatorState.optimalK = k;
+      window.navigatorState.kScores = result.scores;
+      
+    } catch (error) {
+      console.warn('[CLUSTER] Enhanced clustering failed, using fallback:', error.message);
+    }
   }
   
-  // Use the clusterColors already defined at function scope (line 590)
-  // No need to redeclare - reuse the existing array
-  
-  // Run k-means iterations
-  for (let iter = 0; iter < 10; iter++) {
-    // Assign nodes to nearest centroid
-    const assignments = nodes.map(node => {
+  // Fallback: Use simple k-means on spatial positions
+  if (fallbackClusters.length === 0) {
+    console.log('[CLUSTER] Using fallback spatial clustering...');
+    let k;
+    if (nodes.length < 6) {
+      k = Math.max(1, Math.floor(nodes.length / 2));
+    } else if (nodes.length < 20) {
+      k = Math.min(5, Math.max(3, Math.ceil(nodes.length / 4)));
+    } else {
+      k = Math.min(8, Math.max(4, Math.ceil(nodes.length / 8)));
+    }
+    
+    const centroids = [];
+    const used = new Set();
+    for (let i = 0; i < k; i++) {
+      let idx;
+      do {
+        idx = Math.floor(Math.random() * nodes.length);
+      } while (used.has(idx) && used.size < nodes.length);
+      used.add(idx);
+      centroids.push({ x: nodes[idx].x, y: nodes[idx].y });
+    }
+    
+    for (let iter = 0; iter < 10; iter++) {
+      const assignments = nodes.map(node => {
+        let minDist = Infinity;
+        let cluster = 0;
+        centroids.forEach((c, i) => {
+          const dist = Math.sqrt((node.x - c.x) ** 2 + (node.y - c.y) ** 2);
+          if (dist < minDist) {
+            minDist = dist;
+            cluster = i;
+          }
+        });
+        return cluster;
+      });
+      
+      for (let i = 0; i < k; i++) {
+        const clusterNodes = nodes.filter((_, idx) => assignments[idx] === i);
+        if (clusterNodes.length > 0) {
+          centroids[i] = {
+            x: d3.mean(clusterNodes, d => d.x),
+            y: d3.mean(clusterNodes, d => d.y)
+          };
+        }
+      }
+    }
+    
+    const finalAssignments = nodes.map(node => {
       let minDist = Infinity;
       let cluster = 0;
       centroids.forEach((c, i) => {
@@ -724,57 +854,59 @@ function detectLatentClusters(nodes, links) {
       return cluster;
     });
     
-    // Update centroids
     for (let i = 0; i < k; i++) {
-      const clusterNodes = nodes.filter((_, idx) => assignments[idx] === i);
+      const clusterNodes = nodes.filter((_, idx) => finalAssignments[idx] === i);
       if (clusterNodes.length > 0) {
-        centroids[i] = {
-          x: d3.mean(clusterNodes, d => d.x),
-          y: d3.mean(clusterNodes, d => d.y)
-        };
+        clusterNodes.forEach(n => n.cluster = `latent-${i}`);
+        fallbackClusters.push({
+          id: `latent-${i}`,
+          name: `Cluster ${i + 1}`,
+          nodes: clusterNodes,
+          color: clusterColors[i % clusterColors.length],
+          centroid: centroids[i],
+          description: '',
+          keywords: [],
+          category: 'unknown'
+        });
       }
     }
   }
   
-  // Final assignment
-  const assignments = nodes.map(node => {
-    let minDist = Infinity;
-    let cluster = 0;
-    centroids.forEach((c, i) => {
-      const dist = Math.sqrt((node.x - c.x) ** 2 + (node.y - c.y) ** 2);
-      if (dist < minDist) {
-        minDist = dist;
-        cluster = i;
+  // Enhanced annotation using new labeling service
+  if (window.enhancedClusterLabeling && fallbackClusters.length > 0) {
+    // Annotate clusters asynchronously
+    Promise.all(
+      fallbackClusters.map(cluster => 
+        window.enhancedClusterLabeling.generateLabels(cluster, {
+          useLLM: window.CONFIG?.ENABLE_SEMANTIC_SEARCH === true,
+          useTFIDF: true
+        }).then(label => {
+          cluster.name = label.name;
+          cluster.description = label.description;
+          cluster.keywords = label.keywords;
+          cluster.category = label.category;
+          cluster.technologies = label.technologies || [];
+          cluster.labelStage = label.stage;
+          return cluster;
+        })
+      )
+    ).then(annotatedClusters => {
+      // Update navigator state
+      if (window.navigatorState) {
+        window.navigatorState.clusters = annotatedClusters;
+        window.dispatchEvent(new CustomEvent('clusters-annotated', { 
+          detail: { clusters: annotatedClusters } 
+        }));
       }
+    }).catch(err => {
+      console.warn('[CLUSTER-LABEL] Enhanced labeling failed:', err.message);
     });
-    return cluster;
-  });
-  
-  // Create cluster objects
-  for (let i = 0; i < k; i++) {
-    const clusterNodes = nodes.filter((_, idx) => assignments[idx] === i);
-    if (clusterNodes.length > 0) {
-      clusterNodes.forEach(n => n.cluster = `latent-${i}`);
-      fallbackClusters.push({
-        id: `latent-${i}`,
-        name: `Cluster ${i + 1}`, // Will be updated by annotator
-        nodes: clusterNodes,
-        color: clusterColors[i % clusterColors.length],
-        centroid: centroids[i],
-        description: '', // Will be populated by annotator
-        keywords: [],
-        category: 'unknown'
-      });
-    }
-  }
-  
-  // Annotate clusters asynchronously (non-blocking)
-  if (window.clusterAnnotator && fallbackClusters.length > 0) {
+  } else if (window.clusterAnnotator && fallbackClusters.length > 0) {
+    // Fallback to original annotator
     window.clusterAnnotator.annotateClusters(fallbackClusters, {
       useLLM: window.CONFIG?.ENABLE_SEMANTIC_SEARCH === true,
       useEmbeddings: window.CONFIG?.ENABLE_SEMANTIC_SEARCH === true
     }).then(annotatedClusters => {
-      // Update clusters with annotations
       annotatedClusters.forEach((annotated, idx) => {
         if (fallbackClusters[idx]) {
           fallbackClusters[idx].name = annotated.name;
@@ -784,14 +916,14 @@ function detectLatentClusters(nodes, links) {
         }
       });
       
-      // Trigger re-render if navigator is active
       if (window.navigatorState && window.navigatorState.clusters) {
         window.navigatorState.clusters = fallbackClusters;
-        // Dispatch event to update UI
-        window.dispatchEvent(new CustomEvent('clusters-annotated', { detail: { clusters: fallbackClusters } }));
+        window.dispatchEvent(new CustomEvent('clusters-annotated', { 
+          detail: { clusters: fallbackClusters } 
+        }));
       }
     }).catch(err => {
-      console.warn('[CLUSTER-ANNOTATOR] Annotation failed, using default names:', err.message);
+      console.warn('[CLUSTER-ANNOTATOR] Annotation failed:', err.message);
     });
   }
   

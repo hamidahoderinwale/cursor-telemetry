@@ -72,6 +72,19 @@ function renderNavigatorViewTemplate(data) {
         </div>
 
         <div>
+          <h3>Semantic Search</h3>
+          <div style="display: flex; gap: 4px;">
+            <input type="text" id="navigatorSearchInput" class="navigator-filter-select" 
+                   placeholder="Search files by content..." 
+                   onkeyup="handleNavigatorSearch(event)"
+                   style="flex: 1; min-width: 0;">
+            <button class="btn btn-secondary" onclick="clearNavigatorSearch()" title="Clear search">
+              ✕
+            </button>
+          </div>
+        </div>
+
+        <div>
           <h3>Transition Speed</h3>
           <input type="range" id="transitionSpeed" min="0.5" max="2" step="0.1" value="2" oninput="updateTransitionSpeed(this.value)">
           <div class="speed-label-wrapper">
@@ -134,8 +147,16 @@ function renderNavigatorViewTemplate(data) {
                 <span id="navClusterCount" class="mini-map-stat-value">0</span>
               </div>
               <div class="mini-map-stat-row">
-                <span>Coherence:</span>
-                <span id="navCoherence" class="mini-map-stat-value success">0%</span>
+                <span>Silhouette:</span>
+                <span id="navSilhouette" class="mini-map-stat-value">-</span>
+              </div>
+              <div class="mini-map-stat-row">
+                <span>Cohesion:</span>
+                <span id="navCohesion" class="mini-map-stat-value">-</span>
+              </div>
+              <div class="mini-map-stat-row">
+                <span>Separation:</span>
+                <span id="navSeparation" class="mini-map-stat-value">-</span>
               </div>
             </div>
           </div>

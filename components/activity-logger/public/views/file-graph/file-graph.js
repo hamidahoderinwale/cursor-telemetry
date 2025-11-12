@@ -51,9 +51,27 @@ async function initializeD3FileGraph() {
         <span style="margin-top: 12px; color: var(--color-text-muted);">${message}${percentText}</span>
       </div>`;
     };
-    updateProgress('Loading file contents from database...');
+    updateProgress('Loading file graph data...', 0);
     
-    // Check cache first (optimization)
+    const apiBase = window.CONFIG?.API_BASE || window.CONFIG?.API_BASE_URL || 'http://localhost:43917';
+    
+    // OPTIMIZATION: Try fast API endpoint first (pre-computed graph data)
+    updateProgress('Loading pre-computed relationships...', 10);
+    let graphData = null;
+    try {
+      const graphResponse = await fetch(`${apiBase}/api/analytics/context/file-relationships?minCount=1`);
+      if (graphResponse.ok) {
+        const graphResult = await graphResponse.json();
+        if (graphResult.success && graphResult.data) {
+          graphData = graphResult.data;
+          console.log(`[GRAPH] Loaded ${graphData.nodes?.length || 0} nodes and ${graphData.edges?.length || 0} edges from fast API`);
+        }
+      }
+    } catch (e) {
+      console.log('[GRAPH] Fast API endpoint not available, falling back to file-contents');
+    }
+    
+    // Check cache for file contents (optimization)
     const cacheKey = 'fileGraphData';
     const cacheExpiry = 5 * 60 * 1000; // 5 minutes
     const cached = sessionStorage.getItem(cacheKey);
@@ -89,13 +107,12 @@ async function initializeD3FileGraph() {
     
     // Fetch file contents from persistent database if not cached
     if (!data) {
+      updateProgress('Loading file contents from database...', 20);
       console.log('[FILE] Fetching file contents from SQLite for TF-IDF analysis...');
       let response;
       try {
-        // Reduced limit for faster initial load - can fetch more on demand
-        // Start with smaller limit, can increase if needed
-        // Reduced from 500 to 200 for faster initial loading
-        response = await fetch(`${window.CONFIG.API_BASE}/api/file-contents?limit=200`);
+        // Increased limit for better data coverage - can still be fast with caching
+        response = await fetch(`${apiBase}/api/file-contents?limit=1000`);
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
@@ -112,15 +129,103 @@ async function initializeD3FileGraph() {
         }
       } catch (error) {
         console.warn('[FILE] Failed to fetch file contents:', error.message);
-        container.innerHTML = `
-          <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: var(--color-text-muted); padding: 2rem; text-align: center;">
-            <div style="font-size: 1.1rem; font-weight: 500; margin-bottom: 0.5rem; color: var(--color-text);">Companion service not available</div>
-            <div style="font-size: 0.9rem; margin-bottom: 1rem;">File contents cannot be loaded. Make sure the companion service is running on port 43917.</div>
-            <div style="font-size: 0.85rem; opacity: 0.8;">Error: ${error.message}</div>
-          </div>
-        `;
-        return;
+        // Don't return immediately - try to use graphData if available
+        if (!graphData) {
+          container.innerHTML = `
+            <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: var(--color-text-muted); padding: 2rem; text-align: center;">
+              <div style="font-size: 1.1rem; font-weight: 500; margin-bottom: 0.5rem; color: var(--color-text);">Companion service not available</div>
+              <div style="font-size: 0.9rem; margin-bottom: 1rem;">File contents cannot be loaded. Make sure the companion service is running on port 43917.</div>
+              <div style="font-size: 0.85rem; opacity: 0.8;">Error: ${error.message}</div>
+            </div>
+          `;
+          return;
+        }
       }
+    }
+    
+    // If we have graphData from fast API, use it directly (much faster!)
+    if (graphData && graphData.nodes && graphData.nodes.length > 0) {
+      updateProgress('Rendering graph...', 80);
+      console.log(`[GRAPH] Using fast API data: ${graphData.nodes.length} nodes, ${graphData.edges.length} edges`);
+      
+      // Convert graphData format to our format
+      const files = graphData.nodes.map(node => ({
+        id: node.id,
+        path: node.id,
+        name: node.label || node.id.split('/').pop() || node.id,
+        ext: node.id.split('.').pop() || '',
+        changes: node.mentions || 0,
+        size: node.size || 10,
+        events: [],
+        workspace: node.id.split('/')[0] || 'unknown',
+        directory: node.id.split('/').slice(0, -1).join('/') || node.id.split('/')[0] || 'unknown'
+      }));
+      
+      const links = graphData.edges.map(edge => {
+        // Ensure source and target are file IDs (strings) that match node IDs
+        const sourceId = typeof edge.source === 'string' ? edge.source : edge.source.id || edge.source;
+        const targetId = typeof edge.target === 'string' ? edge.target : edge.target.id || edge.target;
+        
+        // Normalize similarity: strength is already 0-1, weight might need normalization
+        let similarity = edge.strength || 0;
+        if (!similarity && edge.weight) {
+          // Normalize weight to 0-1 range (assuming max weight is around 100)
+          similarity = Math.min(1.0, edge.weight / 100);
+        }
+        // Ensure minimum similarity for visibility
+        if (similarity < 0.1) similarity = 0.1;
+        
+        return {
+          source: sourceId,
+          target: targetId,
+          similarity: similarity,
+          sharedPrompts: 0,
+          sharedSessions: 0
+        };
+      });
+      
+      // Update stats immediately
+      const nodeCountEl = document.getElementById('graphNodeCount');
+      const linkCountEl = document.getElementById('graphLinkCount');
+      if (nodeCountEl) nodeCountEl.textContent = files.length;
+      if (linkCountEl) linkCountEl.textContent = links.length;
+      
+      // Update prompt count
+      const prompts = window.state?.data?.prompts || [];
+      const promptCountEl = document.getElementById('graphPromptCount');
+      if (promptCountEl) promptCountEl.textContent = prompts.length;
+      
+      // Calculate average similarity
+      if (links.length > 0) {
+        const avgSim = links.reduce((sum, l) => sum + l.similarity, 0) / links.length;
+        const avgSimEl = document.getElementById('graphAvgSimilarity');
+        if (avgSimEl) avgSimEl.textContent = avgSim.toFixed(3);
+      }
+      
+      // Render immediately
+      if (window.renderD3FileGraph) {
+        window.renderD3FileGraph(container, files, links);
+        console.log('[GRAPH] Graph rendered from fast API data');
+      } else {
+        console.warn('[GRAPH] renderD3FileGraph function not available');
+      }
+      
+      // Store for later use
+      window.fileGraphData = { nodes: files, links: links, tfidfStats: null, similarities: null };
+      
+      // Render similar pairs
+      if (window.renderSimilarFilePairs) {
+        window.renderSimilarFilePairs(links, files);
+      }
+      
+      updateProgress('Graph loaded!', 100);
+      setTimeout(() => {
+        if (container.querySelector('.loading-spinner')) {
+          // Clear loading state if still showing
+        }
+      }, 500);
+      
+      return; // Early return - we're done!
     }
     
     // If no file contents, try to build graph from events data
@@ -313,11 +418,14 @@ async function initializeD3FileGraph() {
       const path = (file.path || '').toLowerCase();
       const name = (file.name || '').toLowerCase();
       
-      // Filter out files with no content, changes, or events
+      // LESS AGGRESSIVE: Only exclude files with absolutely nothing
+      // Allow files with content OR changes OR events OR mentions
       const hasContent = file.content && file.content.length > 0;
       const hasChanges = (file.changes || 0) > 0;
       const hasEvents = file.events && file.events.length > 0;
-      if (!hasContent && !hasChanges && !hasEvents) {
+      const hasMentions = (file.mentions || 0) > 0; // From graphData
+      // Only exclude if file has absolutely nothing
+      if (!hasContent && !hasChanges && !hasEvents && !hasMentions) {
         return true;
       }
       
@@ -404,8 +512,8 @@ async function initializeD3FileGraph() {
     
     updateProgress(`Processing ${filteredFiles.length} files...`, 30);
     
-    // Limit files upfront to prevent timeout
-    const MAX_FILES_TO_PROCESS = 1000; // Reduced from unlimited
+    // Limit files upfront to prevent timeout (increased limit for better coverage)
+    const MAX_FILES_TO_PROCESS = 2000; // Increased from 1000 for better data coverage
     const filesToProcess = filteredFiles.length > MAX_FILES_TO_PROCESS 
       ? filteredFiles.slice(0, MAX_FILES_TO_PROCESS)
       : filteredFiles;
@@ -481,14 +589,16 @@ async function initializeD3FileGraph() {
           }
         }
         
-        // Include files if they have content, events, or changes
+        // LESS AGGRESSIVE: Include files if they have content, events, changes, or mentions
         // Don't skip files just because they don't have events - they might have content for TF-IDF
         const hasContent = f.content && f.content.length > 0;
         const hasEvents = relatedEvents.length > 0;
         const hasChanges = changes > 0;
+        const hasMentions = (f.mentions || 0) > 0; // From graphData
         
-        if (!hasContent && !hasEvents && !hasChanges) {
-          return null; // Only skip if file has nothing useful
+        // Only skip if file has absolutely nothing useful
+        if (!hasContent && !hasEvents && !hasChanges && !hasMentions) {
+          return null;
         }
         
         return {
@@ -517,14 +627,15 @@ async function initializeD3FileGraph() {
       }
     }
     
-    // Filter out null entries - include files with content, events, or changes
+    // Filter out null entries - include files with content, events, changes, or mentions
     const validFiles = files.filter(f => {
       if (!f || f === null || f === undefined) return false;
-      // Include if file has content (for TF-IDF), events, or changes
+      // Include if file has content (for TF-IDF), events, changes, or mentions
       const hasContent = f.content && f.content.length > 0;
       const hasEvents = f.events && f.events.length > 0;
       const hasChanges = f.changes > 0;
-      return hasContent || hasEvents || hasChanges;
+      const hasMentions = (f.mentions || 0) > 0; // From graphData
+      return hasContent || hasEvents || hasChanges || hasMentions;
     });
     
     console.log(`[DATA] Filtered to ${validFiles.length} files with allowed extensions (excluded ${files.length - validFiles.length} files with no content/events/changes)`);
@@ -553,8 +664,8 @@ async function initializeD3FileGraph() {
     // Define prompts early so it's available in all code paths
     const prompts = window.state?.data?.prompts || [];
     
-    // Limit files for performance (O(n²) computation)
-    const MAX_FILES_FOR_GRAPH = 500; // Limit to prevent timeout
+    // Limit files for performance (O(n²) computation) - increased for better coverage
+    const MAX_FILES_FOR_GRAPH = 1000; // Increased from 500 for better data coverage
     const filesForGraph = files.length > MAX_FILES_FOR_GRAPH 
       ? files.slice(0, MAX_FILES_FOR_GRAPH) 
       : files;
