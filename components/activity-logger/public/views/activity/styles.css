@@ -403,6 +403,84 @@
   margin-right: 0;
 }
 
+/* Commit Subgroups (file/type groups within commits) */
+.commit-subgroup {
+  margin-bottom: var(--space-sm, 0.5rem);
+  border-left: 2px solid var(--color-border, #475569);
+  padding-left: var(--space-sm, 0.5rem);
+  margin-left: var(--space-sm, 0.5rem);
+}
+
+.commit-subgroup:last-child {
+  margin-bottom: 0;
+}
+
+.commit-subgroup-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs, 0.25rem);
+  padding: var(--space-xs, 0.25rem) 0;
+  font-size: var(--text-xs, 0.75rem);
+  color: var(--color-text-muted, #94A3B8);
+  cursor: default;
+}
+
+.commit-subgroup-header-nested {
+  cursor: pointer;
+  user-select: none;
+  transition: color 0.2s ease;
+}
+
+.commit-subgroup-header-nested:hover {
+  color: var(--color-text, #F8FAFC);
+}
+
+.commit-subgroup-label {
+  font-weight: 500;
+  color: var(--color-text, #F8FAFC);
+}
+
+.commit-subgroup-file-name {
+  font-family: var(--font-mono, 'Monaco', 'Menlo', 'Courier New', monospace);
+  font-size: var(--text-sm, 0.875rem);
+}
+
+.commit-subgroup-count {
+  color: var(--color-text-muted, #94A3B8);
+  font-size: var(--text-xs, 0.75rem);
+  margin-left: auto;
+}
+
+.commit-subgroup-toggle {
+  font-size: var(--text-xs, 0.75rem);
+  color: var(--color-text-muted, #94A3B8);
+  margin-left: var(--space-xs, 0.25rem);
+  transition: transform 0.2s ease;
+  user-select: none;
+}
+
+.commit-subgroup-items {
+  margin-top: var(--space-xs, 0.25rem);
+  padding-left: var(--space-sm, 0.5rem);
+}
+
+.commit-subgroup-file {
+  border-left-color: var(--color-primary, #8B5CF6);
+}
+
+.commit-subgroup-type {
+  border-left-color: var(--color-accent, #10B981);
+  margin-left: var(--space-md, 1rem);
+}
+
+.commit-subgroup-prompts {
+  border-left-color: var(--color-accent, #10B981);
+}
+
+.commit-subgroup-misc {
+  border-left-color: var(--color-border, #475569);
+}
+
 /* Conversation Timeline Item */
 .conversation-timeline-item {
   border-left-color: var(--color-primary) !important;

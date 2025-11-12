@@ -95,8 +95,9 @@ async function initializeNavigator() {
       }
       
       if (!data) {
-        // Reduced from 100k to 500 for much faster initial load
-        response = await fetch(`${window.CONFIG.API_BASE}/api/file-contents?limit=500`);
+        // OPTIMIZATION: Reduced from 500 to 300 for even faster initial load
+        // Can load more files on demand if needed
+        response = await fetch(`${window.CONFIG.API_BASE}/api/file-contents?limit=300`);
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
@@ -422,9 +423,9 @@ async function initializeNavigator() {
       console.log(`[NAVIGATOR] Filtered to ${files.length} files in directory: ${navigatorState.selectedDirectory}`);
     }
     
-    // Limit files for performance (embeddings are O(n²))
-    // Reduced from 2000 to 800 for faster computation
-    const MAX_FILES = 800;
+    // OPTIMIZATION: Limit files for performance (embeddings are O(n²))
+    // Reduced from 800 to 400 for faster computation and better responsiveness
+    const MAX_FILES = 400;
     if (files.length > MAX_FILES) {
       console.warn(`[NAVIGATOR] Too many files (${files.length}), limiting to ${MAX_FILES} most active files`);
       // Sort by activity (events + changes) and take top N

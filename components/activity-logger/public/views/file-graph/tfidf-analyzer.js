@@ -50,9 +50,10 @@ function cosineSimilarity(vec1, vec2) {
  * Compute TF-IDF analysis for files
  * Optimized to handle large datasets by limiting computation
  */
-function computeTFIDFAnalysis(files) {
-  const MAX_FILES_FOR_TFIDF = 1000; // Limit to prevent timeout
-  const MAX_SIMILARITIES = 5000; // Limit number of similarity calculations
+// OPTIMIZATION: Make TF-IDF computation async to allow yielding
+async function computeTFIDFAnalysis(files) {
+  const MAX_FILES_FOR_TFIDF = 500; // Reduced from 1000 for faster computation
+  const MAX_SIMILARITIES = 3000; // Reduced from 5000 for faster computation
   
   // For very large datasets, limit to most active files
   let filesToProcess = files;
@@ -77,20 +78,21 @@ function computeTFIDFAnalysis(files) {
   const documents = [];
   const tokenizeStart = performance.now();
   
-  for (let i = 0; i < filesToProcess.length; i++) {
-    const file = filesToProcess[i];
-    // Limit content size to prevent memory issues
-    const content = (file.content || '').substring(0, 50000); // Max 50KB per file
-    const tokens = tokenizeCode(content);
-    documents.push({ file, tokens });
+  // OPTIMIZATION: Tokenize in batches with yield points
+  const TOKENIZE_BATCH_SIZE = 50; // Process 50 files at a time
+  for (let i = 0; i < filesToProcess.length; i += TOKENIZE_BATCH_SIZE) {
+    const batch = filesToProcess.slice(i, i + TOKENIZE_BATCH_SIZE);
     
-    // Yield to browser every 100 files to prevent blocking
-    if (i % 100 === 0 && i > 0) {
-      const elapsed = performance.now() - tokenizeStart;
-      if (elapsed > 100) { // If taking too long, defer rest
-        console.log(`[TF-IDF] Tokenized ${i}/${filesToProcess.length} files, deferring rest...`);
-        // Continue but log progress
-      }
+    batch.forEach(file => {
+      // Limit content size to prevent memory issues
+      const content = (file.content || '').substring(0, 50000); // Max 50KB per file
+      const tokens = tokenizeCode(content);
+      documents.push({ file, tokens });
+    });
+    
+    // Yield to browser after each batch to prevent blocking
+    if (i + TOKENIZE_BATCH_SIZE < filesToProcess.length) {
+      await new Promise(resolve => setTimeout(resolve, 0));
     }
   }
   
@@ -144,34 +146,44 @@ function computeTFIDFAnalysis(files) {
     let computed = 0;
     const similarityThreshold = 0.1; // Only store meaningful similarities
     
-    // First, compute similarities for files with overlapping terms (more likely to be similar)
-    for (let i = 0; i < tfidfVectors.length && computed < MAX_SIMILARITIES; i++) {
-      for (let j = i + 1; j < tfidfVectors.length && computed < MAX_SIMILARITIES; j++) {
-        // Quick check: do they share any terms?
-        const vec1 = tfidfVectors[i].vector;
-        const vec2 = tfidfVectors[j].vector;
-        let hasCommonTerms = false;
-        
-        // Quick overlap check before expensive cosine similarity
-        for (const term of vec1.keys()) {
-          if (vec2.has(term)) {
-            hasCommonTerms = true;
-            break;
+    // OPTIMIZATION: Process in chunks with yield points
+    const SIMILARITY_CHUNK_SIZE = 25;
+    for (let chunkStart = 0; chunkStart < tfidfVectors.length && computed < MAX_SIMILARITIES; chunkStart += SIMILARITY_CHUNK_SIZE) {
+      const chunkEnd = Math.min(chunkStart + SIMILARITY_CHUNK_SIZE, tfidfVectors.length);
+      
+      for (let i = chunkStart; i < chunkEnd && computed < MAX_SIMILARITIES; i++) {
+        for (let j = i + 1; j < tfidfVectors.length && computed < MAX_SIMILARITIES; j++) {
+          // Quick check: do they share any terms?
+          const vec1 = tfidfVectors[i].vector;
+          const vec2 = tfidfVectors[j].vector;
+          let hasCommonTerms = false;
+          
+          // Quick overlap check before expensive cosine similarity
+          for (const term of vec1.keys()) {
+            if (vec2.has(term)) {
+              hasCommonTerms = true;
+              break;
+            }
+          }
+          
+          // Only compute similarity if they share terms (optimization)
+          if (hasCommonTerms || computed < 500) { // Reduced from 1000 to 500
+            const sim = cosineSimilarity(vec1, vec2);
+            if (sim > similarityThreshold) {
+              similarities.push({
+                file1: tfidfVectors[i].file.name,
+                file2: tfidfVectors[j].file.name,
+                similarity: sim
+              });
+            }
+            computed++;
           }
         }
-        
-        // Only compute similarity if they share terms (optimization)
-        if (hasCommonTerms || computed < 1000) { // Always compute first 1000
-          const sim = cosineSimilarity(vec1, vec2);
-          if (sim > similarityThreshold) {
-            similarities.push({
-              file1: tfidfVectors[i].file.name,
-              file2: tfidfVectors[j].file.name,
-              similarity: sim
-            });
-          }
-          computed++;
-        }
+      }
+      
+      // Yield to event loop after each chunk
+      if (chunkStart + SIMILARITY_CHUNK_SIZE < tfidfVectors.length && computed < MAX_SIMILARITIES) {
+        await new Promise(resolve => setTimeout(resolve, 0));
       }
     }
   } else {

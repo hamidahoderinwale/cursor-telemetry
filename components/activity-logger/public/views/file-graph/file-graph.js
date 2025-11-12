@@ -111,8 +111,9 @@ async function initializeD3FileGraph() {
       console.log('[FILE] Fetching file contents from SQLite for TF-IDF analysis...');
       let response;
       try {
-        // Increased limit for better data coverage - can still be fast with caching
-        response = await fetch(`${apiBase}/api/file-contents?limit=1000`);
+        // OPTIMIZATION: Start with smaller limit for faster initial load, can load more on demand
+        // Reduced from 1000 to 500 for faster initial response
+        response = await fetch(`${apiBase}/api/file-contents?limit=500`);
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
@@ -370,10 +371,19 @@ async function initializeD3FileGraph() {
     console.log(`[GRAPH] Building event lookup map from ${allEvents.length} events...`);
     updateProgress(`Processing ${allEvents.length} events...`, 10);
     
-    // Process events in batches to prevent timeout
-    const EVENT_BATCH_SIZE = 500;
+    // OPTIMIZATION: Process events in smaller batches with progress updates
+    const EVENT_BATCH_SIZE = 200; // Reduced from 500 for better responsiveness
+    const totalBatches = Math.ceil(allEvents.length / EVENT_BATCH_SIZE);
+    
     for (let i = 0; i < allEvents.length; i += EVENT_BATCH_SIZE) {
       const batch = allEvents.slice(i, i + EVENT_BATCH_SIZE);
+      const batchNum = Math.floor(i / EVENT_BATCH_SIZE) + 1;
+      
+      // Update progress periodically
+      if (batchNum % 5 === 0 || batchNum === totalBatches) {
+        const progress = 10 + Math.floor((i / allEvents.length) * 20);
+        updateProgress(`Processing events... ${batchNum}/${totalBatches}`, progress);
+      }
       
       batch.forEach(event => {
         try {
@@ -405,7 +415,7 @@ async function initializeD3FileGraph() {
         }
       });
       
-      // Yield to event loop periodically
+      // Yield to event loop after each batch for better responsiveness
       if (i + EVENT_BATCH_SIZE < allEvents.length) {
         await new Promise(resolve => setTimeout(resolve, 0));
       }
@@ -664,14 +674,15 @@ async function initializeD3FileGraph() {
     // Define prompts early so it's available in all code paths
     const prompts = window.state?.data?.prompts || [];
     
-    // Limit files for performance (O(n²) computation) - increased for better coverage
-    const MAX_FILES_FOR_GRAPH = 1000; // Increased from 500 for better data coverage
+    // OPTIMIZATION: Limit files for performance (O(n²) computation)
+    // Reduced from 1000 to 500 for faster initial load, can load more on demand
+    const MAX_FILES_FOR_GRAPH = 500;
     const filesForGraph = files.length > MAX_FILES_FOR_GRAPH 
       ? files.slice(0, MAX_FILES_FOR_GRAPH) 
       : files;
     
     if (files.length > MAX_FILES_FOR_GRAPH) {
-      console.log(`[GRAPH] Limiting to ${MAX_FILES_FOR_GRAPH} files (of ${files.length}) to prevent timeout`);
+      console.log(`[GRAPH] Limiting to ${MAX_FILES_FOR_GRAPH} files (of ${files.length}) for faster loading`);
     }
     
     // Build file ID to file object map for quick lookup
@@ -783,14 +794,24 @@ async function initializeD3FileGraph() {
         fileSessionMap.set(file.id, sessions);
       });
       
-      // Compute co-occurrence between files (optimized with early termination)
-      const MAX_LINKS = 3000; // Reduced limit to prevent UI slowdown
+      // OPTIMIZATION: Compute co-occurrence between files with better chunking
+      const MAX_LINKS = 2000; // Reduced from 3000 to prevent UI slowdown
       let linkCount = 0;
       
-      // Process in chunks with yield points
-      const CHUNK_SIZE = 50;
+      // Process in smaller chunks with yield points for better responsiveness
+      const CHUNK_SIZE = 25; // Reduced from 50 for better responsiveness
+      const totalChunks = Math.ceil(filesForGraph.length / CHUNK_SIZE);
+      let processedChunks = 0;
+      
       for (let chunkStart = 0; chunkStart < filesForGraph.length && linkCount < MAX_LINKS; chunkStart += CHUNK_SIZE) {
         const chunkEnd = Math.min(chunkStart + CHUNK_SIZE, filesForGraph.length);
+        processedChunks++;
+        
+        // Update progress periodically
+        if (processedChunks % 5 === 0 || processedChunks === totalChunks) {
+          const progress = 50 + Math.floor((processedChunks / totalChunks) * 20);
+          updateProgress(`Computing relationships... ${processedChunks}/${totalChunks}`, progress);
+        }
         
         for (let i = chunkStart; i < chunkEnd && linkCount < MAX_LINKS; i++) {
           for (let j = i + 1; j < filesForGraph.length && linkCount < MAX_LINKS; j++) {
@@ -869,8 +890,8 @@ async function initializeD3FileGraph() {
           }
         }
         
-        // Yield to event loop periodically to prevent timeout
-        if (chunkStart + CHUNK_SIZE < filesForGraph.length) {
+        // Yield to event loop after each chunk for better responsiveness
+        if (chunkStart + CHUNK_SIZE < filesForGraph.length && linkCount < MAX_LINKS) {
           await new Promise(resolve => setTimeout(resolve, 0));
         }
       }
@@ -891,12 +912,14 @@ async function initializeD3FileGraph() {
       console.log('[GRAPH] Basic graph rendered, computing TF-IDF in background...');
     }
     
-    // Compute TF-IDF for semantic analysis ASYNCHRONOUSLY (defer heavy computation) - OPTIMIZATION
+    // OPTIMIZATION: Compute TF-IDF asynchronously (defer heavy computation)
     // This allows the graph to render immediately while TF-IDF computes in background
     // Use idle time for this heavy computation
     const computeTFIDF = async () => {
       try {
-        const {tfidfStats, similarities} = window.computeTFIDFAnalysis(files);
+        updateProgress('Computing TF-IDF analysis...', 75);
+        // computeTFIDFAnalysis is now async, so await it
+        const {tfidfStats, similarities} = await window.computeTFIDFAnalysis(files);
         
         // Update stored data with TF-IDF results
         if (window.fileGraphData) {
@@ -907,10 +930,12 @@ async function initializeD3FileGraph() {
         // Update TF-IDF stats in UI
         updateTFIDFStats(tfidfStats);
         
+        updateProgress('Graph loaded!', 100);
         console.log('[GRAPH] TF-IDF analysis complete');
       } catch (error) {
         console.warn('[GRAPH] TF-IDF analysis failed:', error);
         // Graph still works without TF-IDF
+        updateProgress('Graph loaded!', 100);
       }
     };
     

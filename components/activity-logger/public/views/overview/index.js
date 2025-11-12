@@ -59,16 +59,6 @@ function renderOverviewView(container) {
     }
   });
   
-  // Calculate activity by hour for rhythm visualization
-  const activityByHour = new Array(24).fill(0);
-  [...events, ...prompts].forEach(item => {
-    if (item.timestamp) {
-      const hour = new Date(item.timestamp).getHours();
-      activityByHour[hour]++;
-    }
-  });
-  const maxHourlyActivity = Math.max(...activityByHour, 1);
-  
   // Calculate activity by day of week
   const activityByDay = new Array(7).fill(0);
   [...events, ...prompts].forEach(item => {
@@ -240,17 +230,6 @@ function renderOverviewView(container) {
       
       <!-- Two Column Layout -->
       <div class="overview-grid-2col">
-        
-        <!-- Activity Overview -->
-        <div class="card">
-          <div class="card-header">
-            <h3 class="card-title">Activity Overview</h3>
-            <p class="card-subtitle">Your coding patterns by hour of day</p>
-          </div>
-          <div class="card-body">
-            <div id="activityRhythmChart" class="activity-rhythm-chart"></div>
-          </div>
-        </div>
         
         <!-- Productivity Pulse -->
         <div class="card">
@@ -438,27 +417,6 @@ function renderOverviewView(container) {
   // Retry after data might have loaded
   setTimeout(renderHeatmap, 1000);
   setTimeout(renderHeatmap, 3000);
-    
-    // Render activity rhythm with D3
-    const rhythmContainer = document.getElementById('activityRhythmChart');
-    if (rhythmContainer && window.renderActivityRhythm) {
-      window.renderActivityRhythm(rhythmContainer, activityByHour);
-    } else if (rhythmContainer) {
-      rhythmContainer.innerHTML = `
-        <div class="empty-state">
-          <div class="empty-state-text" style="font-style: normal;">Activity rhythm renderer not available</div>
-        </div>
-      `;
-    }
-  }, 100);
-  
-  // Retry after D3 loads (if deferred)
-  setTimeout(() => {
-    const rhythmContainer = document.getElementById('activityRhythmChart');
-    if (rhythmContainer && window.renderActivityRhythm && typeof d3 !== 'undefined') {
-      window.renderActivityRhythm(rhythmContainer, activityByHour);
-    }
-  }, 500);
 }
 
 // Export to window for global access

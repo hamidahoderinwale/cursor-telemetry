@@ -1558,10 +1558,17 @@ function renderTimelineItem(event, side = 'left', timelineItems = null) {
     desc = ''; // Hide redundant description
   }
   
-  // Auto-tag the event
+  // Auto-tag the event using classifier
   let eventTags = [];
-  if (window.autoTagEvent) {
+  if (window.eventClassifier && window.eventClassifier.classifyEvent) {
+    eventTags = window.eventClassifier.classifyEvent(event);
+  } else if (window.autoTagEvent) {
     eventTags = window.autoTagEvent(event);
+  }
+  
+  // Generate summary using classifier
+  if (!desc && window.eventClassifier && window.eventClassifier.generateSummary) {
+    desc = window.eventClassifier.generateSummary(event);
   }
   
   // Only render tags if we have actual tags (not empty)
@@ -2155,6 +2162,7 @@ window.renderConversationMessage = renderConversationMessage;
 window.toggleConversationMessages = toggleConversationMessages;
 /**
  * Render a commit group with nested events and prompts
+ * Uses intelligent grouping by file and type for better visual hierarchy
  */
 function renderCommitGroup(commitGroup, timelineItems = null) {
   const { commit, items, eventCount, promptCount } = commitGroup;
@@ -2168,17 +2176,103 @@ function renderCommitGroup(commitGroup, timelineItems = null) {
   // Escape commit message
   const message = window.escapeHtml ? window.escapeHtml(commit.message) : commit.message;
   
-  // Render nested items
-  const itemsHtml = items.map(item => {
-    if (item.itemType === 'prompt') {
-      return window.renderPromptTimelineItem ? 
-        window.renderPromptTimelineItem(item, 'right', timelineItems) : '';
-    } else if (item.itemType === 'event') {
-      return window.renderTimelineItem ? 
-        window.renderTimelineItem(item, 'left', timelineItems) : '';
-    }
-    return '';
-  }).filter(html => html).join('');
+  // Create nested groups if we have many items
+  let itemsHtml = '';
+  if (items.length > 5 && window.createNestedCommitGroups) {
+    const nestedGroups = window.createNestedCommitGroups(commitGroup);
+    
+    itemsHtml = nestedGroups.map(group => {
+      if (group.type === 'prompts') {
+        // Render prompts
+        return `
+          <div class="commit-subgroup commit-subgroup-prompts">
+            <div class="commit-subgroup-header">
+              <span class="commit-subgroup-label">${group.label}</span>
+            </div>
+            <div class="commit-subgroup-items">
+              ${group.items.map(item => 
+                window.renderPromptTimelineItem ? 
+                  window.renderPromptTimelineItem(item, 'right', timelineItems) : ''
+              ).filter(html => html).join('')}
+            </div>
+          </div>
+        `;
+      } else if (group.type === 'file') {
+        // Render file group with optional type subgroups
+        const fileName = window.escapeHtml ? window.escapeHtml(group.label) : group.label;
+        const fileId = `file-${commitId}-${group.filePath ? group.filePath.replace(/[^a-z0-9]/gi, '-') : 'misc'}`;
+        
+        let fileItemsHtml = '';
+        if (group.subgroups && group.subgroups.length > 1) {
+          // Render with type subgroups
+          fileItemsHtml = group.subgroups.map(subgroup => {
+            const subgroupId = `${fileId}-${subgroup.type}`;
+            return `
+              <div class="commit-subgroup commit-subgroup-type" data-file-group="${fileId}">
+                <div class="commit-subgroup-header commit-subgroup-header-nested" onclick="toggleCommitSubgroup('${subgroupId}')">
+                  <span class="commit-subgroup-label">${subgroup.label}</span>
+                  <span class="commit-subgroup-count">${subgroup.eventCount}</span>
+                  <span class="commit-subgroup-toggle" id="toggle-${subgroupId}">▼</span>
+                </div>
+                <div class="commit-subgroup-items" id="items-${subgroupId}">
+                  ${subgroup.items.map(item => 
+                    window.renderTimelineItem ? 
+                      window.renderTimelineItem(item, 'left', timelineItems) : ''
+                  ).filter(html => html).join('')}
+                </div>
+              </div>
+            `;
+          }).join('');
+        } else {
+          // Render flat file group
+          fileItemsHtml = group.items.map(item => 
+            window.renderTimelineItem ? 
+              window.renderTimelineItem(item, 'left', timelineItems) : ''
+          ).filter(html => html).join('');
+        }
+        
+        return `
+          <div class="commit-subgroup commit-subgroup-file" data-file-path="${group.filePath || ''}">
+            <div class="commit-subgroup-header">
+              <span class="commit-subgroup-label commit-subgroup-file-name">${fileName}</span>
+              <span class="commit-subgroup-count">${group.eventCount} change${group.eventCount !== 1 ? 's' : ''}</span>
+            </div>
+            <div class="commit-subgroup-items">
+              ${fileItemsHtml}
+            </div>
+          </div>
+        `;
+      } else {
+        // Misc group
+        return `
+          <div class="commit-subgroup commit-subgroup-misc">
+            <div class="commit-subgroup-header">
+              <span class="commit-subgroup-label">${group.label}</span>
+              <span class="commit-subgroup-count">${group.eventCount}</span>
+            </div>
+            <div class="commit-subgroup-items">
+              ${group.items.map(item => 
+                window.renderTimelineItem ? 
+                  window.renderTimelineItem(item, 'left', timelineItems) : ''
+              ).filter(html => html).join('')}
+            </div>
+          </div>
+        `;
+      }
+    }).join('');
+  } else {
+    // Simple flat rendering for small groups
+    itemsHtml = items.map(item => {
+      if (item.itemType === 'prompt') {
+        return window.renderPromptTimelineItem ? 
+          window.renderPromptTimelineItem(item, 'right', timelineItems) : '';
+      } else if (item.itemType === 'event') {
+        return window.renderTimelineItem ? 
+          window.renderTimelineItem(item, 'left', timelineItems) : '';
+      }
+      return '';
+    }).filter(html => html).join('');
+  }
   
   return `
     <div class="timeline-item commit-group" data-commit-id="${commitId}">
@@ -2206,6 +2300,17 @@ function renderCommitGroup(commitGroup, timelineItems = null) {
 window.toggleCommitGroup = function(commitId) {
   const itemsContainer = document.getElementById(`items-${commitId}`);
   const toggle = document.getElementById(`toggle-${commitId}`);
+  if (itemsContainer && toggle) {
+    const isExpanded = itemsContainer.style.display !== 'none';
+    itemsContainer.style.display = isExpanded ? 'none' : 'block';
+    toggle.textContent = isExpanded ? '▶' : '▼';
+  }
+};
+
+// Toggle function for commit subgroups (file/type groups)
+window.toggleCommitSubgroup = function(subgroupId) {
+  const itemsContainer = document.getElementById(`items-${subgroupId}`);
+  const toggle = document.getElementById(`toggle-${subgroupId}`);
   if (itemsContainer && toggle) {
     const isExpanded = itemsContainer.style.display !== 'none';
     itemsContainer.style.display = isExpanded ? 'none' : 'block';

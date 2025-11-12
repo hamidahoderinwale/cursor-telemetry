@@ -737,35 +737,67 @@ class SchemaConfigView {
       return '<p class="empty-state">No field configurations. All fields will be exported by default.</p>';
     }
 
-    return fields.map(field => `
-      <div class="custom-field-item" style="border-left: 3px solid ${field.enabled ? 'var(--color-success)' : 'var(--color-error)'}; padding: var(--space-sm); margin-bottom: var(--space-xs); background: var(--color-bg); border-radius: var(--radius-sm);">
-        <div class="field-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-xs);">
-          <div>
-            <span class="field-name" style="font-weight: 600;">${field.displayName || field.fieldName}</span>
-            <span style="color: var(--color-text-muted); font-size: var(--text-xs); margin-left: var(--space-xs);">
-              (${field.tableName}.${field.fieldName})
-            </span>
-          </div>
-          <div class="field-actions" style="display: flex; align-items: center; gap: var(--space-sm);">
-            <span style="font-size: var(--text-xs); color: ${field.enabled ? 'var(--color-success)' : 'var(--color-text-muted)'};">
-              ${field.enabled ? '✓ Exported' : '✗ Excluded'}
-            </span>
-            <label class="toggle-switch">
-              <input type="checkbox" ${field.enabled ? 'checked' : ''} 
-                     onchange="schemaConfigView.toggleField('${field.tableName}', '${field.fieldName}', this.checked)">
-              <span class="slider"></span>
-            </label>
-            <button class="btn-icon" onclick="schemaConfigView.deleteCustomField('${field.tableName}', '${field.fieldName}')" title="Remove configuration (field will be exported by default)">
-              [Remove]
-            </button>
-          </div>
-        </div>
-        <div class="field-details" style="font-size: var(--text-xs); color: var(--color-text-muted);">
-          <span class="field-type">Type: ${field.fieldType}</span>
-          ${field.description ? `<span style="margin-left: var(--space-sm);">• ${field.description}</span>` : ''}
-        </div>
+    // Render as a table for better readability
+    const escapeHtml = window.escapeHtml || ((text) => {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    });
+
+    return `
+      <div class="custom-fields-table-wrapper" style="overflow-x: auto;">
+        <table class="custom-fields-table" style="width: 100%; border-collapse: collapse;">
+          <thead>
+            <tr style="background: var(--color-bg-alt); border-bottom: 2px solid var(--color-border);">
+              <th style="padding: var(--space-sm); text-align: left; font-weight: 600; font-size: var(--text-sm); color: var(--color-text);">Field Name</th>
+              <th style="padding: var(--space-sm); text-align: left; font-weight: 600; font-size: var(--text-sm); color: var(--color-text);">Display Name</th>
+              <th style="padding: var(--space-sm); text-align: left; font-weight: 600; font-size: var(--text-sm); color: var(--color-text);">Field Type</th>
+              <th style="padding: var(--space-sm); text-align: left; font-weight: 600; font-size: var(--text-sm); color: var(--color-text);">Description</th>
+              <th style="padding: var(--space-sm); text-align: center; font-weight: 600; font-size: var(--text-sm); color: var(--color-text);">Enabled</th>
+              <th style="padding: var(--space-sm); text-align: center; font-weight: 600; font-size: var(--text-sm); color: var(--color-text);">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${fields.map(field => `
+              <tr class="custom-field-row" style="border-bottom: 1px solid var(--color-border); transition: background-color 0.2s ease;" 
+                  onmouseover="this.style.background='var(--color-bg-alt)'" 
+                  onmouseout="this.style.background='var(--color-bg)'">
+                <td style="padding: var(--space-sm); font-family: var(--font-mono, 'Monaco', 'Menlo', 'Courier New', monospace); font-size: var(--text-sm); color: var(--color-text);">
+                  ${escapeHtml(field.fieldName)}
+                </td>
+                <td style="padding: var(--space-sm); font-size: var(--text-sm); color: var(--color-text);">
+                  ${escapeHtml(field.displayName || field.fieldName)}
+                </td>
+                <td style="padding: var(--space-sm); font-size: var(--text-sm); color: var(--color-text-muted);">
+                  ${escapeHtml(field.fieldType)}
+                </td>
+                <td style="padding: var(--space-sm); font-size: var(--text-sm); color: var(--color-text-muted); max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(field.description || '')}">
+                  ${escapeHtml(field.description || '-')}
+                </td>
+                <td style="padding: var(--space-sm); text-align: center;">
+                  <label class="toggle-switch" style="display: inline-block;">
+                    <input type="checkbox" ${field.enabled ? 'checked' : ''} 
+                           onchange="schemaConfigView.toggleField('${escapeHtml(field.tableName)}', '${escapeHtml(field.fieldName)}', this.checked)">
+                    <span class="slider"></span>
+                  </label>
+                  <span style="font-size: var(--text-xs); color: ${field.enabled ? 'var(--color-success)' : 'var(--color-text-muted)'}; margin-left: var(--space-xs);">
+                    ${field.enabled ? '✓' : '✗'}
+                  </span>
+                </td>
+                <td style="padding: var(--space-sm); text-align: center;">
+                  <button class="btn btn-sm btn-secondary" 
+                          onclick="schemaConfigView.deleteCustomField('${escapeHtml(field.tableName)}', '${escapeHtml(field.fieldName)}')" 
+                          title="Remove configuration (field will be exported by default)"
+                          style="padding: 4px 8px; font-size: var(--text-xs);">
+                    Remove
+                  </button>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
       </div>
-    `).join('');
+    `;
   }
 
   attachEventListeners() {
