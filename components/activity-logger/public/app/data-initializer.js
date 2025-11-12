@@ -164,11 +164,6 @@ async function initializeDashboard() {
             setTimeout(loadBackgroundData, 3000);
         }
     }
-                    // Silently fail - this is background loading
-                });
-            }
-        }, 2000); // Start after 2 seconds (UI should be interactive by then)
-    }
     
     // Step 5: Preload file graph data in background (non-blocking)
     // This allows the file graph to render instantly when the view is opened
