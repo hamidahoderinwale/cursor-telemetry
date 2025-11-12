@@ -253,6 +253,15 @@ async function loadFromCache() {
   const now = Date.now();
   const thirtyMinutesAgo = now - 30 * 60 * 1000; // Reduced to 30 minutes for ultra-fast load
   
+  // Ensure window.state.data exists
+  if (!window.state) {
+    console.warn('[CACHE] window.state not available');
+    return;
+  }
+  if (!window.state.data) {
+    window.state.data = { events: [], prompts: [] };
+  }
+  
   try {
     // Load only most recent events (limit to 20 for ultra-fast load)
     if (window.persistentStorage.getAllEvents) {
@@ -261,7 +270,11 @@ async function loadFromCache() {
       if (lastEvents && lastEvents.length > 0) {
         window.state.data.events = lastEvents;
         console.log(`[SUCCESS] Loaded ${lastEvents.length} events from cache`);
+      } else {
+        console.log(`[CACHE] No events found in cache (tried to load 20)`);
       }
+    } else {
+      console.warn('[CACHE] getAllEvents method not available');
     }
     
     // Load only most recent prompts (limit to 20 for ultra-fast load)
@@ -271,8 +284,17 @@ async function loadFromCache() {
       if (lastPrompts && lastPrompts.length > 0) {
         window.state.data.prompts = lastPrompts;
         console.log(`[SUCCESS] Loaded ${lastPrompts.length} prompts from cache`);
+      } else {
+        console.log(`[CACHE] No prompts found in cache (tried to load 20)`);
       }
+    } else {
+      console.warn('[CACHE] getAllPrompts method not available');
     }
+    
+    // Log final state
+    const eventCount = (window.state.data.events || []).length;
+    const promptCount = (window.state.data.prompts || []).length;
+    console.log(`[CACHE] Final state: ${eventCount} events, ${promptCount} prompts loaded`);
     
     // Don't calculate stats or render here - let main initialization handle it
     // This makes cache loading faster and non-blocking
