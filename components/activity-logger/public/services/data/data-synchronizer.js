@@ -81,8 +81,14 @@ class DataSynchronizer {
       });
     }, 1000);
     
-    // Start periodic sync for live updates
-    this.startPeriodicSync();
+    // Use RefreshManager if available (optimized scheduling)
+    if (window.refreshManager) {
+      window.refreshManager.start(this, this.aggregator);
+      console.log('[SYNC] Using optimized refresh manager');
+    } else {
+      // Fallback to legacy periodic sync
+      this.startPeriodicSync();
+    }
     
     this.isInitialized = true;
     console.log('[SUCCESS] Data synchronizer initialized');

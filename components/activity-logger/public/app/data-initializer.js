@@ -124,10 +124,10 @@ async function initializeDashboard() {
       window.initProgress.complete('Offline - using cached data');
     }
     
-    // Step 4: Background: fetch more data after initial render (cloud optimization)
+    // Step 4: Background: fetch more data after initial render (optimized with idle time)
     if (isConnected) {
-        // Load additional data in background after UI is interactive
-        setTimeout(() => {
+        // Use requestIdleCallback for background loading (low priority)
+        const loadBackgroundData = () => {
             fetchOlderHistory();
             // Load more recent data to fill in gaps (up to 200 total for better performance)
             if (window.APIClient && window.state?.data?.events?.length < 200) {
@@ -145,13 +145,25 @@ async function initializeDashboard() {
                         if (newEvents.length > 0) {
                             window.state.data.events = [...(window.state.data.events || []), ...newEvents];
                             console.log(`[BACKGROUND] Loaded ${newEvents.length} additional events`);
-                            // Optionally update UI if needed
+                            // Update stats (debounced)
                             if (window.calculateStats) {
                                 window.calculateStats();
                             }
                         }
                     }
                 }).catch(err => {
+                    // Silently handle background loading errors
+                });
+            }
+        };
+        
+        // Use idle time if available, otherwise delay
+        if (typeof requestIdleCallback !== 'undefined') {
+            requestIdleCallback(loadBackgroundData, { timeout: 5000 });
+        } else {
+            setTimeout(loadBackgroundData, 3000);
+        }
+    }
                     // Silently fail - this is background loading
                 });
             }

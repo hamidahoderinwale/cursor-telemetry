@@ -1937,49 +1937,8 @@ function initializeWhenReady() {
     
     console.log('[SUCCESS] Dashboard initialized with warm-start');
     
-    // Setup auto-refresh with debouncing to prevent excessive requests
-    let refreshInProgress = false;
-    let lastRefreshTime = Date.now();
-    const MIN_REFRESH_INTERVAL = CONFIG.REFRESH_INTERVAL; // Match the interval to prevent overlap
-    
-    setInterval(async () => {
-      // Skip if refresh is already in progress or too soon
-      if (refreshInProgress || (Date.now() - lastRefreshTime) < MIN_REFRESH_INTERVAL) {
-        console.log('[SYNC] Skipping refresh - already in progress or too soon');
-        return;
-      }
-      
-      refreshInProgress = true;
-      lastRefreshTime = Date.now();
-      
-      try {
-        if (storage && synchronizer) {
-          // Use optimized fetch for refresh
-          await (window.fetchRecentData || (() => { console.error('[ERROR] fetchRecentData not available'); }))();
-          // Fire and forget - don't block on stats calculation
-  calculateStats().catch(err => console.warn('[STATS] Error calculating stats:', err));
-          renderCurrentView();
-          // Update status on successful sync
-          if (window.state && window.state.connected) {
-            updateConnectionStatus(true, 'Connected - synced');
-          }
-          // Reinitialize search if we have significantly more data
-          if (typeof window.reinitializeSearch === 'function') {
-            window.reinitializeSearch().catch(err => {
-              console.warn('[SEARCH] Search reinitialization failed:', err);
-            });
-          }
-        }
-      } catch (error) {
-        console.error('Refresh error:', error);
-        // Update status if sync fails
-        if (window.state && window.state.connected) {
-          updateConnectionStatus(false, 'Sync failed - retrying...');
-        }
-      } finally {
-        refreshInProgress = false;
-      }
-    }, CONFIG.REFRESH_INTERVAL);
+    // Refresh is now handled by RefreshManager (optimized scheduling)
+    // No need for duplicate refresh logic here
   } else {
     // No persistence - use traditional fetch
     initializeNonPersistent();
