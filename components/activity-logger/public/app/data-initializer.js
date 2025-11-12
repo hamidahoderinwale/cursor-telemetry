@@ -324,19 +324,40 @@ async function loadFromCache() {
     }
   } catch (error) {
     console.warn('[WARNING] Cache load failed, trying fallback:', error.message);
-    // Fallback to loading all data at once
+    // Fallback: Wait a bit longer for IndexedDB, then try again
     try {
-      const cached = await window.persistentStorage.getAll();
-      if (cached.events && cached.events.length > 0) {
-        window.state.data.events = cached.events;
-        console.log(`[SUCCESS] Loaded ${cached.events.length} events from cache (fallback)`);
-      }
-      if (cached.prompts && cached.prompts.length > 0) {
-        window.state.data.prompts = cached.prompts;
-        console.log(`[SUCCESS] Loaded ${cached.prompts.length} prompts from cache (fallback)`);
+      // Wait up to 3 more seconds for IndexedDB to be ready
+      let retries = 3;
+      while (retries > 0) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        try {
+          // Ensure DB is initialized
+          if (!window.persistentStorage.db) {
+            await window.persistentStorage.init();
+          }
+          
+          // Try to load data
+          const cached = await window.persistentStorage.getAll();
+          if (cached.events && cached.events.length > 0) {
+            window.state.data.events = cached.events;
+            console.log(`[SUCCESS] Loaded ${cached.events.length} events from cache (fallback)`);
+          }
+          if (cached.prompts && cached.prompts.length > 0) {
+            window.state.data.prompts = cached.prompts;
+            console.log(`[SUCCESS] Loaded ${cached.prompts.length} prompts from cache (fallback)`);
+          }
+          
+          // If we got data, break out of retry loop
+          if ((cached.events && cached.events.length > 0) || (cached.prompts && cached.prompts.length > 0)) {
+            break;
+          }
+        } catch (retryError) {
+          // Continue retrying
+        }
+        retries--;
       }
     } catch (fallbackError) {
-      console.error('[ERROR] Cache load fallback also failed:', fallbackError);
+      console.warn('[WARNING] Fallback cache load also failed:', fallbackError.message);
     }
   }
 }
