@@ -193,10 +193,18 @@ function updateNodePositions() {
     }
   });
   
-  // Update D3 elements
-  navigatorState.nodeElements.attr('transform', d => `translate(${d.x},${d.y})`);
+  // Update D3 elements (only if in 2D mode)
+  if (navigatorState.viewDimension === '2d' && navigatorState.nodeElements) {
+    navigatorState.nodeElements.attr('transform', d => `translate(${d.x},${d.y})`);
+  }
   
-  navigatorState.linkElements
+  // Update 3D positions if in 3D mode
+  if (navigatorState.viewDimension === '3d' && window.updateNavigator3DPositions) {
+    window.updateNavigator3DPositions();
+  }
+  
+  if (navigatorState.viewDimension === '2d' && navigatorState.linkElements) {
+    navigatorState.linkElements
     .attr('x1', d => {
       const source = navigatorState.nodes.find(n => n.id === d.source || n.id === d.source.id);
       return source ? source.x : 0;
@@ -1150,6 +1158,58 @@ function toggleNavigatorLabels() {
   }
 }
 
+/**
+ * Toggle between 2D and 3D visualization
+ */
+function toggleNavigator3D() {
+  if (!window.navigatorState) return;
+  const navigatorState = window.navigatorState;
+  
+  const container = document.getElementById('navigatorContainer');
+  if (!container) return;
+  
+  // Cleanup previous renderer
+  if (navigatorState.viewDimension === '3d' && navigatorState.cleanup3D) {
+    navigatorState.cleanup3D();
+  }
+  
+  // Toggle dimension
+  navigatorState.viewDimension = navigatorState.viewDimension === '3d' ? '2d' : '3d';
+  
+  // Update button
+  const button = document.getElementById('navigator3DToggle');
+  const label = document.getElementById('navigator3DLabel');
+  if (button && label) {
+    if (navigatorState.viewDimension === '3d') {
+      label.textContent = '2D View';
+      button.classList.add('active');
+    } else {
+      label.textContent = '3D View';
+      button.classList.remove('active');
+    }
+  }
+  
+  // Re-render with new dimension
+  if (navigatorState.nodes.length > 0 && navigatorState.links.length > 0) {
+    if (navigatorState.viewDimension === '3d') {
+      if (window.renderNavigator3D) {
+        window.renderNavigator3D(container, navigatorState.nodes, navigatorState.links);
+      } else {
+        console.warn('[NAVIGATOR] 3D renderer not loaded');
+        navigatorState.viewDimension = '2d';
+        if (button && label) {
+          label.textContent = '3D View';
+          button.classList.remove('active');
+        }
+      }
+    } else {
+      if (window.renderNavigator) {
+        window.renderNavigator(container, navigatorState.nodes, navigatorState.links);
+      }
+    }
+  }
+}
+
 // Export to window
 window.renderNavigator = renderNavigator;
 window.updateNodePositions = updateNodePositions;
@@ -1312,4 +1372,5 @@ window.zoomToNode = zoomToNode;
 window.zoomToFitNavigator = zoomToFitNavigator;
 window.resetNavigatorView = resetNavigatorView;
 window.toggleNavigatorLabels = toggleNavigatorLabels;
+window.toggleNavigator3D = toggleNavigator3D;
 

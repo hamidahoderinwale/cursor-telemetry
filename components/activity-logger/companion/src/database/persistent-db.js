@@ -1455,7 +1455,15 @@ class PersistentDB {
           console.error('Error loading events:', err);
           reject(err);
         } else {
-          resolve(rows);
+          resolve(
+            rows.map((row) => ({
+              ...row,
+              details: row.details ? JSON.parse(row.details) : {},
+              tags: row.tags ? JSON.parse(row.tags || '[]') : [],
+              ai_generated: row.ai_generated === 1,
+              // annotation field is already a string, no parsing needed
+            }))
+          );
         }
       });
     });

@@ -629,6 +629,7 @@ async function captureSystemResources() {
     const memUsage = process.memoryUsage();
     const cpuUsage = process.cpuUsage();
     const loadAvg = os.loadavg();
+    const cpuCores = os.cpus().length;
 
     const resourceData = {
       timestamp: Date.now(),
@@ -645,6 +646,7 @@ async function captureSystemResources() {
       },
       system: {
         loadAverage: loadAvg,
+        cpuCores: cpuCores,
         freeMemory: os.freemem(),
         totalMemory: os.totalmem(),
         uptime: os.uptime(),

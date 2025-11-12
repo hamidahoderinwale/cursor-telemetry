@@ -41,29 +41,48 @@ function renderWhiteboardView(container) {
       <!-- Toolbar -->
       <div class="whiteboard-toolbar">
         <div class="toolbar-section">
-          <label>Zoom:</label>
+          <label>Canvas Zoom:</label>
           <button class="btn-icon" id="zoomOutBtn" title="Zoom out">−</button>
           <span id="zoomLevel">100%</span>
           <button class="btn-icon" id="zoomInBtn" title="Zoom in">+</button>
           <button class="btn-icon" id="zoomFitBtn" title="Fit to screen">⌂</button>
         </div>
         <div class="toolbar-section">
-          <label>View:</label>
-          <button class="btn-icon active" id="viewCanvasBtn" title="Canvas view">⊞</button>
-          <button class="btn-icon" id="viewListBtn" title="List view">☰</button>
+          <button class="btn btn-secondary" id="toggleChartsPanelBtn" title="Toggle charts panel">
+            <span id="chartsPanelToggleText">Hide Charts</span>
+          </button>
         </div>
       </div>
 
-      <!-- Canvas Container -->
-      <div class="whiteboard-canvas-container" id="whiteboardCanvas">
-        <div class="whiteboard-empty-state" id="whiteboardEmptyState">
-          <div class="empty-state-content">
-            <h3>Start Building</h3>
-            <p>Add your first query to begin analyzing your data</p>
-            <button class="btn btn-primary" id="addFirstQueryBtn">+ Add Query</button>
-            <div class="empty-state-templates">
-              <p>Or start with a template:</p>
-              <div class="template-grid" id="templateGrid"></div>
+      <!-- Main Content: Split Pane Layout -->
+      <div class="whiteboard-main-layout">
+        <!-- Left: Canvas Container for Queries -->
+        <div class="whiteboard-canvas-wrapper">
+          <div class="whiteboard-canvas-container" id="whiteboardCanvas">
+            <div class="whiteboard-empty-state" id="whiteboardEmptyState">
+              <div class="empty-state-content">
+                <h3>Start Building</h3>
+                <p>Add your first query to begin analyzing your data</p>
+                <button class="btn btn-primary" id="addFirstQueryBtn">+ Add Query</button>
+                <div class="empty-state-templates">
+                  <p>Or start with a template:</p>
+                  <div class="template-grid" id="templateGrid"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: Charts Panel -->
+        <div class="whiteboard-charts-panel" id="whiteboardChartsPanel">
+          <div class="charts-panel-header">
+            <h3 class="charts-panel-title">Visualizations</h3>
+            <p class="charts-panel-subtitle">Charts created from your queries</p>
+            <button class="btn-icon" id="closeChartsPanelBtn" title="Close panel">×</button>
+          </div>
+          <div class="charts-panel-content" id="chartsPanelContent">
+            <div class="charts-empty-state">
+              <p>No charts yet. Run a query and click "Add to Charts" to visualize results.</p>
             </div>
           </div>
         </div>
@@ -79,10 +98,10 @@ function renderWhiteboardView(container) {
             </div>
             <div class="query-block-actions">
               <button class="btn-icon expand-btn" title="Expand/Collapse" data-action="toggle-expand">⛶</button>
-              <button class="btn-icon" title="Run query" data-action="run">Run</button>
-              <button class="btn-icon" title="Create chart widget" data-action="create-chart">Chart</button>
-              <button class="btn-icon" title="Export" data-action="export">Export</button>
-              <button class="btn-icon" title="Delete" data-action="delete">×</button>
+              <button class="btn-icon" title="Run query" data-action="run">▶</button>
+              <button class="btn-icon" title="Add chart to panel" data-action="add-chart">📊</button>
+              <button class="btn-icon" title="Export results" data-action="export">↓</button>
+              <button class="btn-icon" title="Delete query" data-action="delete">×</button>
             </div>
           </div>
           <div class="query-block-body">
@@ -93,8 +112,8 @@ function renderWhiteboardView(container) {
                 <button class="query-tab" data-mode="builder">Builder</button>
               </div>
               <div class="query-input-content">
-                <textarea class="query-input natural-input" placeholder="Ask a question in natural language...&#10;Example: 'Show me files I edited most this week'"></textarea>
-                <textarea class="query-input sql-input" style="display: none;" placeholder="Write SQL query...&#10;Example: SELECT file_path, COUNT(*) FROM entries WHERE timestamp > date('now', '-7 days') GROUP BY file_path"></textarea>
+                <textarea class="query-input natural-input" placeholder="Ask a question in natural language...&#10;&#10;Examples:&#10;• Show me files I edited most this week&#10;• What are my most active coding sessions?&#10;• Which files have the most AI interactions?"></textarea>
+                <textarea class="query-input sql-input" style="display: none;" placeholder="Write SQL query...&#10;&#10;Example:&#10;SELECT file_path, COUNT(*) as edit_count&#10;FROM entries&#10;WHERE timestamp > datetime('now', '-7 days')&#10;GROUP BY file_path&#10;ORDER BY edit_count DESC&#10;LIMIT 20"></textarea>
                 <div class="query-builder" style="display: none;">
                   <div class="builder-section">
                     <label>Data Source:</label>
@@ -190,61 +209,29 @@ function initializeWhiteboard() {
   // Update stats display
   updateWhiteboardStats();
 
-  // Add default sample query if whiteboard is empty
-  setTimeout(() => {
-    if (whiteboard.queries.size === 0) {
-      const sampleQueryId = whiteboard.addQueryBlock('Sample Query: File Changes This Week');
-      // Wait a bit for the query block to be fully initialized
-      setTimeout(() => {
-        const sampleBlock = document.getElementById(sampleQueryId);
-        if (sampleBlock) {
-          // Find the inner query-block element
-          const innerBlock = sampleBlock.querySelector('.query-block') || sampleBlock;
-          
-          // Set sample SQL query
-          const sqlInput = innerBlock.querySelector('.sql-input');
-          if (sqlInput) {
-            sqlInput.value = `SELECT 
-  file_path,
-  COUNT(*) as change_count,
-  SUM(CASE WHEN after_code IS NOT NULL THEN 1 ELSE 0 END) as additions
-FROM entries 
-WHERE timestamp > datetime('now', '-7 days')
-GROUP BY file_path
-ORDER BY change_count DESC
-LIMIT 10`;
-            // Update the query object
-            const query = whiteboard.queries.get(sampleQueryId);
-            if (query) {
-              query.query = sqlInput.value;
-              query.sql = sqlInput.value;
-              query.mode = 'sql';
-            }
-          }
-          
-          // Switch to SQL mode
-          const sqlTab = innerBlock.querySelector('.query-tab[data-mode="sql"]');
-          if (sqlTab) {
-            // Trigger click to switch tabs
-            sqlTab.click();
-          } else {
-            // Fallback: manually switch
-            const tabs = innerBlock.querySelectorAll('.query-tab');
-            tabs.forEach(t => t.classList.remove('active'));
-            if (sqlTab) sqlTab.classList.add('active');
-            
-            // Show SQL input
-            innerBlock.querySelectorAll('.query-input').forEach(input => {
-              input.style.display = 'none';
-            });
-            innerBlock.querySelector('.query-builder')?.style.setProperty('display', 'none');
-            const sqlInputEl = innerBlock.querySelector('.sql-input');
-            if (sqlInputEl) sqlInputEl.style.display = 'block';
-          }
-        }
-      }, 200);
-    }
-  }, 100);
+  // Initialize charts panel toggle
+  const toggleChartsPanelBtn = document.getElementById('toggleChartsPanelBtn');
+  const closeChartsPanelBtn = document.getElementById('closeChartsPanelBtn');
+  const chartsPanel = document.getElementById('whiteboardChartsPanel');
+  const chartsPanelToggleText = document.getElementById('chartsPanelToggleText');
+  
+  if (toggleChartsPanelBtn && chartsPanel) {
+    toggleChartsPanelBtn.addEventListener('click', () => {
+      chartsPanel.classList.toggle('hidden');
+      if (chartsPanelToggleText) {
+        chartsPanelToggleText.textContent = chartsPanel.classList.contains('hidden') ? 'Show Charts' : 'Hide Charts';
+      }
+    });
+  }
+  
+  if (closeChartsPanelBtn && chartsPanel) {
+    closeChartsPanelBtn.addEventListener('click', () => {
+      chartsPanel.classList.add('hidden');
+      if (chartsPanelToggleText) {
+        chartsPanelToggleText.textContent = 'Show Charts';
+      }
+    });
+  }
 
   // Event listeners with null checks
   const addQueryBtn = document.getElementById('whiteboardAddQueryBtn');

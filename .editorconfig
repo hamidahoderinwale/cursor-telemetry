@@ -20,3 +20,4 @@ indent_size = 2
 [*.{html,css}]
 indent_size = 2
 
+

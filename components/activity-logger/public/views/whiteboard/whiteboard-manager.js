@@ -141,11 +141,11 @@ class WhiteboardManager {
       });
     }
 
-    // Create chart widget button
-    const chartBtn = block.querySelector('[data-action="create-chart"]');
+    // Add chart to panel button
+    const chartBtn = block.querySelector('[data-action="add-chart"]');
     if (chartBtn) {
       chartBtn.addEventListener('click', () => {
-        this.createChartWidget(queryId);
+        this.addChartToPanel(queryId);
       });
     }
 
@@ -255,6 +255,9 @@ class WhiteboardManager {
       // Show results
       this.displayResults(queryId, results);
 
+      // Update all charts that use this query (reactive updates)
+      this.visualizationEngine.updateChartsForQuery(queryId, results);
+
       if (statusEl) {
         statusEl.textContent = '✓';
         statusEl.className = 'query-status success';
@@ -326,45 +329,138 @@ class WhiteboardManager {
     }
   }
 
-  createChartWidget(queryId) {
+  addChartToPanel(queryId) {
     const query = this.queries.get(queryId);
     if (!query || !query.results) {
       alert('Please run the query first to create a chart');
       return;
     }
 
-    const chartId = `chart-${Date.now()}`;
-    const template = document.getElementById('chartWidgetTemplate');
-    if (!template) {
-      console.error('Chart widget template not found');
+    const chartsPanel = document.getElementById('whiteboardChartsPanel');
+    const chartsContent = document.getElementById('chartsPanelContent');
+    if (!chartsPanel || !chartsContent) {
+      console.error('Charts panel not found');
       return;
     }
 
-    const canvas = document.getElementById('whiteboardCanvas');
-    if (!canvas) return;
+    // Show panel if hidden
+    chartsPanel.classList.remove('hidden');
+    const toggleText = document.getElementById('chartsPanelToggleText');
+    if (toggleText) toggleText.textContent = 'Hide Charts';
 
-    const chartWidget = template.cloneNode(true);
-    chartWidget.id = chartId;
-    chartWidget.style.display = 'block';
-    chartWidget.querySelector('.chart-widget').dataset.chartId = chartId;
-    chartWidget.querySelector('.chart-widget').dataset.queryId = queryId;
+    // Hide empty state
+    const emptyState = chartsContent.querySelector('.charts-empty-state');
+    if (emptyState) emptyState.style.display = 'none';
 
-    // Position near the query block
-    const queryBlock = document.getElementById(queryId);
-    if (queryBlock) {
-      const rect = queryBlock.getBoundingClientRect();
-      const canvasRect = canvas.getBoundingClientRect();
-      chartWidget.querySelector('.chart-widget').style.left = `${rect.right - canvasRect.left + 20}px`;
-      chartWidget.querySelector('.chart-widget').style.top = `${rect.top - canvasRect.top}px`;
+    const chartId = `chart-${Date.now()}`;
+    const chartCard = this.createChartCard(chartId, queryId, query);
+    chartsContent.appendChild(chartCard);
+
+    // Render chart
+    this.renderChartInPanel(chartId, query.results, query.title || 'Untitled Query');
+  }
+
+  createChartCard(chartId, queryId, query) {
+    const card = document.createElement('div');
+    card.className = 'chart-card';
+    card.id = chartId;
+    card.dataset.queryId = queryId;
+    
+    card.innerHTML = `
+      <div class="chart-card-header">
+        <div class="chart-card-title">
+          <h4>${this.escapeHtml(query.title || 'Untitled Query')}</h4>
+          <span class="chart-card-query-badge">Query ${queryId.replace('query-', '')}</span>
+        </div>
+        <div class="chart-card-actions">
+          <select class="chart-type-select" data-chart-id="${chartId}">
+            <option value="auto">Auto</option>
+            <option value="bar">Bar</option>
+            <option value="line">Line</option>
+            <option value="scatter">Scatter</option>
+            <option value="area">Area</option>
+            <option value="heatmap">Heatmap</option>
+            <option value="network">Network</option>
+            <option value="parallel">Parallel Coordinates</option>
+            <option value="sankey">Sankey</option>
+          </select>
+          <button class="btn-icon" data-action="refresh-chart" data-chart-id="${chartId}" title="Refresh">↻</button>
+          <button class="btn-icon" data-action="remove-chart" data-chart-id="${chartId}" title="Remove">×</button>
+        </div>
+      </div>
+      <div class="chart-card-body">
+        <div class="chart-container" id="chart-${chartId}"></div>
+      </div>
+    `;
+
+    // Add event listeners
+    const refreshBtn = card.querySelector('[data-action="refresh-chart"]');
+    if (refreshBtn) {
+      refreshBtn.addEventListener('click', () => {
+        const query = this.queries.get(queryId);
+        if (query?.results) {
+          const typeSelect = card.querySelector('.chart-type-select');
+          const chartType = typeSelect?.value || 'auto';
+          this.renderChartInPanel(chartId, query.results, query.title || 'Untitled Query', chartType);
+        }
+      });
     }
 
-    canvas.appendChild(chartWidget);
+    const removeBtn = card.querySelector('[data-action="remove-chart"]');
+    if (removeBtn) {
+      removeBtn.addEventListener('click', () => {
+        // Unregister chart from visualization engine
+        this.visualizationEngine.unregisterChart(chartId);
+        card.remove();
+        // Show empty state if no charts left
+        const chartsContent = document.getElementById('chartsPanelContent');
+        if (chartsContent) {
+          const remainingCharts = chartsContent.querySelectorAll('.chart-card').length;
+          const emptyState = chartsContent.querySelector('.charts-empty-state');
+          if (emptyState) {
+            emptyState.style.display = remainingCharts === 0 ? 'block' : 'none';
+          }
+        }
+      });
+    }
 
-    // Initialize chart widget
-    this.initializeChartWidget(chartId, queryId);
-    
-    // Render chart
-    this.renderChart(chartId, query.results);
+    const typeSelect = card.querySelector('.chart-type-select');
+    if (typeSelect) {
+      typeSelect.addEventListener('change', () => {
+        const query = this.queries.get(queryId);
+        if (query?.results) {
+          this.renderChartInPanel(chartId, query.results, query.title || 'Untitled Query', typeSelect.value);
+        }
+      });
+    }
+
+    return card;
+  }
+
+  async renderChartInPanel(chartId, results, title, chartType = 'auto') {
+    const container = document.getElementById(`chart-${chartId}`);
+    if (!container) return;
+
+    container.innerHTML = '<div class="chart-loading">Generating chart...</div>';
+
+    try {
+      const vizType = chartType === 'auto' ? this.visualizationEngine.detectVisualizationType(results) : chartType;
+      // Get queryId from card data attribute for reactive updates
+      const card = document.getElementById(chartId);
+      const queryId = card?.dataset.queryId || null;
+      // Pass chartId and queryId for reactive updates and linked brushing
+      const chart = await this.visualizationEngine.createChart(results, vizType, chartId, queryId);
+      
+      if (chart) {
+        container.innerHTML = '';
+        container.appendChild(chart);
+      } else {
+        container.innerHTML = '<div class="chart-error">Failed to create chart</div>';
+      }
+    } catch (error) {
+      console.error('Chart rendering error:', error);
+      container.innerHTML = `<div class="chart-error">Error: ${this.escapeHtml(error.message)}</div>`;
+    }
   }
 
   initializeChartWidget(chartId, queryId) {
@@ -456,7 +552,8 @@ class WhiteboardManager {
     try {
       // Auto-detect best visualization type
       const vizType = this.visualizationEngine.detectVisualizationType(query.results);
-      const chart = await this.visualizationEngine.createChart(query.results, vizType);
+      // Pass queryId for reactive updates
+      const chart = await this.visualizationEngine.createChart(query.results, vizType, null, queryId);
       
       if (chart) {
         chartContainer.innerHTML = '';

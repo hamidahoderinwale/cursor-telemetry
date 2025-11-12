@@ -237,6 +237,19 @@ function renderSystemResourceStats() {
         <div class="stat-value" style="font-size: 2.5rem; font-weight: 700; color: var(--color-text); margin-bottom: var(--space-lg); line-height: 1.1;">
           ${avgCpu.toFixed(2)}
         </div>
+        ${(() => {
+          const latestSystem = window.state?.data?.systemResources?.[window.state?.data?.systemResources?.length - 1];
+          const cpuCores = latestSystem?.system?.cpuCores || null;
+          if (cpuCores) {
+            const loadPercent = ((avgCpu / cpuCores) * 100).toFixed(1);
+            return `<div style="font-size: var(--text-xs); color: var(--color-text-subtle); margin-bottom: var(--space-sm);" title="Load average is relative to CPU cores. ${avgCpu.toFixed(2)} / ${cpuCores} cores = ${loadPercent}% utilization">
+              ~${loadPercent}% of ${cpuCores} cores
+            </div>`;
+          }
+          return `<div style="font-size: var(--text-xs); color: var(--color-text-subtle); margin-bottom: var(--space-sm);" title="Load average: 1.0 = 100% utilization on a single-core system. On multi-core systems, compare to number of CPU cores.">
+            Load avg (1-min)
+          </div>`;
+        })()}
         <div style="font-size: var(--text-sm); color: var(--color-text-secondary); padding-top: var(--space-md); border-top: 1px solid var(--color-border); line-height: 1.6;">
           <div style="margin-bottom: var(--space-xs);">
             <span style="color: var(--color-text-muted); font-weight: 500;">Range:</span>
@@ -249,6 +262,19 @@ function renderSystemResourceStats() {
         <div class="stat-value" style="font-size: 2.5rem; font-weight: 700; color: var(--color-text); margin-bottom: var(--space-lg); line-height: 1.1;">
           ${maxCpu.toFixed(2)}
         </div>
+        ${(() => {
+          const latestSystem = window.state?.data?.systemResources?.[window.state?.data?.systemResources?.length - 1];
+          const cpuCores = latestSystem?.system?.cpuCores || null;
+          if (cpuCores) {
+            const loadPercent = ((maxCpu / cpuCores) * 100).toFixed(1);
+            return `<div style="font-size: var(--text-xs); color: var(--color-text-subtle); margin-bottom: var(--space-sm);" title="Load average is relative to CPU cores. ${maxCpu.toFixed(2)} / ${cpuCores} cores = ${loadPercent}% utilization">
+              ~${loadPercent}% of ${cpuCores} cores
+            </div>`;
+          }
+          return `<div style="font-size: var(--text-xs); color: var(--color-text-subtle); margin-bottom: var(--space-sm);" title="Load average: 1.0 = 100% utilization on a single-core system. On multi-core systems, compare to number of CPU cores.">
+            Load avg (1-min)
+          </div>`;
+        })()}
         <div style="font-size: var(--text-sm); color: var(--color-text-secondary); padding-top: var(--space-md); border-top: 1px solid var(--color-border); line-height: 1.6;">
           <div style="color: var(--color-text-muted); font-weight: 500;">Maximum observed</div>
         </div>
@@ -518,6 +544,20 @@ function renderPerformanceTrends() {
           <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">
             ${activePeriods.length} periods with activity
           </div>
+          ${(() => {
+            // Get CPU cores from latest system resource data
+            const latestSystem = window.state?.data?.systemResources?.[window.state?.data?.systemResources?.length - 1];
+            const cpuCores = latestSystem?.system?.cpuCores || null;
+            if (cpuCores) {
+              const loadPercent = ((avgCpuActive / cpuCores) * 100).toFixed(1);
+              return `<div style="font-size: var(--text-xs); color: var(--color-text-subtle); margin-top: 2px;" title="Load average is relative to CPU cores. ${avgCpuActive.toFixed(2)} / ${cpuCores} cores = ${loadPercent}% utilization">
+                ~${loadPercent}% of ${cpuCores} cores
+              </div>`;
+            }
+            return `<div style="font-size: var(--text-xs); color: var(--color-text-subtle); margin-top: 2px;" title="Load average: 1.0 = 100% utilization on a single-core system. On multi-core systems, compare to number of CPU cores.">
+              Load avg (1-min)
+            </div>`;
+          })()}
         </div>
         <div class="stat-card">
           <div class="stat-label">CPU Load (Idle)</div>
@@ -525,6 +565,22 @@ function renderPerformanceTrends() {
           <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">
             ${idlePeriods.length > 0 ? `${idlePeriods.length} periods` : 'No idle periods detected'}
           </div>
+          ${(() => {
+            if (idlePeriods.length > 0) {
+              const latestSystem = window.state?.data?.systemResources?.[window.state?.data?.systemResources?.length - 1];
+              const cpuCores = latestSystem?.system?.cpuCores || null;
+              if (cpuCores) {
+                const loadPercent = ((avgCpuIdle / cpuCores) * 100).toFixed(1);
+                return `<div style="font-size: var(--text-xs); color: var(--color-text-subtle); margin-top: 2px;" title="Load average is relative to CPU cores. ${avgCpuIdle.toFixed(2)} / ${cpuCores} cores = ${loadPercent}% utilization">
+                  ~${loadPercent}% of ${cpuCores} cores
+                </div>`;
+              }
+              return `<div style="font-size: var(--text-xs); color: var(--color-text-subtle); margin-top: 2px;" title="Load average: 1.0 = 100% utilization on a single-core system. On multi-core systems, compare to number of CPU cores.">
+                Load avg (1-min)
+              </div>`;
+            }
+            return '';
+          })()}
         </div>
       </div>
     </div>

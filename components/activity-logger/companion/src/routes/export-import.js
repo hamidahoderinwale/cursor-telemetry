@@ -1043,6 +1043,13 @@ function createExportImportRoutes(deps) {
             workspace_path: e.workspace_path || e.workspacePath,
             session_id: e.session_id || e.sessionId,
             details: e.details || {},
+            // Include AI-generated annotations if available
+            ...(e.annotation ? { annotation: e.annotation, ai_generated: e.ai_generated || false } : {}),
+            // Include other event metadata
+            ...(e.tags ? { tags: typeof e.tags === 'string' ? JSON.parse(e.tags || '[]') : e.tags } : {}),
+            ...(e.intent ? { intent: e.intent } : {}),
+            ...(e.source ? { source: e.source } : {}),
+            ...(e.file_path ? { file_path: e.file_path } : {}),
           })),
 
           // Terminal Commands

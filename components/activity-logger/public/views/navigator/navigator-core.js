@@ -6,6 +6,7 @@
 // Navigator state
 const navigatorState = {
   viewMode: 'physical',
+  viewDimension: '2d', // '2d' or '3d'
   interpolation: 0.0,
   transitionSpeed: 2.0, // Maximum speed by default
   physicalPositions: new Map(),
@@ -26,7 +27,17 @@ const navigatorState = {
   isInitializing: false,
   isInitialized: false,
   searchResults: [],
-  searchQuery: null
+  searchQuery: null,
+  autoRotate: false,
+  // 3D state
+  scene3D: null,
+  camera3D: null,
+  renderer3D: null,
+  controls3D: null,
+  nodeMeshes3D: null,
+  linkGroup3D: null,
+  nodeGroup3D: null,
+  cleanup3D: null
 };
 
 /**
@@ -439,7 +450,11 @@ async function initializeNavigator() {
     navigatorState.links = links;
     
     // Render physical layout immediately (progressive loading)
-    window.renderNavigator(container, physicalNodes, links);
+    if (navigatorState.viewDimension === '3d' && window.renderNavigator3D) {
+      window.renderNavigator3D(container, physicalNodes, links);
+    } else if (window.renderNavigator) {
+      window.renderNavigator(container, physicalNodes, links);
+    }
     console.log('[NAVIGATOR] Physical layout rendered, computing latent embeddings in background...');
     
     // Populate workspace and directory filters (can do this while latent computes)
@@ -463,7 +478,11 @@ async function initializeNavigator() {
         navigatorState.clusters = await window.detectLatentClusters(latentNodes, links);
         
         // Re-render with both layouts available
-        window.renderNavigator(container, physicalNodes, links);
+        if (navigatorState.viewDimension === '3d' && window.renderNavigator3D) {
+          window.renderNavigator3D(container, physicalNodes, links);
+        } else if (window.renderNavigator) {
+          window.renderNavigator(container, physicalNodes, links);
+        }
         console.log('[NAVIGATOR] Latent embeddings complete');
       } catch (error) {
         console.warn('[NAVIGATOR] Latent embedding computation failed:', error.message);
@@ -471,7 +490,11 @@ async function initializeNavigator() {
         physicalNodes.forEach(n => {
           navigatorState.latentPositions.set(n.id, { x: n.x, y: n.y });
         });
-        window.renderNavigator(container, physicalNodes, links);
+        if (navigatorState.viewDimension === '3d' && window.renderNavigator3D) {
+          window.renderNavigator3D(container, physicalNodes, links);
+        } else if (window.renderNavigator) {
+          window.renderNavigator(container, physicalNodes, links);
+        }
       }
     };
     

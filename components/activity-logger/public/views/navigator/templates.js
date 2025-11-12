@@ -123,6 +123,12 @@ function renderNavigatorViewTemplate(data) {
             </button>
             <button class="btn btn-secondary" onclick="resetNavigatorView()">Reset View</button>
             <button class="btn btn-secondary" onclick="toggleNavigatorLabels()" id="navigatorLabelToggle">Hide Labels</button>
+            <button class="btn btn-secondary" onclick="toggleNavigator3D()" id="navigator3DToggle" title="Toggle between 2D and 3D visualization">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                <path d="M8 0L0 4v8l8 4 8-4V4L8 0zM2 5.5l6 3v6l-6-3v-6zm12 0v6l-6 3v-6l6-3z"/>
+              </svg>
+              <span id="navigator3DLabel">3D View</span>
+            </button>
             
             <div class="spacer"></div>
             

@@ -144,8 +144,15 @@ class SchemaConfigView {
   }
 
   render() {
-    const container = document.getElementById('schema-config-container');
-    if (!container) return;
+    // Try to find container by ID first, then fallback to viewContainer
+    let container = document.getElementById('schema-config-container');
+    if (!container) {
+      container = document.getElementById('viewContainer');
+    }
+    if (!container) {
+      console.error('[SCHEMA-CONFIG] Container not found');
+      return;
+    }
 
     const viewMode = this.viewMode || 'ui'; // 'ui' or 'json'
     const activeTab = this.activeTab || 'configure'; // 'configure' or 'export-import'
@@ -156,6 +163,11 @@ class SchemaConfigView {
     const disabledFields = this.customFields.filter(f => !f.enabled).length;
     const configuredFields = enabledFields + disabledFields;
 
+    // Ensure container has the right ID
+    if (container.id !== 'schema-config-container') {
+      container.id = 'schema-config-container';
+    }
+    
     container.innerHTML = `
       <div class="schema-config-view">
         <!-- Header Section -->
@@ -1096,11 +1108,20 @@ if (typeof module !== 'undefined' && module.exports) {
   let schemaConfigViewInstance = null;
   
   window.renderSchemaConfigView = function(container) {
+    if (!container) {
+      console.error('[SCHEMA-CONFIG] Container not found');
+      return;
+    }
+    
     if (!schemaConfigViewInstance) {
       schemaConfigViewInstance = new SchemaConfigView();
     }
     
-    container.innerHTML = '<div id="schema-config-container"></div>';
+    // Set container ID for the view to find it
+    container.id = 'schema-config-container';
+    container.innerHTML = '';
+    
+    // Initialize and render
     schemaConfigViewInstance.init();
   };
   

@@ -36,6 +36,7 @@
   <link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
   <link rel="dns-prefetch" href="https://cdn.socket.io">
   <link rel="dns-prefetch" href="https://d3js.org">
+  <link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
   
   <!-- Critical CSS (inline or load immediately) -->
   <link rel="stylesheet" href="dashboard.css">
@@ -664,6 +665,8 @@
   <script src="https://cdn.socket.io/4.5.4/socket.io.min.js" defer></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js" defer></script>
   <script src="https://d3js.org/d3.v7.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js" defer></script>
+  <!-- OrbitControls loaded dynamically in navigator-3d-renderer.js if needed -->
   <script src="https://unpkg.com/lunr/lunr.js" defer></script>
   <script src="https://unpkg.com/lucide@latest" defer></script>
   
@@ -687,6 +690,7 @@
   <script src="utils/helpers.js"></script>
   <script src="utils/file-helpers.js"></script>
   <script src="utils/math-helpers.js"></script>
+  <script src="utils/tooltip.js"></script>
   <script src="utils/data-helpers.js"></script>
   <script src="utils/time-formatting.js"></script>
   <script src="utils/event-helpers.js"></script>
@@ -726,6 +730,7 @@
   <script src="views/file-graph/index.js" defer></script>
   <script src="views/workspace-comparison/index.js" defer></script>
   <script src="views/navigator/templates.js" defer></script>
+  <script src="views/navigator/navigator-3d-renderer.js" defer></script>
   <!-- Enhanced Navigator Services (lazy load - only when navigator view is accessed) -->
   <script>
     // Lazy load navigator services only when needed
