@@ -1,11 +1,12 @@
 .schema-config-view {
-  padding: var(--space-xl);
+  padding: var(--space-lg, 1.5rem) var(--space-md, 1rem);
   max-width: 1400px;
   margin: 0 auto;
   background: transparent;
   color: var(--color-text, #F8FAFC);
   min-height: auto;
   width: 100%;
+  box-sizing: border-box;
 }
 
 .schema-header {
@@ -35,20 +36,29 @@
 
 /* Header Stats */
 .header-stats {
-  display: flex;
-  gap: var(--space-md);
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: var(--space-md, 1rem);
+  width: 100%;
 }
 
 .stat-item {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: var(--space-md);
+  justify-content: center;
+  padding: var(--space-md, 1rem);
   background: var(--color-surface, #1E293B);
   border: 1px solid var(--color-border, #475569);
-  border-radius: var(--radius-md, 6px);
+  border-radius: var(--radius-md, 8px);
   min-width: 100px;
+  transition: all 0.2s ease;
+}
+
+.stat-item:hover {
+  border-color: var(--color-primary, #8B5CF6);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
 .stat-value {
@@ -616,16 +626,20 @@ input:checked + .slider:before {
 
 .tables-overview {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: var(--space-lg);
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+  gap: var(--space-md, 1rem);
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .table-overview-card {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  padding: var(--space-lg);
-  transition: all var(--transition-fast);
+  border-radius: var(--radius-md, 8px);
+  padding: var(--space-md, 1rem);
+  transition: all 0.2s ease;
+  cursor: pointer;
+  box-sizing: border-box;
 }
 
 .table-overview-card:hover {
@@ -663,7 +677,28 @@ input:checked + .slider:before {
 .table-overview-columns {
   display: flex;
   flex-direction: column;
-  gap: var(--space-sm);
+  gap: var(--space-xs, 0.5rem);
+  max-height: 300px;
+  overflow-y: auto;
+  padding-right: var(--space-xs, 0.5rem);
+}
+
+.table-overview-columns::-webkit-scrollbar {
+  width: 6px;
+}
+
+.table-overview-columns::-webkit-scrollbar-track {
+  background: var(--color-bg, #0F172A);
+  border-radius: 3px;
+}
+
+.table-overview-columns::-webkit-scrollbar-thumb {
+  background: var(--color-border, #475569);
+  border-radius: 3px;
+}
+
+.table-overview-columns::-webkit-scrollbar-thumb:hover {
+  background: var(--color-primary, #8B5CF6);
 }
 
 .column-preview {
@@ -901,22 +936,40 @@ input:checked + .slider:before {
   }
 }
 
+@media (max-width: 1024px) {
+  .tables-overview {
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+    gap: var(--space-md, 1rem);
+  }
+  
+  .header-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
 @media (max-width: 768px) {
   .schema-config-view {
-    padding: var(--space-md);
+    padding: var(--space-md, 1rem);
+  }
+  
+  .schema-header {
+    margin-bottom: var(--space-lg, 1.5rem);
+    gap: var(--space-md, 1rem);
   }
   
   .tables-overview {
     grid-template-columns: 1fr;
+    gap: var(--space-md, 1rem);
   }
   
   .schema-content {
     grid-template-columns: 1fr;
+    gap: var(--space-md, 1rem);
   }
   
   .schema-sidebar {
     position: static;
-    margin-bottom: var(--space-lg);
+    margin-bottom: var(--space-lg, 1.5rem);
   }
   
   .schema-header-actions {
@@ -925,6 +978,40 @@ input:checked + .slider:before {
   
   .schema-header-actions .btn {
     width: 100%;
+  }
+  
+  .header-stats {
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--space-sm, 0.75rem);
+  }
+  
+  .stat-item {
+    padding: var(--space-sm, 0.75rem);
+    min-width: auto;
+  }
+  
+  .table-overview-card {
+    padding: var(--space-md, 1rem);
+  }
+}
+
+@media (max-width: 480px) {
+  .schema-config-view {
+    padding: var(--space-sm, 0.75rem);
+  }
+  
+  .header-stats {
+    grid-template-columns: 1fr;
+  }
+  
+  .stat-item {
+    padding: var(--space-sm, 0.75rem);
+  }
+  
+  .table-overview-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-xs, 0.5rem);
   }
 }
 

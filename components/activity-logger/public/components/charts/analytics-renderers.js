@@ -557,6 +557,8 @@ export class AnalyticsRenderers {
     
     // Code churn (high churn = editing same files repeatedly)
     const fileEditCounts = new Map();
+    const fileChurnData = new Map(); // Track churn per file: { edits: count, churn: total }
+    
     events.forEach(e => {
       // Try multiple field names for file path
       let filePath = e.file || e.file_path || e.filePath || '';
@@ -573,11 +575,48 @@ export class AnalyticsRenderers {
       
       if (filePath) {
         fileEditCounts.set(filePath, (fileEditCounts.get(filePath) || 0) + 1);
+        
+        // Calculate churn for this event (lines added + lines removed)
+        let churn = 0;
+        if (e.details) {
+          try {
+            const details = typeof e.details === 'string' ? JSON.parse(e.details || '{}') : (e.details || {});
+            const linesAdded = details.lines_added || details.linesAdded || 0;
+            const linesRemoved = details.lines_removed || details.linesRemoved || 0;
+            churn = linesAdded + linesRemoved;
+          } catch (err) {
+            // Ignore parse errors
+          }
+        }
+        
+        // Track churn data per file
+        if (!fileChurnData.has(filePath)) {
+          fileChurnData.set(filePath, { edits: 0, churn: 0 });
+        }
+        const data = fileChurnData.get(filePath);
+        data.edits += 1;
+        data.churn += churn;
       }
     });
+    
     const highChurnFiles = Array.from(fileEditCounts.entries())
       .filter(([_, count]) => count >= 5)
       .sort((a, b) => b[1] - a[1]);
+    
+    // Calculate churn per edit for files with substantial modifications
+    const highChurnPerEditFiles = Array.from(fileChurnData.entries())
+      .map(([filePath, data]) => {
+        const churnPerEdit = data.edits > 0 ? data.churn / data.edits : 0;
+        return {
+          filePath,
+          edits: data.edits,
+          churn: data.churn,
+          churnPerEdit: churnPerEdit
+        };
+      })
+      .filter(f => f.edits > 0 && f.churnPerEdit >= 100) // Only show files with 100+ lines per edit on average
+      .sort((a, b) => b.churnPerEdit - a.churnPerEdit)
+      .slice(0, 10); // Top 10
     
     // Conversation length (prompts per conversation)
     const conversationMap = new Map();
@@ -659,6 +698,33 @@ export class AnalyticsRenderers {
               </span>
             </div>
           `).join('')}
+        </div>
+      ` : ''}
+
+      ${highChurnPerEditFiles.length > 0 ? `
+        <h4 style="margin-top: var(--space-lg); margin-bottom: var(--space-md); color: var(--color-text); font-size: var(--text-md);">Substantial Modifications (High Churn per Edit)</h4>
+        <p style="font-size: var(--text-sm); color: var(--color-text-muted); margin-bottom: var(--space-md);">
+          Files with high average lines changed per edit, indicating substantial modifications per session.
+        </p>
+        <div style="display: flex; flex-direction: column; gap: var(--space-xs); max-height: 300px; overflow-y: auto;">
+          ${highChurnPerEditFiles.map(f => {
+            const avgLines = Math.round(f.churnPerEdit);
+            return `
+            <div style="display: flex; flex-direction: column; padding: var(--space-sm); background: var(--color-bg); border-radius: var(--radius-sm); border-left: 3px solid var(--color-warning);">
+              <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: var(--space-xs);">
+                <span style="font-family: var(--font-mono); font-size: var(--text-sm); color: var(--color-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;">
+                  ${this.escapeHtml(f.filePath)}
+                </span>
+                <span style="font-size: var(--text-sm); color: var(--color-warning); font-weight: 600; margin-left: var(--space-sm); white-space: nowrap;">
+                  ~${avgLines} lines/edit
+                </span>
+              </div>
+              <div style="font-size: var(--text-xs); color: var(--color-text-muted);">
+                ${f.churn.toLocaleString()} total churn from ${f.edits} edit${f.edits !== 1 ? 's' : ''} = average of ~${avgLines} lines changed per edit
+              </div>
+            </div>
+          `;
+          }).join('')}
         </div>
       ` : ''}
     `;

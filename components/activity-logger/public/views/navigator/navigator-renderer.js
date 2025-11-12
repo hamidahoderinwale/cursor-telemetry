@@ -1373,4 +1373,4 @@ window.zoomToFitNavigator = zoomToFitNavigator;
 window.resetNavigatorView = resetNavigatorView;
 window.toggleNavigatorLabels = toggleNavigatorLabels;
 window.toggleNavigator3D = toggleNavigator3D;
-
+}

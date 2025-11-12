@@ -14,6 +14,9 @@ class CodeEmbeddingService {
     this.embeddingDimension = 768; // Default dimension
     this.modelName = null;
     this.useOpenRouter = false;
+    this.failureCount = 0;
+    this.maxFailures = 5; // Circuit breaker: disable after 5 consecutive failures
+    this.circuitOpen = false;
   }
 
   /**
@@ -78,6 +81,11 @@ class CodeEmbeddingService {
    * @returns {Promise<Array<number>>} Embedding vector
    */
   async generateEmbedding(file) {
+    // Circuit breaker: skip if too many failures
+    if (this.circuitOpen) {
+      return this._createFallbackVector(file);
+    }
+
     await this.initialize();
     if (!this.isInitialized) {
       // Fallback to feature vector
@@ -100,11 +108,30 @@ class CodeEmbeddingService {
       }
 
       if (embedding) {
+        // Reset failure count on success
+        this.failureCount = 0;
+        this.circuitOpen = false;
         this.embeddings.set(cacheKey, embedding);
         return embedding;
+      } else {
+        // Increment failure count
+        this.failureCount++;
+        if (this.failureCount >= this.maxFailures) {
+          this.circuitOpen = true;
+          console.warn(`[EMBEDDING] Circuit breaker opened after ${this.maxFailures} failures. Using fallback vectors.`);
+        }
       }
     } catch (error) {
-      console.warn('[EMBEDDING] Error generating embedding:', error.message);
+      // Increment failure count on exception
+      this.failureCount++;
+      if (this.failureCount >= this.maxFailures) {
+        this.circuitOpen = true;
+        console.warn(`[EMBEDDING] Circuit breaker opened after ${this.maxFailures} failures. Using fallback vectors.`);
+      }
+      // Only log first few errors to avoid spam
+      if (this.failureCount <= 3) {
+        console.warn('[EMBEDDING] Error generating embedding:', error.message);
+      }
     }
 
     // Fallback to feature vector
@@ -125,13 +152,26 @@ class CodeEmbeddingService {
       });
 
       if (response.ok) {
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+          const text = await response.text();
+          console.warn('[EMBEDDING] Non-JSON response from API:', text.substring(0, 100));
+          return null;
+        }
+        
         const data = await response.json();
         if (data.embedding && Array.isArray(data.embedding)) {
           return data.embedding;
         }
+      } else {
+        const text = await response.text().catch(() => '');
+        console.warn(`[EMBEDDING] API error ${response.status}:`, text.substring(0, 100));
       }
     } catch (error) {
-      console.warn('[EMBEDDING] OpenRouter embedding failed:', error.message);
+      // Only log if it's not a JSON parse error (those are expected for non-JSON responses)
+      if (!error.message.includes('JSON') && !error.message.includes('Unexpected token')) {
+        console.warn('[EMBEDDING] OpenRouter embedding failed:', error.message);
+      }
     }
 
     return null;
@@ -154,7 +194,13 @@ class CodeEmbeddingService {
       const embedding = Array.from(output.data);
       return embedding;
     } catch (error) {
-      console.warn('[EMBEDDING] Local embedding failed:', error.message);
+      // Only log if it's not a JSON parse error (those are expected for non-JSON responses)
+      if (!error.message.includes('JSON') && !error.message.includes('Unexpected token')) {
+        // Only log first few errors to avoid spam
+        if (this.failureCount < 3) {
+          console.warn('[EMBEDDING] Local embedding failed:', error.message);
+        }
+      }
       return null;
     }
   }

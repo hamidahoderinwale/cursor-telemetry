@@ -97,8 +97,9 @@
 /* Analytics view specific split layout */
 .analytics-split-view {
   display: flex;
-  height: calc(100vh - 150px);
-  min-height: 500px;
+  height: calc(100vh - 200px);
+  min-height: 600px;
+  max-height: calc(100vh - 120px);
   gap: 0;
   margin: var(--space-md, 1rem) 0;
 }

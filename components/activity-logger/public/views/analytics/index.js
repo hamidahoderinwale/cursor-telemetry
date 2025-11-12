@@ -130,7 +130,7 @@ async function renderAnalyticsView(container) {
           <p class="card-subtitle">Distribution of models used across prompts and modes</p>
         </div>
         <div class="card-body">
-          <div id="modelUsageAnalytics" style="min-height: 180px;"></div>
+          <div id="modelUsageAnalytics"></div>
         </div>
       </div>
 
@@ -164,7 +164,7 @@ async function renderAnalyticsView(container) {
           <p class="card-subtitle">@ referenced files and context patterns</p>
         </div>
         <div class="card-body">
-          <div id="contextFileAnalytics" style="min-height: 150px;"></div>
+          <div id="contextFileAnalytics"></div>
         </div>
       </div>
 
@@ -175,7 +175,7 @@ async function renderAnalyticsView(container) {
           <p class="card-subtitle">Real metrics: file references, estimated tokens, context adoption rate, and most-mentioned files from your actual prompt data</p>
         </div>
         <div class="card-body">
-          <div id="enhancedContextAnalytics" style="min-height: 150px;"></div>
+          <div id="enhancedContextAnalytics"></div>
         </div>
       </div>
 
@@ -186,7 +186,7 @@ async function renderAnalyticsView(container) {
           <p class="card-subtitle">Coding velocity: active time estimation, prompt iteration patterns, line changes, code churn hotspots, and daily metrics</p>
         </div>
         <div class="card-body">
-          <div id="productivityInsights" style="min-height: 150px;"></div>
+          <div id="productivityInsights"></div>
         </div>
       </div>
 
@@ -197,7 +197,7 @@ async function renderAnalyticsView(container) {
           <p class="card-subtitle">Time from prompt to code change, success rate, iteration patterns, and workflow efficiency</p>
         </div>
         <div class="card-body">
-          <div id="promptEffectiveness" style="min-height: 150px;"></div>
+          <div id="promptEffectiveness"></div>
         </div>
       </div>
 
@@ -208,7 +208,7 @@ async function renderAnalyticsView(container) {
           <p class="card-subtitle">Context window changes, file additions/removals, and context switching patterns over time</p>
         </div>
         <div class="card-body">
-          <div id="contextEvolutionTimeline" style="min-height: 200px;"></div>
+          <div id="contextEvolutionTimeline"></div>
         </div>
       </div>
 
@@ -219,7 +219,7 @@ async function renderAnalyticsView(container) {
           <p class="card-subtitle">Success rate, time to first change, and code change patterns following prompts</p>
         </div>
         <div class="card-body">
-          <div id="promptToCodeCorrelation" style="min-height: 200px;"></div>
+          <div id="promptToCodeCorrelation"></div>
         </div>
       </div>
 
@@ -230,7 +230,7 @@ async function renderAnalyticsView(container) {
           <p class="card-subtitle">Recent commits, commit frequency, and branch activity</p>
         </div>
         <div class="card-body">
-          <div id="gitCommitTimeline" style="min-height: 180px;"></div>
+          <div id="gitCommitTimeline"></div>
         </div>
       </div>
 
@@ -241,7 +241,7 @@ async function renderAnalyticsView(container) {
           <p class="card-subtitle">Most frequently edited files with edit counts, lines changed, and activity scores</p>
         </div>
         <div class="card-body">
-          <div id="fileHotspots" style="min-height: 180px;"></div>
+          <div id="fileHotspots"></div>
         </div>
       </div>
 
@@ -252,90 +252,90 @@ async function renderAnalyticsView(container) {
           <p class="card-subtitle">Fast insights into your development patterns</p>
         </div>
         <div class="card-body">
-          <div class="quick-wins-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: var(--space-md, 1rem);">
+          <div class="quick-wins-grid">
             
             <!-- Prompt Success Rate -->
-            <div class="quick-win-card" style="padding: var(--space-md); background: var(--color-bg-alt, #f5f5f5); border-radius: var(--radius-md, 8px);">
-              <h4 class="quick-win-title" style="margin: 0 0 var(--space-sm) 0; font-size: var(--text-sm, 14px); color: var(--color-text); font-weight: 600;" title="Percentage of prompts that resulted in code changes. Higher is better - indicates effective AI usage.">
+            <div class="quick-win-card">
+              <h4 class="quick-win-title" title="Percentage of prompts that resulted in code changes. Higher is better - indicates effective AI usage.">
                 Prompt Success Rate
               </h4>
-              <div id="promptSuccessRate" class="quick-win-value" style="font-size: var(--text-2xl, 32px); font-weight: 700; color: var(--color-primary, #3b82f6); margin: var(--space-xs) 0;">
+              <div id="promptSuccessRate" class="quick-win-value" style="color: var(--color-primary, #3b82f6);">
                 Calculating...
               </div>
-              <div class="quick-win-description" style="font-size: var(--text-xs, 12px); color: var(--color-text-muted); margin-top: var(--space-xs);">
+              <div class="quick-win-description">
                 Prompts with code changes / Total prompts
               </div>
             </div>
 
             <!-- Context Efficiency Score -->
-            <div class="quick-win-card" style="padding: var(--space-md); background: var(--color-bg-alt, #f5f5f5); border-radius: var(--radius-md, 8px);">
-              <h4 class="quick-win-title" style="margin: 0 0 var(--space-sm) 0; font-size: var(--text-sm, 14px); color: var(--color-text); font-weight: 600;" title="Average lines of code added per context file. Higher values indicate more efficient context usage - fewer files needed for better results.">
+            <div class="quick-win-card">
+              <h4 class="quick-win-title" title="Average lines of code added per context file. Higher values indicate more efficient context usage - fewer files needed for better results.">
                 Context Efficiency Score
               </h4>
-              <div id="contextEfficiencyScore" class="quick-win-value" style="font-size: var(--text-2xl, 32px); font-weight: 700; color: var(--color-accent, #10b981); margin: var(--space-xs) 0;">
+              <div id="contextEfficiencyScore" class="quick-win-value" style="color: var(--color-accent, #10b981);">
                 Calculating...
               </div>
-              <div class="quick-win-description" style="font-size: var(--text-xs, 12px); color: var(--color-text-muted); margin-top: var(--space-xs);">
+              <div class="quick-win-description">
                 Lines added / Context files used
               </div>
             </div>
 
             <!-- Model Usage Distribution -->
-            <div class="quick-win-card" style="padding: var(--space-md); background: var(--color-bg-alt, #f5f5f5); border-radius: var(--radius-md, 8px);">
-              <h4 class="quick-win-title" style="margin: 0 0 var(--space-sm) 0; font-size: var(--text-sm, 14px); color: var(--color-text); font-weight: 600;" title="Distribution of AI models used across all prompts. Shows which models you use most frequently.">
+            <div class="quick-win-card">
+              <h4 class="quick-win-title" title="Distribution of AI models used across all prompts. Shows which models you use most frequently.">
                 Model Usage Distribution
               </h4>
-              <div id="modelUsageChart" style="min-height: 150px; margin-top: var(--space-xs);">
+              <div id="modelUsageChart">
                 <canvas id="modelUsagePieChart"></canvas>
               </div>
             </div>
 
             <!-- Context File Frequency -->
-            <div class="quick-win-card" style="padding: var(--space-md); background: var(--color-bg-alt, #f5f5f5); border-radius: var(--radius-md, 8px);">
-              <h4 class="quick-win-title" style="margin: 0 0 var(--space-sm) 0; font-size: var(--text-sm, 14px); color: var(--color-text); font-weight: 600;" title="Most frequently used context files. Files that appear often in your prompts are likely important dependencies or core files.">
+            <div class="quick-win-card">
+              <h4 class="quick-win-title" title="Most frequently used context files. Files that appear often in your prompts are likely important dependencies or core files.">
                 Most Used Context Files
               </h4>
-              <div id="contextFileFrequency" style="min-height: 150px; margin-top: var(--space-xs);">
+              <div id="contextFileFrequency">
                 <canvas id="contextFileChart"></canvas>
               </div>
             </div>
 
             <!-- Thinking Time Distribution -->
-            <div class="quick-win-card" style="padding: var(--space-md); background: var(--color-bg-alt, #f5f5f5); border-radius: var(--radius-md, 8px);">
-              <h4 class="quick-win-title" style="margin: 0 0 var(--space-sm) 0; font-size: var(--text-sm, 14px); color: var(--color-text); font-weight: 600;" title="Distribution of AI response times (thinking time). Shows how long models take to respond - useful for performance analysis.">
+            <div class="quick-win-card">
+              <h4 class="quick-win-title" title="Distribution of AI response times (thinking time). Shows how long models take to respond - useful for performance analysis.">
                 Thinking Time Distribution
               </h4>
-              <div id="thinkingTimeChart" style="min-height: 150px; margin-top: var(--space-xs);">
+              <div id="thinkingTimeChart">
                 <canvas id="thinkingTimeHistogram"></canvas>
               </div>
             </div>
 
             <!-- Time-of-Day Activity -->
-            <div class="quick-win-card" style="padding: var(--space-md); background: var(--color-bg-alt, #f5f5f5); border-radius: var(--radius-md, 8px);">
-              <h4 class="quick-win-title" style="margin: 0 0 var(--space-sm) 0; font-size: var(--text-sm, 14px); color: var(--color-text); font-weight: 600;" title="Activity patterns throughout the day. Shows when you're most productive - helps identify peak coding hours.">
+            <div class="quick-win-card">
+              <h4 class="quick-win-title" title="Activity patterns throughout the day. Shows when you're most productive - helps identify peak coding hours.">
                 24-Hour Activity Pattern
               </h4>
-              <div id="timeOfDayChart" style="min-height: 150px; margin-top: var(--space-xs);">
+              <div id="timeOfDayChart">
                 <canvas id="timeOfDayBarChart"></canvas>
               </div>
             </div>
 
             <!-- Conversation Length Distribution -->
-            <div class="quick-win-card" style="padding: var(--space-md); background: var(--color-bg-alt, #f5f5f5); border-radius: var(--radius-md, 8px);">
-              <h4 class="quick-win-title" style="margin: 0 0 var(--space-sm) 0; font-size: var(--text-sm, 14px); color: var(--color-text); font-weight: 600;" title="Distribution of conversation lengths (message counts). Shows whether you have many short conversations or fewer long ones.">
+            <div class="quick-win-card">
+              <h4 class="quick-win-title" title="Distribution of conversation lengths (message counts). Shows whether you have many short conversations or fewer long ones.">
                 Conversation Length Distribution
               </h4>
-              <div id="conversationLengthChart" style="min-height: 150px; margin-top: var(--space-xs);">
+              <div id="conversationLengthChart">
                 <canvas id="conversationLengthHistogram"></canvas>
               </div>
             </div>
 
             <!-- Intent Distribution -->
-            <div class="quick-win-card" style="padding: var(--space-md); background: var(--color-bg-alt, #f5f5f5); border-radius: var(--radius-md, 8px);">
-              <h4 class="quick-win-title" style="margin: 0 0 var(--space-sm) 0; font-size: var(--text-sm, 14px); color: var(--color-text); font-weight: 600;" title="Distribution of development intents (feature, bug-fix, refactor, etc.). Shows what types of work you do most often.">
+            <div class="quick-win-card">
+              <h4 class="quick-win-title" title="Distribution of development intents (feature, bug-fix, refactor, etc.). Shows what types of work you do most often.">
                 Intent Distribution
               </h4>
-              <div id="intentDistribution" style="min-height: 150px; margin-top: var(--space-xs);">
+              <div id="intentDistribution">
                 <canvas id="intentTagCloud"></canvas>
               </div>
             </div>

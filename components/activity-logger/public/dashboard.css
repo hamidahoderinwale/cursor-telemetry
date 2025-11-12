@@ -2875,8 +2875,20 @@ textarea:disabled {
   font-weight: 600;
 }
 
-.filter-chip span {
-  font-size: 14px;
+.filter-chip svg {
+  width: 16px;
+  height: 16px;
+  stroke: white;
+  color: white;
+  flex-shrink: 0;
+  opacity: 0.9;
+}
+
+.filter-chip:hover svg,
+.filter-chip.active svg {
+  stroke: white;
+  color: white;
+  opacity: 1;
 }
 
 /* Recent Searches */

@@ -49,11 +49,28 @@ function calculateStats() {
   console.log(`[STATS] Code changed: ${totalChars} chars (${(totalChars / 1024).toFixed(1)} KB) from ${events.length} events`);
 
   // Calculate average context usage
+  // Check multiple possible field names and handle both percentage and token values
   let totalContextUsage = 0;
   let contextUsageCount = 0;
   (window.state.data.prompts || []).forEach(p => {
-    if (p.contextUsage && p.contextUsage > 0) {
-      totalContextUsage += p.contextUsage;
+    // Try multiple field name variations
+    const contextUsage = p.contextUsage || 
+                        p.context_usage || 
+                        p.promptTokens || 
+                        p.prompt_tokens ||
+                        p.context_file_count ||
+                        (p.token_estimate ? p.token_estimate / 1000 : null) || // Convert tokens to percentage estimate
+                        0;
+    
+    // Handle both percentage (0-100) and token values
+    // If value is > 100, assume it's tokens and convert to percentage (assuming 100k token context window)
+    let usagePercent = contextUsage;
+    if (contextUsage > 100) {
+      usagePercent = (contextUsage / 100000) * 100; // Convert tokens to percentage
+    }
+    
+    if (usagePercent > 0 && usagePercent <= 100) {
+      totalContextUsage += usagePercent;
       contextUsageCount++;
     }
   });
