@@ -35,17 +35,20 @@ class SharingService {
       workspaces = [],
       abstractionLevel = 1,
       filters = {},
-      expirationDays = 7
+      expirationDays = 7,
+      name = null
     } = options;
 
     const shareId = this.generateShareId();
-    const expiresAt = Date.now() + (expirationDays * 24 * 60 * 60 * 1000);
+    const expiresAt = expirationDays === 0 ? null : Date.now() + (expirationDays * 24 * 60 * 60 * 1000);
 
     const shareData = {
       id: shareId,
+      shareId, // Alias for compatibility
       workspaces,
       abstractionLevel,
       filters,
+      name,
       createdAt: Date.now(),
       expiresAt,
       accessCount: 0,
@@ -66,7 +69,7 @@ class SharingService {
       success: true,
       shareId,
       shareUrl: `/api/share/${shareId}`,
-      expiresAt: new Date(expiresAt).toISOString(),
+      expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null,
       qrCode: null // Could generate QR code here
     };
   }
@@ -96,8 +99,8 @@ class SharingService {
       return null;
     }
 
-    // Check expiration
-    if (Date.now() > shareData.expiresAt) {
+    // Check expiration (only if expiresAt is set)
+    if (shareData.expiresAt && Date.now() > shareData.expiresAt) {
       this.shareLinks.delete(shareId);
       try {
         await this.persistentDB.deleteShareLink(shareId);

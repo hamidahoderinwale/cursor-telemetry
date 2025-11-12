@@ -20,7 +20,8 @@ function createSharingRoutes(deps) {
         workspaces = [],
         abstractionLevel = 1,
         filters = {},
-        expirationDays = 7
+        expirationDays = 7,
+        name = null
       } = req.body;
 
       if (!workspaces || workspaces.length === 0) {
@@ -34,7 +35,8 @@ function createSharingRoutes(deps) {
         workspaces,
         abstractionLevel,
         filters,
-        expirationDays
+        expirationDays,
+        name
       });
 
       res.json({
@@ -163,12 +165,13 @@ function createSharingRoutes(deps) {
       // Return metadata only (no access count update)
       res.json({
         success: true,
-        shareId: shareData.shareId,
+        shareId: shareData.id || shareData.shareId,
+        name: shareData.name || null,
         workspaces: shareData.workspaces,
         abstractionLevel: shareData.abstractionLevel,
         createdAt: new Date(shareData.createdAt).toISOString(),
-        expiresAt: new Date(shareData.expiresAt).toISOString(),
-        isExpired: Date.now() > shareData.expiresAt
+        expiresAt: shareData.expiresAt ? new Date(shareData.expiresAt).toISOString() : null,
+        isExpired: shareData.expiresAt ? Date.now() > shareData.expiresAt : false
       });
     } catch (error) {
       console.error('[SHARING] Error getting share link info:', error);
@@ -213,14 +216,15 @@ function createSharingRoutes(deps) {
       res.json({
         success: true,
         links: links.map(link => ({
-          shareId: link.shareId,
+          shareId: link.id || link.shareId,
+          name: link.name || null,
           workspaces: link.workspaces,
           abstractionLevel: link.abstractionLevel,
           createdAt: new Date(link.createdAt).toISOString(),
-          expiresAt: new Date(link.expiresAt).toISOString(),
-          accessCount: link.accessCount,
+          expiresAt: link.expiresAt ? new Date(link.expiresAt).toISOString() : null,
+          accessCount: link.accessCount || 0,
           lastAccessed: link.lastAccessed ? new Date(link.lastAccessed).toISOString() : null,
-          isExpired: Date.now() > link.expiresAt
+          isExpired: link.expiresAt ? Date.now() > link.expiresAt : false
         }))
       });
     } catch (error) {
