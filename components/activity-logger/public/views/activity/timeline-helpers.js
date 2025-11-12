@@ -2010,9 +2010,20 @@ function getEnhancedFileInfo(event) {
 }
 
 function getEventDescription(event) {
-  // Use AI annotation if available (preferred)
+  // Remove emojis helper
+  const removeEmojis = (text) => {
+    if (!text || typeof text !== 'string') return text;
+    return text
+      .replace(/🔄|✨|↗|⇄|→|📦/g, '')
+      .replace(/[\u{1F300}-\u{1F9FF}]/gu, '')
+      .replace(/[\u{2600}-\u{26FF}]/gu, '')
+      .replace(/[\u{2700}-\u{27BF}]/gu, '')
+      .trim();
+  };
+  
+  // Use AI annotation if available (preferred), but remove emojis
   if (event.annotation) {
-    return event.annotation;
+    return removeEmojis(event.annotation);
   }
   
   // Fallback to improved logic

@@ -44,6 +44,20 @@ function isGitInternalFile(path) {
   return false;
 }
 
+/**
+ * Remove emojis from text
+ */
+function removeEmojis(text) {
+  if (!text || typeof text !== 'string') return text;
+  // Remove common emojis and emoji-like characters
+  return text
+    .replace(/🔄|✨|↗|⇄|→|📦|🔄/g, '')
+    .replace(/[\u{1F300}-\u{1F9FF}]/gu, '') // Emoji range
+    .replace(/[\u{2600}-\u{26FF}]/gu, '') // Miscellaneous symbols
+    .replace(/[\u{2700}-\u{27BF}]/gu, '') // Dingbats
+    .trim();
+}
+
 function getEventTitle(event) {
   if (event.type === 'file_change' || event.type === 'code_change') {
     try {
@@ -60,15 +74,17 @@ function getEventTitle(event) {
       
       // If filename is empty or looks like a hash, try to use a better description
       if (!fileName || /^[a-f0-9]{32,}$/i.test(fileName)) {
-        return details?.change_type || event.type || 'File changed';
+        const fallback = details?.change_type || event.type || 'File changed';
+        return removeEmojis(fallback);
       }
       
-      return fileName;
+      return removeEmojis(fileName);
     } catch {
       return 'File changed';
     }
   }
-  return event.type || 'Activity';
+  const title = event.type || 'Activity';
+  return removeEmojis(title);
 }
 
 function getEventDescription(event) {
@@ -108,7 +124,12 @@ function getEventDescription(event) {
     // Show change type if available
     const changeType = details?.change_type || event.change_type;
     if (changeType) {
-      return changeType.charAt(0).toUpperCase() + changeType.slice(1);
+      return removeEmojis(changeType.charAt(0).toUpperCase() + changeType.slice(1));
+    }
+    
+    // If event has annotation, use it but remove emojis
+    if (event.annotation) {
+      return removeEmojis(event.annotation);
     }
   } catch {}
   return 'File modification detected';
