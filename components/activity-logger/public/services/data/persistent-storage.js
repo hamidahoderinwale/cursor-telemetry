@@ -129,7 +129,6 @@ class PersistentStorage {
       // The dashboard will continue to work even if IndexedDB is slow
 
       request.onerror = () => {
-        clearTimeout(timeout);
         console.error('[ERROR] IndexedDB open failed:', request.error);
         PersistentStorage._initPromise = null; // Clear promise on error
         reject(request.error);
