@@ -1287,7 +1287,7 @@ function renderTimelineItem(event, side = 'left') {
         </div>
         <div class="timeline-description">
           ${desc}
-          ${event.annotation ? `<div class="ai-annotation" style="margin-top: 4px; font-style: italic; color: var(--color-text-secondary); font-size: 0.9em; display: flex; align-items: center; gap: 4px;">${window.renderAnnotationIcon ? window.renderAnnotationIcon(14, 'var(--color-text-secondary)') : '<span>✨</span>'} ${window.escapeHtml(event.annotation)}</div>` : ''}
+          ${event.annotation ? `<div class="ai-annotation" style="margin-top: 4px; font-style: italic; color: var(--color-text-secondary); font-size: 0.9em; display: flex; align-items: center; gap: 4px;"><span style="font-size: 0.85em; color: var(--color-text-muted); font-weight: 500;">[AI]</span> ${window.escapeHtml(event.annotation)}</div>` : ''}
           ${event.intent ? `<span class="badge" style="background: var(--color-primary); margin-top: 4px; display: inline-block;">${window.escapeHtml(event.intent)}</span>` : ''}
         </div>
       </div>

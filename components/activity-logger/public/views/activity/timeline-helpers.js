@@ -1754,7 +1754,7 @@ function renderTimelineItem(event, side = 'left', timelineItems = null) {
                          onmouseover="this.style.background='var(--color-bg, #ffffff)'"
                          onmouseout="this.style.background='transparent'"
                          title="${file}">
-                      📄 ${window.escapeHtml(fileName)}
+                      <span style="font-size: 0.85em; color: var(--color-text-muted); margin-right: 2px;">[File]</span>${window.escapeHtml(fileName)}
                     </div>
                   `;
                 }).join('')}
@@ -1822,7 +1822,7 @@ function renderTimelineItem(event, side = 'left', timelineItems = null) {
         </div>
         <div class="timeline-description">
           ${desc ? `<div style="color: var(--color-text-muted); font-size: var(--text-sm);">${window.escapeHtml ? window.escapeHtml(desc) : desc}</div>` : ''}
-          ${event.annotation ? `<div class="ai-annotation" style="margin-top: 4px; font-style: italic; color: var(--color-text-secondary); font-size: 0.9em; display: flex; align-items: center; gap: 4px;">${window.renderAnnotationIcon ? window.renderAnnotationIcon(14, 'var(--color-text-secondary)') : '<span style="font-size: 0.85em; color: var(--color-text-muted);">[AI]</span>'} ${window.escapeHtml(event.annotation)}</div>` : ''}
+          ${event.annotation ? `<div class="ai-annotation" style="margin-top: 4px; font-style: italic; color: var(--color-text-secondary); font-size: 0.9em; display: flex; align-items: center; gap: 4px;"><span style="font-size: 0.85em; color: var(--color-text-muted); font-weight: 500;">[AI]</span> ${window.escapeHtml(event.annotation)}</div>` : ''}
           ${event.intent ? `<span class="timeline-badge timeline-badge-primary" style="margin-top: 4px; display: inline-block;">${window.escapeHtml(event.intent)}</span>` : ''}
           ${tagsHtml ? `<div style="display: flex; gap: var(--space-xs); flex-wrap: wrap; margin-top: var(--space-xs); align-items: center;">${tagsHtml}</div>` : ''}
           ${linkedPromptIndicator || contextIndicators ? `
@@ -2017,14 +2017,20 @@ function getEnhancedFileInfo(event) {
 }
 
 function getEventDescription(event) {
-  // Remove emojis helper
+  // Remove emojis helper - comprehensive emoji removal
   const removeEmojis = (text) => {
     if (!text || typeof text !== 'string') return text;
     return text
-      .replace(/🔄|✨|↗|⇄|→|📦/g, '')
-      .replace(/[\u{1F300}-\u{1F9FF}]/gu, '')
-      .replace(/[\u{2600}-\u{26FF}]/gu, '')
-      .replace(/[\u{2700}-\u{27BF}]/gu, '')
+      // Remove common emojis
+      .replace(/🔄|✨|↗|⇄|→|📦|📄|🎯|📝|💬|⚡|🔧|📊|🎨|🐛|📦|🔍|⚙️|🚀|💡|🔒|📈|📉|🎭|🎪|🎬|📌|📍|🔖|🏷️|⭐|🌟|💫|🔥|💯|✅|❌|⚠️|ℹ️|🔔|📢|📣|🔴|🟢|🟡|🔵|🟣|🟠|⚫|⚪|🟤/g, '')
+      // Remove emoji ranges
+      .replace(/[\u{1F300}-\u{1F9FF}]/gu, '') // Miscellaneous Symbols and Pictographs
+      .replace(/[\u{2600}-\u{26FF}]/gu, '') // Miscellaneous Symbols
+      .replace(/[\u{2700}-\u{27BF}]/gu, '') // Dingbats
+      .replace(/[\u{1F600}-\u{1F64F}]/gu, '') // Emoticons
+      .replace(/[\u{1F680}-\u{1F6FF}]/gu, '') // Transport and Map Symbols
+      .replace(/[\u{1F900}-\u{1F9FF}]/gu, '') // Supplemental Symbols and Pictographs
+      .replace(/[\u{1FA00}-\u{1FAFF}]/gu, '') // Symbols and Pictographs Extended-A
       .trim();
   };
   
@@ -2215,20 +2221,34 @@ function renderCommitGroup(commitGroup, timelineItems = null) {
                   <span class="commit-subgroup-toggle" id="toggle-${subgroupId}">▼</span>
                 </div>
                 <div class="commit-subgroup-items" id="items-${subgroupId}">
-                  ${subgroup.items.map(item => 
-                    window.renderTimelineItem ? 
-                      window.renderTimelineItem(item, 'left', timelineItems) : ''
-                  ).filter(html => html).join('')}
+                  ${subgroup.items.map(item => {
+                    if (item.itemType === 'terminal') {
+                      return window.renderTerminalTimelineItem ? 
+                        window.renderTerminalTimelineItem(item, 'left', timelineItems) : '';
+                    } else if (item.itemType === 'status') {
+                      return window.renderStatusMessageTimelineItem ? 
+                        window.renderStatusMessageTimelineItem(item, 'left') : '';
+                    }
+                    return window.renderTimelineItem ? 
+                      window.renderTimelineItem(item, 'left', timelineItems) : '';
+                  }).filter(html => html).join('')}
                 </div>
               </div>
             `;
           }).join('');
         } else {
-          // Render flat file group
-          fileItemsHtml = group.items.map(item => 
-            window.renderTimelineItem ? 
-              window.renderTimelineItem(item, 'left', timelineItems) : ''
-          ).filter(html => html).join('');
+          // Render flat file group - handle all event types
+          fileItemsHtml = group.items.map(item => {
+            if (item.itemType === 'terminal') {
+              return window.renderTerminalTimelineItem ? 
+                window.renderTerminalTimelineItem(item, 'left', timelineItems) : '';
+            } else if (item.itemType === 'status') {
+              return window.renderStatusMessageTimelineItem ? 
+                window.renderStatusMessageTimelineItem(item, 'left') : '';
+            }
+            return window.renderTimelineItem ? 
+              window.renderTimelineItem(item, 'left', timelineItems) : '';
+          }).filter(html => html).join('');
         }
         
         return `
@@ -2251,26 +2271,41 @@ function renderCommitGroup(commitGroup, timelineItems = null) {
               <span class="commit-subgroup-count">${group.eventCount}</span>
             </div>
             <div class="commit-subgroup-items">
-              ${group.items.map(item => 
-                window.renderTimelineItem ? 
-                  window.renderTimelineItem(item, 'left', timelineItems) : ''
-              ).filter(html => html).join('')}
+              ${group.items.map(item => {
+                if (item.itemType === 'terminal') {
+                  return window.renderTerminalTimelineItem ? 
+                    window.renderTerminalTimelineItem(item, 'left', timelineItems) : '';
+                } else if (item.itemType === 'status') {
+                  return window.renderStatusMessageTimelineItem ? 
+                    window.renderStatusMessageTimelineItem(item, 'left') : '';
+                }
+                return window.renderTimelineItem ? 
+                  window.renderTimelineItem(item, 'left', timelineItems) : '';
+              }).filter(html => html).join('')}
             </div>
           </div>
         `;
       }
     }).join('');
   } else {
-    // Simple flat rendering for small groups
+    // Simple flat rendering for small groups - handle all event types
     itemsHtml = items.map(item => {
       if (item.itemType === 'prompt') {
         return window.renderPromptTimelineItem ? 
           window.renderPromptTimelineItem(item, 'right', timelineItems) : '';
-      } else if (item.itemType === 'event') {
+      } else if (item.itemType === 'event' || item.itemType === 'code_change' || item.itemType === 'file_change') {
         return window.renderTimelineItem ? 
           window.renderTimelineItem(item, 'left', timelineItems) : '';
+      } else if (item.itemType === 'terminal') {
+        return window.renderTerminalTimelineItem ? 
+          window.renderTerminalTimelineItem(item, 'left', timelineItems) : '';
+      } else if (item.itemType === 'status') {
+        return window.renderStatusMessageTimelineItem ? 
+          window.renderStatusMessageTimelineItem(item, 'left') : '';
       }
-      return '';
+      // Fallback: try renderTimelineItem for any other event-like types
+      return window.renderTimelineItem ? 
+        window.renderTimelineItem(item, 'left', timelineItems) : '';
     }).filter(html => html).join('');
   }
   

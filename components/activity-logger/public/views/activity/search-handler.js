@@ -16,12 +16,26 @@ let searchFilters = {
   workspace: 'all'
 };
 
+// Track if search is initialized to prevent duplicate listeners
+let searchInitialized = false;
+let cmdFHandler = null;
+
 /**
  * Initialize search functionality
  */
 function initializeActivitySearch() {
   const searchInput = document.getElementById('activitySearchInput');
   if (!searchInput) return;
+  
+  // Prevent duplicate initialization
+  if (searchInitialized) {
+    // Re-attach input handlers if input was recreated
+    if (!searchInput.dataset.initialized) {
+      attachSearchInputHandlers(searchInput);
+      searchInput.dataset.initialized = 'true';
+    }
+    return;
+  }
   
   // Debounce search
   let searchTimeout;
@@ -50,12 +64,52 @@ function initializeActivitySearch() {
     }
   });
   
-  // Focus shortcut (Cmd/Ctrl + F)
-  document.addEventListener('keydown', (e) => {
-    if ((e.metaKey || e.ctrlKey) && e.key === 'f' && window.state?.currentView === 'activity') {
+  searchInput.dataset.initialized = 'true';
+  
+  // Focus shortcut (Cmd/Ctrl + F) - only add once globally
+  if (!cmdFHandler) {
+    cmdFHandler = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'f' && window.state?.currentView === 'activity') {
+        e.preventDefault();
+        const input = document.getElementById('activitySearchInput');
+        if (input) {
+          input.focus();
+          input.select();
+        }
+      }
+    };
+    document.addEventListener('keydown', cmdFHandler);
+  }
+  
+  searchInitialized = true;
+}
+
+/**
+ * Attach search input handlers (for re-initialization)
+ */
+function attachSearchInputHandlers(searchInput) {
+  let searchTimeout;
+  searchInput.addEventListener('input', (e) => {
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(() => {
+      performActivitySearch(e.target.value);
+    }, 300);
+  });
+  
+  searchInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
       e.preventDefault();
-      searchInput.focus();
-      searchInput.select();
+      if (activitySearchResults.length > 0) {
+        selectSearchResult(currentSearchIndex >= 0 ? currentSearchIndex : 0);
+      }
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      navigateSearchResults(1);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      navigateSearchResults(-1);
+    } else if (e.key === 'Escape') {
+      clearActivitySearch();
     }
   });
 }

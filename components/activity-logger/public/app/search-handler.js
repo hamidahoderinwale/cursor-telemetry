@@ -623,8 +623,7 @@ function renderSearchResults(results) {
       const index = result.originalIndex;
       const hasAnnotation = result.annotation || (result.payload && result.payload.annotation);
       const annotation = result.annotation || (result.payload && result.payload.annotation);
-      const annotationIcon = hasAnnotation && window.renderAnnotationIcon ? 
-        window.renderAnnotationIcon(14, 'var(--color-primary)') : '';
+      const annotationLabel = hasAnnotation ? '<span style="font-size: 0.85em; color: var(--color-text-muted); font-weight: 500;">[AI]</span>' : '';
       
       const title = result.title || result.content?.substring(0, 100) || 'Untitled';
       const snippet = result.snippet || result.content?.substring(0, 200) || '';
@@ -718,7 +717,7 @@ function renderSearchResults(results) {
               align-items: center;
               gap: 6px;
             ">
-              ${annotationIcon}
+              ${annotationLabel}
               <span style="font-style: italic;">${escapeHtml(annotation)}</span>
             </div>
           ` : ''}

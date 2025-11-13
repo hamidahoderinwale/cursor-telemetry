@@ -65,7 +65,7 @@ async function fetchGitCommits() {
 }
 
 /**
- * Get file paths from an event
+ * Get file paths from an event (works for all event types)
  */
 function getEventFilePaths(event) {
   const paths = new Set();
@@ -88,6 +88,14 @@ function getEventFilePaths(event) {
       // Ignore parse errors
     }
   }
+  
+  // For terminal commands, check cwd
+  if (event.itemType === 'terminal' && event.cwd) {
+    paths.add(event.cwd);
+  }
+  
+  // For code/file changes, check path field
+  if (event.path) paths.add(event.path);
   
   return Array.from(paths);
 }
@@ -196,11 +204,17 @@ function matchPromptsToCommits(prompts, commitGroups) {
  * Group timeline items by commits
  */
 async function groupByCommits(timelineItems) {
-  // Separate items by type
-  const events = timelineItems.filter(item => item.itemType === 'event');
+  // Separate items by type - include all event types (events, terminal, etc.)
+  const events = timelineItems.filter(item => 
+    item.itemType === 'event' || item.itemType === 'terminal' || item.itemType === 'code_change' || item.itemType === 'file_change'
+  );
   const prompts = timelineItems.filter(item => item.itemType === 'prompt');
   const otherItems = timelineItems.filter(item => 
-    item.itemType !== 'event' && item.itemType !== 'prompt'
+    item.itemType !== 'event' && 
+    item.itemType !== 'prompt' && 
+    item.itemType !== 'terminal' &&
+    item.itemType !== 'code_change' &&
+    item.itemType !== 'file_change'
   );
   
   // Fetch commits
@@ -253,13 +267,16 @@ async function groupByCommits(timelineItems) {
       ? group.commit.timestamp
       : new Date(group.commit.timestamp).getTime();
     
+    // Count all event types (events, terminal, code_change, file_change, etc.)
+    const totalEventCount = group.events.length;
+    
     groupedItems.push({
       itemType: 'commit-group',
       commit: group.commit,
       items: commitItems,
       sortTime: commitTime,
       id: `commit-${hash}`,
-      eventCount: group.events.length,
+      eventCount: totalEventCount,
       promptCount: group.prompts.length
     });
   }

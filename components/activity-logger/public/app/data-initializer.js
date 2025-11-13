@@ -335,11 +335,11 @@ async function loadFromCache(progressCallback = null) {
     }
     
     // Load only most recent prompts (limit to 20 for ultra-fast load)
-    // Add timeout to prevent hanging
+    // Add timeout to prevent hanging - increased timeout for large databases
     if (window.persistentStorage.getAllPrompts) {
       const promptsPromise = window.persistentStorage.getAllPrompts(20);
       const promptsTimeout = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('getAllPrompts timeout')), 2000)
+        setTimeout(() => reject(new Error('getAllPrompts timeout')), 5000)
       );
       
       try {
@@ -352,7 +352,12 @@ async function loadFromCache(progressCallback = null) {
         }
         if (progressCallback) progressCallback(90);
       } catch (promptsError) {
-        console.warn('[CACHE] Failed to load prompts:', promptsError.message);
+        // Only log as warning if it's not a timeout (timeout is expected for large DBs)
+        if (promptsError.message && !promptsError.message.includes('timeout')) {
+          console.warn('[CACHE] Failed to load prompts:', promptsError.message);
+        } else {
+          console.log('[CACHE] Prompt loading timed out (database may be large, continuing with empty prompts)');
+        }
         // Continue with empty prompts array
         if (!window.state.data.prompts) {
           window.state.data.prompts = [];

@@ -691,7 +691,28 @@
   <script src="https://cdn.socket.io/4.5.4/socket.io.min.js" defer></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js" defer></script>
   <script src="https://d3js.org/d3.v7.min.js" defer></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js" defer></script>
+  <!-- Three.js ES Module (replaces deprecated build/three.min.js) -->
+  <script type="module">
+    (async function() {
+      try {
+        const THREE = await import('https://cdn.jsdelivr.net/npm/three@0.160.0/+esm');
+        window.THREE = THREE.default || THREE;
+        // Also load OrbitControls if needed
+        if (typeof window.loadOrbitControls === 'undefined') {
+          window.loadOrbitControls = async function() {
+            if (!window.OrbitControls) {
+              const { OrbitControls } = await import('https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/OrbitControls.js');
+              window.OrbitControls = OrbitControls;
+            }
+            return window.OrbitControls;
+          };
+        }
+        console.log('[THREE] Three.js loaded successfully via ES modules');
+      } catch (error) {
+        console.error('[THREE] Failed to load Three.js:', error);
+      }
+    })();
+  </script>
   <!-- OrbitControls loaded dynamically in navigator-3d-renderer.js if needed -->
   <script src="https://unpkg.com/lunr/lunr.js" defer></script>
   <script src="https://unpkg.com/lucide@latest" defer></script>
@@ -757,6 +778,7 @@
   <script src="views/file-graph/helpers.js" defer></script>
   <script src="views/file-graph/d3-renderer.js" defer></script>
   <script src="views/file-graph/file-graph.js" defer></script>
+  <script src="views/schema-config/helpers.js" defer></script>
   <script src="views/schema-config/index.js" defer></script>
   <script src="views/file-graph/index.js" defer></script>
   <script src="views/workspace-comparison/index.js" defer></script>

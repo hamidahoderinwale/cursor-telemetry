@@ -248,3 +248,4 @@ window.chunkEventsByTime = chunkEventsByTime;
 window.createNestedCommitGroups = createNestedCommitGroups;
 window.shouldGroup = shouldGroup;
 
+

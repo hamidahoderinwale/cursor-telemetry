@@ -3,6 +3,70 @@
  * Handles event, prompt, thread, and terminal modals
  */
 
+// Global function for switching diff views (must be defined before modals are rendered)
+window.switchDiffView = window.switchDiffView || function(id, view) {
+  const codeView = document.getElementById(id + '_code_view');
+  const astView = document.getElementById(id + '_ast_view');
+  const codeBtn = document.getElementById(id + '_code_btn');
+  const astBtn = document.getElementById(id + '_ast_btn');
+  
+  if (!codeView || !astView || !codeBtn || !astBtn) {
+    console.warn('[MODAL] Diff view elements not found for:', id);
+    return;
+  }
+  
+  if (view === 'code') {
+    codeView.style.display = 'block';
+    astView.style.display = 'none';
+    codeBtn.style.background = 'var(--color-primary)';
+    codeBtn.style.color = 'white';
+    astBtn.style.background = 'var(--color-surface)';
+    astBtn.style.color = 'var(--color-text-muted)';
+  } else {
+    codeView.style.display = 'none';
+    astView.style.display = 'block';
+    astBtn.style.background = 'var(--color-primary)';
+    astBtn.style.color = 'white';
+    codeBtn.style.background = 'var(--color-surface)';
+    codeBtn.style.color = 'var(--color-text-muted)';
+    
+    // Render AST if not already rendered
+    const container = document.getElementById(id + '_ast_container');
+    if (container && !container.dataset.rendered && window.ASTParser && window.ASTVisualizer) {
+      container.dataset.rendered = 'true';
+      const data = window._astData && window._astData[id];
+      if (data) {
+        try {
+          const parser = new window.ASTParser();
+          const language = parser.detectLanguage(data.filePath, data.beforeCode || data.afterCode);
+          
+          const beforeAST = data.beforeCode ? parser.parseCode(data.beforeCode, language) : null;
+          const afterAST = data.afterCode ? parser.parseCode(data.afterCode, language) : null;
+          
+          if (beforeAST && afterAST) {
+            parser.compareASTs(beforeAST, afterAST);
+            const visualizer = new window.ASTVisualizer(id + '_ast_container');
+            visualizer.renderComparison(beforeAST, afterAST, { width: container.clientWidth || 800, height: 400 });
+          } else if (afterAST) {
+            const visualizer = new window.ASTVisualizer(id + '_ast_container');
+            visualizer.renderAST(afterAST, { width: container.clientWidth || 800, height: 400 });
+          } else if (beforeAST) {
+            const visualizer = new window.ASTVisualizer(id + '_ast_container');
+            visualizer.renderAST(beforeAST, { width: container.clientWidth || 800, height: 400 });
+          } else {
+            container.innerHTML = '<div style="padding: var(--space-lg); text-align: center; color: var(--color-text-muted);">No code available for AST visualization</div>';
+          }
+        } catch (error) {
+          console.error('[MODAL] Error rendering AST:', error);
+          container.innerHTML = `<div style="padding: var(--space-lg); text-align: center; color: var(--color-error);">Error rendering AST: ${error.message}</div>`;
+        }
+      } else {
+        container.innerHTML = '<div style="padding: var(--space-lg); text-align: center; color: var(--color-text-muted);">No AST data available</div>';
+      }
+    }
+  }
+};
+
 class ModalManager {
   constructor() {
     this.state = window.state;
@@ -334,7 +398,7 @@ class ModalManager {
               color: var(--color-text);
               font-size: 0.9em;
             ">
-              ${window.renderAnnotationIcon ? window.renderAnnotationIcon(16, 'var(--color-primary)') : '<span style="font-size: 0.85em; color: var(--color-text-muted);">[AI]</span>'}
+              <span style="font-size: 0.85em; color: var(--color-text-muted); font-weight: 500;">[AI]</span>
               <span>AI Annotation</span>
             </div>
             <div style="
@@ -706,58 +770,6 @@ class ModalManager {
           // Store AST data for this diff
           window._astData = window._astData || {};
           window._astData[diffId] = { beforeCode, afterCode, filePath };
-          
-          // Initialize AST visualization when AST view is shown
-          window.switchDiffView = window.switchDiffView || function(id, view) {
-            const codeView = document.getElementById(id + '_code_view');
-            const astView = document.getElementById(id + '_ast_view');
-            const codeBtn = document.getElementById(id + '_code_btn');
-            const astBtn = document.getElementById(id + '_ast_btn');
-            
-            if (view === 'code') {
-              codeView.style.display = 'block';
-              astView.style.display = 'none';
-              codeBtn.style.background = 'var(--color-primary)';
-              codeBtn.style.color = 'white';
-              astBtn.style.background = 'var(--color-surface)';
-              astBtn.style.color = 'var(--color-text-muted)';
-            } else {
-              codeView.style.display = 'none';
-              astView.style.display = 'block';
-              astBtn.style.background = 'var(--color-primary)';
-              astBtn.style.color = 'white';
-              codeBtn.style.background = 'var(--color-surface)';
-              codeBtn.style.color = 'var(--color-text-muted)';
-              
-              // Render AST if not already rendered
-              const container = document.getElementById(id + '_ast_container');
-              if (container && !container.dataset.rendered && window.ASTParser && window.ASTVisualizer) {
-                container.dataset.rendered = 'true';
-                const data = window._astData[id];
-                if (data) {
-                  const parser = new window.ASTParser();
-                  const language = parser.detectLanguage(data.filePath, data.beforeCode || data.afterCode);
-                  
-                  const beforeAST = data.beforeCode ? parser.parseCode(data.beforeCode, language) : null;
-                  const afterAST = data.afterCode ? parser.parseCode(data.afterCode, language) : null;
-                  
-                  if (beforeAST && afterAST) {
-                    parser.compareASTs(beforeAST, afterAST);
-                    const visualizer = new window.ASTVisualizer(id + '_ast_container');
-                    visualizer.renderComparison(beforeAST, afterAST, { width: container.clientWidth || 800, height: 400 });
-                  } else if (afterAST) {
-                    const visualizer = new window.ASTVisualizer(id + '_ast_container');
-                    visualizer.renderAST(afterAST, { width: container.clientWidth || 800, height: 400 });
-                  } else if (beforeAST) {
-                    const visualizer = new window.ASTVisualizer(id + '_ast_container');
-                    visualizer.renderAST(beforeAST, { width: container.clientWidth || 800, height: 400 });
-                  } else {
-                    container.innerHTML = '<div style="padding: var(--space-lg); text-align: center; color: var(--color-text-muted);">No code available for AST visualization</div>';
-                  }
-                }
-              }
-            }
-          };
         })();
       </script>
     `;

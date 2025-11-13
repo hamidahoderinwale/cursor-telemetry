@@ -900,7 +900,7 @@ a:focus:not(:focus-visible) {
   box-shadow: var(--shadow-xl);
   animation: slideUp var(--transition-slow);
   width: 95%; /* Increased from 90% */
-  max-width: 1100px; /* Increased from 900px */
+  max-width: 1400px; /* Increased from 1100px */
   margin: 0 !important;
   z-index: 10000 !important; /* Higher than overlay to ensure content is on top */
   font-size: var(--font-size-sm); /* Smaller base font size */
@@ -925,7 +925,7 @@ a:focus:not(:focus-visible) {
 
 .modal-large {
   width: 100%;
-  max-width: 1100px; /* Increased from 900px */
+  max-width: 1400px; /* Increased from 1100px */
 }
 
 .modal-header {
@@ -1198,14 +1198,14 @@ a:focus:not(:focus-visible) {
 .timeline-item-left::before {
   content: '';
   position: absolute;
-  right: -8px;
+  right: -6px;
   top: 12px;
-  width: 16px;
-  height: 16px;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
   background: #3b82f6;
-  border: 3px solid var(--color-surface);
-  box-shadow: 0 0 0 2px var(--color-bg), 0 0 0 4px #3b82f6;
+  border: 2px solid var(--color-surface);
+  box-shadow: 0 0 0 1px var(--color-bg), 0 0 0 2px #3b82f6;
   z-index: 3;
 }
 
