@@ -24,6 +24,7 @@ function createFileWatcherService(deps) {
     broadcastUpdate,
     enqueue,
     getCurrentActiveTodo,
+    plotService,
   } = deps;
 
   let watcher = null;
@@ -226,6 +227,38 @@ function createFileWatcherService(deps) {
           updateWorkspaceData(workspacePath, null, event);
 
           console.log(`File change detected: ${relativePath} in workspace: ${workspacePath}`);
+
+          // Detect plots from code changes (for Python scripts)
+          if (plotService && (filePath.endsWith('.py') || filePath.endsWith('.ipynb'))) {
+            try {
+              if (filePath.endsWith('.ipynb')) {
+                // Process notebook for plots
+                plotService.processNotebook(filePath, {
+                  workspacePath,
+                  autoTrack: true
+                }).then(result => {
+                  if (result.success && result.count > 0) {
+                    console.log(`[PLOT] Extracted ${result.count} plots from notebook: ${relativePath}`);
+                  }
+                }).catch(err => {
+                  console.warn(`[PLOT] Error processing notebook: ${err.message}`);
+                });
+              } else if (filePath.endsWith('.py')) {
+                // Detect plot patterns in Python code
+                plotService.detectPlotsFromCode(content, filePath, {
+                  workspacePath
+                }).then(result => {
+                  if (result.success && result.detectedPaths.length > 0) {
+                    console.log(`[PLOT] Detected ${result.detectedPaths.length} plot patterns in: ${relativePath}`);
+                  }
+                }).catch(err => {
+                  console.warn(`[PLOT] Error detecting plots from code: ${err.message}`);
+                });
+              }
+            } catch (err) {
+              console.warn(`[PLOT] Error in plot detection: ${err.message}`);
+            }
+          }
         } else {
           console.log(`Change too small for ${relativePath}: ${diff.summary}`);
         }
@@ -271,17 +304,54 @@ function createFileWatcherService(deps) {
     });
 
     watcher
-      .on('add', processFileChange)
+      .on('add', (filePath) => {
+        processFileChange(filePath);
+      })
       .on('change', processFileChange)
       .on('unlink', (filePath) => {
-        const detectedWorkspace = detectWorkspace(filePath);
-        fileSnapshots.delete(filePath);
-        const relativePath = path.relative(detectedWorkspace || config.root_dir, filePath);
-        console.log(` File deleted: ${relativePath} from workspace: ${detectedWorkspace}`);
+          const detectedWorkspace = detectWorkspace(filePath);
+          fileSnapshots.delete(filePath);
+          const relativePath = path.relative(detectedWorkspace || config.root_dir, filePath);
+          console.log(` File deleted: ${relativePath} from workspace: ${detectedWorkspace}`);
+          
+          // Start plot file monitoring when workspace is detected
+          if (plotService && detectedWorkspace && fs.existsSync(detectedWorkspace)) {
+            try {
+              const PlotFileMonitor = require('../monitors/plot-file-monitor');
+              if (!global.plotFileMonitors) {
+                global.plotFileMonitors = new Map();
+              }
+              if (!global.plotFileMonitors.has(detectedWorkspace)) {
+                const plotFileMonitor = new PlotFileMonitor(plotService);
+                plotFileMonitor.start(detectedWorkspace);
+                global.plotFileMonitors.set(detectedWorkspace, plotFileMonitor);
+                console.log(`[PLOT] Started plot file monitoring for workspace: ${detectedWorkspace}`);
+              }
+            } catch (err) {
+              console.warn(`[PLOT] Error starting plot file monitor: ${err.message}`);
+            }
+          }
       })
       .on('error', (error) => console.error(` Watcher error: ${error}`))
       .on('ready', () => {
         console.log(' File watcher ready');
+        
+        // Start plot file monitoring for detected workspaces
+        if (plotService && typeof plotService !== 'undefined') {
+          const workspacesToWatch = config.workspace_roots || config.workspaces || [config.root_dir];
+          workspacesToWatch.forEach(workspacePath => {
+            if (fs.existsSync(workspacePath)) {
+              try {
+                const PlotFileMonitor = require('../monitors/plot-file-monitor');
+                const plotFileMonitor = new PlotFileMonitor(plotService);
+                plotFileMonitor.start(workspacePath);
+                console.log(`[PLOT] Started plot file monitoring for workspace: ${workspacePath}`);
+              } catch (err) {
+                console.warn(`[PLOT] Error starting plot file monitor: ${err.message}`);
+              }
+            }
+          });
+        }
       });
   }
 

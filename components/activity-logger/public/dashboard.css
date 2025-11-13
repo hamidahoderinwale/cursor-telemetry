@@ -101,17 +101,17 @@
   --space-xl: 1.5rem;     /* 24px - reduced from 32px */
   --space-2xl: 2rem;      /* 32px - reduced from 48px */
   
-  /* Border Radius */
-  --radius-sm: 0.375rem;  /* 6px */
-  --radius-md: 0.5rem;    /* 8px */
-  --radius-lg: 0.75rem;   /* 12px */
-  --radius-xl: 1rem;      /* 16px */
+  /* Border Radius - Minimal, straight edges */
+  --radius-sm: 0.125rem;  /* 2px */
+  --radius-md: 0.25rem;   /* 4px */
+  --radius-lg: 0.375rem;  /* 6px */
+  --radius-xl: 0.5rem;    /* 8px */
   
-  /* Shadows */
-  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+  /* Shadows - Minimal */
+  --shadow-sm: 0 1px 1px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 2px 4px -1px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 4px 8px -2px rgba(0, 0, 0, 0.1);
+  --shadow-xl: 0 8px 16px -4px rgba(0, 0, 0, 0.12);
   
   /* Transitions */
   --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
@@ -631,14 +631,14 @@ a:focus:not(:focus-visible) {
 .card {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   padding: var(--space-xl);
   transition: all var(--transition-base);
   width: 100%;
   min-width: 0;
   overflow-x: hidden;
   box-sizing: border-box;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--shadow-sm);
 }
 
 @media (max-width: 1024px) {
@@ -661,8 +661,8 @@ a:focus:not(:focus-visible) {
 
 .card:hover {
   border-color: var(--color-primary);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+  transform: none;
 }
 
 .card-header {
@@ -773,7 +773,7 @@ a:focus:not(:focus-visible) {
   background: var(--color-primary);
   color: white;
   border: none;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   font-size: var(--text-sm);
   font-weight: 500;
   font-family: var(--font-sans);
@@ -786,8 +786,8 @@ a:focus:not(:focus-visible) {
 
 .btn:hover {
   background: var(--color-primary-dark);
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-md);
+  transform: none;
+  box-shadow: var(--shadow-sm);
 }
 
 .btn:active {
@@ -881,6 +881,8 @@ a:focus:not(:focus-visible) {
   opacity: 1 !important;
   /* Ensure overlay stays in background, not covering modal content */
   overflow: hidden;
+  /* Match modal content border-radius for visual consistency */
+  border-radius: 0;
 }
 
 .modal-content {
@@ -890,7 +892,7 @@ a:focus:not(:focus-visible) {
   transform: translate(-50%, -50%) !important;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-md);
   max-height: 90vh;
   height: auto;
   min-height: 200px;
@@ -921,6 +923,8 @@ a:focus:not(:focus-visible) {
   pointer-events: auto !important;
   visibility: visible !important;
   opacity: 1 !important;
+  /* Ensure border-radius is applied consistently */
+  clip-path: none;
 }
 
 .modal-large {
@@ -939,6 +943,8 @@ a:focus:not(:focus-visible) {
   position: sticky;
   top: 0;
   z-index: 10;
+  /* Match parent border-radius for top corners */
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
 }
 
 .modal-header h2 {
@@ -1211,8 +1217,10 @@ a:focus:not(:focus-visible) {
 
 .timeline-item-left .timeline-content {
   background: rgba(59, 130, 246, 0.05);
+  border: 1px solid var(--color-border);
   border-left: 3px solid #3b82f6;
   border-right: none;
+  border-radius: var(--radius-sm);
 }
 
 .timeline-item-left:hover {
@@ -1253,8 +1261,10 @@ a:focus:not(:focus-visible) {
 
 .timeline-item-right .timeline-content {
   background: rgba(139, 92, 246, 0.05);
+  border: 1px solid var(--color-border);
   border-right: 3px solid #8b5cf6;
   border-left: none;
+  border-radius: var(--radius-sm);
 }
 
 .timeline-item-right:hover {
@@ -1270,13 +1280,13 @@ a:focus:not(:focus-visible) {
 /* Event content styling (blue theme) */
 .event-content .timeline-content {
   background: rgba(59, 130, 246, 0.05);
-  border-left: 3px solid #3b82f6;
+  /* Border removed - already handled by .timeline-item-left .timeline-content */
 }
 
 /* Prompt content styling (purple theme) */
 .prompt-content {
   background: rgba(139, 92, 246, 0.05) !important;
-  border-right: 3px solid #8b5cf6 !important;
+  /* Border removed - already handled by .timeline-item-right .timeline-content */
 }
 
 /* Temporal thread items span full width */
@@ -1330,8 +1340,8 @@ a:focus:not(:focus-visible) {
 
 .timeline-content {
   background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
+  /* Border removed - handled by specific selectors (.timeline-item-left .timeline-content, .timeline-item-right .timeline-content) */
+  border-radius: var(--radius-sm);
   padding: var(--space-lg);
   transition: all var(--transition-base);
 }

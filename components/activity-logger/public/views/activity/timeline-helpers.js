@@ -248,12 +248,26 @@ function renderUnifiedTimeline(items) {
   });
   
   // Merge all items (conversations, standalone prompts, and other items)
+  // Sort by sequence index if available (sequence-based ordering), otherwise by timestamp
   const allItems = [...conversationItems, ...standalonePrompts, ...nonPromptItems]
     .sort((a, b) => {
+      // Prefer sequence-based ordering if available
+      if (a.sequenceIndex !== undefined && b.sequenceIndex !== undefined) {
+        return b.sequenceIndex - a.sequenceIndex; // Higher sequence = more recent
+      }
+      // Fallback to timestamp-based ordering
       const aTime = a.sortTime || 0;
       const bTime = b.sortTime || 0;
       return bTime - aTime;
     });
+  
+  // Ensure all items have sequence indices for sequence-based linking
+  allItems.forEach((item, index) => {
+    if (item.sequenceIndex === undefined) {
+      item.sequenceIndex = allItems.length - index;
+      item.sequencePosition = index;
+    }
+  });
   
   // Analyze conversation flow if analyzer is available
   let conversationAnalytics = {};

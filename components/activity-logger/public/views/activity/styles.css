@@ -159,24 +159,24 @@
   position: relative;
   padding: var(--space-sm, 0.75rem) var(--space-md, 1rem);
   background: var(--color-bg);
-  border-radius: var(--radius-md);
-  border-left: 3px solid var(--color-border);
+  border-radius: 0;
+  /* Border removed - handled by .timeline-content child elements */
   cursor: pointer;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  box-shadow: none;
   margin-bottom: var(--space-xs, 0.5rem);
 }
 
 .timeline-item:hover {
   background: var(--color-bg-alt);
-  border-left-color: var(--color-primary);
-  transform: translateX(4px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  /* Border color change handled by .timeline-content child */
+  transform: none;
+  box-shadow: none;
 }
 
 .timeline-item:active {
-  transform: translateX(2px);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+  transform: none;
+  box-shadow: none;
 }
 
 .timeline-content {
@@ -910,7 +910,8 @@
 
 .prompt-content {
   background: transparent;
-  border-left: none;
+  border: none;
+  /* Border removed - already handled by parent .timeline-item-right .timeline-content */
 }
 
 /* Enhanced Badge Styles */

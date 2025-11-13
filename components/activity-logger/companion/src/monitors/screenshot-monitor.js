@@ -10,13 +10,16 @@ const path = require('path');
 const os = require('os');
 const chokidar = require('chokidar');
 const crypto = require('crypto');
+const ImageProcessor = require('../processors/image-processor');
 
 class ScreenshotMonitor {
-  constructor() {
+  constructor(options = {}) {
     this.screenshotPaths = this.findScreenshotPaths();
     this.watchers = [];
     this.screenshots = new Map(); // Store screenshot metadata
     this.onScreenshotCallback = null;
+    this.imageProcessor = options.imageProcessor || new ImageProcessor();
+    this.processImages = options.processImages !== false; // Default to true
   }
 
   /**
@@ -35,7 +38,7 @@ class ScreenshotMonitor {
    * Start monitoring for screenshots
    */
   start(callback) {
-    console.log('📷 Starting screenshot monitor...');
+    console.log('[SCREENSHOT] Starting screenshot monitor...');
     this.onScreenshotCallback = callback;
 
     // Monitor workspace images directory
@@ -55,7 +58,7 @@ class ScreenshotMonitor {
         .on('unlink', (filePath) => this.handleScreenshotDeleted(filePath));
 
       this.watchers.push(workspaceWatcher);
-      console.log(`📷 Monitoring workspace screenshots: ${this.screenshotPaths.workspaceImages}`);
+      console.log(`[SCREENSHOT] Monitoring workspace screenshots: ${this.screenshotPaths.workspaceImages}`);
     }
 
     // Monitor history directory (for historical screenshots)
@@ -88,7 +91,7 @@ class ScreenshotMonitor {
         });
 
       this.watchers.push(historyWatcher);
-      console.log(`📷 Monitoring history screenshots: ${this.screenshotPaths.history}`);
+      console.log(`[SCREENSHOT] Monitoring history screenshots: ${this.screenshotPaths.history}`);
     }
 
     console.log('[SUCCESS] Screenshot monitor started');
@@ -128,10 +131,38 @@ class ScreenshotMonitor {
         ...metadata,
       };
 
+      // Process image if enabled
+      if (this.processImages) {
+        try {
+          const processed = await this.imageProcessor.processImage(filePath, {
+            generateThumbnail: true,
+            extractMetadata: true,
+            computeHash: true
+          });
+
+          if (processed.metadata) {
+            screenshotData.width = processed.metadata.width;
+            screenshotData.height = processed.metadata.height;
+            screenshotData.format = processed.metadata.format;
+            screenshotData.imageMetadata = processed.metadata;
+          }
+
+          if (processed.thumbnail) {
+            screenshotData.thumbnailPath = processed.thumbnail.thumbnailPath;
+          }
+
+          if (processed.perceptualHash) {
+            screenshotData.perceptualHash = processed.perceptualHash;
+          }
+        } catch (error) {
+          console.warn(`[SCREENSHOT] Error processing image: ${error.message}`);
+        }
+      }
+
       // Store screenshot data
       this.screenshots.set(screenshotId, screenshotData);
 
-      console.log(`📷 New screenshot captured: ${fileName} (${source})`);
+      console.log(`[SCREENSHOT] New screenshot captured: ${fileName} (${source})`);
 
       // Call callback if provided
       if (this.onScreenshotCallback) {
@@ -140,7 +171,7 @@ class ScreenshotMonitor {
 
       return screenshotData;
     } catch (error) {
-      console.warn(`Error processing screenshot ${filePath}:`, error.message);
+      console.warn(`[SCREENSHOT] Error processing screenshot ${filePath}:`, error.message);
     }
   }
 
@@ -158,7 +189,7 @@ class ScreenshotMonitor {
         existingScreenshot.timestamp = stats.mtime;
         existingScreenshot.size = stats.size;
 
-        console.log(`📷 Screenshot updated: ${path.basename(filePath)}`);
+        console.log(`[SCREENSHOT] Screenshot updated: ${path.basename(filePath)}`);
 
         if (this.onScreenshotCallback) {
           this.onScreenshotCallback('changed', existingScreenshot);
@@ -184,7 +215,7 @@ class ScreenshotMonitor {
       const [id, data] = existingScreenshot;
       this.screenshots.delete(id);
 
-      console.log(`📷 Screenshot deleted: ${path.basename(filePath)}`);
+      console.log(`[SCREENSHOT] Screenshot deleted: ${path.basename(filePath)}`);
 
       if (this.onScreenshotCallback) {
         this.onScreenshotCallback('deleted', data);
@@ -329,7 +360,7 @@ class ScreenshotMonitor {
    * Stop monitoring
    */
   stop() {
-    console.log('📷 Stopping screenshot monitor...');
+    console.log('[SCREENSHOT] Stopping screenshot monitor...');
     this.watchers.forEach((watcher) => watcher.close());
     this.watchers = [];
     console.log('[SUCCESS] Screenshot monitor stopped');

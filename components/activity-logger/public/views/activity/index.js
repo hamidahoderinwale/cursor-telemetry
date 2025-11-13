@@ -128,25 +128,37 @@ async function renderActivityView(container) {
   });
   
   // Merge events, prompts, and terminal commands into unified timeline
+  // First, sort by timestamp to establish initial order
   let timelineItems = [
     ...filteredEvents.map(event => ({
       ...event,
       itemType: 'event',
-      sortTime: new Date(event.timestamp).getTime()
+      sortTime: new Date(event.timestamp).getTime(),
+      originalTimestamp: new Date(event.timestamp).getTime()
     })),
     ...prompts.map(prompt => ({
       ...prompt,
       itemType: 'prompt',
       sortTime: new Date(prompt.timestamp).getTime(),
+      originalTimestamp: new Date(prompt.timestamp).getTime(),
       id: prompt.id || `prompt-${prompt.timestamp}`
     })),
     ...terminalCommands.map(cmd => ({
       ...cmd,
       itemType: 'terminal',
       sortTime: cmd.timestamp,
+      originalTimestamp: cmd.timestamp,
       id: cmd.id
     }))
   ].sort((a, b) => b.sortTime - a.sortTime);
+  
+  // Assign sequence indices based on position in timeline (reverse chronological)
+  // Higher sequence number = appears earlier in timeline = happened more recently
+  timelineItems = timelineItems.map((item, index) => ({
+    ...item,
+    sequenceIndex: timelineItems.length - index, // Higher number = more recent
+    sequencePosition: index // Position in sorted array
+  }));
   
   // Enhance timeline with status messages if available
   if (window.enhanceTimelineWithStatusMessages) {

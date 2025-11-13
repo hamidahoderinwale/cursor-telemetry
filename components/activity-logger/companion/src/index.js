@@ -87,6 +87,11 @@ const CursorDatabaseParser = require('./database/cursor-db-parser.js');
 // Import screenshot monitor
 const ScreenshotMonitor = require('./monitors/screenshot-monitor.js');
 
+// Import image processor and plot services
+const ImageProcessor = require('./processors/image-processor.js');
+const PlotService = require('./services/plot-service.js');
+const PlotFileMonitor = require('./monitors/plot-file-monitor.js');
+
 // Import persistent database
 const PersistentDB = require('./database/persistent-db.js');
 
@@ -139,6 +144,7 @@ const createWhiteboardRoutes = require('./routes/whiteboard.js');
 const createAIRoutes = require('./routes/ai.js');
 const createAnnotationRoutes = require('./routes/annotations.js');
 const createStateRoutes = require('./routes/states.js');
+const createPlotRoutes = require('./routes/plots.js');
 const SharingService = require('./services/sharing-service.js');
 
 // Initialize persistent database
@@ -163,6 +169,7 @@ const terminalMonitor = new TerminalMonitor({
   captureOutput: false, // Don't execute commands, just monitor
   debug: false,
 });
+
 const abstractionEngine = new AbstractionEngine();
 
 // Simple in-memory database for companion service (with persistent backup)
@@ -323,7 +330,86 @@ ideStateCapture.start(); // Start capturing IDE state
 let cursorDbParser = new CursorDatabaseParser();
 
 // Initialize screenshot monitor
-let screenshotMonitor = new ScreenshotMonitor();
+// Initialize image processor
+const imageProcessor = new ImageProcessor({
+  thumbnailDir: path.join(__dirname, '../data/thumbnails')
+});
+
+// Initialize plot service
+const plotService = new PlotService(persistentDB, {
+  imageProcessor: imageProcessor
+});
+
+// Initialize screenshot monitor with image processor
+let screenshotMonitor = new ScreenshotMonitor({
+  imageProcessor: imageProcessor,
+  processImages: true
+});
+
+// Initialize plot file monitor
+let plotFileMonitor = new PlotFileMonitor(plotService, {
+  commonDirs: ['plots', 'figures', 'images', 'output', 'results', 'visualizations', 'charts', 'graphs']
+});
+
+// Set up terminal command plot detection
+terminalMonitor.removeAllListeners('command');
+terminalMonitor.on('command', async (commandRecord) => {
+  if (!plotService) return;
+
+  try {
+    const command = commandRecord.command || '';
+    const workspace = commandRecord.workspace || process.cwd();
+
+    // Detect Python scripts that might generate plots
+    if (command.includes('python') || command.includes('python3')) {
+      // Extract script path from command
+      const scriptMatch = command.match(/python(?:3)?\s+([^\s]+\.py)/);
+      if (scriptMatch) {
+        const scriptPath = path.isAbsolute(scriptMatch[1]) 
+          ? scriptMatch[1] 
+          : path.join(workspace, scriptMatch[1]);
+
+        if (fs.existsSync(scriptPath)) {
+          // Read script and detect plot patterns
+          const scriptContent = fs.readFileSync(scriptPath, 'utf8');
+          const result = await plotService.detectPlotsFromCode(scriptContent, scriptPath, {
+            workspacePath: workspace
+          });
+
+          if (result.success && result.detectedPaths.length > 0) {
+            console.log(`[PLOT] Detected ${result.detectedPaths.length} plot patterns in terminal command: ${command}`);
+          }
+        }
+      }
+    }
+
+    // Detect Jupyter notebook execution
+    if (command.includes('jupyter') && command.includes('.ipynb')) {
+      const notebookMatch = command.match(/([^\s]+\.ipynb)/);
+      if (notebookMatch) {
+        const notebookPath = path.isAbsolute(notebookMatch[1])
+          ? notebookMatch[1]
+          : path.join(workspace, notebookMatch[1]);
+
+        if (fs.existsSync(notebookPath)) {
+          // Process notebook for plots after a delay (to allow execution to complete)
+          setTimeout(async () => {
+            const result = await plotService.processNotebook(notebookPath, {
+              workspacePath: workspace,
+              autoTrack: true
+            });
+
+            if (result.success && result.count > 0) {
+              console.log(`[PLOT] Extracted ${result.count} plots from executed notebook: ${notebookMatch[1]}`);
+            }
+          }, 5000); // Wait 5 seconds for notebook execution
+        }
+      }
+    }
+  } catch (error) {
+    console.warn(`[PLOT] Error detecting plots from terminal command: ${error.message}`);
+  }
+});
 
 // Start screenshot monitoring with callback
 screenshotMonitor.start((action, screenshotData) => {
@@ -1274,6 +1360,7 @@ const fileWatcherService = createFileWatcherService({
   broadcastUpdate,
   enqueue,
   getCurrentActiveTodo: todosRoutes.getCurrentActiveTodo,
+  plotService,
 });
 
 const dbRepairService = createDbRepairService({
@@ -1322,6 +1409,11 @@ createActivityRoutes({
 createScreenshotRoutes({
   app,
   screenshotMonitor,
+});
+
+createPlotRoutes({
+  app,
+  plotService,
 });
 
 createPromptRoutes({
@@ -1976,6 +2068,15 @@ process.on('SIGINT', () => {
     screenshotMonitor.stop();
   }
 
+  if (plotFileMonitor) {
+    plotFileMonitor.stop();
+  }
+
+  if (global.plotFileMonitors) {
+    global.plotFileMonitors.forEach(monitor => monitor.stop());
+    global.plotFileMonitors.clear();
+  }
+
   server.close(() => {
     console.log(' Companion service stopped');
     process.exit(0);
@@ -2005,6 +2106,15 @@ process.on('SIGTERM', () => {
   // Stop screenshot monitor
   if (screenshotMonitor) {
     screenshotMonitor.stop();
+  }
+
+  if (plotFileMonitor) {
+    plotFileMonitor.stop();
+  }
+
+  if (global.plotFileMonitors) {
+    global.plotFileMonitors.forEach(monitor => monitor.stop());
+    global.plotFileMonitors.clear();
   }
 
   server.close(() => {

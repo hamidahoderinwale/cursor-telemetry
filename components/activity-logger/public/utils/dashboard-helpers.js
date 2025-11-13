@@ -402,12 +402,25 @@ function findRelatedPromptsBySequence(event, timelineItems = [], sequenceWindow 
     return window.findRelatedPrompts ? window.findRelatedPrompts(event, 15) : [];
   }
 
-  // Find event's position in timeline
-  const eventIndex = timelineItems.findIndex(item => 
-    item.itemType === 'event' && 
-    (item.id === event.id || item.timestamp === event.timestamp || 
-     (item.id && event.id && item.id.toString() === event.id.toString()))
-  );
+  // Find event's position in timeline using sequence index if available, otherwise by ID/timestamp
+  let eventIndex = -1;
+  
+  // First try to find by sequence index if event has one
+  if (event.sequenceIndex !== undefined) {
+    eventIndex = timelineItems.findIndex(item => 
+      item.itemType === 'event' && 
+      item.sequenceIndex === event.sequenceIndex
+    );
+  }
+  
+  // Fallback to ID/timestamp matching
+  if (eventIndex === -1) {
+    eventIndex = timelineItems.findIndex(item => 
+      item.itemType === 'event' && 
+      (item.id === event.id || item.timestamp === event.timestamp || 
+       (item.id && event.id && item.id.toString() === event.id.toString()))
+    );
+  }
 
   if (eventIndex === -1) {
     // Fallback to time-based if event not found in timeline
@@ -415,6 +428,7 @@ function findRelatedPromptsBySequence(event, timelineItems = [], sequenceWindow 
   }
 
   // Look for prompts in sequence window (before = higher index, after = lower index)
+  // In reverse chronological order: before = items with higher sequenceIndex (more recent)
   const startIndex = Math.max(0, eventIndex - sequenceWindow.before);
   const endIndex = Math.min(timelineItems.length, eventIndex + sequenceWindow.after + 1);
   

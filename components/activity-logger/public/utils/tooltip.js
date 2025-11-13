@@ -11,12 +11,49 @@ class TooltipManager {
   }
 
   /**
+   * Get valid DOM element from event target
+   * Handles cases where e.target might be a text node or not a DOM element
+   */
+  _getElementFromEvent(e) {
+    if (!e || !e.target) return null;
+    
+    // If target is a text node, get its parent element
+    if (e.target.nodeType === Node.TEXT_NODE) {
+      return e.target.parentElement;
+    }
+    
+    // If target is an element node, return it
+    if (e.target.nodeType === Node.ELEMENT_NODE) {
+      return e.target;
+    }
+    
+    return null;
+  }
+
+  /**
+   * Safe closest lookup - handles cases where element might not support closest
+   */
+  _closest(element, selector) {
+    if (!element || typeof element.closest !== 'function') {
+      return null;
+    }
+    try {
+      return element.closest(selector);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /**
    * Initialize tooltip system
    */
   init() {
     // Handle tooltip-icon elements (priority - these are specifically for tooltips)
     document.addEventListener('mouseenter', (e) => {
-      const target = e.target.closest('.tooltip-icon');
+      const element = this._getElementFromEvent(e);
+      if (!element) return;
+      
+      const target = this._closest(element, '.tooltip-icon');
       if (target && target.title) {
         // Temporarily remove title to prevent native tooltip
         target.dataset.originalTitle = target.title;
@@ -26,8 +63,11 @@ class TooltipManager {
     }, true);
 
     document.addEventListener('mouseleave', (e) => {
-      const target = e.target.closest('.tooltip-icon');
-      if (target && target.dataset.originalTitle) {
+      const element = this._getElementFromEvent(e);
+      if (!element) return;
+      
+      const target = this._closest(element, '.tooltip-icon');
+      if (target && target.dataset && target.dataset.originalTitle) {
         // Restore title attribute
         target.title = target.dataset.originalTitle;
         this.hide();
@@ -36,7 +76,10 @@ class TooltipManager {
 
     // Handle elements with data-tooltip attribute
     document.addEventListener('mouseenter', (e) => {
-      const target = e.target.closest('[data-tooltip]');
+      const element = this._getElementFromEvent(e);
+      if (!element) return;
+      
+      const target = this._closest(element, '[data-tooltip]');
       if (target) {
         const text = target.getAttribute('data-tooltip');
         if (text) {
@@ -46,7 +89,10 @@ class TooltipManager {
     }, true);
 
     document.addEventListener('mouseleave', (e) => {
-      const target = e.target.closest('[data-tooltip]');
+      const element = this._getElementFromEvent(e);
+      if (!element) return;
+      
+      const target = this._closest(element, '[data-tooltip]');
       if (target) {
         this.hide();
       }
@@ -55,14 +101,17 @@ class TooltipManager {
     // Handle elements with title attribute that should show custom tooltips
     // (buttons, inputs, etc. - but only if they have a title and aren't already handled)
     document.addEventListener('mouseenter', (e) => {
+      const element = this._getElementFromEvent(e);
+      if (!element) return;
+      
       // Skip if already handled by tooltip-icon or data-tooltip
-      if (e.target.closest('.tooltip-icon') || e.target.closest('[data-tooltip]')) {
+      if (this._closest(element, '.tooltip-icon') || this._closest(element, '[data-tooltip]')) {
         return;
       }
       
-      const target = e.target;
+      const target = element;
       // Only show custom tooltip for interactive elements with title
-      if (target.title && 
+      if (target && target.title && 
           (target.tagName === 'BUTTON' || 
            target.tagName === 'INPUT' || 
            target.hasAttribute('aria-label') ||
@@ -78,8 +127,11 @@ class TooltipManager {
     }, true);
 
     document.addEventListener('mouseleave', (e) => {
-      const target = e.target;
-      if (target.dataset.originalTitle && 
+      const element = this._getElementFromEvent(e);
+      if (!element) return;
+      
+      const target = element;
+      if (target && target.dataset && target.dataset.originalTitle && 
           (target.tagName === 'BUTTON' || 
            target.tagName === 'INPUT' || 
            target.hasAttribute('aria-label') ||

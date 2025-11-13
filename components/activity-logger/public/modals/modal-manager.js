@@ -505,6 +505,11 @@ class ModalManager {
 
         ${relatedScreenshots.length > 0 ? this._buildScreenshotsHTML(event, relatedScreenshots) : ''}
 
+        ${relatedPrompts.length > 0 ? this._buildRelatedPromptsHTML(relatedPrompts) : 
+          (this.state && this.state.data && this.state.data.prompts && this.state.data.prompts.length > 0) ? 
+            this._buildNoRelatedPromptsDebugHTML(event, this.state.data.prompts) : 
+            '<div style="padding: var(--space-md); background: rgba(148, 163, 184, 0.1); border-radius: var(--radius-md); border: 1px dashed var(--color-border);"><div style="font-size: var(--text-sm); color: var(--color-text-muted);">No prompts available in state</div></div>'}
+
         ${(() => {
           // Normalize code diff data - handle multiple field name variations
           let beforeContent = details?.before_content || details?.before_code || details?.beforeContent || null;
@@ -536,11 +541,6 @@ class ModalManager {
           }
           return '';
         })()}
-
-        ${relatedPrompts.length > 0 ? this._buildRelatedPromptsHTML(relatedPrompts) : 
-          (this.state && this.state.data && this.state.data.prompts && this.state.data.prompts.length > 0) ? 
-            this._buildNoRelatedPromptsDebugHTML(event, this.state.data.prompts) : 
-            '<div style="padding: var(--space-md); background: rgba(148, 163, 184, 0.1); border-radius: var(--radius-md); border: 1px dashed var(--color-border);"><div style="font-size: var(--text-sm); color: var(--color-text-muted);">No prompts available in state</div></div>'}
 
         ${relatedConversations.length > 0 ? this._buildRelatedConversationsHTML(relatedConversations) : ''}
 
