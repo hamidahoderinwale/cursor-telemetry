@@ -3,7 +3,7 @@
  */
 
 function createExportImportRoutes(deps) {
-  const { app, persistentDB, db, abstractionEngine, schemaMigrations } = deps;
+  const { app, persistentDB, db, abstractionEngine, schemaMigrations, dataAccessControl } = deps;
 
   // Streaming export handler for large datasets
   async function handleStreamingExport(req, res, options) {
@@ -563,11 +563,21 @@ function createExportImportRoutes(deps) {
         await Promise.all(promises);
 
       // Apply date range filtering
-      const filteredEntries = filterByDateRange(entries);
-      const filteredPrompts = filterByDateRange(prompts);
-      const filteredEvents = filterByDateRange(events);
-      const filteredTerminalCommands = filterByDateRange(terminalCommands);
-      const filteredContextSnapshots = filterByDateRange(contextSnapshots);
+      let filteredEntries = filterByDateRange(entries);
+      let filteredPrompts = filterByDateRange(prompts);
+      let filteredEvents = filterByDateRange(events);
+      let filteredTerminalCommands = filterByDateRange(terminalCommands);
+      let filteredContextSnapshots = filterByDateRange(contextSnapshots);
+
+      // Apply workspace and data source filtering if access control is enabled
+      const workspace = req.query.workspace || req.query.workspace_path || null;
+      if (dataAccessControl) {
+        filteredEntries = dataAccessControl.applyFilters(filteredEntries, { workspace });
+        filteredPrompts = dataAccessControl.applyFilters(filteredPrompts, { workspace });
+        filteredEvents = dataAccessControl.applyFilters(filteredEvents, { workspace });
+        filteredTerminalCommands = dataAccessControl.applyFilters(filteredTerminalCommands, { workspace });
+        filteredContextSnapshots = dataAccessControl.applyFilters(filteredContextSnapshots, { workspace });
+      }
 
       // Calculate diff stats for entries with code
       const calculateDiff = (before, after) => {

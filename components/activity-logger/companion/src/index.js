@@ -156,6 +156,9 @@ const contextChangeTracker = new ContextChangeTracker(persistentDB);
 const statusMessageTracker = new StatusMessageTracker(persistentDB);
 const errorTracker = new ErrorTracker();
 const productivityTracker = new ProductivityTracker();
+
+// Initialize data access control (will be configured after config is loaded)
+let dataAccessControl = null;
 const terminalMonitor = new TerminalMonitor({
   captureOutput: false, // Don't execute commands, just monitor
   debug: false,
@@ -1120,6 +1123,21 @@ try {
   };
 }
 
+// Initialize data access control service
+const DataAccessControl = require('./services/data-access-control');
+dataAccessControl = new DataAccessControl(config);
+if (config.data_access_control?.enabled) {
+  console.log('[ACCESS] Data access control enabled');
+  console.log(`[ACCESS] Allowed data sources: ${config.data_access_control.allowed_data_sources?.join(', ') || 'all'}`);
+  if (config.data_access_control.allowed_workspaces) {
+    console.log(`[ACCESS] Allowed workspaces: ${config.data_access_control.allowed_workspaces.join(', ')}`);
+  } else {
+    console.log('[ACCESS] All workspaces allowed');
+  }
+} else {
+  console.log('[ACCESS] Data access control disabled - all data accessible');
+}
+
 // Support automatic workspace detection
 const workspacesToWatch = config.workspace_roots || config.workspaces || [config.root_dir];
 const autoDetect = config.auto_detect_workspaces !== false;
@@ -1180,6 +1198,7 @@ createCoreRoutes({
   queueSystem,
   clipboardMonitor,
   queryCache,
+  dataAccessControl,
 });
 
 createWorkspaceRoutes({
@@ -1297,6 +1316,7 @@ createActivityRoutes({
   queryCache,
   calculateDiff,
   cursorDbParser,
+  dataAccessControl,
 });
 
 createScreenshotRoutes({
@@ -1351,6 +1371,7 @@ createExportImportRoutes({
   db,
   abstractionEngine,
   schemaMigrations,
+  dataAccessControl,
 });
 
 // Sharing routes

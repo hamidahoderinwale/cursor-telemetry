@@ -45,5 +45,22 @@
   "enable_terminal_monitoring": true,
   "enable_preload": false,
   "strict_auth": false,
-  "polling_interval": 2000
+  "polling_interval": 2000,
+  "data_access_control": {
+    "enabled": false,
+    "allowed_data_sources": [
+      "cursor_db",
+      "file_watcher",
+      "terminal",
+      "clipboard",
+      "system_resources",
+      "ide_state",
+      "context_snapshots"
+    ],
+    "allowed_workspaces": null,
+    "workspace_filtering": {
+      "enabled": false,
+      "default_scope": "all"
+    }
+  }
 }

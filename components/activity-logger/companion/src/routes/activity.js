@@ -3,7 +3,7 @@
  */
 
 function createActivityRoutes(deps) {
-  const { app, persistentDB, sequence, queryCache, calculateDiff, cursorDbParser } = deps;
+  const { app, persistentDB, sequence, queryCache, calculateDiff, cursorDbParser, dataAccessControl } = deps;
 
   async function withCache(key, ttl, asyncFn) {
     const cached = queryCache.get(key);
@@ -21,6 +21,7 @@ function createActivityRoutes(deps) {
     try {
       const limit = Math.min(parseInt(req.query.limit) || 100, 500); // Max 500 at a time
       const offset = parseInt(req.query.offset) || 0;
+      const workspace = req.query.workspace || req.query.workspace_path || null; // Optional workspace filter
 
       // Enhanced cache control headers for cloud/CDN optimization
       // Use stale-while-revalidate pattern for better performance
@@ -50,8 +51,14 @@ function createActivityRoutes(deps) {
 
       const { totalCount, allEntries, allPrompts, paginatedEntries } = cached;
 
+      // Apply workspace and data source filtering if enabled
+      let filteredEntries = paginatedEntries;
+      if (dataAccessControl) {
+        filteredEntries = dataAccessControl.applyFilters(paginatedEntries, { workspace });
+      }
+
       // Convert entries to events format for dashboard compatibility
-      const events = paginatedEntries.map((entry) => {
+      const events = filteredEntries.map((entry) => {
         // Extract diff stats from notes field (e.g., "Diff: +172 chars")
         let diffStats = {};
 
@@ -119,16 +126,21 @@ function createActivityRoutes(deps) {
         };
       });
 
+      // Update total count if filtering was applied
+      const filteredTotal = dataAccessControl && workspace 
+        ? filteredEntries.length 
+        : totalCount;
+
       console.log(
-        `[API] Returning ${events.length} of ${totalCount} activity events (offset: ${offset})`
+        `[API] Returning ${events.length} of ${filteredTotal} activity events (offset: ${offset}${workspace ? `, workspace: ${workspace}` : ''})`
       );
       res.json({
         data: events,
         pagination: {
-          total: totalCount,
+          total: filteredTotal,
           limit,
           offset,
-          hasMore: offset + events.length < totalCount,
+          hasMore: offset + events.length < filteredTotal,
         },
       });
     } catch (error) {
@@ -142,13 +154,19 @@ function createActivityRoutes(deps) {
     try {
       const limit = Math.min(parseInt(req.query.limit) || 100, 1000); // Allow more for streaming
       const offset = parseInt(req.query.offset) || 0;
+      const workspace = req.query.workspace || req.query.workspace_path || null;
 
       res.setHeader('Content-Type', 'application/json');
       res.setHeader('Cache-Control', 'public, max-age=30');
       res.write('{"data":[');
 
       const entries = await persistentDB.getRecentEntries(limit + offset);
-      const paginatedEntries = entries.slice(offset, offset + limit);
+      let paginatedEntries = entries.slice(offset, offset + limit);
+      
+      // Apply workspace and data source filtering if enabled
+      if (dataAccessControl) {
+        paginatedEntries = dataAccessControl.applyFilters(paginatedEntries, { workspace });
+      }
 
       let first = true;
       for (const entry of paginatedEntries) {

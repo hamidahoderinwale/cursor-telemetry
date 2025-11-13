@@ -3,7 +3,7 @@
  */
 
 function createCoreRoutes(deps) {
-  const { app, db, queue, sequence, rawData, queueSystem, clipboardMonitor, queryCache } = deps;
+  const { app, db, queue, sequence, rawData, queueSystem, clipboardMonitor, queryCache, dataAccessControl } = deps;
 
   // Health check
   app.get('/health', (req, res) => {
@@ -93,6 +93,22 @@ function createCoreRoutes(deps) {
         sample: queue[0] || null,
       },
     });
+  });
+
+  // Access control status endpoint
+  app.get('/api/access-control/status', (req, res) => {
+    if (dataAccessControl) {
+      res.json({
+        success: true,
+        ...dataAccessControl.getStatus(),
+      });
+    } else {
+      res.json({
+        success: true,
+        enabled: false,
+        message: 'Data access control not initialized',
+      });
+    }
   });
 }
 
