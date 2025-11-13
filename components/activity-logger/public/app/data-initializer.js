@@ -184,12 +184,19 @@ async function initializeDashboard() {
     const isNetworkError = window.APIClient?.isOfflineError(error) || 
                            error.message?.includes('CORS') || 
                            error.message?.includes('NetworkError') || 
-                           error.message?.includes('Failed to fetch');
+                           error.message?.includes('Failed to fetch') ||
+                           error.name === 'AbortError' ||
+                           error.name === 'TypeError';
     
     const apiBase = window.APIClient?.getApiBase() || window.CONFIG?.API_BASE || 'http://localhost:43917';
-    const errorMessage = isNetworkError
-      ? `Offline - using cached data (service at ${apiBase} not reachable)`
-      : `Initialization error: ${error.message || 'Unknown error'}`;
+    let errorMessage;
+    
+    if (isNetworkError) {
+      errorMessage = `Offline - using cached data (service at ${apiBase} not reachable)`;
+    } else {
+      const errorDetail = error.message || 'Unknown error';
+      errorMessage = `Initialization error: ${errorDetail}. Make sure the companion service is running at ${apiBase}`;
+    }
     
     window.updateConnectionStatus(false, errorMessage);
     if (window.state) {

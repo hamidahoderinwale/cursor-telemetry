@@ -38,9 +38,10 @@ function updateConnectionStatus(connected, message = null, progress = null) {
     // Add helpful tooltip for connection issues
     if (displayMessage.includes('not reachable') || displayMessage.includes('Offline')) {
       const apiBase = window.APIClient?.getApiBase() || window.CONFIG?.API_BASE || 'http://localhost:43917';
-      text.title = `Companion service not running. Make sure it's started at ${apiBase}. The dashboard will work with cached data.`;
+      text.title = `Companion service not running. Make sure it's started at ${apiBase}. The dashboard will work with cached data. Click "Retry" to test the connection again.`;
     } else if (displayMessage.includes('Connection failed')) {
-      text.title = 'Failed to connect to companion service. Check if the service is running and the API endpoint is correct.';
+      const apiBase = window.APIClient?.getApiBase() || window.CONFIG?.API_BASE || 'http://localhost:43917';
+      text.title = `Failed to connect to companion service at ${apiBase}. Check if the service is running, then click "Retry" to test the connection again. The dashboard will work with cached data.`;
     } else {
       text.title = displayMessage;
     }
@@ -152,12 +153,25 @@ async function testConnection() {
     const isNetworkError = window.APIClient?.isOfflineError(error) || 
                            error.message?.includes('CORS') || 
                            error.message?.includes('NetworkError') || 
-                           error.message?.includes('Failed to fetch');
+                           error.message?.includes('Failed to fetch') ||
+                           error.name === 'AbortError' ||
+                           error.name === 'TypeError';
     
     const apiBase = window.APIClient?.getApiBase() || window.CONFIG?.API_BASE || 'http://localhost:43917';
-    const errorMessage = isNetworkError
-      ? `Offline - using cached data (service at ${apiBase} not reachable)`
-      : `Connection failed - ${error.message || 'Unknown error'}`;
+    let errorMessage;
+    
+    if (isNetworkError) {
+      errorMessage = `Offline - using cached data (service at ${apiBase} not reachable)`;
+    } else if (error.message?.includes('HTTP')) {
+      // HTTP status errors
+      const statusMatch = error.message.match(/HTTP (\d+)/);
+      const status = statusMatch ? statusMatch[1] : 'unknown';
+      errorMessage = `Connection failed (HTTP ${status}) - companion service may be starting up or experiencing issues`;
+    } else {
+      // Other errors - provide more helpful message
+      const errorDetail = error.message || 'Unknown error';
+      errorMessage = `Connection failed - ${errorDetail}. Make sure the companion service is running at ${apiBase}`;
+    }
     
     updateConnectionStatus(false, errorMessage);
     
