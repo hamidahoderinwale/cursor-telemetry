@@ -1,5 +1,5 @@
 /**
- * Rung 4 Data Extractor
+ * Module Graph Data Extractor
  * Extracts file-level interaction data from Cursor DB
  */
 
@@ -11,7 +11,7 @@ const os = require('os');
 
 const execAsync = promisify(exec);
 
-class Rung4Extractor {
+class ModuleGraphExtractor {
   constructor(cursorDbParser = null) {
     this.cursorDbParser = cursorDbParser;
     this.dbPaths = this.findCursorDatabases();
@@ -74,7 +74,7 @@ class Rung4Extractor {
         }
       }
     } catch (error) {
-      console.warn('[RUNG4] Error extracting file paths:', error.message);
+      console.warn('[MODULE-GRAPH] Error extracting file paths:', error.message);
     }
 
     return {
@@ -142,7 +142,7 @@ class Rung4Extractor {
         }
       }
     } catch (error) {
-      console.warn(`[RUNG4] Error extracting from ${dbPath}:`, error.message);
+      console.warn(`[MODULE-GRAPH] Error extracting from ${dbPath}:`, error.message);
     }
   }
 
@@ -170,7 +170,7 @@ class Rung4Extractor {
         }
       }
     } catch (error) {
-      console.warn('[RUNG4] Error extracting model context:', error.message);
+      console.warn('[MODULE-GRAPH] Error extracting model context:', error.message);
     }
 
     return Object.fromEntries(contextMap);
@@ -236,7 +236,7 @@ class Rung4Extractor {
         }
       }
     } catch (error) {
-      console.warn(`[RUNG4] Error extracting model context from ${dbPath}:`, error.message);
+      console.warn(`[MODULE-GRAPH] Error extracting model context from ${dbPath}:`, error.message);
     }
   }
 
@@ -290,17 +290,17 @@ class Rung4Extractor {
         }
       }
     } catch (error) {
-      console.warn('[RUNG4] Error extracting tool interactions:', error.message);
+      console.warn('[MODULE-GRAPH] Error extracting tool interactions:', error.message);
     }
 
     return toolInteractions;
   }
 
   /**
-   * Extract all Rung 4 data
+   * Extract all module graph data
    */
   async extractAll(workspacePath = null) {
-    console.log('[RUNG4] Extracting file-level data...');
+    console.log('[MODULE-GRAPH] Extracting file-level data...');
 
     const [fileData, modelContext, toolInteractions] = await Promise.all([
       this.extractFilePaths(workspacePath),
@@ -318,5 +318,5 @@ class Rung4Extractor {
   }
 }
 
-module.exports = Rung4Extractor;
+module.exports = ModuleGraphExtractor;
 

@@ -1,75 +1,75 @@
 /**
- * Rung 4 File Graph View (Module Graph)
+ * Module Graph View
  * Main entry point for the Module Graph view
  */
 
 // Load templates first
-if (!window.renderRung4FileGraphTemplate) {
+if (!window.renderModuleGraphTemplate) {
   const templatesScript = document.createElement('script');
-  templatesScript.src = 'views/rung4-file-graph/templates.js';
+  templatesScript.src = 'views/module-graph/templates.js';
   templatesScript.async = false;
   document.head.appendChild(templatesScript);
 }
 
-function renderRung4FileGraphView(container) {
+function renderModuleGraphView(container) {
   // Ensure D3.js is loaded
   if (typeof d3 === 'undefined') {
     const d3Script = document.createElement('script');
     d3Script.src = 'https://d3js.org/d3.v7.min.js';
     d3Script.onload = () => {
-      initializeRung4View(container);
+      initializeModuleGraphView(container);
     };
     document.head.appendChild(d3Script);
   } else {
-    initializeRung4View(container);
+    initializeModuleGraphView(container);
   }
 }
 
-function initializeRung4View(container) {
+function initializeModuleGraphView(container) {
   // Load visualization script if not already loaded
-  if (!window.initializeRung4Visualization) {
-    const vizScript = document.createElement('script');
-    vizScript.src = 'views/rung4-file-graph/rung4-visualization.js';
+  if (!window.initializeModuleGraphVisualization) {
+      const vizScript = document.createElement('script');
+      vizScript.src = 'views/module-graph/module-graph-visualization.js';
     vizScript.onload = () => {
-      renderRung4ViewContent(container);
+      renderModuleGraphViewContent(container);
     };
     document.head.appendChild(vizScript);
   } else {
-    renderRung4ViewContent(container);
+    renderModuleGraphViewContent(container);
   }
 }
 
-function renderRung4ViewContent(container) {
+function renderModuleGraphViewContent(container) {
   // Render template
-  container.innerHTML = window.renderRung4FileGraphTemplate();
+  container.innerHTML = window.renderModuleGraphTemplate();
 
   // Initialize visualization
-  if (window.initializeRung4Visualization) {
-    window.initializeRung4Visualization();
+  if (window.initializeModuleGraphVisualization) {
+    window.initializeModuleGraphVisualization();
   }
 
   // Load data
-  loadRung4Data();
+  loadModuleGraphData();
 
   // Initialize timeline
-  loadRung4Timeline();
+  loadModuleGraphTimeline();
 }
 
 /**
- * Load Rung 4 graph data
+ * Load Module Graph data
  */
-async function loadRung4Data() {
-  const graphContainer = document.getElementById('rung4-graph');
+async function loadModuleGraphData() {
+  const graphContainer = document.getElementById('module-graph-graph');
   if (!graphContainer) return;
 
   try {
-    graphContainer.innerHTML = '<div class="rung4-loading">Loading module graph...</div>';
+    graphContainer.innerHTML = '<div class="module-graph-loading">Loading module graph...</div>';
 
     const apiBase = window.CONFIG?.API_BASE || 'http://localhost:43917';
     const workspace = getCurrentWorkspace();
     const url = workspace 
-      ? `${apiBase}/api/rung4/graph?workspace=${encodeURIComponent(workspace)}`
-      : `${apiBase}/api/rung4/graph`;
+      ? `${apiBase}/api/module-graph/graph?workspace=${encodeURIComponent(workspace)}`
+      : `${apiBase}/api/module-graph/graph`;
 
     const response = await fetch(url);
     
@@ -81,21 +81,21 @@ async function loadRung4Data() {
     
     if (data.success && data.graph) {
       // Store graph data globally for details panel
-      window.rung4GraphData = data.graph;
+      window.moduleGraphData = data.graph;
       
       // Render graph
-      if (window.renderRung4Graph) {
-        window.renderRung4Graph(data.graph);
+      if (window.renderModuleGraph) {
+        window.renderModuleGraph(data.graph);
       }
     } else {
       throw new Error(data.error || 'Failed to load graph data');
     }
-  } catch (error) {
-    console.error('[RUNG4] Error loading graph data:', error);
-    const graphContainer = document.getElementById('rung4-graph');
+    } catch (error) {
+    console.error('[MODULE-GRAPH] Error loading graph data:', error);
+    const graphContainer = document.getElementById('module-graph-graph');
     if (graphContainer) {
       graphContainer.innerHTML = `
-        <div class="rung4-loading" style="color: var(--color-error, #ef4444);">
+        <div class="module-graph-loading" style="color: var(--color-error, #ef4444);">
           Error loading module graph: ${error.message}
         </div>
       `;
@@ -106,20 +106,20 @@ async function loadRung4Data() {
 /**
  * Load structural events timeline
  */
-async function loadRung4Timeline() {
-  const timelineContainer = document.getElementById('rung4-timeline');
+async function loadModuleGraphTimeline() {
+  const timelineContainer = document.getElementById('module-graph-timeline');
   if (!timelineContainer) return;
 
   try {
-    timelineContainer.innerHTML = '<div class="rung4-timeline-loading">Loading events...</div>';
+    timelineContainer.innerHTML = '<div class="module-graph-timeline-loading">Loading events...</div>';
 
     const apiBase = window.CONFIG?.API_BASE || 'http://localhost:43917';
     const workspace = getCurrentWorkspace();
-    const eventType = document.getElementById('rung4-event-filter')?.value || '';
+    const eventType = document.getElementById('module-graph-event-filter')?.value || '';
     
     let url = workspace 
-      ? `${apiBase}/api/rung4/events?workspace=${encodeURIComponent(workspace)}`
-      : `${apiBase}/api/rung4/events`;
+      ? `${apiBase}/api/module-graph/events?workspace=${encodeURIComponent(workspace)}`
+      : `${apiBase}/api/module-graph/events`;
     
     if (eventType) {
       url += `&event_type=${encodeURIComponent(eventType)}`;
@@ -134,16 +134,16 @@ async function loadRung4Timeline() {
     const data = await response.json();
     
     if (data.success && data.events) {
-      renderRung4Timeline(data.events);
+      renderModuleGraphTimeline(data.events);
     } else {
       throw new Error(data.error || 'Failed to load events');
     }
   } catch (error) {
-    console.error('[RUNG4] Error loading timeline:', error);
-    const timelineContainer = document.getElementById('rung4-timeline');
+    console.error('[MODULE-GRAPH] Error loading timeline:', error);
+    const timelineContainer = document.getElementById('module-graph-timeline');
     if (timelineContainer) {
       timelineContainer.innerHTML = `
-        <div class="rung4-timeline-loading" style="color: var(--color-error, #ef4444);">
+        <div class="module-graph-timeline-loading" style="color: var(--color-error, #ef4444);">
           Error loading events: ${error.message}
         </div>
       `;
@@ -154,12 +154,12 @@ async function loadRung4Timeline() {
 /**
  * Render timeline events
  */
-function renderRung4Timeline(events) {
-  const timelineContainer = document.getElementById('rung4-timeline');
+function renderModuleGraphTimeline(events) {
+  const timelineContainer = document.getElementById('module-graph-timeline');
   if (!timelineContainer) return;
 
   if (!events || events.length === 0) {
-    timelineContainer.innerHTML = '<div class="rung4-timeline-loading">No events found</div>';
+    timelineContainer.innerHTML = '<div class="module-graph-timeline-loading">No events found</div>';
     return;
   }
 
@@ -172,10 +172,10 @@ function renderRung4Timeline(events) {
     const dateStr = date.toLocaleDateString();
 
     return `
-      <div class="rung4-event-item" onclick="selectRung4Event('${event.id}')">
-        <span class="rung4-event-time">${timeStr} ${dateStr}</span>
-        <span class="rung4-event-type">${event.event_type}</span>
-        <span class="rung4-event-file">${event.metadata?.file_path || event.file || 'Unknown'}</span>
+      <div class="module-graph-event-item" onclick="selectModuleGraphEvent('${event.id}')">
+        <span class="module-graph-event-time">${timeStr} ${dateStr}</span>
+        <span class="module-graph-event-type">${event.event_type}</span>
+        <span class="module-graph-event-file">${event.metadata?.file_path || event.file || 'Unknown'}</span>
       </div>
     `;
   }).join('');
@@ -186,30 +186,30 @@ function renderRung4Timeline(events) {
 /**
  * Apply filters and refresh graph
  */
-window.applyRung4Filters = function() {
-  if (window.rung4GraphData && window.renderRung4Graph) {
-    window.renderRung4Graph(window.rung4GraphData);
+window.applyModuleGraphFilters = function() {
+  if (window.moduleGraphData && window.renderModuleGraph) {
+    window.renderModuleGraph(window.moduleGraphData);
   }
 };
 
 /**
  * Change layout
  */
-window.changeRung4Layout = function() {
-  const layout = document.getElementById('rung4-layout')?.value;
-  console.log('[RUNG4] Layout changed to:', layout);
+window.changeModuleGraphLayout = function() {
+  const layout = document.getElementById('module-graph-layout')?.value;
+  console.log('[MODULE-GRAPH] Layout changed to:', layout);
   // Layout change logic would go here
   // For now, just re-render with current layout
-  if (window.rung4GraphData && window.renderRung4Graph) {
-    window.renderRung4Graph(window.rung4GraphData);
+  if (window.moduleGraphData && window.renderModuleGraph) {
+    window.renderModuleGraph(window.moduleGraphData);
   }
 };
 
 /**
  * Update time range
  */
-window.updateRung4TimeRange = function(value) {
-  const display = document.getElementById('rung4-time-display');
+window.updateModuleGraphTimeRange = function(value) {
+  const display = document.getElementById('module-graph-time-display');
   if (display) {
     if (value >= 100) {
       display.textContent = 'All Time';
@@ -219,49 +219,49 @@ window.updateRung4TimeRange = function(value) {
     }
   }
   // Time range filtering would go here
-  loadRung4Timeline();
+  loadModuleGraphTimeline();
 };
 
 /**
  * Update timeline
  */
-window.updateRung4Timeline = function() {
-  loadRung4Timeline();
+window.updateModuleGraphTimeline = function() {
+  loadModuleGraphTimeline();
 };
 
 /**
  * Refresh graph
  */
-window.refreshRung4Graph = async function() {
+window.refreshModuleGraph = async function() {
   const apiBase = window.CONFIG?.API_BASE || 'http://localhost:43917';
   const workspace = getCurrentWorkspace();
   
   try {
     // Clear cache
-    await fetch(`${apiBase}/api/rung4/refresh`, {
+    await fetch(`${apiBase}/api/module-graph/refresh`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ workspace })
     });
 
     // Reload data
-    loadRung4Data();
-    loadRung4Timeline();
+    loadModuleGraphData();
+    loadModuleGraphTimeline();
   } catch (error) {
-    console.error('[RUNG4] Error refreshing graph:', error);
+    console.error('[MODULE-GRAPH] Error refreshing graph:', error);
   }
 };
 
 /**
  * Export graph
  */
-window.exportRung4Graph = async function() {
-  if (!window.rung4GraphData) {
+window.exportModuleGraph = async function() {
+  if (!window.moduleGraphData) {
     alert('No graph data to export');
     return;
   }
 
-  const dataStr = JSON.stringify(window.rung4GraphData, null, 2);
+  const dataStr = JSON.stringify(window.moduleGraphData, null, 2);
   const dataBlob = new Blob([dataStr], { type: 'application/json' });
   const url = URL.createObjectURL(dataBlob);
   const link = document.createElement('a');
@@ -274,29 +274,29 @@ window.exportRung4Graph = async function() {
 /**
  * Close details panel
  */
-window.closeRung4Details = function() {
-  const detailsPanel = document.getElementById('rung4-details-content');
+window.closeModuleGraphDetails = function() {
+  const detailsPanel = document.getElementById('module-graph-details-content');
   if (detailsPanel) {
     detailsPanel.innerHTML = `
-      <div class="rung4-details-placeholder">
+      <div class="module-graph-details-placeholder">
         <p>Click a node or edge to view details</p>
       </div>
     `;
   }
-  rung4SelectedNode = null;
+  window.moduleGraphSelectedNode = null;
 };
 
 /**
  * Select event
  */
-window.selectRung4Event = function(eventId) {
+window.selectModuleGraphEvent = function(eventId) {
   // Find event in graph data
-  if (window.rung4GraphData && window.rung4GraphData.events) {
-    const event = window.rung4GraphData.events.find(e => e.id === eventId);
-    if (event && window.rung4GraphData.nodes) {
-      const node = window.rung4GraphData.nodes.find(n => n.id === event.file);
-      if (node && window.selectRung4Node) {
-        window.selectRung4Node(node);
+  if (window.moduleGraphData && window.moduleGraphData.events) {
+    const event = window.moduleGraphData.events.find(e => e.id === eventId);
+    if (event && window.moduleGraphData.nodes) {
+      const node = window.moduleGraphData.nodes.find(n => n.id === event.file);
+      if (node && window.selectModuleGraphNode) {
+        window.selectModuleGraphNode(node);
       }
     }
   }
@@ -320,5 +320,5 @@ function getCurrentWorkspace() {
 }
 
 // Export to window for global access
-window.renderRung4FileGraphView = renderRung4FileGraphView;
+window.renderModuleGraphView = renderModuleGraphView;
 

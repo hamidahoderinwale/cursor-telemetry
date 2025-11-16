@@ -1,5 +1,5 @@
 /**
- * Rung 4 Graph Visualization
+ * Module Graph Visualization
  * D3.js rendering for module graph (nodes, edges, ports)
  */
 
@@ -20,17 +20,17 @@ const path = {
   }
 };
 
-let rung4Simulation = null;
-let rung4Svg = null;
-let rung4Nodes = null;
-let rung4Edges = null;
-let rung4SelectedNode = null;
+let moduleGraphSimulation = null;
+let moduleGraphSvg = null;
+let moduleGraphNodes = null;
+let moduleGraphEdges = null;
+let moduleGraphSelectedNode = null;
 
 /**
  * Initialize D3.js visualization
  */
-function initializeRung4Visualization() {
-  const container = document.getElementById('rung4-graph');
+function initializeModuleGraphVisualization() {
+  const container = document.getElementById('module-graph-graph');
   if (!container) return;
 
   // Clear existing content
@@ -40,7 +40,7 @@ function initializeRung4Visualization() {
   const width = container.clientWidth || 800;
   const height = container.clientHeight || 600;
 
-  rung4Svg = d3.select('#rung4-graph')
+  moduleGraphSvg = d3.select('#module-graph-graph')
     .append('svg')
     .attr('width', width)
     .attr('height', height);
@@ -49,25 +49,25 @@ function initializeRung4Visualization() {
   const zoom = d3.zoom()
     .scaleExtent([0.1, 4])
     .on('zoom', (event) => {
-      rung4Svg.select('g').attr('transform', event.transform);
+      moduleGraphSvg.select('g').attr('transform', event.transform);
     });
 
-  rung4Svg.call(zoom);
+  moduleGraphSvg.call(zoom);
 
   // Create main group for zoom/pan
-  const g = rung4Svg.append('g');
+  const g = moduleGraphSvg.append('g');
 
   // Create edge group (rendered first, behind nodes)
-  rung4Edges = g.append('g').attr('class', 'edges');
+  moduleGraphEdges = g.append('g').attr('class', 'edges');
 
   // Create node group
-  rung4Nodes = g.append('g').attr('class', 'nodes');
+  moduleGraphNodes = g.append('g').attr('class', 'nodes');
 
   // Create port group (for connection points)
   const ports = g.append('g').attr('class', 'ports');
 
   // Initialize force simulation
-  rung4Simulation = d3.forceSimulation()
+  moduleGraphSimulation = d3.forceSimulation()
     .force('link', d3.forceLink().id(d => d.id).distance(100))
     .force('charge', d3.forceManyBody().strength(-300))
     .force('center', d3.forceCenter(width / 2, height / 2))
@@ -77,10 +77,10 @@ function initializeRung4Visualization() {
   window.addEventListener('resize', () => {
     const newWidth = container.clientWidth || 800;
     const newHeight = container.clientHeight || 600;
-    rung4Svg.attr('width', newWidth).attr('height', newHeight);
-    if (rung4Simulation) {
-      rung4Simulation.force('center', d3.forceCenter(newWidth / 2, newHeight / 2));
-      rung4Simulation.alpha(0.3).restart();
+    moduleGraphSvg.attr('width', newWidth).attr('height', newHeight);
+    if (moduleGraphSimulation) {
+      moduleGraphSimulation.force('center', d3.forceCenter(newWidth / 2, newHeight / 2));
+      moduleGraphSimulation.alpha(0.3).restart();
     }
   });
 }
@@ -88,36 +88,36 @@ function initializeRung4Visualization() {
 /**
  * Render module graph
  */
-function renderRung4Graph(graphData) {
-  if (!rung4Svg || !graphData) return;
+function renderModuleGraph(graphData) {
+  if (!moduleGraphSvg || !graphData) return;
 
   const { nodes, edges } = graphData;
 
   // Update stats
-  updateRung4Stats(nodes.length, edges.length);
+  updateModuleGraphStats(nodes.length, edges.length);
 
   // Filter nodes and edges based on current filters
-  const filteredNodes = filterRung4Nodes(nodes);
-  const filteredEdges = filterRung4Edges(edges, filteredNodes);
+  const filteredNodes = filterModuleGraphNodes(nodes);
+  const filteredEdges = filterModuleGraphEdges(edges, filteredNodes);
 
   // Render edges
-  renderRung4Edges(filteredEdges);
+  renderModuleGraphEdges(filteredEdges);
 
   // Render nodes
-  renderRung4Nodes(filteredNodes);
+  renderModuleGraphNodes(filteredNodes);
 
   // Update simulation
-  if (rung4Simulation) {
-    rung4Simulation.nodes(filteredNodes);
-    rung4Simulation.force('link').links(filteredEdges);
-    rung4Simulation.alpha(1).restart();
+  if (moduleGraphSimulation) {
+    moduleGraphSimulation.nodes(filteredNodes);
+    moduleGraphSimulation.force('link').links(filteredEdges);
+    moduleGraphSimulation.alpha(1).restart();
   } else {
     // Re-initialize if simulation was lost
-    initializeRung4Visualization();
-    if (rung4Simulation) {
-      rung4Simulation.nodes(filteredNodes);
-      rung4Simulation.force('link').links(filteredEdges);
-      rung4Simulation.alpha(1).restart();
+    initializeModuleGraphVisualization();
+    if (moduleGraphSimulation) {
+      moduleGraphSimulation.nodes(filteredNodes);
+      moduleGraphSimulation.force('link').links(filteredEdges);
+      moduleGraphSimulation.alpha(1).restart();
     }
   }
 }
@@ -125,10 +125,10 @@ function renderRung4Graph(graphData) {
 /**
  * Render nodes
  */
-function renderRung4Nodes(nodes) {
-  if (!rung4Nodes) return;
+function renderModuleGraphNodes(nodes) {
+  if (!moduleGraphNodes) return;
 
-  const nodeSelection = rung4Nodes.selectAll('.node')
+  const nodeSelection = moduleGraphNodes.selectAll('.node')
     .data(nodes, d => d.id);
 
   // Remove old nodes
@@ -180,32 +180,32 @@ function renderRung4Nodes(nodes) {
   // Add hover effects
   nodeEnter
     .on('mouseenter', function(event, d) {
-      highlightRung4Node(d);
-      showRung4NodePorts(d);
+      highlightModuleGraphNode(d);
+      showModuleGraphNodePorts(d);
     })
     .on('mouseleave', function(event, d) {
-      unhighlightRung4Node();
-      hideRung4NodePorts();
+      unhighlightModuleGraphNode();
+      hideModuleGraphNodePorts();
     })
     .on('click', function(event, d) {
-      selectRung4Node(d);
+      selectModuleGraphNode(d);
     });
 
   // Merge and update positions
   const nodeUpdate = nodeSelection.merge(nodeEnter);
   
   // Store node selection for tick updates
-  window.rung4NodeUpdate = nodeUpdate;
+  window.moduleGraphNodeUpdate = nodeUpdate;
   
-  if (rung4Simulation) {
-    rung4Simulation.on('tick', () => {
-      if (window.rung4NodeUpdate) {
-        window.rung4NodeUpdate
+  if (moduleGraphSimulation) {
+    moduleGraphSimulation.on('tick', () => {
+      if (window.moduleGraphNodeUpdate) {
+        window.moduleGraphNodeUpdate
           .attr('transform', d => `translate(${d.x || 0},${d.y || 0})`);
       }
       
       // Update edge positions
-      updateRung4EdgePositions();
+      updateModuleGraphEdgePositions();
     });
   }
 }
@@ -213,10 +213,10 @@ function renderRung4Nodes(nodes) {
 /**
  * Render edges
  */
-function renderRung4Edges(edges) {
-  if (!rung4Edges) return;
+function renderModuleGraphEdges(edges) {
+  if (!moduleGraphEdges) return;
 
-  const edgeSelection = rung4Edges.selectAll('.edge')
+  const edgeSelection = moduleGraphEdges.selectAll('.edge')
     .data(edges, d => d.id);
 
   // Remove old edges
@@ -235,27 +235,27 @@ function renderRung4Edges(edges) {
   edgeEnter
     .on('mouseenter', function(event, d) {
       d3.select(this).attr('stroke-width', Math.max(2, d.weight + 2));
-      showRung4EdgeDetails(d);
+      showModuleGraphEdgeDetails(d);
     })
     .on('mouseleave', function(event, d) {
       d3.select(this).attr('stroke-width', Math.max(1, Math.min(5, d.weight)));
-      hideRung4EdgeDetails();
+      hideModuleGraphEdgeDetails();
     })
     .on('click', function(event, d) {
-      selectRung4Edge(d);
+      selectModuleGraphEdge(d);
     });
 
   // Update edge positions
-  updateRung4EdgePositions();
+  updateModuleGraphEdgePositions();
 }
 
 /**
  * Update edge positions (called on simulation tick)
  */
-function updateRung4EdgePositions() {
-  if (!rung4Edges) return;
+function updateModuleGraphEdgePositions() {
+  if (!moduleGraphEdges) return;
 
-  rung4Edges.selectAll('.edge')
+  moduleGraphEdges.selectAll('.edge')
     .attr('x1', d => d.source.x)
     .attr('y1', d => d.source.y)
     .attr('x2', d => d.target.x)
@@ -331,7 +331,7 @@ function getEdgeDashArray(edgeType) {
  * Drag handlers
  */
 function dragStarted(event, d) {
-  if (!event.active) rung4Simulation.alphaTarget(0.3).restart();
+  if (!event.active) moduleGraphSimulation.alphaTarget(0.3).restart();
   d.fx = d.x;
   d.fy = d.y;
 }
@@ -342,7 +342,7 @@ function dragged(event, d) {
 }
 
 function dragEnded(event, d) {
-  if (!event.active) rung4Simulation.alphaTarget(0);
+  if (!event.active) moduleGraphSimulation.alphaTarget(0);
   d.fx = null;
   d.fy = null;
 }
@@ -350,15 +350,15 @@ function dragEnded(event, d) {
 /**
  * Highlight node
  */
-function highlightRung4Node(node) {
-  rung4Nodes.selectAll('.node')
+function highlightModuleGraphNode(node) {
+  moduleGraphNodes.selectAll('.node')
     .filter(d => d.id === node.id)
     .select('circle, rect')
     .attr('stroke', '#3b82f6')
     .attr('stroke-width', 3);
 
   // Highlight connected edges
-  rung4Edges.selectAll('.edge')
+  moduleGraphEdges.selectAll('.edge')
     .attr('opacity', d => 
       (d.source.id === node.id || d.target.id === node.id) ? 1 : 0.1
     );
@@ -367,20 +367,20 @@ function highlightRung4Node(node) {
 /**
  * Unhighlight node
  */
-function unhighlightRung4Node() {
-  rung4Nodes.selectAll('.node')
+function unhighlightModuleGraphNode() {
+  moduleGraphNodes.selectAll('.node')
     .select('circle, rect')
     .attr('stroke', d => d.interaction_counts?.ai_suggestions > 0 ? '#8b5cf6' : '#e5e7eb')
     .attr('stroke-width', d => d.interaction_counts?.ai_suggestions > 0 ? 2 : 1);
 
-  rung4Edges.selectAll('.edge')
+  moduleGraphEdges.selectAll('.edge')
     .attr('opacity', d => Math.min(1, 0.3 + (d.weight / 10)));
 }
 
 /**
  * Show node ports
  */
-function showRung4NodePorts(node) {
+function showModuleGraphNodePorts(node) {
   // Port visualization would go here
   // For now, just highlight the node
 }
@@ -388,34 +388,34 @@ function showRung4NodePorts(node) {
 /**
  * Hide node ports
  */
-function hideRung4NodePorts() {
+function hideModuleGraphNodePorts() {
   // Hide port visualization
 }
 
 /**
  * Select node
  */
-function selectRung4Node(node) {
-  rung4SelectedNode = node;
-  showRung4NodeDetails(node);
+function selectModuleGraphNode(node) {
+  moduleGraphSelectedNode = node;
+  showModuleGraphNodeDetails(node);
 }
 
 /**
  * Select edge
  */
-function selectRung4Edge(edge) {
-  showRung4EdgeDetails(edge);
+function selectModuleGraphEdge(edge) {
+  showModuleGraphEdgeDetails(edge);
 }
 
 /**
  * Show node details
  */
-function showRung4NodeDetails(node) {
-  const detailsPanel = document.getElementById('rung4-details-content');
+function showModuleGraphNodeDetails(node) {
+  const detailsPanel = document.getElementById('module-graph-details-content');
   if (!detailsPanel) return;
 
   // Get connected files
-  const graphData = window.rung4GraphData;
+  const graphData = window.moduleGraphData;
   if (!graphData) return;
 
   const connectedFiles = (graphData.edges || [])
@@ -449,47 +449,47 @@ function showRung4NodeDetails(node) {
   const connectedHTML = Object.entries(connectedByType)
     .map(([type, files]) => {
       const filesHTML = files.map(cf => `
-        <div class="rung4-connected-file">
-          <span class="rung4-detail-path">${path.basename(cf.node.path)}</span>
-          <span class="rung4-edge-type-badge ${type.toLowerCase()}">${type}</span>
+        <div class="module-graph-connected-file">
+          <span class="module-graph-detail-path">${path.basename(cf.node.path)}</span>
+          <span class="module-graph-edge-type-badge ${type.toLowerCase()}">${type}</span>
         </div>
       `).join('');
       return `
-        <div class="rung4-detail-section">
-          <div class="rung4-detail-label">${type} (${files.length})</div>
-          <div class="rung4-connected-files">${filesHTML}</div>
+        <div class="module-graph-detail-section">
+          <div class="module-graph-detail-label">${type} (${files.length})</div>
+          <div class="module-graph-connected-files">${filesHTML}</div>
         </div>
       `;
     }).join('');
 
   detailsPanel.innerHTML = `
-    <div class="rung4-node-details">
-      <div class="rung4-detail-section">
-        <div class="rung4-detail-label">File</div>
-        <div class="rung4-detail-value">${path.basename(node.path)}</div>
-        <div class="rung4-detail-path">${node.path}</div>
+    <div class="module-graph-node-details">
+      <div class="module-graph-detail-section">
+        <div class="module-graph-detail-label">File</div>
+        <div class="module-graph-detail-value">${path.basename(node.path)}</div>
+        <div class="module-graph-detail-path">${node.path}</div>
       </div>
 
-      <div class="rung4-detail-section">
-        <div class="rung4-detail-label">Type</div>
-        <div class="rung4-detail-value">${node.type}</div>
+      <div class="module-graph-detail-section">
+        <div class="module-graph-detail-label">Type</div>
+        <div class="module-graph-detail-value">${node.type}</div>
       </div>
 
       ${node.lang ? `
-      <div class="rung4-detail-section">
-        <div class="rung4-detail-label">Language</div>
-        <div class="rung4-detail-value">${node.lang.toUpperCase()}</div>
+      <div class="module-graph-detail-section">
+        <div class="module-graph-detail-label">Language</div>
+        <div class="module-graph-detail-value">${node.lang.toUpperCase()}</div>
       </div>
       ` : ''}
 
-      <div class="rung4-detail-section">
-        <div class="rung4-detail-label">Size</div>
-        <div class="rung4-detail-value">${node.size_bucket} (${node.metadata?.num_original_lines || 0} lines)</div>
+      <div class="module-graph-detail-section">
+        <div class="module-graph-detail-label">Size</div>
+        <div class="module-graph-detail-value">${node.size_bucket} (${node.metadata?.num_original_lines || 0} lines)</div>
       </div>
 
-      <div class="rung4-detail-section">
-        <div class="rung4-detail-label">Interactions</div>
-        <div class="rung4-detail-value">
+      <div class="module-graph-detail-section">
+        <div class="module-graph-detail-label">Interactions</div>
+        <div class="module-graph-detail-value">
           Edits: ${node.interaction_counts?.edits || 0}<br>
           Navigations: ${node.interaction_counts?.navs || 0}<br>
           AI Suggestions: ${node.interaction_counts?.ai_suggestions || 0}<br>
@@ -498,8 +498,8 @@ function showRung4NodeDetails(node) {
       </div>
 
       ${connectedHTML ? `
-      <div class="rung4-detail-section">
-        <div class="rung4-detail-label">Connected Files</div>
+      <div class="module-graph-detail-section">
+        <div class="module-graph-detail-label">Connected Files</div>
         ${connectedHTML}
       </div>
       ` : ''}
@@ -510,11 +510,11 @@ function showRung4NodeDetails(node) {
 /**
  * Show edge details
  */
-function showRung4EdgeDetails(edge) {
-  const detailsPanel = document.getElementById('rung4-details-content');
+function showModuleGraphEdgeDetails(edge) {
+  const detailsPanel = document.getElementById('module-graph-details-content');
   if (!detailsPanel) return;
 
-  const graphData = window.rung4GraphData;
+  const graphData = window.moduleGraphData;
   if (!graphData) return;
 
   const sourceId = typeof edge.source === 'object' ? edge.source.id : edge.source;
@@ -523,40 +523,40 @@ function showRung4EdgeDetails(edge) {
   const targetNode = (graphData.nodes || []).find(n => n.id === targetId);
 
   detailsPanel.innerHTML = `
-    <div class="rung4-node-details">
-      <div class="rung4-detail-section">
-        <div class="rung4-detail-label">Edge Type</div>
-        <div class="rung4-detail-value">
-          <span class="rung4-edge-type-badge ${edge.type.toLowerCase()}">${edge.type}</span>
+    <div class="module-graph-node-details">
+      <div class="module-graph-detail-section">
+        <div class="module-graph-detail-label">Edge Type</div>
+        <div class="module-graph-detail-value">
+          <span class="module-graph-edge-type-badge ${edge.type.toLowerCase()}">${edge.type}</span>
         </div>
       </div>
 
-      <div class="rung4-detail-section">
-        <div class="rung4-detail-label">Source</div>
-        <div class="rung4-detail-value">${sourceNode ? path.basename(sourceNode.path) : edge.source}</div>
-        <div class="rung4-detail-path">${sourceNode ? sourceNode.path : ''}</div>
+      <div class="module-graph-detail-section">
+        <div class="module-graph-detail-label">Source</div>
+        <div class="module-graph-detail-value">${sourceNode ? path.basename(sourceNode.path) : edge.source}</div>
+        <div class="module-graph-detail-path">${sourceNode ? sourceNode.path : ''}</div>
       </div>
 
-      <div class="rung4-detail-section">
-        <div class="rung4-detail-label">Target</div>
-        <div class="rung4-detail-value">${targetNode ? path.basename(targetNode.path) : edge.target}</div>
-        <div class="rung4-detail-path">${targetNode ? targetNode.path : ''}</div>
+      <div class="module-graph-detail-section">
+        <div class="module-graph-detail-label">Target</div>
+        <div class="module-graph-detail-value">${targetNode ? path.basename(targetNode.path) : edge.target}</div>
+        <div class="module-graph-detail-path">${targetNode ? targetNode.path : ''}</div>
       </div>
 
-      <div class="rung4-detail-section">
-        <div class="rung4-detail-label">Weight</div>
-        <div class="rung4-detail-value">${edge.weight} (frequency)</div>
+      <div class="module-graph-detail-section">
+        <div class="module-graph-detail-label">Weight</div>
+        <div class="module-graph-detail-value">${edge.weight} (frequency)</div>
       </div>
 
-      <div class="rung4-detail-section">
-        <div class="rung4-detail-label">Occurrences</div>
-        <div class="rung4-detail-value">${edge.timestamps?.length || 0} times</div>
+      <div class="module-graph-detail-section">
+        <div class="module-graph-detail-label">Occurrences</div>
+        <div class="module-graph-detail-value">${edge.timestamps?.length || 0} times</div>
       </div>
 
       ${edge.metadata ? `
-      <div class="rung4-detail-section">
-        <div class="rung4-detail-label">Metadata</div>
-        <div class="rung4-detail-value">
+      <div class="module-graph-detail-section">
+        <div class="module-graph-detail-label">Metadata</div>
+        <div class="module-graph-detail-value">
           ${Object.entries(edge.metadata).map(([key, value]) => 
             `${key}: ${value}`
           ).join('<br>')}
@@ -570,19 +570,19 @@ function showRung4EdgeDetails(edge) {
 /**
  * Hide edge details
  */
-function hideRung4EdgeDetails() {
+function hideModuleGraphEdgeDetails() {
   // Keep details if node is selected
-  if (rung4SelectedNode) {
-    showRung4NodeDetails(rung4SelectedNode);
+  if (moduleGraphSelectedNode) {
+    showModuleGraphNodeDetails(moduleGraphSelectedNode);
   }
 }
 
 /**
  * Update stats
  */
-function updateRung4Stats(nodeCount, edgeCount) {
-  const nodeCountEl = document.getElementById('rung4-node-count');
-  const edgeCountEl = document.getElementById('rung4-edge-count');
+function updateModuleGraphStats(nodeCount, edgeCount) {
+  const nodeCountEl = document.getElementById('module-graph-node-count');
+  const edgeCountEl = document.getElementById('module-graph-edge-count');
   
   if (nodeCountEl) nodeCountEl.textContent = `${nodeCount} nodes`;
   if (edgeCountEl) edgeCountEl.textContent = `${edgeCount} edges`;
@@ -591,9 +591,9 @@ function updateRung4Stats(nodeCount, edgeCount) {
 /**
  * Filter nodes based on current filters
  */
-function filterRung4Nodes(nodes) {
-  const typeFilter = document.getElementById('rung4-filter-type')?.value;
-  const langFilter = document.getElementById('rung4-filter-lang')?.value;
+function filterModuleGraphNodes(nodes) {
+  const typeFilter = document.getElementById('module-graph-filter-type')?.value;
+  const langFilter = document.getElementById('module-graph-filter-lang')?.value;
 
   return nodes.filter(node => {
     if (typeFilter && node.type !== typeFilter) return false;
@@ -605,16 +605,16 @@ function filterRung4Nodes(nodes) {
 /**
  * Filter edges based on current filters
  */
-function filterRung4Edges(edges, filteredNodes) {
+function filterModuleGraphEdges(edges, filteredNodes) {
   const nodeIds = new Set(filteredNodes.map(n => n.id));
   
   // Check edge type filters
   const edgeTypeFilters = {
-    IMPORT: document.getElementById('rung4-edge-import')?.checked !== false,
-    CALL: document.getElementById('rung4-edge-call')?.checked !== false,
-    MODEL_CONTEXT: document.getElementById('rung4-edge-context')?.checked !== false,
-    NAVIGATE: document.getElementById('rung4-edge-nav')?.checked !== false,
-    TOOL: document.getElementById('rung4-edge-tool')?.checked !== false
+    IMPORT: document.getElementById('module-graph-edge-import')?.checked !== false,
+    CALL: document.getElementById('module-graph-edge-call')?.checked !== false,
+    MODEL_CONTEXT: document.getElementById('module-graph-edge-context')?.checked !== false,
+    NAVIGATE: document.getElementById('module-graph-edge-nav')?.checked !== false,
+    TOOL: document.getElementById('module-graph-edge-tool')?.checked !== false
   };
 
   return edges.filter(edge => {
@@ -629,8 +629,8 @@ function filterRung4Edges(edges, filteredNodes) {
 }
 
 // Export functions to window
-window.initializeRung4Visualization = initializeRung4Visualization;
-window.renderRung4Graph = renderRung4Graph;
-window.selectRung4Node = selectRung4Node;
-window.selectRung4Edge = selectRung4Edge;
+window.initializeModuleGraphVisualization = initializeModuleGraphVisualization;
+window.renderModuleGraph = renderModuleGraph;
+window.selectModuleGraphNode = selectModuleGraphNode;
+window.selectModuleGraphEdge = selectModuleGraphEdge;
 

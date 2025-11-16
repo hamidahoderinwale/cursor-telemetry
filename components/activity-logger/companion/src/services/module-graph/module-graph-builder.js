@@ -1,11 +1,11 @@
 /**
- * Rung 4 Graph Builder
+ * Module Graph Builder
  * Builds the complete module graph structure from extracted data
  */
 
 const { nanoid } = require('nanoid');
 
-class Rung4GraphBuilder {
+class ModuleGraphBuilder {
   constructor() {
     this.fileIdCounter = 0;
     this.dirIdCounter = 0;
@@ -292,5 +292,5 @@ class Rung4GraphBuilder {
   }
 }
 
-module.exports = Rung4GraphBuilder;
+module.exports = ModuleGraphBuilder;
 

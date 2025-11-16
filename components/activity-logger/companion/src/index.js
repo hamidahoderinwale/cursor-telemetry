@@ -1488,19 +1488,19 @@ const motifService = initializeMotifService(app, persistentDB, {
   maxMotifLength: 20
 });
 
-// Rung 4 service and routes (File-level abstraction)
-const Rung4Service = require('./services/rung4/rung4-service.js');
-const createRung4Routes = require('./routes/rung4.js');
-let rung4Service = null;
+// Module Graph service and routes (File-level abstraction)
+const ModuleGraphService = require('./services/module-graph/module-graph-service.js');
+const createModuleGraphRoutes = require('./routes/module-graph.js');
+let moduleGraphService = null;
 try {
-  rung4Service = new Rung4Service(cursorDbParser);
-  createRung4Routes({
+  moduleGraphService = new ModuleGraphService(cursorDbParser);
+  createModuleGraphRoutes({
     app,
-    rung4Service
+    moduleGraphService
   });
-  console.log('[RUNG4] Rung 4 service initialized');
+  console.log('[MODULE-GRAPH] Module graph service initialized');
 } catch (error) {
-  console.warn('[RUNG4] Failed to initialize Rung 4 service:', error.message);
+  console.warn('[MODULE-GRAPH] Failed to initialize module graph service:', error.message);
 }
 
 // Annotation routes (event annotation, intent classification, state summarization)

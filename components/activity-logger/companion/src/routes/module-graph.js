@@ -1,28 +1,28 @@
 /**
- * Rung 4 API Routes
- * Endpoints for file-level abstraction (Rung 4) data
+ * Module Graph API Routes
+ * Endpoints for file-level abstraction (module graph) data
  */
 
-function createRung4Routes(deps) {
-  const { app, rung4Service } = deps;
+function createModuleGraphRoutes(deps) {
+  const { app, moduleGraphService } = deps;
 
-  if (!rung4Service) {
-    console.warn('[RUNG4] Rung 4 service not available, routes disabled');
+  if (!moduleGraphService) {
+    console.warn('[MODULE-GRAPH] Module graph service not available, routes disabled');
     return;
   }
 
-  console.log('[RUNG4] Registering Rung 4 routes...');
+  console.log('[MODULE-GRAPH] Registering module graph routes...');
 
   /**
-   * GET /api/rung4/graph
+   * GET /api/module-graph/graph
    * Get complete module graph
    */
-  app.get('/api/rung4/graph', async (req, res) => {
+  app.get('/api/module-graph/graph', async (req, res) => {
     try {
       const workspace = req.query.workspace || req.query.workspace_path || null;
       const forceRefresh = req.query.force_refresh === 'true';
 
-      const graph = await rung4Service.getModuleGraph(workspace, { forceRefresh });
+      const graph = await moduleGraphService.getModuleGraph(workspace, { forceRefresh });
 
       res.json({
         success: true,
@@ -30,7 +30,7 @@ function createRung4Routes(deps) {
         metadata: graph.metadata
       });
     } catch (error) {
-      console.error('[RUNG4] Error getting module graph:', error);
+      console.error('[MODULE-GRAPH] Error getting module graph:', error);
       res.status(500).json({
         success: false,
         error: error.message
@@ -39,10 +39,10 @@ function createRung4Routes(deps) {
   });
 
   /**
-   * GET /api/rung4/nodes
+   * GET /api/module-graph/nodes
    * Get module nodes with filters
    */
-  app.get('/api/rung4/nodes', async (req, res) => {
+  app.get('/api/module-graph/nodes', async (req, res) => {
     try {
       const workspace = req.query.workspace || req.query.workspace_path || null;
       const filters = {
@@ -52,7 +52,7 @@ function createRung4Routes(deps) {
         hasModelContext: req.query.has_model_context === 'true'
       };
 
-      const nodes = await rung4Service.getNodes(workspace, filters);
+      const nodes = await moduleGraphService.getNodes(workspace, filters);
 
       res.json({
         success: true,
@@ -60,7 +60,7 @@ function createRung4Routes(deps) {
         count: nodes.length
       });
     } catch (error) {
-      console.error('[RUNG4] Error getting nodes:', error);
+      console.error('[MODULE-GRAPH] Error getting nodes:', error);
       res.status(500).json({
         success: false,
         error: error.message
@@ -69,10 +69,10 @@ function createRung4Routes(deps) {
   });
 
   /**
-   * GET /api/rung4/edges
+   * GET /api/module-graph/edges
    * Get typed edges with filters
    */
-  app.get('/api/rung4/edges', async (req, res) => {
+  app.get('/api/module-graph/edges', async (req, res) => {
     try {
       const workspace = req.query.workspace || req.query.workspace_path || null;
       const filters = {
@@ -82,7 +82,7 @@ function createRung4Routes(deps) {
         minWeight: req.query.min_weight ? parseInt(req.query.min_weight) : undefined
       };
 
-      const edges = await rung4Service.getEdges(workspace, filters);
+      const edges = await moduleGraphService.getEdges(workspace, filters);
 
       res.json({
         success: true,
@@ -90,7 +90,7 @@ function createRung4Routes(deps) {
         count: edges.length
       });
     } catch (error) {
-      console.error('[RUNG4] Error getting edges:', error);
+      console.error('[MODULE-GRAPH] Error getting edges:', error);
       res.status(500).json({
         success: false,
         error: error.message
@@ -99,10 +99,10 @@ function createRung4Routes(deps) {
   });
 
   /**
-   * GET /api/rung4/events
+   * GET /api/module-graph/events
    * Get structural events with filters
    */
-  app.get('/api/rung4/events', async (req, res) => {
+  app.get('/api/module-graph/events', async (req, res) => {
     try {
       const workspace = req.query.workspace || req.query.workspace_path || null;
       const filters = {
@@ -118,7 +118,7 @@ function createRung4Routes(deps) {
         };
       }
 
-      const events = await rung4Service.getEvents(workspace, filters);
+      const events = await moduleGraphService.getEvents(workspace, filters);
 
       res.json({
         success: true,
@@ -126,7 +126,7 @@ function createRung4Routes(deps) {
         count: events.length
       });
     } catch (error) {
-      console.error('[RUNG4] Error getting events:', error);
+      console.error('[MODULE-GRAPH] Error getting events:', error);
       res.status(500).json({
         success: false,
         error: error.message
@@ -135,21 +135,21 @@ function createRung4Routes(deps) {
   });
 
   /**
-   * GET /api/rung4/hierarchy
+   * GET /api/module-graph/hierarchy
    * Get directory hierarchy
    */
-  app.get('/api/rung4/hierarchy', async (req, res) => {
+  app.get('/api/module-graph/hierarchy', async (req, res) => {
     try {
       const workspace = req.query.workspace || req.query.workspace_path || null;
 
-      const hierarchy = await rung4Service.getHierarchy(workspace);
+      const hierarchy = await moduleGraphService.getHierarchy(workspace);
 
       res.json({
         success: true,
         hierarchy
       });
     } catch (error) {
-      console.error('[RUNG4] Error getting hierarchy:', error);
+      console.error('[MODULE-GRAPH] Error getting hierarchy:', error);
       res.status(500).json({
         success: false,
         error: error.message
@@ -158,21 +158,21 @@ function createRung4Routes(deps) {
   });
 
   /**
-   * POST /api/rung4/refresh
+   * POST /api/module-graph/refresh
    * Force refresh cache
    */
-  app.post('/api/rung4/refresh', async (req, res) => {
+  app.post('/api/module-graph/refresh', async (req, res) => {
     try {
       const workspace = req.body.workspace || req.body.workspace_path || null;
 
-      rung4Service.clearCache(workspace);
+      moduleGraphService.clearCache(workspace);
 
       res.json({
         success: true,
         message: 'Cache cleared'
       });
     } catch (error) {
-      console.error('[RUNG4] Error refreshing cache:', error);
+      console.error('[MODULE-GRAPH] Error refreshing cache:', error);
       res.status(500).json({
         success: false,
         error: error.message
@@ -181,5 +181,5 @@ function createRung4Routes(deps) {
   });
 }
 
-module.exports = createRung4Routes;
+module.exports = createModuleGraphRoutes;
 

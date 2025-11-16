@@ -1,15 +1,15 @@
 /**
- * Rung 4 Service
- * Main orchestration service for Rung 4 file-level abstraction
+ * Module Graph Service
+ * Main orchestration service for module graph file-level abstraction
  */
 
-const Rung4Extractor = require('./rung4-extractor');
-const Rung4GraphBuilder = require('./rung4-graph-builder');
+const ModuleGraphExtractor = require('./module-graph-extractor');
+const ModuleGraphBuilder = require('./module-graph-builder');
 
-class Rung4Service {
+class ModuleGraphService {
   constructor(cursorDbParser = null) {
-    this.extractor = new Rung4Extractor(cursorDbParser);
-    this.graphBuilder = new Rung4GraphBuilder();
+    this.extractor = new ModuleGraphExtractor(cursorDbParser);
+    this.graphBuilder = new ModuleGraphBuilder();
     this.cache = new Map();
     this.cacheTimeout = 5 * 60 * 1000; // 5 minutes
   }
@@ -152,5 +152,5 @@ class Rung4Service {
   }
 }
 
-module.exports = Rung4Service;
+module.exports = ModuleGraphService;
 

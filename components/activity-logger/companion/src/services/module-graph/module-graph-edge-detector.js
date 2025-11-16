@@ -1,12 +1,12 @@
 /**
- * Rung 4 Edge Detector
+ * Module Graph Edge Detector
  * Detects typed edges (imports, calls, model context, navigation, tool) from extracted data
  */
 
 const path = require('path');
 const fs = require('fs');
 
-class Rung4EdgeDetector {
+class ModuleGraphEdgeDetector {
   constructor() {
     this.importPatterns = {
       js: [
@@ -310,5 +310,5 @@ class Rung4EdgeDetector {
   }
 }
 
-module.exports = Rung4EdgeDetector;
+module.exports = ModuleGraphEdgeDetector;
 

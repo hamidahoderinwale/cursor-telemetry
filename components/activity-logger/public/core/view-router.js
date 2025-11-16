@@ -21,8 +21,7 @@ const viewFunctionNames = {
   'workspace-comparison': 'renderWorkspaceComparisonView',
       'whiteboard': 'renderWhiteboardView',
       'clio': 'renderClioView',
-      'module-graph': 'renderRung4FileGraphView',
-      'rung4-file-graph': 'renderRung4FileGraphView'
+      'module-graph': 'renderModuleGraphView'
     };
 
 // Debounced view switching

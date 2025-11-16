@@ -1,32 +1,32 @@
 /**
- * Rung 4 File Graph Templates
+ * Module Graph Templates
  */
 
-function renderRung4FileGraphTemplate() {
+function renderModuleGraphTemplate() {
   return `
-    <div class="rung4-file-graph-view">
+    <div class="module-graph-view">
       <!-- Header -->
-      <div class="rung4-header">
-        <div class="rung4-title-section">
-          <h1 class="rung4-title">Module Graph</h1>
-          <p class="rung4-subtitle">Content-free, compositional system graph with typed signals (imports, calls, context, navigation, tools)</p>
+      <div class="module-graph-header">
+        <div class="module-graph-title-section">
+          <h1 class="module-graph-title">Module Graph</h1>
+          <p class="module-graph-subtitle">Content-free, compositional system graph with typed signals (imports, calls, context, navigation, tools)</p>
         </div>
-        <div class="rung4-actions">
-          <button class="btn btn-sm" id="rung4-refresh-btn" onclick="refreshRung4Graph()">
+        <div class="module-graph-actions">
+          <button class="btn btn-sm" id="module-graph-refresh-btn" onclick="refreshModuleGraph()">
             Refresh
           </button>
-          <button class="btn btn-sm" id="rung4-export-btn" onclick="exportRung4Graph()">
+          <button class="btn btn-sm" id="module-graph-export-btn" onclick="exportModuleGraph()">
             Export
           </button>
         </div>
       </div>
 
       <!-- Controls Bar -->
-      <div class="rung4-controls-bar">
+      <div class="module-graph-controls-bar">
         <!-- File Type Filter -->
         <div class="control-group">
           <label class="control-label">Type</label>
-          <select id="rung4-filter-type" class="control-select" onchange="applyRung4Filters()">
+          <select id="module-graph-filter-type" class="control-select" onchange="applyModuleGraphFilters()">
             <option value="">All</option>
             <option value="file">Files</option>
             <option value="directory">Directories</option>
@@ -36,7 +36,7 @@ function renderRung4FileGraphTemplate() {
         <!-- Language Filter -->
         <div class="control-group">
           <label class="control-label">Language</label>
-          <select id="rung4-filter-lang" class="control-select" onchange="applyRung4Filters()">
+          <select id="module-graph-filter-lang" class="control-select" onchange="applyModuleGraphFilters()">
             <option value="">All</option>
             <option value="js">JavaScript</option>
             <option value="ts">TypeScript</option>
@@ -52,23 +52,23 @@ function renderRung4FileGraphTemplate() {
           <label class="control-label">Edge Types</label>
           <div class="control-checkboxes">
             <label class="checkbox-label">
-              <input type="checkbox" id="rung4-edge-import" checked onchange="applyRung4Filters()">
+              <input type="checkbox" id="module-graph-edge-import" checked onchange="applyModuleGraphFilters()">
               <span>IMPORT</span>
             </label>
             <label class="checkbox-label">
-              <input type="checkbox" id="rung4-edge-call" checked onchange="applyRung4Filters()">
+              <input type="checkbox" id="module-graph-edge-call" checked onchange="applyModuleGraphFilters()">
               <span>CALL</span>
             </label>
             <label class="checkbox-label">
-              <input type="checkbox" id="rung4-edge-context" checked onchange="applyRung4Filters()">
+              <input type="checkbox" id="module-graph-edge-context" checked onchange="applyModuleGraphFilters()">
               <span>MODEL_CONTEXT</span>
             </label>
             <label class="checkbox-label">
-              <input type="checkbox" id="rung4-edge-nav" checked onchange="applyRung4Filters()">
+              <input type="checkbox" id="module-graph-edge-nav" checked onchange="applyModuleGraphFilters()">
               <span>NAVIGATE</span>
             </label>
             <label class="checkbox-label">
-              <input type="checkbox" id="rung4-edge-tool" checked onchange="applyRung4Filters()">
+              <input type="checkbox" id="module-graph-edge-tool" checked onchange="applyModuleGraphFilters()">
               <span>TOOL</span>
             </label>
           </div>
@@ -77,7 +77,7 @@ function renderRung4FileGraphTemplate() {
         <!-- Layout Options -->
         <div class="control-group">
           <label class="control-label">Layout</label>
-          <select id="rung4-layout" class="control-select" onchange="changeRung4Layout()">
+          <select id="module-graph-layout" class="control-select" onchange="changeModuleGraphLayout()">
             <option value="force">Force-Directed</option>
             <option value="hierarchical">Hierarchical</option>
             <option value="circular">Circular</option>
@@ -88,29 +88,29 @@ function renderRung4FileGraphTemplate() {
         <!-- Time Range -->
         <div class="control-group">
           <label class="control-label">Time Range</label>
-          <input type="range" id="rung4-time-range" class="control-range" min="0" max="100" value="100" oninput="updateRung4TimeRange(this.value)">
+          <input type="range" id="module-graph-time-range" class="control-range" min="0" max="100" value="100" oninput="updateModuleGraphTimeRange(this.value)">
           <div class="control-range-labels">
             <span>All Time</span>
-            <span id="rung4-time-display">All Time</span>
+            <span id="module-graph-time-display">All Time</span>
           </div>
         </div>
       </div>
 
       <!-- Main Content Area -->
-      <div class="rung4-main-content">
+      <div class="module-graph-main-content">
         <!-- Graph Visualization -->
-        <div class="rung4-graph-container">
-          <div class="rung4-graph-header">
-            <h3 class="rung4-section-title">Module Graph</h3>
-            <div class="rung4-graph-stats" id="rung4-graph-stats">
-              <span id="rung4-node-count">0 nodes</span>
-              <span id="rung4-edge-count">0 edges</span>
+        <div class="module-graph-graph-container">
+          <div class="module-graph-graph-header">
+            <h3 class="module-graph-section-title">Module Graph</h3>
+            <div class="module-graph-graph-stats" id="module-graph-graph-stats">
+              <span id="module-graph-node-count">0 nodes</span>
+              <span id="module-graph-edge-count">0 edges</span>
             </div>
           </div>
-          <div class="rung4-graph" id="rung4-graph">
-            <div class="rung4-loading">Loading module graph...</div>
+          <div class="module-graph-graph" id="module-graph-graph">
+            <div class="module-graph-loading">Loading module graph...</div>
           </div>
-          <div class="rung4-legend">
+          <div class="module-graph-legend">
             <div class="legend-item">
               <div class="legend-color" style="background: #3b82f6;"></div>
               <span>IMPORT</span>
@@ -135,13 +135,13 @@ function renderRung4FileGraphTemplate() {
         </div>
 
         <!-- Details Panel -->
-        <div class="rung4-details-panel">
-          <div class="rung4-details-header">
-            <h3 class="rung4-section-title">Details</h3>
-            <button class="btn-icon" id="rung4-details-close" onclick="closeRung4Details()">×</button>
+        <div class="module-graph-details-panel">
+          <div class="module-graph-details-header">
+            <h3 class="module-graph-section-title">Details</h3>
+            <button class="btn-icon" id="module-graph-details-close" onclick="closeModuleGraphDetails()">×</button>
           </div>
-          <div class="rung4-details-content" id="rung4-details-content">
-            <div class="rung4-details-placeholder">
+          <div class="module-graph-details-content" id="module-graph-details-content">
+            <div class="module-graph-details-placeholder">
               <p>Click a node or edge to view details</p>
             </div>
           </div>
@@ -149,11 +149,11 @@ function renderRung4FileGraphTemplate() {
       </div>
 
       <!-- Event Timeline -->
-      <div class="rung4-timeline-container">
-        <div class="rung4-timeline-header">
-          <h3 class="rung4-section-title">Structural Events Timeline</h3>
-          <div class="rung4-timeline-controls">
-            <select id="rung4-event-filter" class="control-select" onchange="updateRung4Timeline()">
+      <div class="module-graph-timeline-container">
+        <div class="module-graph-timeline-header">
+          <h3 class="module-graph-section-title">Structural Events Timeline</h3>
+          <div class="module-graph-timeline-controls">
+            <select id="module-graph-event-filter" class="control-select" onchange="updateModuleGraphTimeline()">
               <option value="">All Events</option>
               <option value="FILE_EDIT">File Edits</option>
               <option value="IMPORT_ADD">Import Add</option>
@@ -163,8 +163,8 @@ function renderRung4FileGraphTemplate() {
             </select>
           </div>
         </div>
-        <div class="rung4-timeline" id="rung4-timeline">
-          <div class="rung4-timeline-loading">Loading events...</div>
+        <div class="module-graph-timeline" id="module-graph-timeline">
+          <div class="module-graph-timeline-loading">Loading events...</div>
         </div>
       </div>
     </div>
@@ -172,5 +172,5 @@ function renderRung4FileGraphTemplate() {
 }
 
 // Export to window
-window.renderRung4FileGraphTemplate = renderRung4FileGraphTemplate;
+window.renderModuleGraphFileGraphTemplate = renderModuleGraphFileGraphTemplate;
 
