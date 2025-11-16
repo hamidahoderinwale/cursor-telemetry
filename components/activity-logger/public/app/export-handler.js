@@ -193,6 +193,9 @@ async function exportDatabaseWithFilters({ dateFrom, dateTo, limit = 1000, types
     if (!types.context) {
       url.searchParams.set('exclude_context', 'true');
     }
+    if (!types.motifs) {
+      url.searchParams.set('exclude_motifs', 'true');
+    }
     
     // Options
     if (!options.includeCodeDiffs) {

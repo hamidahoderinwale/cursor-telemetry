@@ -19,8 +19,11 @@ const viewFunctionNames = {
   'api-docs': 'renderAPIDocsView',
   'schema-config': 'renderSchemaConfigView',
   'workspace-comparison': 'renderWorkspaceComparisonView',
-  'whiteboard': 'renderWhiteboardView'
-};
+      'whiteboard': 'renderWhiteboardView',
+      'clio': 'renderClioView',
+      'module-graph': 'renderRung4FileGraphView',
+      'rung4-file-graph': 'renderRung4FileGraphView'
+    };
 
 // Debounced view switching
 const debouncedRender = window.debounce ? 

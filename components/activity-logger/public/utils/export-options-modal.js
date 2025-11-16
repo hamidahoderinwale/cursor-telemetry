@@ -87,6 +87,10 @@ function showExportOptionsModal() {
                 <input type="checkbox" id="exportTypeContext" checked>
                 <span>Context</span>
               </label>
+              <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: var(--text-sm);">
+                <input type="checkbox" id="exportTypeMotifs" checked>
+                <span>Motifs</span>
+              </label>
             </div>
           </div>
           
@@ -399,7 +403,8 @@ async function executeExportWithOptions() {
     events: document.getElementById('exportTypeEvents').checked,
     prompts: document.getElementById('exportTypePrompts').checked,
     terminal: document.getElementById('exportTypeTerminal').checked,
-    context: document.getElementById('exportTypeContext').checked
+    context: document.getElementById('exportTypeContext').checked,
+    motifs: document.getElementById('exportTypeMotifs').checked
   };
   
   const options = {

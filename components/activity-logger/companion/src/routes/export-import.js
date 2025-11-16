@@ -3,7 +3,7 @@
  */
 
 function createExportImportRoutes(deps) {
-  const { app, persistentDB, db, abstractionEngine, schemaMigrations, dataAccessControl } = deps;
+  const { app, persistentDB, db, abstractionEngine, schemaMigrations, dataAccessControl, motifService } = deps;
 
   // Streaming export handler for large datasets
   async function handleStreamingExport(req, res, options) {
@@ -16,6 +16,7 @@ function createExportImportRoutes(deps) {
       excludePrompts,
       excludeTerminal,
       excludeContext,
+      excludeMotifs,
       noCodeDiffs,
       noLinkedData,
       noTemporalChunks,
@@ -326,6 +327,48 @@ function createExportImportRoutes(deps) {
         `    "context_analytics": ${JSON.stringify(contextAnalytics).split('\n').join('\n    ')},\n`
       );
 
+      // Stream Procedural Clio: Motifs (Rung 6)
+      if (!excludeMotifs && motifService) {
+        writeChunk('    "proceduralClio": {\n');
+        writeChunk('      "version": "1.0",\n');
+        writeChunk('      "rung": 6,\n');
+        writeChunk('      "description": "Recurring procedural patterns (motifs) extracted from canonical workflow DAGs",\n');
+        writeChunk('      "motifs": [\n');
+        try {
+          const motifs = await motifService.getMotifs({});
+          let firstMotif = true;
+          
+          for (const motif of motifs) {
+            if (!firstMotif) writeChunk(',\n');
+            firstMotif = false;
+            
+            const motifData = {
+              id: motif.id,
+              pattern: motif.pattern,
+              sequence: motif.sequence || [],
+              dominant_intent: motif.dominantIntent,
+              shape: motif.shape,
+              frequency: motif.frequency,
+              confidence: motif.confidence,
+              intents: motif.intents || {},
+              stats: motif.stats || {},
+              privacy: motif.privacy || {},
+              created_at: motif.created_at || null,
+              updated_at: motif.updated_at || null,
+            };
+            
+            writeChunk('      ' + JSON.stringify(motifData).split('\n').join('\n      '));
+          }
+        } catch (error) {
+          console.warn('[EXPORT] Failed to stream motifs:', error.message);
+        }
+        writeChunk('\n      ],\n');
+        writeChunk('      "note": "Only motifs (Rung 6) are exported. Full Clio clusters, facets, and canonical DAGs are computed on-demand and not persisted."\n');
+        writeChunk('    },\n');
+      } else {
+        writeChunk('    "proceduralClio": { "motifs": [], "note": "Motifs excluded from export" },\n');
+      }
+
       // Workspaces (small)
       writeChunk(
         `    "workspaces": ${JSON.stringify(db.workspaces || [])
@@ -439,6 +482,7 @@ function createExportImportRoutes(deps) {
       const excludePrompts = req.query.exclude_prompts === 'true';
       const excludeTerminal = req.query.exclude_terminal === 'true';
       const excludeContext = req.query.exclude_context === 'true';
+      const excludeMotifs = req.query.exclude_motifs === 'true';
 
       // Options
       const noCodeDiffs = req.query.no_code_diffs === 'true';
@@ -458,7 +502,7 @@ function createExportImportRoutes(deps) {
         `[EXPORT] Limit: ${limit}, Since: ${since ? new Date(since).toISOString() : 'all'}, Until: ${until ? new Date(until).toISOString() : 'all'}`
       );
       console.log(
-        `[EXPORT] Exclude: events=${excludeEvents}, prompts=${excludePrompts}, terminal=${excludeTerminal}, context=${excludeContext}`
+        `[EXPORT] Exclude: events=${excludeEvents}, prompts=${excludePrompts}, terminal=${excludeTerminal}, context=${excludeContext}, motifs=${excludeMotifs}`
       );
       console.log(
         `[EXPORT] Abstraction Level: ${abstractionLevel}, Abstract Prompts: ${abstractPrompts}, Extract Patterns: ${extractPatterns}`
@@ -478,6 +522,7 @@ function createExportImportRoutes(deps) {
           excludePrompts,
           excludeTerminal,
           excludeContext,
+          excludeMotifs,
           noCodeDiffs,
           noLinkedData,
           noTemporalChunks,
@@ -967,6 +1012,7 @@ function createExportImportRoutes(deps) {
             excludePrompts,
             excludeTerminal,
             excludeContext,
+            excludeMotifs,
             noCodeDiffs,
             noLinkedData,
             noTemporalChunks,
@@ -979,6 +1025,11 @@ function createExportImportRoutes(deps) {
             events: filteredEvents.length,
             terminalCommands: filteredTerminalCommands.length,
             contextSnapshots: filteredContextSnapshots.length,
+            motifs: filteredMotifs.length,
+            proceduralClio: {
+              motifs: filteredMotifs.length,
+              rung: 6
+            },
             linkedPairs: linkedData.length,
             temporalChunks: noTemporalChunks ? 0 : enrichedChunks.length,
             workspaces: (db.workspaces || []).length,
@@ -1088,6 +1139,31 @@ function createExportImportRoutes(deps) {
             removed_files: snapshot.removedFiles || [],
             net_change: snapshot.netChange || 0,
           })),
+
+          // Procedural Clio: Motifs (Rung 6 - Procedural Patterns)
+          // These are recurring procedural patterns extracted from canonical workflow DAGs
+          proceduralClio: {
+            version: '1.0',
+            rung: 6,
+            description: 'Recurring procedural patterns (motifs) extracted from canonical workflow DAGs',
+            motifs: filteredMotifs.map((motif) => ({
+              id: motif.id,
+              pattern: motif.pattern,
+              sequence: motif.sequence || [],
+              dominant_intent: motif.dominantIntent,
+              shape: motif.shape,
+              frequency: motif.frequency,
+              confidence: motif.confidence,
+              intents: motif.intents || {},
+              stats: motif.stats || {},
+              privacy: motif.privacy || {},
+              created_at: motif.created_at || null,
+              updated_at: motif.updated_at || null,
+            })),
+            // Note: Full Clio analysis (clusters, facets, canonical DAGs) is computed on-demand
+            // and not persisted. Only motifs (Rung 6) are stored in the database.
+            note: 'Only motifs (Rung 6) are exported. Full Clio clusters, facets, and canonical DAGs are computed on-demand and not persisted.'
+          },
         },
 
         // ============================================
@@ -1409,7 +1485,7 @@ function createExportImportRoutes(deps) {
       }
 
       console.log(
-        `[SUCCESS] Exported ${enrichedEntries.length} entries (${linkedData.length} linked to prompts), ${filteredPrompts.length} prompts, ${filteredEvents.length} events, ${filteredTerminalCommands.length} terminal commands, ${filteredContextSnapshots.length} context snapshots`
+        `[SUCCESS] Exported ${enrichedEntries.length} entries (${linkedData.length} linked to prompts), ${filteredPrompts.length} prompts, ${filteredEvents.length} events, ${filteredTerminalCommands.length} terminal commands, ${filteredContextSnapshots.length} context snapshots, ${filteredMotifs.length} motifs`
       );
 
       res.json({

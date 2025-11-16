@@ -641,40 +641,86 @@ class PersistentDB {
             })
           );
 
+          // Motifs table (Rung 6 - procedural patterns)
+          tables.push(
+            new Promise((res, rej) => {
+              this.db.run(
+                `
+          CREATE TABLE IF NOT EXISTS motifs (
+            id TEXT PRIMARY KEY,
+            pattern TEXT NOT NULL,
+            sequence TEXT,
+            dominant_intent TEXT,
+            shape TEXT,
+            frequency INTEGER DEFAULT 0,
+            confidence REAL DEFAULT 0,
+            data TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+          )
+        `,
+                (err) => {
+                  if (err) {
+                    console.error('Error creating motifs table:', err);
+                    rej(err);
+                  } else {
+                    // Create indexes
+                    this.db.run(
+                      `CREATE INDEX IF NOT EXISTS idx_motif_intent ON motifs(dominant_intent)`,
+                      () => {
+                        this.db.run(
+                          `CREATE INDEX IF NOT EXISTS idx_motif_shape ON motifs(shape)`,
+                          () => {
+                            this.db.run(
+                              `CREATE INDEX IF NOT EXISTS idx_motif_frequency ON motifs(frequency)`,
+                              () => {
+                                res();
+                              }
+                            );
+                          }
+                        );
+                      }
+                    );
+                  }
+                }
+              );
+            })
+          );
+
           // Plot outputs table (for Jupyter notebook plots and script-generated plots)
           tables.push(
             new Promise((res, rej) => {
               this.db.run(
                 `
-              CREATE TABLE IF NOT EXISTS plot_outputs (
-                id TEXT PRIMARY KEY,
-                plot_type TEXT NOT NULL,
-                source_type TEXT NOT NULL,
-                file_path TEXT,
-                notebook_path TEXT,
-                cell_index INTEGER,
-                execution_count INTEGER,
-                format TEXT,
-                library TEXT,
-                width INTEGER,
-                height INTEGER,
-                size INTEGER,
-                perceptual_hash TEXT,
-                thumbnail_path TEXT,
-                is_regeneration INTEGER DEFAULT 0,
-                original_plot_id TEXT,
-                regeneration_count INTEGER DEFAULT 0,
-                version_number INTEGER DEFAULT 1,
-                changes_detected TEXT,
-                similarity_to_original REAL,
-                created_at TEXT,
-                execution_timestamp TEXT,
-                cell_source TEXT,
-                script_path TEXT,
-                workspace_path TEXT,
-                FOREIGN KEY (original_plot_id) REFERENCES plot_outputs(id)
-              )
-            `,
+          CREATE TABLE IF NOT EXISTS plot_outputs (
+            id TEXT PRIMARY KEY,
+            plot_type TEXT NOT NULL,
+            source_type TEXT NOT NULL,
+            file_path TEXT,
+            notebook_path TEXT,
+            cell_index INTEGER,
+            execution_count INTEGER,
+            format TEXT,
+            library TEXT,
+            width INTEGER,
+            height INTEGER,
+            size INTEGER,
+            perceptual_hash TEXT,
+            thumbnail_path TEXT,
+            is_regeneration INTEGER DEFAULT 0,
+            original_plot_id TEXT,
+            regeneration_count INTEGER DEFAULT 0,
+            version_number INTEGER DEFAULT 1,
+            changes_detected TEXT,
+            similarity_to_original REAL,
+            created_at TEXT,
+            execution_timestamp TEXT,
+            cell_source TEXT,
+            script_path TEXT,
+            workspace_path TEXT,
+            FOREIGN KEY (original_plot_id) REFERENCES plot_outputs(id)
+          )
+        `,
                 (err) => {
                   if (err) {
                     console.error('Error creating plot_outputs table:', err);

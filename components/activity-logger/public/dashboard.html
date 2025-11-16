@@ -60,6 +60,8 @@
   <link rel="stylesheet" href="views/workspace-comparison/styles.css" media="print" onload="this.media='all'">
   <link rel="stylesheet" href="views/activity/context-visualization.css" media="print" onload="this.media='all'">
   <link rel="stylesheet" href="views/activity/status-message-visualization.css" media="print" onload="this.media='all'">
+      <link rel="stylesheet" href="views/clio/styles.css" media="print" onload="this.media='all'">
+      <link rel="stylesheet" href="views/rung4-file-graph/styles.css" media="print" onload="this.media='all'">
   <link rel="stylesheet" href="components/db-preview.css" media="print" onload="this.media='all'">
   
   <!-- Service Worker Registration -->
@@ -312,6 +314,19 @@
           </svg>
           <span>API Docs</span>
         </a>
+        
+      <a href="#clio" class="nav-link" data-view="clio">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+          <path fill-rule="evenodd" d="M3 3a1 1 0 000 2v8a2 2 0 002 2h2.586l-1.293 1.293a1 1 0 101.414 1.414L10 15.414l2.293 2.293a1 1 0 001.414-1.414L12.414 15H15a2 2 0 002-2V5a1 1 0 100-2H3zm11.707 4.707a1 1 0 00-1.414-1.414L10 9.586 8.707 8.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+        </svg>
+        <span>Clio</span>
+      </a>
+      <a href="#module-graph" class="nav-link" data-view="module-graph">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+          <path fill-rule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clip-rule="evenodd"/>
+        </svg>
+        <span>Module Graph</span>
+      </a>
       </nav>
 
       <div class="sidebar-footer">
@@ -831,6 +846,12 @@
   <script src="views/whiteboard/ai-query-generator.js" defer></script>
   <script src="views/whiteboard/whiteboard-manager.js" defer></script>
   <script src="views/whiteboard/index.js" defer></script>
+      <script src="views/clio/templates.js" defer></script>
+      <script src="views/clio/procedural-clio.js" defer></script>
+      <script src="views/clio/index.js" defer></script>
+      <script src="views/rung4-file-graph/templates.js" defer></script>
+      <script src="views/rung4-file-graph/rung4-visualization.js" defer></script>
+      <script src="views/rung4-file-graph/index.js" defer></script>
   <!-- States feature disabled - scripts removed -->
   <!-- <script src="views/states/state-graph.js" defer></script> -->
   <!-- <script src="views/states/index.js" defer></script> -->

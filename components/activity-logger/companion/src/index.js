@@ -145,6 +145,7 @@ const createAIRoutes = require('./routes/ai.js');
 const createAnnotationRoutes = require('./routes/annotations.js');
 const createStateRoutes = require('./routes/states.js');
 const createPlotRoutes = require('./routes/plots.js');
+const initializeMotifService = require('./services/motif-service-init.js');
 const SharingService = require('./services/sharing-service.js');
 
 // Initialize persistent database
@@ -1464,6 +1465,7 @@ createExportImportRoutes({
   abstractionEngine,
   schemaMigrations,
   dataAccessControl,
+  motifService,
 });
 
 // Sharing routes
@@ -1478,6 +1480,28 @@ createSharingRoutes({
 createAIRoutes({
   app,
 });
+
+// Motif service and routes (Rung 6)
+const motifService = initializeMotifService(app, persistentDB, {
+  minClusterSize: 10,
+  similarityThreshold: 0.7,
+  maxMotifLength: 20
+});
+
+// Rung 4 service and routes (File-level abstraction)
+const Rung4Service = require('./services/rung4/rung4-service.js');
+const createRung4Routes = require('./routes/rung4.js');
+let rung4Service = null;
+try {
+  rung4Service = new Rung4Service(cursorDbParser);
+  createRung4Routes({
+    app,
+    rung4Service
+  });
+  console.log('[RUNG4] Rung 4 service initialized');
+} catch (error) {
+  console.warn('[RUNG4] Failed to initialize Rung 4 service:', error.message);
+}
 
 // Annotation routes (event annotation, intent classification, state summarization)
 createAnnotationRoutes({

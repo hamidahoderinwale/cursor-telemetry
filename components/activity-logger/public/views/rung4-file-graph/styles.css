@@ -1,0 +1,420 @@
+/**
+ * Rung 4 File Graph View Styles
+ */
+
+.rung4-file-graph-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 100vh;
+  background: var(--color-bg, #ffffff);
+  padding: var(--space-md, 1rem);
+  gap: var(--space-md, 1rem);
+}
+
+/* Header */
+.rung4-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding-bottom: var(--space-md, 1rem);
+  border-bottom: 1px solid var(--color-border, #e5e7eb);
+}
+
+.rung4-title-section {
+  flex: 1;
+}
+
+.rung4-title {
+  font-size: var(--text-2xl, 1.5rem);
+  font-weight: 600;
+  color: var(--color-text, #111827);
+  margin: 0 0 var(--space-xs, 0.5rem) 0;
+}
+
+.rung4-subtitle {
+  font-size: var(--text-sm, 0.875rem);
+  color: var(--color-text-muted, #6b7280);
+  margin: 0;
+}
+
+.rung4-actions {
+  display: flex;
+  gap: var(--space-xs, 0.5rem);
+}
+
+/* Controls Bar */
+.rung4-controls-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-md, 1rem);
+  padding: var(--space-md, 1rem);
+  background: var(--color-bg-secondary, #f9fafb);
+  border: 1px solid var(--color-border, #e5e7eb);
+  border-radius: var(--radius-sm, 0.125rem);
+}
+
+.control-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs, 0.5rem);
+  min-width: 120px;
+}
+
+.control-label {
+  font-size: var(--text-xs, 0.75rem);
+  font-weight: 500;
+  color: var(--color-text-muted, #6b7280);
+}
+
+.control-select {
+  padding: var(--space-xs, 0.5rem);
+  border: 1px solid var(--color-border, #e5e7eb);
+  border-radius: var(--radius-sm, 0.125rem);
+  font-size: var(--text-sm, 0.875rem);
+  background: var(--color-bg, #ffffff);
+  color: var(--color-text, #111827);
+}
+
+.control-checkboxes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm, 0.75rem);
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs, 0.5rem);
+  font-size: var(--text-sm, 0.875rem);
+  cursor: pointer;
+}
+
+.checkbox-label input[type="checkbox"] {
+  cursor: pointer;
+}
+
+.control-range {
+  width: 100%;
+}
+
+.control-range-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--text-xs, 0.75rem);
+  color: var(--color-text-muted, #6b7280);
+}
+
+/* Main Content */
+.rung4-main-content {
+  display: grid;
+  grid-template-columns: 1fr 350px;
+  gap: var(--space-md, 1rem);
+  flex: 1;
+  min-height: 0;
+}
+
+/* Graph Container */
+.rung4-graph-container {
+  display: flex;
+  flex-direction: column;
+  background: var(--color-bg, #ffffff);
+  border: 1px solid var(--color-border, #e5e7eb);
+  border-radius: var(--radius-sm, 0.125rem);
+  overflow: hidden;
+}
+
+.rung4-graph-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-md, 1rem);
+  border-bottom: 1px solid var(--color-border, #e5e7eb);
+}
+
+.rung4-section-title {
+  font-size: var(--text-lg, 1.125rem);
+  font-weight: 600;
+  color: var(--color-text, #111827);
+  margin: 0;
+}
+
+.rung4-graph-stats {
+  display: flex;
+  gap: var(--space-md, 1rem);
+  font-size: var(--text-sm, 0.875rem);
+  color: var(--color-text-muted, #6b7280);
+}
+
+.rung4-graph {
+  flex: 1;
+  min-height: 500px;
+  position: relative;
+  background: var(--color-bg, #ffffff);
+}
+
+.rung4-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--color-text-muted, #6b7280);
+  font-size: var(--text-sm, 0.875rem);
+}
+
+.rung4-legend {
+  display: flex;
+  gap: var(--space-md, 1rem);
+  padding: var(--space-sm, 0.75rem) var(--space-md, 1rem);
+  border-top: 1px solid var(--color-border, #e5e7eb);
+  background: var(--color-bg-secondary, #f9fafb);
+  flex-wrap: wrap;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs, 0.5rem);
+  font-size: var(--text-xs, 0.75rem);
+  color: var(--color-text-muted, #6b7280);
+}
+
+.legend-color {
+  width: 20px;
+  height: 2px;
+  background: currentColor;
+  border: 1px solid currentColor;
+}
+
+/* Details Panel */
+.rung4-details-panel {
+  display: flex;
+  flex-direction: column;
+  background: var(--color-bg, #ffffff);
+  border: 1px solid var(--color-border, #e5e7eb);
+  border-radius: var(--radius-sm, 0.125rem);
+  overflow: hidden;
+}
+
+.rung4-details-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-md, 1rem);
+  border-bottom: 1px solid var(--color-border, #e5e7eb);
+}
+
+.btn-icon {
+  background: none;
+  border: none;
+  font-size: var(--text-xl, 1.25rem);
+  color: var(--color-text-muted, #6b7280);
+  cursor: pointer;
+  padding: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-icon:hover {
+  color: var(--color-text, #111827);
+}
+
+.rung4-details-content {
+  flex: 1;
+  padding: var(--space-md, 1rem);
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.rung4-details-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--color-text-muted, #6b7280);
+  font-size: var(--text-sm, 0.875rem);
+  text-align: center;
+}
+
+/* Node Details */
+.rung4-node-details {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md, 1rem);
+}
+
+.rung4-detail-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs, 0.5rem);
+}
+
+.rung4-detail-label {
+  font-size: var(--text-xs, 0.75rem);
+  font-weight: 500;
+  color: var(--color-text-muted, #6b7280);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.rung4-detail-value {
+  font-size: var(--text-sm, 0.875rem);
+  color: var(--color-text, #111827);
+}
+
+.rung4-detail-path {
+  font-family: var(--font-mono, 'Courier New', monospace);
+  font-size: var(--text-xs, 0.75rem);
+  color: var(--color-text-muted, #6b7280);
+  word-break: break-all;
+}
+
+.rung4-connected-files {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs, 0.5rem);
+}
+
+.rung4-connected-file {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-xs, 0.5rem);
+  background: var(--color-bg-secondary, #f9fafb);
+  border-radius: var(--radius-sm, 0.125rem);
+  font-size: var(--text-sm, 0.875rem);
+}
+
+.rung4-edge-type-badge {
+  padding: 2px 6px;
+  border-radius: var(--radius-sm, 0.125rem);
+  font-size: var(--text-xs, 0.75rem);
+  font-weight: 500;
+}
+
+.rung4-edge-type-badge.import {
+  background: rgba(59, 130, 246, 0.1);
+  color: #3b82f6;
+}
+
+.rung4-edge-type-badge.call {
+  background: rgba(16, 185, 129, 0.1);
+  color: #10b981;
+}
+
+.rung4-edge-type-badge.context {
+  background: rgba(139, 92, 246, 0.1);
+  color: #8b5cf6;
+}
+
+.rung4-edge-type-badge.navigate {
+  background: rgba(245, 158, 11, 0.1);
+  color: #f59e0b;
+}
+
+.rung4-edge-type-badge.tool {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+}
+
+/* Timeline */
+.rung4-timeline-container {
+  display: flex;
+  flex-direction: column;
+  background: var(--color-bg, #ffffff);
+  border: 1px solid var(--color-border, #e5e7eb);
+  border-radius: var(--radius-sm, 0.125rem);
+  max-height: 300px;
+  overflow: hidden;
+}
+
+.rung4-timeline-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-md, 1rem);
+  border-bottom: 1px solid var(--color-border, #e5e7eb);
+}
+
+.rung4-timeline-controls {
+  display: flex;
+  gap: var(--space-sm, 0.75rem);
+}
+
+.rung4-timeline {
+  flex: 1;
+  padding: var(--space-md, 1rem);
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.rung4-timeline-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--color-text-muted, #6b7280);
+  font-size: var(--text-sm, 0.875rem);
+}
+
+.rung4-event-item {
+  display: flex;
+  gap: var(--space-sm, 0.75rem);
+  padding: var(--space-xs, 0.5rem);
+  border-left: 2px solid var(--color-border, #e5e7eb);
+  padding-left: var(--space-sm, 0.75rem);
+  margin-bottom: var(--space-xs, 0.5rem);
+  font-size: var(--text-sm, 0.875rem);
+}
+
+.rung4-event-item:hover {
+  background: var(--color-bg-secondary, #f9fafb);
+  border-left-color: var(--color-primary, #3b82f6);
+}
+
+.rung4-event-time {
+  color: var(--color-text-muted, #6b7280);
+  font-family: var(--font-mono, 'Courier New', monospace);
+  min-width: 120px;
+}
+
+.rung4-event-type {
+  font-weight: 500;
+  color: var(--color-text, #111827);
+  min-width: 120px;
+}
+
+.rung4-event-file {
+  color: var(--color-text-muted, #6b7280);
+  font-family: var(--font-mono, 'Courier New', monospace);
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+  .rung4-main-content {
+    grid-template-columns: 1fr;
+  }
+
+  .rung4-details-panel {
+    max-height: 400px;
+  }
+}
+
+@media (max-width: 768px) {
+  .rung4-controls-bar {
+    flex-direction: column;
+  }
+
+  .control-group {
+    min-width: 100%;
+  }
+
+  .rung4-header {
+    flex-direction: column;
+    gap: var(--space-sm, 0.75rem);
+  }
+}
+
