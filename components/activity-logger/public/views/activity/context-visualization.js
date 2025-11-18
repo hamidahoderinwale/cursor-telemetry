@@ -3,17 +3,61 @@
  * Visualizes context changes and structure in timeline and other views
  */
 
+// Track error logging to prevent spam
+let _lastContextErrorLog = 0;
+const CONTEXT_ERROR_LOG_INTERVAL = 30000; // Log at most once per 30 seconds
+
 /**
  * Fetch context changes for a prompt
  */
 async function fetchContextChanges(promptId) {
+  // Check if companion service is online before attempting fetch
+  if (window.state && window.state.companionServiceOnline === false) {
+    // Service is offline, return empty array silently
+    return [];
+  }
+  
   try {
     const apiBase = window.CONFIG?.API_BASE_URL || 'http://localhost:43917';
-    const response = await fetch(`${apiBase}/api/prompts/${promptId}/context-changes`);
+    
+    // Create abort controller for timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+    
+    const response = await fetch(`${apiBase}/api/prompts/${promptId}/context-changes`, {
+      signal: controller.signal
+    });
+    
+    clearTimeout(timeoutId);
+    
+    if (!response.ok) {
+      // Non-200 response, return empty array
+      return [];
+    }
+    
     const result = await response.json();
     return result.success ? result.data : [];
   } catch (error) {
-    console.error('Error fetching context changes:', error);
+    // Suppress expected network errors when service is offline
+    const isExpectedError = error.name === 'AbortError' || 
+                           error.name === 'TimeoutError' ||
+                           error.message?.includes('NetworkError') ||
+                           error.message?.includes('Failed to fetch') ||
+                           error.message?.includes('CORS');
+    
+    // Only log unexpected errors, and throttle logging
+    if (!isExpectedError || (Date.now() - _lastContextErrorLog > CONTEXT_ERROR_LOG_INTERVAL)) {
+      if (!isExpectedError) {
+        console.error('Error fetching context changes:', error);
+      }
+      _lastContextErrorLog = Date.now();
+    }
+    
+    // Mark service as offline if we get network errors
+    if (isExpectedError && window.state) {
+      window.state.companionServiceOnline = false;
+    }
+    
     return [];
   }
 }
@@ -186,6 +230,12 @@ function renderContextStructure(contextAnalysis, contextChange = null) {
  */
 async function enhancePromptWithContext(prompt) {
   if (!prompt.id) return prompt;
+  
+  // Check if companion service is online before attempting to enhance
+  if (window.state && window.state.companionServiceOnline === false) {
+    // Service is offline, return prompt as-is
+    return prompt;
+  }
   
   try {
     // Fetch context changes

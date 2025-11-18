@@ -8,9 +8,10 @@
   flex-direction: column;
   height: 100%;
   min-height: 100vh;
-  background: var(--color-bg, #ffffff);
+  background: var(--color-bg);
   padding: var(--space-md, 1rem);
   gap: var(--space-md, 1rem);
+  color: var(--color-text);
 }
 
 /* A. Summary Bar (Top Row) */
@@ -18,10 +19,11 @@
   display: flex;
   gap: var(--space-lg, 1.5rem);
   padding: var(--space-md, 1rem);
-  background: var(--color-bg-secondary, #f9fafb);
+  background: var(--color-surface);
   border-radius: var(--radius-md, 0.25rem);
-  border: 1px solid var(--color-border, #e5e7eb);
+  border: 1px solid var(--color-border);
   flex-wrap: wrap;
+  color: var(--color-text);
 }
 
 .summary-section {
@@ -32,7 +34,7 @@
 .summary-title {
   font-size: var(--text-xs, 0.75rem);
   font-weight: 600;
-  color: var(--color-text-muted, #6b7280);
+  color: var(--color-text-subtle);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   margin-bottom: var(--space-xs, 0.5rem);
@@ -52,13 +54,13 @@
 
 .summary-label {
   font-size: var(--text-sm, 0.875rem);
-  color: var(--color-text-muted, #6b7280);
+  color: var(--color-text-muted);
 }
 
 .summary-value {
   font-size: var(--text-lg, 1.125rem);
   font-weight: 600;
-  color: var(--color-text, #111827);
+  color: var(--color-text);
 }
 
 /* Motif Filters (Rung 6 only) */
@@ -66,10 +68,11 @@
   display: flex;
   gap: var(--space-md, 1rem);
   padding: var(--space-md, 1rem);
-  background: var(--color-bg-secondary, #f9fafb);
+  background: var(--color-surface);
   border-radius: var(--radius-md, 0.25rem);
-  border: 1px solid var(--color-border, #e5e7eb);
+  border: 1px solid var(--color-border);
   flex-wrap: wrap;
+  color: var(--color-text);
 }
 
 .filter-group {
@@ -82,23 +85,23 @@
 .filter-label {
   font-size: var(--text-xs, 0.75rem);
   font-weight: 600;
-  color: var(--color-text-muted, #6b7280);
+  color: var(--color-text-subtle);
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
 
 .filter-select {
   padding: var(--space-xs, 0.5rem) var(--space-sm, 0.75rem);
-  background: var(--color-bg, #ffffff);
-  border: 1px solid var(--color-border, #e5e7eb);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-sm, 0.125rem);
   font-size: var(--text-sm, 0.875rem);
-  color: var(--color-text, #111827);
+  color: var(--color-text);
   cursor: pointer;
 }
 
 .filter-select:hover {
-  border-color: var(--color-primary, #3b82f6);
+  border-color: var(--color-primary);
 }
 
 /* Main Content Area */
@@ -116,40 +119,44 @@
   grid-row: 1 / -1;
   display: flex;
   flex-direction: column;
-  background: var(--color-bg-secondary, #f9fafb);
+  background: var(--color-surface);
   border-radius: var(--radius-md, 0.25rem);
-  border: 1px solid var(--color-border, #e5e7eb);
+  border: 1px solid var(--color-border);
   overflow: hidden;
+  color: var(--color-text);
 }
 
 .clio-motif-map-header {
   padding: var(--space-md, 1rem);
-  border-bottom: 1px solid var(--color-border, #e5e7eb);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .clio-section-title {
   font-size: var(--text-lg, 1.125rem);
   font-weight: 600;
-  color: var(--color-text, #111827);
+  color: var(--color-text);
   margin: 0 0 var(--space-xs, 0.5rem) 0;
 }
 
 .clio-section-subtitle {
   font-size: var(--text-sm, 0.875rem);
-  color: var(--color-text-muted, #6b7280);
+  color: var(--color-text-muted);
   margin: 0;
 }
 
 .clio-motif-map {
   flex: 1;
   min-height: 500px;
+  height: 600px;
   position: relative;
-  background: var(--color-bg, #ffffff);
+  background: var(--color-bg);
+  overflow: hidden;
 }
 
 .motif-map-svg {
   width: 100%;
   height: 100%;
+  display: block;
 }
 
 .motif-bubble {
@@ -166,11 +173,12 @@
   grid-row: 1;
   display: flex;
   flex-direction: column;
-  background: var(--color-bg-secondary, #f9fafb);
+  background: var(--color-surface);
   border-radius: var(--radius-md, 0.25rem);
-  border: 1px solid var(--color-border, #e5e7eb);
+  border: 1px solid var(--color-border);
   padding: var(--space-md, 1rem);
   gap: var(--space-sm, 0.75rem);
+  color: var(--color-text);
 }
 
 .clio-rung-selector-header {
@@ -185,26 +193,26 @@
 
 .rung-button {
   padding: var(--space-sm, 0.75rem) var(--space-md, 1rem);
-  background: var(--color-bg, #ffffff);
-  border: 1px solid var(--color-border, #e5e7eb);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-sm, 0.125rem);
   font-size: var(--text-sm, 0.875rem);
   font-weight: 500;
-  color: var(--color-text, #111827);
+  color: var(--color-text);
   cursor: pointer;
   transition: all 0.2s;
   text-align: left;
 }
 
 .rung-button:hover {
-  background: var(--color-bg-hover, #f3f4f6);
-  border-color: var(--color-primary, #3b82f6);
+  background: var(--color-surface-hover);
+  border-color: var(--color-primary);
 }
 
 .rung-button.active {
-  background: var(--color-primary, #3b82f6);
-  color: #ffffff;
-  border-color: var(--color-primary, #3b82f6);
+  background: var(--color-primary);
+  color: white;
+  border-color: var(--color-primary);
 }
 
 /* D. Motif Details Panel */
@@ -213,15 +221,16 @@
   grid-row: 1 / -1;
   display: flex;
   flex-direction: column;
-  background: var(--color-bg-secondary, #f9fafb);
+  background: var(--color-surface);
   border-radius: var(--radius-md, 0.25rem);
-  border: 1px solid var(--color-border, #e5e7eb);
+  border: 1px solid var(--color-border);
   overflow: hidden;
+  color: var(--color-text);
 }
 
 .clio-motif-details-header {
   padding: var(--space-md, 1rem);
-  border-bottom: 1px solid var(--color-border, #e5e7eb);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .clio-motif-details {
@@ -235,7 +244,7 @@
   align-items: center;
   justify-content: center;
   height: 100%;
-  color: var(--color-text-muted, #6b7280);
+  color: var(--color-text-muted);
   font-size: var(--text-sm, 0.875rem);
 }
 
@@ -255,13 +264,13 @@
 .motif-title {
   font-size: var(--text-xl, 1.25rem);
   font-weight: 600;
-  color: var(--color-text, #111827);
+  color: var(--color-text);
   margin: 0;
 }
 
 .motif-id {
   font-size: var(--text-xs, 0.75rem);
-  color: var(--color-text-muted, #6b7280);
+  color: var(--color-text-muted);
   font-family: var(--font-mono, monospace);
 }
 
@@ -274,7 +283,7 @@
 .section-title {
   font-size: var(--text-sm, 0.875rem);
   font-weight: 600;
-  color: var(--color-text, #111827);
+  color: var(--color-text);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   margin: 0;
@@ -282,7 +291,7 @@
 
 .motif-description {
   font-size: var(--text-sm, 0.875rem);
-  color: var(--color-text, #111827);
+  color: var(--color-text);
   line-height: 1.6;
   margin: 0;
 }
@@ -294,15 +303,15 @@
   gap: var(--space-xs, 0.5rem);
   flex-wrap: wrap;
   padding: var(--space-sm, 0.75rem);
-  background: var(--color-bg, #ffffff);
+  background: var(--color-bg);
   border-radius: var(--radius-sm, 0.125rem);
-  border: 1px solid var(--color-border, #e5e7eb);
+  border: 1px solid var(--color-border);
 }
 
 .workflow-step {
   padding: var(--space-xs, 0.5rem) var(--space-sm, 0.75rem);
-  background: var(--color-primary, #3b82f6);
-  color: #ffffff;
+  background: var(--color-primary);
+  color: white;
   border-radius: var(--radius-sm, 0.125rem);
   font-size: var(--text-xs, 0.75rem);
   font-weight: 500;
@@ -310,18 +319,18 @@
 }
 
 .workflow-arrow {
-  color: var(--color-text-muted, #6b7280);
+  color: var(--color-text-muted);
   font-weight: bold;
 }
 
 .workflow-summary {
   font-size: var(--text-sm, 0.875rem);
   font-family: var(--font-mono, monospace);
-  color: var(--color-text, #111827);
+  color: var(--color-text);
   padding: var(--space-sm, 0.75rem);
-  background: var(--color-bg, #ffffff);
+  background: var(--color-bg);
   border-radius: var(--radius-sm, 0.125rem);
-  border: 1px solid var(--color-border, #e5e7eb);
+  border: 1px solid var(--color-border);
 }
 
 /* Intent Breakdown */
@@ -340,27 +349,27 @@
 
 .intent-label {
   font-size: var(--text-sm, 0.875rem);
-  color: var(--color-text, #111827);
+  color: var(--color-text);
   font-weight: 500;
 }
 
 .intent-bar {
   height: 8px;
-  background: var(--color-bg, #ffffff);
+  background: var(--color-bg);
   border-radius: var(--radius-sm, 0.125rem);
   overflow: hidden;
-  border: 1px solid var(--color-border, #e5e7eb);
+  border: 1px solid var(--color-border);
 }
 
 .intent-fill {
   height: 100%;
-  background: var(--color-primary, #3b82f6);
+  background: var(--color-primary);
   transition: width 0.3s;
 }
 
 .intent-value {
   font-size: var(--text-sm, 0.875rem);
-  color: var(--color-text-muted, #6b7280);
+  color: var(--color-text-muted);
   text-align: right;
   font-weight: 500;
 }
@@ -377,20 +386,20 @@
   justify-content: space-between;
   align-items: center;
   padding: var(--space-sm, 0.75rem);
-  background: var(--color-bg, #ffffff);
+  background: var(--color-bg);
   border-radius: var(--radius-sm, 0.125rem);
-  border: 1px solid var(--color-border, #e5e7eb);
+  border: 1px solid var(--color-border);
 }
 
 .stat-label {
   font-size: var(--text-sm, 0.875rem);
-  color: var(--color-text-muted, #6b7280);
+  color: var(--color-text-muted);
 }
 
 .stat-value {
   font-size: var(--text-sm, 0.875rem);
   font-weight: 600;
-  color: var(--color-text, #111827);
+  color: var(--color-text);
 }
 
 /* Privacy Indicator */
@@ -434,7 +443,7 @@
 
 .privacy-text {
   font-size: var(--text-sm, 0.875rem);
-  color: var(--color-text, #111827);
+  color: var(--color-text);
   flex: 1;
 }
 
@@ -442,7 +451,7 @@
 .summary-loading {
   padding: var(--space-md, 1rem);
   text-align: center;
-  color: var(--color-text-muted, #6b7280);
+  color: var(--color-text-muted);
   font-size: var(--text-sm, 0.875rem);
 }
 
@@ -452,17 +461,17 @@
   flex-direction: column;
   gap: var(--space-sm, 0.75rem);
   padding: var(--space-sm, 0.75rem);
-  background: var(--color-bg, #ffffff);
+  background: var(--color-bg);
   border-radius: var(--radius-sm, 0.125rem);
-  border: 1px solid var(--color-border, #e5e7eb);
+  border: 1px solid var(--color-border);
 }
 
 .motif-pattern {
   font-size: var(--text-sm, 0.875rem);
   font-family: var(--font-mono, monospace);
-  color: var(--color-text, #111827);
+  color: var(--color-text);
   padding: var(--space-sm, 0.75rem);
-  background: var(--color-bg-secondary, #f9fafb);
+  background: var(--color-surface);
   border-radius: var(--radius-sm, 0.125rem);
 }
 
@@ -477,14 +486,14 @@
 .motif-symbol {
   font-size: var(--text-xl, 1.25rem);
   font-family: var(--font-mono, monospace);
-  color: var(--color-text, #111827);
+  color: var(--color-text);
   line-height: 1.5;
   text-align: center;
 }
 
 .motif-symbol-desc {
   font-size: var(--text-xs, 0.75rem);
-  color: var(--color-text-muted, #6b7280);
+  color: var(--color-text-muted);
   font-style: italic;
 }
 
@@ -492,14 +501,15 @@
 .clio-timeline-container {
   margin-top: var(--space-md, 1rem);
   padding: var(--space-md, 1rem);
-  background: var(--color-bg-secondary, #f9fafb);
+  background: var(--color-surface);
   border-radius: var(--radius-md, 0.25rem);
-  border: 1px solid var(--color-border, #e5e7eb);
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
 }
 
 .clio-timeline {
   height: 150px;
-  background: var(--color-bg, #ffffff);
+  background: var(--color-bg);
   border-radius: var(--radius-sm, 0.125rem);
 }
 

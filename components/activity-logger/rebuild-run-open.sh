@@ -32,6 +32,20 @@ for file in "${REQUIRED_FILES[@]}"; do
     fi
 done
 
+# Copy service worker to root if it exists in workers directory
+if [ -f "public/workers/sw.js" ] && [ ! -f "public/sw.js" ]; then
+    echo "  Copying service worker to root..."
+    cp public/workers/sw.js public/sw.js
+    echo "  OK: Service worker copied to public/sw.js"
+elif [ -f "public/workers/sw.js" ]; then
+    # Update if source is newer
+    if [ "public/workers/sw.js" -nt "public/sw.js" ]; then
+        echo "  Updating service worker..."
+        cp public/workers/sw.js public/sw.js
+        echo "  OK: Service worker updated"
+    fi
+fi
+
 if [ "$ALL_FILES_OK" = false ]; then
     echo ""
     echo "ERROR: Build failed - Missing required files"

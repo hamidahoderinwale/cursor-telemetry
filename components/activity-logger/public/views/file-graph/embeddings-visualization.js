@@ -32,7 +32,6 @@ async function renderEmbeddingsVisualization() {
   container.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--color-text-muted);">Processing embeddings... (this may take a moment)</div>';
   
   try {
-    console.log(`[EMBEDDINGS] Starting analysis: method=${method}, dims=${dimensions}, components=${numComponents}`);
     
     // Build conversation hierarchy if available
     let hierarchy = null;
@@ -65,7 +64,6 @@ async function renderEmbeddingsVisualization() {
           });
         });
         
-        console.log(`[EMBEDDINGS] Built hierarchy: ${hierarchy.metadata.totalConversations} conversations across ${hierarchy.metadata.totalWorkspaces} workspaces`);
       } catch (error) {
         console.warn('[EMBEDDINGS] Failed to build conversation hierarchy:', error);
       }
@@ -91,7 +89,6 @@ async function renderEmbeddingsVisualization() {
         .slice(0, MAX_PROMPTS);
     }
     
-    console.log(`[EMBEDDINGS] Filtered to ${validPrompts.length} valid prompts (processing ${validPrompts.length} for embeddings)`);
     
     // Update stats immediately
     const filesCountEl = document.getElementById('embeddingsFilesCount');
@@ -136,64 +133,79 @@ async function renderEmbeddingsVisualization() {
       .slice(0, vocabSize)
       .map(e => e[0]);
     
-    console.log(`[EMBEDDINGS] Using vocabulary size: ${topVocab.length}`);
     
-    // Create TF-IDF vectors (chunked)
+    // OPTIMIZATION: Pre-compute document frequencies once (O(n) instead of O(n²))
+    const docFreqs = new Map();
+    allTokens.forEach(tokens => {
+      const uniqueTokens = new Set(tokens);
+      uniqueTokens.forEach(term => {
+        docFreqs.set(term, (docFreqs.get(term) || 0) + 1);
+      });
+    });
+    
+    // Create TF-IDF vectors (chunked, optimized)
     const vectors = [];
     const promptLabels = [];
     const promptMetadata = [];
     
-    for (let i = 0; i < validPrompts.length; i++) {
-      if (i % 100 === 0) {
-        await new Promise(resolve => setTimeout(resolve, 0)); // Yield every 100 prompts
+    // Process in larger batches for better performance
+    const VECTOR_BATCH_SIZE = 200;
+    for (let batchStart = 0; batchStart < validPrompts.length; batchStart += VECTOR_BATCH_SIZE) {
+      const batchEnd = Math.min(batchStart + VECTOR_BATCH_SIZE, validPrompts.length);
+      
+      for (let i = batchStart; i < batchEnd; i++) {
+        const prompt = validPrompts[i];
+        const tokens = allTokens[i];
+        const vector = [];
+        
+        // Create TF-IDF vector (optimized: use pre-computed docFreqs)
+        const tokenCounts = new Map();
+        tokens.forEach(t => tokenCounts.set(t, (tokenCounts.get(t) || 0) + 1));
+        
+        topVocab.forEach(term => {
+          const tf = (tokenCounts.get(term) || 0) / Math.max(tokens.length, 1);
+          const df = docFreqs.get(term) || 1;
+          const idf = Math.log(validPrompts.length / df);
+          vector.push(tf * idf);
+        });
+        
+        vectors.push(vector);
+      
+        // Get conversation info for this prompt
+        const conversationId = prompt.conversation_id || prompt.conversationId || 
+                              prompt.composer_id || prompt.composerId;
+        const conversationInfo = conversationId ? conversationMap.get(conversationId) : null;
+        
+        // Create label (truncated prompt text)
+        const text = promptTexts[i];
+        const label = text.length > 40 ? text.substring(0, 40) + '...' : text;
+        promptLabels.push(label);
+        
+        // Store metadata for hover/click
+        promptMetadata.push({
+          id: prompt.id,
+          text: text,
+          timestamp: prompt.timestamp,
+          workspaceName: prompt.workspaceName || conversationInfo?.workspace || 'Unknown',
+          source: prompt.source || 'cursor',
+          conversationId: conversationId,
+          conversationTitle: conversationInfo?.title || null,
+          conversationColor: conversationInfo?.color || null
+        });
       }
       
-      const prompt = validPrompts[i];
-      const tokens = allTokens[i];
-      const vector = [];
-      
-      // Create TF-IDF vector
-      topVocab.forEach(term => {
-        const tf = tokens.filter(t => t === term).length / Math.max(tokens.length, 1);
-        // Simple IDF approximation
-        const df = allTokens.filter(tokSet => tokSet.includes(term)).length;
-        const idf = Math.log(validPrompts.length / (df + 1));
-        vector.push(tf * idf);
-      });
-      
-      vectors.push(vector);
-      
-      // Get conversation info for this prompt
-      const conversationId = prompt.conversation_id || prompt.conversationId || 
-                            prompt.composer_id || prompt.composerId;
-      const conversationInfo = conversationId ? conversationMap.get(conversationId) : null;
-      
-      // Create label (truncated prompt text)
-      const text = promptTexts[i];
-      const label = text.length > 40 ? text.substring(0, 40) + '...' : text;
-      promptLabels.push(label);
-      
-      // Store metadata for hover/click
-      promptMetadata.push({
-        id: prompt.id,
-        text: text,
-        timestamp: prompt.timestamp,
-        workspaceName: prompt.workspaceName || conversationInfo?.workspace || 'Unknown',
-        source: prompt.source || 'cursor',
-        conversationId: conversationId,
-        conversationTitle: conversationInfo?.title || null,
-        conversationColor: conversationInfo?.color || null
-      });
+      // Yield to browser after each batch
+      if (batchEnd < validPrompts.length) {
+        await new Promise(resolve => setTimeout(resolve, 0));
+      }
     }
     
-    console.log(`[EMBEDDINGS] Built ${vectors.length} TF-IDF vectors with ${vectors[0]?.length} dimensions`);
     
     // Apply dimensionality reduction (with timeout protection)
     let reducedVectors;
     if (method === 'pca') {
       // PCA is fast, can run synchronously
       reducedVectors = applyPCA(vectors, dimensions, numComponents);
-      console.log(`[EMBEDDINGS] PCA complete: ${reducedVectors.length} vectors -> ${reducedVectors[0]?.length} dims`);
     } else if (method === 'tsne') {
       // t-SNE is slow, limit to smaller dataset
       if (vectors.length > 500) {
@@ -211,7 +223,6 @@ async function renderEmbeddingsVisualization() {
         return;
       }
       reducedVectors = applyTSNE(vectors, dimensions, numComponents);
-      console.log(`[EMBEDDINGS] t-SNE complete`);
     } else {
       // MDS is also slow, limit if needed
       if (vectors.length > 500) {
@@ -228,7 +239,6 @@ async function renderEmbeddingsVisualization() {
         return;
       }
       reducedVectors = applyMDS(vectors, dimensions);
-      console.log(`[EMBEDDINGS] MDS complete`);
     }
     
     // Render the visualization
@@ -426,11 +436,7 @@ function applyMDS(vectors, dimensions) {
   
   // Simple stress minimization (reduced iterations for speed)
   const iterations = Math.min(20, n * 2); // Adaptive: 20 max, or 2× node count
-  console.log(`[MDS] Running ${iterations} stress minimization iterations for ${n} nodes...`);
   for (let iter = 0; iter < iterations; iter++) {
-    if (iter % 5 === 0) {
-      console.log(`[MDS] Iteration ${iter}/${iterations} (${Math.round(iter/iterations*100)}%)`);
-    }
     for (let i = 0; i < n; i++) {
       const forces = Array(dimensions).fill(0);
       

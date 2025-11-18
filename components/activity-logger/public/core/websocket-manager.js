@@ -20,10 +20,6 @@ class WebSocketManager {
     if (state) {
       this.subscriptions = new Set(state.subscriptions || []);
       this.lastMessageId = state.lastMessageId || 0;
-      console.log('[SYNC] Restored WebSocket state:', {
-        subscriptions: this.subscriptions.size,
-        lastMessageId: this.lastMessageId
-      });
     }
   }
 
@@ -59,7 +55,6 @@ class WebSocketManager {
       });
 
       this.socket.on('connect', () => {
-        console.log('[SUCCESS] WebSocket connected');
         if (window.state) window.state.connected = true;
         if (handlers.onConnect) handlers.onConnect();
         this.reconnectAttempts = 0;
@@ -67,21 +62,18 @@ class WebSocketManager {
       });
 
       this.socket.on('disconnect', () => {
-        console.log('[ERROR] WebSocket disconnected');
         if (window.state) window.state.connected = false;
         if (handlers.onDisconnect) handlers.onDisconnect();
         this.saveConnectionState();
       });
 
       this.socket.on('activityUpdate', (data) => {
-        console.log('Activity update:', data);
         if (data.id) this.lastMessageId = Math.max(this.lastMessageId, data.id);
         if (handlers.onActivityUpdate) handlers.onActivityUpdate(data);
         this.saveConnectionState();
       });
 
       this.socket.on('terminal-command', (cmd) => {
-        console.log('Terminal command:', cmd);
         if (handlers.onTerminalCommand) handlers.onTerminalCommand(cmd);
       });
 
@@ -98,7 +90,6 @@ class WebSocketManager {
 
   restoreSubscriptions() {
     this.subscriptions.forEach(channel => {
-      console.log(`[SYNC] Re-subscribing to: ${channel}`);
       if (this.socket) this.socket.emit('subscribe', channel);
     });
   }

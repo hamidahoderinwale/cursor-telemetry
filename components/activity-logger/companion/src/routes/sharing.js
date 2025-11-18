@@ -1,14 +1,34 @@
 /**
  * Sharing API routes
  * Handles workspace sharing via shareable links
+ * Supports both account-based and anonymous sharing
  */
 
 function createSharingRoutes(deps) {
-  const { app, sharingService, persistentDB } = deps;
+  const { app, sharingService, persistentDB, accountService = null } = deps;
+  
+  /**
+   * Helper to get account from request (if authenticated)
+   * Returns account object with account_id field
+   */
+  async function getAccountFromRequest() {
+    if (!accountService) return null;
+    try {
+      const account = await accountService.getAccount();
+      // Ensure account has account_id field
+      if (account && account.account_id) {
+        return account;
+      }
+      return null;
+    } catch (error) {
+      return null;
+    }
+  }
 
   /**
    * Create a shareable link for workspace data
    * POST /api/share/create
+   * Supports both authenticated (account-linked) and anonymous sharing
    */
   app.post('/api/share/create', async (req, res) => {
     try {
@@ -27,17 +47,25 @@ function createSharingRoutes(deps) {
         });
       }
 
+      // Get account info if available (optional - supports anonymous sharing)
+      const account = await getAccountFromRequest();
+      const accountId = account?.account_id || null;
+      const deviceId = account && accountService ? accountService.deviceId : null;
+
       const shareLink = await sharingService.createShareLink({
         workspaces,
         abstractionLevel,
         filters,
         expirationDays,
         name,
+        account_id: accountId,
+        device_id: deviceId,
       });
 
       res.json({
         success: true,
         ...shareLink,
+        account_linked: accountId !== null,
       });
     } catch (error) {
       console.error('[SHARING] Error creating share link:', error);
@@ -182,12 +210,17 @@ function createSharingRoutes(deps) {
   /**
    * Delete a share link
    * DELETE /api/share/:shareId
+   * Requires ownership if share link is account-linked
    */
   app.delete('/api/share/:shareId', async (req, res) => {
     try {
       const { shareId } = req.params;
 
-      await sharingService.deleteShareLink(shareId);
+      // Get account info for authorization check
+      const account = await getAccountFromRequest();
+      const accountId = account?.account_id || null;
+
+      await sharingService.deleteShareLink(shareId, accountId);
 
       res.json({
         success: true,
@@ -195,7 +228,8 @@ function createSharingRoutes(deps) {
       });
     } catch (error) {
       console.error('[SHARING] Error deleting share link:', error);
-      res.status(500).json({
+      const statusCode = error.message.includes('Unauthorized') ? 403 : 500;
+      res.status(statusCode).json({
         success: false,
         error: error.message,
       });
@@ -205,18 +239,26 @@ function createSharingRoutes(deps) {
   /**
    * List all share links (for management)
    * GET /api/share
+   * If authenticated, only returns links for the current account
+   * If not authenticated, returns all links (for backward compatibility)
    */
   app.get('/api/share', async (req, res) => {
     try {
-      const links = await sharingService.listShareLinks();
+      // Get account info - filter by account if authenticated
+      const account = await getAccountFromRequest();
+      const accountId = account?.account_id || null;
+
+      const links = await sharingService.listShareLinks(accountId);
 
       res.json({
         success: true,
+        account_filtered: accountId !== null,
         links: links.map((link) => ({
           shareId: link.id || link.shareId,
           name: link.name || null,
           workspaces: link.workspaces,
           abstractionLevel: link.abstractionLevel,
+          account_linked: link.account_id !== null,
           createdAt: new Date(link.createdAt).toISOString(),
           expiresAt: link.expiresAt ? new Date(link.expiresAt).toISOString() : null,
           accessCount: link.accessCount || 0,

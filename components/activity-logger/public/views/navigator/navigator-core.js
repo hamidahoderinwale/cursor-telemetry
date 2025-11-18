@@ -49,13 +49,11 @@ async function initializeNavigator() {
   
   // Prevent multiple simultaneous initializations
   if (navigatorState.isInitializing) {
-    console.log('[NAVIGATOR] Initialization already in progress, skipping...');
     return;
   }
   
   // If already initialized and container has content, skip
   if (navigatorState.isInitialized && container.innerHTML && !container.innerHTML.includes('loading-wrapper')) {
-    console.log('[NAVIGATOR] Already initialized, skipping...');
     return;
   }
   
@@ -63,19 +61,40 @@ async function initializeNavigator() {
   
   try {
     const startTime = Date.now();
-    console.log('[NAVIGATOR] Starting initialization...');
     
     // Lazy load navigator services if not already loaded
     if (window.loadNavigatorServices && !window._navigatorServicesLoaded) {
       await window.loadNavigatorServices();
     }
     
+    // Check companion service status before attempting to load
+    const apiBase = window.CONFIG?.API_BASE || window.CONFIG?.API_BASE_URL || 'http://localhost:43917';
+    if (window.state && window.state.companionServiceOnline === false) {
+      // Try to verify service is actually offline by doing a quick health check
+      try {
+        const healthController = new AbortController();
+        const healthTimeoutId = setTimeout(() => healthController.abort(), 2000);
+        const healthResponse = await fetch(`${apiBase}/health`, { signal: healthController.signal });
+        clearTimeout(healthTimeoutId);
+        
+        if (healthResponse.ok) {
+          // Service is actually online, update state
+          window.state.companionServiceOnline = true;
+          console.log('[NAVIGATOR] Companion service is online, proceeding with data fetch');
+        }
+      } catch (e) {
+        // Service is indeed offline, continue with fallback
+        console.log('[NAVIGATOR] Companion service health check failed, will use fallback');
+      }
+    }
+    
     // Show loading
-    container.innerHTML = '<div class="loading-wrapper"><div class="loading-spinner"></div><span>Computing latent embeddings...</span></div>';
+    container.innerHTML = '<div class="loading-wrapper"><div class="loading-spinner"></div><span>Loading file data...</span></div>';
     
     // Fetch file data - reduced limit for faster initial load
     // Start with 500 files, can load more on demand
     let response, data;
+    let usingCachedData = false;
     try {
       // Check cache first
       const cacheKey = 'navigatorFileData';
@@ -86,8 +105,8 @@ async function initializeNavigator() {
         try {
           const cachedData = JSON.parse(cached);
           if (Date.now() - cachedData.timestamp < cacheExpiry) {
-            console.log('[NAVIGATOR] Using cached file data');
             data = cachedData.data;
+            usingCachedData = true;
           }
         } catch (e) {
           // Cache invalid, fetch fresh
@@ -95,39 +114,296 @@ async function initializeNavigator() {
       }
       
       if (!data) {
-        // OPTIMIZATION: Reduced from 500 to 300 for even faster initial load
-        // Can load more files on demand if needed
-        response = await fetch(`${window.CONFIG.API_BASE}/api/file-contents?limit=300`);
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-        data = await response.json();
+        // Check if companion service is online before attempting fetch
+        const apiBase = window.CONFIG?.API_BASE || window.CONFIG?.API_BASE_URL || 'http://localhost:43917';
         
-        // Cache the data
-        try {
-          sessionStorage.setItem(cacheKey, JSON.stringify({
-            data: data,
-            timestamp: Date.now()
-          }));
-        } catch (e) {
-          // Cache storage failed, continue anyway
+        if (!(window.state && window.state.companionServiceOnline === false)) {
+          // OPTIMIZATION: Reduced from 500 to 250 for even faster initial load
+          // Can load more files on demand if needed
+          try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+            
+            response = await fetch(`${apiBase}/api/file-contents?limit=250`, {
+              signal: controller.signal
+            });
+            
+            clearTimeout(timeoutId);
+            
+            if (!response.ok) {
+              throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            data = await response.json();
+            
+            // Validate that we got file data
+            if (!data || !data.files || data.files.length === 0) {
+              console.warn('[NAVIGATOR] API returned empty file data');
+              data = null; // Set to null so fallback can run
+            } else {
+              // Mark service as online on success
+              if (window.state) {
+                window.state.companionServiceOnline = true;
+              }
+              
+              // Cache the data
+              try {
+                sessionStorage.setItem(cacheKey, JSON.stringify({
+                  data: data,
+                  timestamp: Date.now()
+                }));
+              } catch (e) {
+                // Cache storage failed, continue anyway
+              }
+            }
+          } catch (fetchError) {
+            // Mark service as offline if we get network errors
+            const isNetworkError = fetchError.name === 'AbortError' || 
+                                  fetchError.message?.includes('NetworkError') ||
+                                  fetchError.message?.includes('Failed to fetch') ||
+                                  fetchError.message?.includes('CORS');
+            
+            if (isNetworkError && window.state) {
+              window.state.companionServiceOnline = false;
+            }
+            
+            // Fetch failed - will be handled by outer catch block
+            console.warn('[NAVIGATOR] Fetch failed:', fetchError.message);
+            throw fetchError;
+          }
+        } else {
+          // Service is known to be offline, skip fetch
+          console.log('[NAVIGATOR] Companion service is offline, skipping fetch');
+          throw new Error('Companion service is offline');
         }
       }
     } catch (error) {
-      console.warn('[NAVIGATOR] Failed to fetch file contents:', error.message);
-      container.innerHTML = `
-        <div class="empty-wrapper" style="padding: 2rem; text-align: center;">
-          <div style="font-size: 1.1rem; font-weight: 500; margin-bottom: 0.5rem; color: var(--color-text);">Companion service not available</div>
-          <div style="font-size: 0.9rem; margin-bottom: 1rem; color: var(--color-text-muted);">File contents cannot be loaded. Make sure the companion service is running on port 43917.</div>
-          <div style="font-size: 0.85rem; opacity: 0.8; color: var(--color-text-muted);">Error: ${error.message}</div>
-        </div>
-      `;
-      return;
+      // Try to use cached data even if expired
+      const cacheKey = 'navigatorFileData';
+      const cached = sessionStorage.getItem(cacheKey);
+      
+      if (cached) {
+        try {
+          const cachedData = JSON.parse(cached);
+          if (cachedData.data && cachedData.data.files && cachedData.data.files.length > 0) {
+            data = cachedData.data;
+            usingCachedData = true;
+            console.log('[NAVIGATOR] Using expired cache data (companion service offline)');
+          }
+        } catch (e) {
+          // Cache invalid
+        }
+      }
+      
+      // If still no data, try to construct from events as fallback
+      if (!data) {
+        console.warn('[NAVIGATOR] Failed to fetch file contents, trying to construct from events:', error.message);
+        
+        // Try to construct file data from window.state.data.events
+        const allEvents = window.state?.data?.events || [];
+        if (allEvents.length > 0) {
+          console.log('[NAVIGATOR] Constructing file data from events (companion service offline)');
+          
+          // Extract unique file paths from events
+          const fileMap = new Map();
+          
+          let eventsWithFiles = 0;
+          allEvents.forEach(event => {
+            try {
+              // Try multiple ways to extract file path
+              let filePath = '';
+              
+              // Method 1: From event.details (JSON string or object)
+              if (event.details) {
+                const details = typeof event.details === 'string' ? JSON.parse(event.details) : event.details;
+                filePath = details?.file_path || details?.filePath || details?.path || '';
+              }
+              
+              // Method 2: Directly from event object
+              if (!filePath) {
+                filePath = event.file_path || event.filePath || event.path || '';
+              }
+              
+              // Method 3: From event type-specific fields
+              if (!filePath && event.type === 'file_change') {
+                filePath = event.target || event.file || '';
+              }
+              
+              if (!filePath) {
+                return; // Skip events without file paths
+              }
+              
+              eventsWithFiles++;
+              
+              // Skip Git object hashes
+              if (filePath.includes('.git/objects/') && /^[0-9a-f]{40}$/i.test(filePath.split('/').pop())) {
+                return;
+              }
+              
+              if (!fileMap.has(filePath)) {
+                const pathParts = filePath.split('/');
+                const fileName = pathParts[pathParts.length - 1];
+                const ext = fileName.includes('.') ? fileName.split('.').pop() : '';
+                
+                fileMap.set(filePath, {
+                  path: filePath,
+                  name: fileName,
+                  ext: ext,
+                  content: '', // No content available without companion service
+                  changes: 0,
+                  lastModified: event.timestamp ? (typeof event.timestamp === 'string' ? new Date(event.timestamp).getTime() : event.timestamp) : Date.now(),
+                  size: 0,
+                  workspace_path: event.workspace_path || event.workspacePath || event.workspace || null,
+                  events: [] // Initialize events array
+                });
+              }
+              
+              // Update change count, last modified, and collect events
+              const fileData = fileMap.get(filePath);
+              fileData.changes = (fileData.changes || 0) + 1;
+              fileData.events.push(event); // Collect all events for this file
+              if (event.timestamp) {
+                const eventTime = typeof event.timestamp === 'string' ? new Date(event.timestamp).getTime() : event.timestamp;
+                if (!isNaN(eventTime) && eventTime > fileData.lastModified) {
+                  fileData.lastModified = eventTime;
+                }
+              }
+            } catch (e) {
+              // Skip invalid events
+            }
+          });
+          
+          // Convert map to array
+          const filesFromEvents = Array.from(fileMap.values());
+          
+          console.log(`[NAVIGATOR] Processed ${eventsWithFiles} events with file paths, created ${filesFromEvents.length} unique files`);
+          
+          if (filesFromEvents.length > 0) {
+            data = { files: filesFromEvents };
+            usingCachedData = true;
+            console.log(`[NAVIGATOR] Successfully constructed ${filesFromEvents.length} files from events`);
+          } else {
+            console.warn(`[NAVIGATOR] No files could be constructed from ${allEvents.length} events. Events may not contain file_path information.`);
+          }
+        }
+      }
+      
+      // If still no data, show offline message
+      if (!data) {
+        console.warn('[NAVIGATOR] Failed to fetch file contents and no event data available:', error.message);
+        container.innerHTML = `
+          <div class="empty-wrapper" style="padding: 2rem; text-align: center;">
+            <div style="font-size: 1.1rem; font-weight: 500; margin-bottom: 0.5rem; color: var(--color-text);">Companion service offline</div>
+            <div style="font-size: 0.9rem; margin-bottom: 1rem; color: var(--color-text-muted);">The navigator requires the companion service to load file contents. Please start the companion service to use this view.</div>
+            <div style="font-size: 0.85rem; opacity: 0.8; color: var(--color-text-muted); margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--color-border);">
+              <div>Service URL: ${window.CONFIG?.API_BASE || 'http://localhost:43917'}</div>
+              <div style="margin-top: 0.5rem;">Error: ${error.message}</div>
+            </div>
+          </div>
+        `;
+        navigatorState.isInitializing = false;
+        return;
+      }
     }
     
-    if (!data.files || data.files.length === 0) {
-      container.innerHTML = '<div class="empty-wrapper">No file data available</div>';
-      return;
+    if (!data || !data.files || data.files.length === 0) {
+      // Try one more time to construct from events if we still don't have data
+      const allEvents = window.state?.data?.events || [];
+      if (allEvents.length > 0 && !data) {
+        console.log('[NAVIGATOR] No file data, attempting to construct from events...');
+        const fileMap = new Map();
+        
+        let eventsWithFiles = 0;
+        allEvents.forEach(event => {
+          try {
+            // Try multiple ways to extract file path
+            let filePath = '';
+            
+            // Method 1: From event.details (JSON string or object)
+            if (event.details) {
+              const details = typeof event.details === 'string' ? JSON.parse(event.details) : event.details;
+              filePath = details?.file_path || details?.filePath || details?.path || '';
+            }
+            
+            // Method 2: Directly from event object
+            if (!filePath) {
+              filePath = event.file_path || event.filePath || event.path || '';
+            }
+            
+            // Method 3: From event type-specific fields
+            if (!filePath && event.type === 'file_change') {
+              filePath = event.target || event.file || '';
+            }
+            
+            if (!filePath) {
+              return; // Skip events without file paths
+            }
+            
+            eventsWithFiles++;
+            
+            // Skip Git object hashes
+            if (filePath.includes('.git/objects/') && /^[0-9a-f]{40}$/i.test(filePath.split('/').pop())) {
+              return;
+            }
+            
+            if (!fileMap.has(filePath)) {
+              const pathParts = filePath.split('/');
+              const fileName = pathParts[pathParts.length - 1];
+              const ext = fileName.includes('.') ? fileName.split('.').pop() : '';
+              
+              fileMap.set(filePath, {
+                path: filePath,
+                name: fileName,
+                ext: ext,
+                content: '',
+                changes: 0,
+                lastModified: event.timestamp ? (typeof event.timestamp === 'string' ? new Date(event.timestamp).getTime() : event.timestamp) : Date.now(),
+                size: 0,
+                workspace_path: event.workspace_path || event.workspacePath || event.workspace || null,
+                events: []
+              });
+            }
+            
+            const fileData = fileMap.get(filePath);
+            fileData.changes = (fileData.changes || 0) + 1;
+            fileData.events.push(event);
+            if (event.timestamp) {
+              const eventTime = typeof event.timestamp === 'string' ? new Date(event.timestamp).getTime() : event.timestamp;
+              if (!isNaN(eventTime) && eventTime > fileData.lastModified) {
+                fileData.lastModified = eventTime;
+              }
+            }
+          } catch (e) {
+            // Skip invalid events
+          }
+        });
+        
+        const filesFromEvents = Array.from(fileMap.values());
+        console.log(`[NAVIGATOR] Processed ${eventsWithFiles} events with file paths, created ${filesFromEvents.length} unique files`);
+        
+        if (filesFromEvents.length > 0) {
+          data = { files: filesFromEvents };
+          usingCachedData = true;
+          console.log(`[NAVIGATOR] Successfully constructed ${filesFromEvents.length} files from events`);
+        } else {
+          console.warn(`[NAVIGATOR] No files could be constructed from ${allEvents.length} events. Events may not contain file_path information.`);
+        }
+      }
+      
+      if (!data || !data.files || data.files.length === 0) {
+        container.innerHTML = '<div class="empty-wrapper">No file data available. Please start the companion service or ensure events contain file path information.</div>';
+        navigatorState.isInitializing = false;
+        return;
+      }
+    }
+    
+    // Show notification if using cached data or event data
+    if (usingCachedData) {
+      console.log('[NAVIGATOR] Using cached/event file data (companion service offline)');
+      // Optionally show a user-visible notification
+      if (window.showNotification) {
+        const dataSource = data.files && data.files[0] && data.files[0].content ? 'cached data' : 'event data';
+        window.showNotification(`Navigator is using ${dataSource} (companion service offline). Semantic analysis may be limited.`, 'info');
+      }
     }
     
     // Helper function to check if a string is a Git object hash (40-char hex)
@@ -153,8 +429,6 @@ async function initializeNavigator() {
     // This prevents timeout when processing large datasets
     const eventsByFilePath = new Map();
     const allEvents = window.state.data.events || [];
-    
-    console.log(`[NAVIGATOR] Building event lookup map from ${allEvents.length} events...`);
     
     allEvents.forEach(event => {
       try {
@@ -186,8 +460,6 @@ async function initializeNavigator() {
       }
     });
     
-    console.log(`[NAVIGATOR] Event lookup map built with ${eventsByFilePath.size} keys`);
-    
     // Extract workspace and directory information
     // First, try to get comprehensive workspace list from API
     let allWorkspacesFromState = new Set();
@@ -210,7 +482,6 @@ async function initializeNavigator() {
           const wsPath = ws.path || ws.id || ws.workspace_path;
           if (wsPath) allWorkspacesFromState.add(wsPath);
         });
-        console.log(`[NAVIGATOR] Found ${allWorkspacesFromState.size} workspaces from API`);
       }
     } catch (error) {
       if (error.name !== 'AbortError') {
@@ -245,8 +516,6 @@ async function initializeNavigator() {
       const wsPath = ws.path || ws.id || ws.workspace_path;
       if (wsPath) allWorkspacesFromState.add(wsPath);
     });
-    
-    console.log(`[NAVIGATOR] Found ${allWorkspacesFromState.size} total workspaces (from API + state data):`, Array.from(allWorkspacesFromState).slice(0, 10));
     
     const workspaces = new Set(allWorkspacesFromState); // Start with all collected workspaces
     const directories = new Set();
@@ -286,13 +555,20 @@ async function initializeNavigator() {
       })
       .map(f => {
         // Look up events from map instead of filtering all events (O(1) lookup)
-        const relatedEvents = [];
+        // Start with existing events if file was constructed from events
+        const relatedEvents = f.events ? [...f.events] : [];
         const normalizedPath = f.path.toLowerCase();
         const fileName = f.name.toLowerCase();
         
         // Try exact path match first
         if (eventsByFilePath.has(normalizedPath)) {
-          relatedEvents.push(...eventsByFilePath.get(normalizedPath));
+          const pathEvents = eventsByFilePath.get(normalizedPath);
+          // Avoid duplicates
+          pathEvents.forEach(evt => {
+            if (!relatedEvents.find(e => e.id === evt.id || (e.timestamp === evt.timestamp && e.type === evt.type))) {
+              relatedEvents.push(evt);
+            }
+          });
         }
         
         // Try filename match
@@ -301,7 +577,7 @@ async function initializeNavigator() {
           const filenameEvents = eventsByFilePath.get(fileNameKey);
           // Avoid duplicates
           filenameEvents.forEach(evt => {
-            if (!relatedEvents.find(e => e.id === evt.id || e.timestamp === evt.timestamp)) {
+            if (!relatedEvents.find(e => e.id === evt.id || (e.timestamp === evt.timestamp && e.type === evt.type))) {
               relatedEvents.push(evt);
             }
           });
@@ -393,9 +669,6 @@ async function initializeNavigator() {
         };
       });
     
-    console.log(`[NAVIGATOR] Processing ${files.length} files...`);
-    console.log(`[NAVIGATOR] Found ${workspaces.size} workspaces and ${directories.size} directories`);
-    
     // Store workspace and directory info in navigator state
     navigatorState.workspaces = Array.from(workspaces).sort();
     navigatorState.directories = Array.from(directories).sort();
@@ -410,7 +683,6 @@ async function initializeNavigator() {
                fileWorkspace.includes(navigatorState.selectedWorkspace) ||
                navigatorState.selectedWorkspace.includes(fileWorkspace);
       });
-      console.log(`[NAVIGATOR] Filtered to ${files.length} files in workspace: ${navigatorState.selectedWorkspace}`);
     }
     
     // Apply directory filter if set
@@ -420,12 +692,11 @@ async function initializeNavigator() {
                f.directory.startsWith(navigatorState.selectedDirectory) ||
                f.path.includes(navigatorState.selectedDirectory);
       });
-      console.log(`[NAVIGATOR] Filtered to ${files.length} files in directory: ${navigatorState.selectedDirectory}`);
     }
     
     // OPTIMIZATION: Limit files for performance (embeddings are O(n²))
-    // Reduced from 800 to 400 for faster computation and better responsiveness
-    const MAX_FILES = 400;
+    // Reduced from 400 to 300 for faster computation and better responsiveness
+    const MAX_FILES = 300;
     if (files.length > MAX_FILES) {
       console.warn(`[NAVIGATOR] Too many files (${files.length}), limiting to ${MAX_FILES} most active files`);
       // Sort by activity (events + changes) and take top N
@@ -456,7 +727,6 @@ async function initializeNavigator() {
     } else if (window.renderNavigator) {
       window.renderNavigator(container, physicalNodes, links);
     }
-    console.log('[NAVIGATOR] Physical layout rendered, computing latent embeddings in background...');
     
     // Populate workspace and directory filters (can do this while latent computes)
     if (window.populateNavigatorFilters) {
@@ -484,7 +754,6 @@ async function initializeNavigator() {
         } else if (window.renderNavigator) {
           window.renderNavigator(container, physicalNodes, links);
         }
-        console.log('[NAVIGATOR] Latent embeddings complete');
       } catch (error) {
         console.warn('[NAVIGATOR] Latent embedding computation failed:', error.message);
         // Continue with physical layout only - use physical as fallback for latent
@@ -523,8 +792,6 @@ async function initializeNavigator() {
     window.generateSemanticInsights();
     
     navigatorState.isInitialized = true;
-    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-    console.log(`[NAVIGATOR] Initialization complete in ${elapsed}s`);
     
   } catch (error) {
     // Suppress CORS/network errors (expected when companion service is offline)
@@ -542,14 +809,27 @@ async function initializeNavigator() {
     
     // Show user-friendly message instead of error for network issues
     if (isNetworkError) {
-      container.innerHTML = `<div class="error-wrapper">Navigator requires companion service (offline mode)</div>`;
+      container.innerHTML = `
+        <div class="empty-wrapper" style="padding: 2rem; text-align: center;">
+          <div style="font-size: 1.1rem; font-weight: 500; margin-bottom: 0.5rem; color: var(--color-text);">Companion service offline</div>
+          <div style="font-size: 0.9rem; margin-bottom: 1rem; color: var(--color-text-muted);">The navigator requires the companion service to load file contents. Please start the companion service to use this view.</div>
+          <div style="font-size: 0.85rem; opacity: 0.8; color: var(--color-text-muted); margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--color-border);">
+            Service URL: ${window.CONFIG?.API_BASE || 'http://localhost:43917'}
+          </div>
+        </div>
+      `;
     } else {
       const escapeHtml = window.escapeHtml || ((str) => {
         const div = document.createElement('div');
         div.textContent = str;
         return div.innerHTML;
       });
-      container.innerHTML = `<div class="error-wrapper">Error loading navigator: ${escapeHtml(error.message)}</div>`;
+      container.innerHTML = `
+        <div class="empty-wrapper" style="padding: 2rem; text-align: center;">
+          <div style="font-size: 1.1rem; font-weight: 500; margin-bottom: 0.5rem; color: var(--color-text);">Error loading navigator</div>
+          <div style="font-size: 0.9rem; color: var(--color-text-muted);">${escapeHtml(error.message)}</div>
+        </div>
+      `;
     }
   } finally {
     navigatorState.isInitializing = false;

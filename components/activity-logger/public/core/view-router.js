@@ -8,7 +8,6 @@ const viewRenderCache = new Map();
 
 // View render function names (for script tag loading)
 const viewFunctionNames = {
-  'overview': 'renderOverviewView',
   'activity': 'renderActivityView',
   'threads': 'renderThreadsView',
   'analytics': 'renderAnalyticsView',
@@ -21,7 +20,10 @@ const viewFunctionNames = {
   'workspace-comparison': 'renderWorkspaceComparisonView',
       'whiteboard': 'renderWhiteboardView',
       'clio': 'renderClioView',
-      'module-graph': 'renderModuleGraphView'
+      'module-graph': 'renderModuleGraphView',
+      'rung1-tokens': 'renderRung1TokensView',
+      'rung2-edit-scripts': 'renderRung2EditScriptsView',
+      'rung3-functions': 'renderRung3FunctionsView'
     };
 
 // Debounced view switching
@@ -84,7 +86,7 @@ async function renderCurrentView() {
     renderFn = window[functionName];
     
     // Wait for view to load if not available yet (for deferred scripts)
-    if (!renderFn && viewName !== 'overview') {
+    if (!renderFn) {
       // Wait up to 2 seconds for deferred scripts to load
       const maxWait = 2000;
       const startTime = Date.now();
@@ -174,7 +176,7 @@ async function renderCurrentView() {
 if (typeof requestIdleCallback !== 'undefined') {
   requestIdleCallback(() => {
     // Check if critical views are loaded
-    ['overview', 'activity'].forEach(viewName => {
+    ['activity'].forEach(viewName => {
       const functionName = viewFunctionNames[viewName];
       if (functionName && window[functionName] && !viewRenderCache.has(viewName)) {
         viewRenderCache.set(viewName, window[functionName]);

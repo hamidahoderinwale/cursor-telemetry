@@ -1,13 +1,15 @@
 /**
  * Workspace Sharing Service
  * Handles generation of shareable links and workspace data sharing
+ * Supports both account-based and anonymous sharing
  */
 
 const crypto = require('crypto');
 
 class SharingService {
-  constructor(persistentDB) {
+  constructor(persistentDB, accountService = null) {
     this.persistentDB = persistentDB;
+    this.accountService = accountService;
     // In-memory store for shareable links (in production, use Redis or database)
     this.shareLinks = new Map();
     // Link expiration: 7 days
@@ -28,6 +30,9 @@ class SharingService {
    * @param {string} options.abstractionLevel - Privacy level (0-3)
    * @param {Object} options.filters - Export filters (date range, types, etc.)
    * @param {number} options.expirationDays - Link expiration in days (default: 7)
+   * @param {string} options.account_id - Account ID (optional, for account-based sharing)
+   * @param {string} options.device_id - Device ID (optional, for account-based sharing)
+   * @param {string} options.name - Custom name for the share link
    * @returns {Object} Share link info
    */
   async createShareLink(options) {
@@ -37,7 +42,25 @@ class SharingService {
       filters = {},
       expirationDays = 7,
       name = null,
+      account_id = null,
+      device_id = null,
     } = options;
+
+    // If account service is available, try to get account info
+    let finalAccountId = account_id;
+    let finalDeviceId = device_id;
+    
+    if (this.accountService && !finalAccountId) {
+      try {
+        const account = await this.accountService.getAccount();
+        if (account && account.account_id) {
+          finalAccountId = account.account_id;
+          finalDeviceId = this.accountService.deviceId || device_id;
+        }
+      } catch (error) {
+        // Account not available, continue with anonymous sharing
+      }
+    }
 
     const shareId = this.generateShareId();
     const expiresAt =
@@ -46,6 +69,8 @@ class SharingService {
     const shareData = {
       id: shareId,
       shareId, // Alias for compatibility
+      account_id: finalAccountId,
+      device_id: finalDeviceId,
       workspaces,
       abstractionLevel,
       filters,
@@ -131,27 +156,46 @@ class SharingService {
   /**
    * Delete a share link
    * @param {string} shareId - Share link ID
+   * @param {string} accountId - Optional account ID for authorization check
    */
-  async deleteShareLink(shareId) {
+  async deleteShareLink(shareId, accountId = null) {
+    // If account ID provided, verify ownership
+    if (accountId) {
+      const shareData = await this.getShareLink(shareId);
+      if (shareData && shareData.account_id && shareData.account_id !== accountId) {
+        throw new Error('Unauthorized: You can only delete your own share links');
+      }
+    }
+    
     this.shareLinks.delete(shareId);
     try {
       await this.persistentDB.deleteShareLink(shareId);
     } catch (err) {
       console.warn('[SHARING] Could not delete share link from DB:', err.message);
+      throw err;
     }
   }
 
   /**
    * List all share links (for management)
+   * @param {string} accountId - Optional account ID to filter by
    * @returns {Array} List of share links
    */
-  async listShareLinks() {
+  async listShareLinks(accountId = null) {
     try {
-      const links = await this.persistentDB.getAllShareLinks();
-      return links.filter((link) => Date.now() < link.expiresAt);
+      const links = await this.persistentDB.getAllShareLinks(accountId);
+      return links.filter((link) => !link.expiresAt || Date.now() < link.expiresAt);
     } catch (err) {
       // Fallback to in-memory
-      return Array.from(this.shareLinks.values()).filter((link) => Date.now() < link.expiresAt);
+      const allLinks = Array.from(this.shareLinks.values());
+      let filtered = allLinks.filter((link) => !link.expiresAt || Date.now() < link.expiresAt);
+      
+      // Filter by account if specified
+      if (accountId) {
+        filtered = filtered.filter((link) => link.account_id === accountId);
+      }
+      
+      return filtered;
     }
   }
 

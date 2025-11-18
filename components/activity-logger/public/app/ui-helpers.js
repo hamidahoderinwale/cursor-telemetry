@@ -14,6 +14,10 @@ function updateStatsDisplay() {
   const statAIInteractions = document.getElementById('statAIInteractions');
   const statCodeChanged = document.getElementById('statCodeChanged');
   const statAvgContext = document.getElementById('statAvgContext');
+  const statLanguages = document.getElementById('statLanguages');
+  const statActiveWorkspace = document.getElementById('statActiveWorkspace');
+  const statActivitiesToday = document.getElementById('statActivitiesToday');
+  const statActivitiesTodayBreakdown = document.getElementById('statActivitiesTodayBreakdown');
   
   // Update workspace count
   const workspaceCount = window.state.stats.workspaces || 
@@ -25,6 +29,112 @@ function updateStatsDisplay() {
   if (statAIInteractions) statAIInteractions.textContent = window.state.stats.aiInteractions || 0;
   if (statCodeChanged) statCodeChanged.textContent = `${window.state.stats.codeChanged || 0} KB`;
   if (statAvgContext) statAvgContext.textContent = `${window.state.stats.avgContext || 0}%`;
+  
+  // Get events and prompts from state
+  const events = window.state.data?.events || [];
+  const prompts = window.state.data?.prompts || [];
+  
+  // Calculate programming languages
+  const languageMap = {
+    '.py': 'Python', '.js': 'JavaScript', '.ts': 'TypeScript', '.jsx': 'JavaScript', '.tsx': 'TypeScript',
+    '.java': 'Java', '.cpp': 'C++', '.c': 'C', '.h': 'C', '.go': 'Go', '.rs': 'Rust',
+    '.php': 'PHP', '.rb': 'Ruby', '.swift': 'Swift', '.kt': 'Kotlin', '.scala': 'Scala',
+    '.cs': 'C#', '.vb': 'VB.NET', '.fs': 'F#', '.r': 'R', '.m': 'Objective-C', '.mm': 'Objective-C++',
+    '.clj': 'Clojure', '.hs': 'Haskell', '.ml': 'OCaml', '.erl': 'Erlang',
+    '.sh': 'Shell', '.bash': 'Shell', '.zsh': 'Shell', '.fish': 'Shell',
+    '.html': 'HTML', '.css': 'CSS', '.scss': 'SCSS', '.sass': 'SASS', '.less': 'Less',
+    '.json': 'JSON', '.yaml': 'YAML', '.yml': 'YAML', '.xml': 'XML', '.md': 'Markdown',
+    '.txt': 'Text', '.csv': 'CSV', '.ipynb': 'Jupyter', '.sql': 'SQL', '.vue': 'Vue', '.svelte': 'Svelte'
+  };
+  
+  const languageStats = new Map();
+  events.forEach(event => {
+    try {
+      const details = typeof event.details === 'string' ? JSON.parse(event.details) : event.details;
+      const filePath = details.file_path || details.filePath || event.file || event.filePath;
+      if (filePath) {
+        const ext = '.' + filePath.split('.').pop().toLowerCase();
+        const language = languageMap[ext] || 'Other';
+        languageStats.set(language, (languageStats.get(language) || 0) + 1);
+      }
+    } catch (e) {
+      // Ignore parse errors
+    }
+  });
+  
+  // Calculate total for percentages
+  const totalChanges = Array.from(languageStats.values()).reduce((sum, count) => sum + count, 0);
+  
+  // Sort by percentage (which is proportional to count) and get top languages
+  const topLanguages = Array.from(languageStats.entries())
+    .map(([lang, count]) => ({
+      language: lang,
+      count: count,
+      percentage: totalChanges > 0 ? (count / totalChanges) * 100 : 0
+    }))
+    .sort((a, b) => b.percentage - a.percentage)
+    .slice(0, 3); // Top 3 languages
+  
+  if (statLanguages) {
+    if (topLanguages.length > 0) {
+      // Display with percentages, ordered by percentage
+      statLanguages.textContent = topLanguages.map(({ language, percentage }) => 
+        `${language} ${percentage.toFixed(0)}%`
+      ).join(', ');
+      statLanguages.title = topLanguages.map(({ language, count, percentage }) => 
+        `${language}: ${count} changes (${percentage.toFixed(1)}%)`
+      ).join('\n');
+    } else {
+      statLanguages.textContent = '-';
+    }
+  }
+  
+  // Calculate most active workspace
+  const workspaceActivity = new Map();
+  [...events, ...prompts].forEach(item => {
+    const wsPath = item.workspace_path || item.workspacePath || item.workspace || item.workspaceName;
+    if (wsPath) {
+      workspaceActivity.set(wsPath, (workspaceActivity.get(wsPath) || 0) + 1);
+    }
+  });
+  
+  const mostActiveWorkspace = Array.from(workspaceActivity.entries())
+    .sort((a, b) => b[1] - a[1])[0];
+  
+  if (statActiveWorkspace) {
+    if (mostActiveWorkspace) {
+      const workspaceName = mostActiveWorkspace[0].split('/').pop() || mostActiveWorkspace[0];
+      statActiveWorkspace.textContent = workspaceName;
+      statActiveWorkspace.title = `${mostActiveWorkspace[0]}\n${mostActiveWorkspace[1]} activities`;
+    } else {
+      statActiveWorkspace.textContent = '-';
+    }
+  }
+  
+  // Calculate activities today
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  
+  const todayEvents = events.filter(e => {
+    const eventDate = e.timestamp ? new Date(e.timestamp) : null;
+    return eventDate && eventDate >= today && (e.type === 'file_change' || e.type === 'code_change');
+  }).length;
+  
+  const todayPrompts = prompts.filter(p => {
+    const promptDate = p.timestamp ? new Date(p.timestamp) : null;
+    return promptDate && promptDate >= today;
+  }).length;
+  
+  const currentActivity = todayEvents + todayPrompts;
+  
+  // Update Activities Today
+  if (statActivitiesToday) {
+    statActivitiesToday.textContent = currentActivity;
+  }
+  
+  if (statActivitiesTodayBreakdown) {
+    statActivitiesTodayBreakdown.textContent = `${todayEvents} file changes, ${todayPrompts} AI prompts`;
+  }
   
   console.log('[STATS] Updated display:', window.state.stats);
 }

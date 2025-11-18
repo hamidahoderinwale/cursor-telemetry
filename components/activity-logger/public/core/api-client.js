@@ -24,18 +24,25 @@ class APIClient {
     const silent = options.silent || false; // Option to suppress error logging
     const useCache = options.cache !== false; // Default to true
     const cacheTTL = options.cacheTTL || 5 * 60 * 1000; // 5 minutes default
+    const compress = options.compress !== false; // Default to true for large responses
+    
+    // Add compression headers if supported
+    const headers = {
+      ...options.headers,
+      'Accept-Encoding': 'gzip, deflate, br'
+    };
     
     // Use request deduplicator if available
     if (window.requestDeduplicator && useCache) {
       const cacheKey = `${endpoint}_${JSON.stringify(options)}`;
       return window.requestDeduplicator.request(
         cacheKey,
-        () => this._executeGet(endpoint, { timeout, retries, silent }),
+        () => this._executeGet(endpoint, { timeout, retries, silent, headers }),
         cacheTTL
       );
     }
     
-    return this._executeGet(endpoint, { timeout, retries, silent });
+    return this._executeGet(endpoint, { timeout, retries, silent, headers });
   }
 
   static async _executeGet(endpoint, options = {}) {
@@ -47,10 +54,15 @@ class APIClient {
         const timeoutId = setTimeout(() => controller.abort(), timeout);
         
         const apiBase = this.getApiBase();
-        const response = await fetch(`${apiBase}${endpoint}`, {
+        const fetchOptions = {
           signal: controller.signal,
+          headers: {
+            'Accept-Encoding': 'gzip, deflate, br',
+            ...options.headers
+          },
           ...options
-        });
+        };
+        const response = await fetch(`${apiBase}${endpoint}`, fetchOptions);
         
         clearTimeout(timeoutId);
         

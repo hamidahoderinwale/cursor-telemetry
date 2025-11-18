@@ -15,6 +15,51 @@ function createSchemaRoutes(deps) {
     }
   });
 
+  /**
+   * Get all data types reference
+   * GET /api/schema/data-types
+   */
+  app.get('/api/schema/data-types', async (req, res) => {
+    try {
+      const fs = require('fs');
+      const path = require('path');
+      
+      // Try to read the DATA_TYPES.json file
+      const dataTypesPath = path.join(__dirname, '../../../docs/DATABASE_SCHEMA.json');
+      const dataTypesFile = path.join(__dirname, '../../../docs/DATA_TYPES.json');
+      
+      let dataTypes = null;
+      try {
+        if (fs.existsSync(dataTypesFile)) {
+          dataTypes = JSON.parse(fs.readFileSync(dataTypesFile, 'utf8'));
+        }
+      } catch (e) {
+        console.warn('Could not read DATA_TYPES.json:', e.message);
+      }
+      
+      // If file doesn't exist, return a basic structure
+      if (!dataTypes) {
+        dataTypes = {
+          itemTypes: {
+            values: ['prompt', 'event', 'terminal', 'conversation-turn', 'status-message', 'temporal-thread', 'file-change-group', 'commit-group']
+          },
+          eventTypes: {
+            values: ['file_change', 'code_change', 'file_create', 'file_delete', 'file_rename', 'state_create', 'state_fork', 'state_switch', 'state_merge']
+          },
+          databaseTables: {
+            tables: ['entries', 'prompts', 'events', 'terminal_commands', 'conversations', 'conversation_turns', 'rung1_tokens', 'rung2_edit_scripts', 'rung3_function_changes']
+          },
+          note: 'Full data types available in docs/DATA_TYPES.json'
+        };
+      }
+      
+      res.json({ success: true, data: dataTypes });
+    } catch (error) {
+      console.error('Error getting data types:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
   app.get('/api/schema/:tableName', async (req, res) => {
     try {
       const { tableName } = req.params;

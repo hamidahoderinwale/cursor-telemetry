@@ -53,14 +53,31 @@ class AnalyticsManager {
    * Setup tab visibility detection
    */
   setupVisibilityDetection() {
+    this.tabVisible = !document.hidden;
+    
     document.addEventListener('visibilitychange', () => {
       this.tabVisible = !document.hidden;
       
       if (this.tabVisible && this.analyticsDeferred) {
         console.log('[VIEW] Tab visible - loading deferred analytics');
         this.triggerDeferredAnalytics();
+      } else if (!this.tabVisible) {
+        console.log('[VIEW] Tab hidden - analytics will load in background when ready');
       }
     });
+    
+    // Allow initial loading even if tab is hidden
+    // This ensures analytics can start loading in background tabs
+    if (document.hidden && this.analyticsDeferred) {
+      console.log('[VIEW] Tab initially hidden - allowing background analytics loading');
+      // Trigger after a short delay to allow page to fully initialize
+      setTimeout(() => {
+        if (this.analyticsDeferred) {
+          console.log('[VIEW] Triggering background analytics load');
+          this.triggerDeferredAnalytics();
+        }
+      }, 2000);
+    }
   }
 
   /**

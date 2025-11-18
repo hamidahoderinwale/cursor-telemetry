@@ -19,6 +19,13 @@ function createModuleGraphRoutes(deps) {
    */
   app.get('/api/module-graph/graph', async (req, res) => {
     try {
+      if (!moduleGraphService) {
+        return res.status(503).json({
+          success: false,
+          error: 'Module graph service not available'
+        });
+      }
+
       const workspace = req.query.workspace || req.query.workspace_path || null;
       const forceRefresh = req.query.force_refresh === 'true';
 
@@ -104,6 +111,13 @@ function createModuleGraphRoutes(deps) {
    */
   app.get('/api/module-graph/events', async (req, res) => {
     try {
+      if (!moduleGraphService) {
+        return res.status(503).json({
+          success: false,
+          error: 'Module graph service not available'
+        });
+      }
+
       const workspace = req.query.workspace || req.query.workspace_path || null;
       const filters = {
         timeRange: null,

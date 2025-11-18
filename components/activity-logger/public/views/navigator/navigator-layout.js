@@ -4,9 +4,7 @@
  */
 
 // Prevent redeclaration if script is loaded multiple times
-if (window._navigatorLayoutLoaded) {
-  console.warn('[NAV-LAYOUT] Script already loaded, skipping re-initialization');
-} else {
+if (!window._navigatorLayoutLoaded) {
   window._navigatorLayoutLoaded = true;
 
 /**
@@ -24,8 +22,6 @@ function computePhysicalLayout(files) {
   const filesToCompare = files.length > MAX_FILES_FOR_FULL_COMPARISON 
     ? files.slice(0, MAX_FILES_FOR_FULL_COMPARISON) 
     : files;
-  
-  console.log(`[LAYOUT] Computing physical layout for ${filesToCompare.length} files (of ${files.length} total)`);
   
   for (let i = 0; i < filesToCompare.length; i++) {
     for (let j = i + 1; j < filesToCompare.length; j++) {
@@ -126,7 +122,6 @@ function computePhysicalLayout(files) {
   // Stage 1: Quick layout with high alpha (fast movement)
   tempSimulation.alpha(1.0).restart();
   const quickIterations = Math.min(30, Math.max(10, Math.floor(nodeCount / 10)));
-  console.log(`[LAYOUT] Stage 1: Quick layout (${quickIterations} ticks)...`);
   for (let i = 0; i < quickIterations; i++) {
     tempSimulation.tick();
   }
@@ -135,13 +130,10 @@ function computePhysicalLayout(files) {
   if (nodeCount < 200) { // Only refine for smaller graphs
     tempSimulation.alpha(0.3).restart();
     const refineIterations = Math.min(20, Math.max(5, Math.floor(nodeCount / 20)));
-    console.log(`[LAYOUT] Stage 2: Refinement (${refineIterations} ticks)...`);
     for (let i = 0; i < refineIterations; i++) {
       tempSimulation.tick();
     }
   }
-  
-  console.log(`[LAYOUT] Physical layout complete (${nodeCount} nodes, ${links.length} links)`);
   
   tempSimulation.stop();
   
@@ -174,8 +166,6 @@ async function buildKNN(vectors, k) {
   // 2. Refine top candidates with full comparison
   const useTwoStage = n > 500;
   const candidateSize = useTwoStage ? k * 3 : sampleSize; // Get more candidates, then refine
-  
-  console.log(`[KNN] Building kNN graph: ${n} nodes, k=${k}, sampling=${useSampling}, sampleSize=${sampleSize}`);
   
   for (let i = 0; i < n; i++) {
     const scores = [];
@@ -249,7 +239,6 @@ async function buildKNN(vectors, k) {
     }
   }
   
-  console.log(`[KNN] kNN graph complete: ${neighbors.length} nodes with ${k} neighbors each`);
   return neighbors;
 }
 
@@ -284,7 +273,7 @@ function createFeatureVector(file) {
         conversationContext = fileConversations;
       }
     } catch (error) {
-      console.debug('[NAVIGATOR] Failed to build conversation context:', error);
+      // Failed to build conversation context
     }
   }
   // Create a simple feature vector based on file characteristics
@@ -347,7 +336,21 @@ async function computeLatentLayoutUMAP(files) {
   const width = 800, height = 700;
   const padding = 100;
   
-  console.log(`[UMAP] Computing latent layout for ${files.length} files...`);
+  // Check for cached UMAP layout first
+  if (window.performanceCache) {
+    try {
+      const cachedPositions = await window.performanceCache.getUMAP(files, 24 * 60 * 60 * 1000);
+      if (cachedPositions && cachedPositions.length === files.length) {
+        return files.map((file, i) => ({
+          ...file,
+          x: cachedPositions[i][0],
+          y: cachedPositions[i][1]
+        }));
+      }
+    } catch (e) {
+      // Cache check failed
+    }
+  }
   
   // Step 1: Generate embeddings (use enhanced embedding service if available)
   let embeddings = [];
@@ -355,20 +358,13 @@ async function computeLatentLayoutUMAP(files) {
   
   if (window.codeEmbeddingService) {
     try {
-      console.log('[UMAP] Using enhanced code embedding service...');
       await window.codeEmbeddingService.initialize();
       
       if (window.codeEmbeddingService.isInitialized) {
         embeddings = await window.codeEmbeddingService.generateEmbeddingsBatch(files, {
-          batchSize: 32,
-          onProgress: (current, total) => {
-            if (current % 100 === 0) {
-              console.log(`[UMAP] Generated embeddings: ${current}/${total}`);
-            }
-          }
+          batchSize: 32
         });
         useEnhancedEmbeddings = true;
-        console.log(`[UMAP] Generated ${embeddings.length} embeddings (${window.codeEmbeddingService.getDimension()}D)`);
       }
     } catch (error) {
       console.warn('[UMAP] Enhanced embeddings failed, using fallback:', error.message);
@@ -377,7 +373,6 @@ async function computeLatentLayoutUMAP(files) {
   
   // Fallback: Use feature vectors
   if (!useEnhancedEmbeddings || embeddings.length === 0) {
-    console.log('[UMAP] Using feature vectors (fallback)...');
     for (let i = 0; i < files.length; i++) {
       const vector = createFeatureVector(files[i]);
       embeddings.push(vector);
@@ -405,7 +400,6 @@ async function computeLatentLayoutUMAP(files) {
   let positions;
   if (window.umapService && useEnhancedEmbeddings) {
     try {
-      console.log('[UMAP] Using enhanced UMAP service...');
       positions = await window.umapService.computeUMAP(embeddings, {
         nNeighbors: Math.min(15, Math.max(5, Math.floor(Math.sqrt(files.length)))),
         nComponents: 2,
@@ -414,7 +408,6 @@ async function computeLatentLayoutUMAP(files) {
         metric: 'cosine',
         randomState: 42
       });
-      console.log('[UMAP] Enhanced UMAP layout complete');
     } catch (error) {
       console.warn('[UMAP] Enhanced UMAP failed, using fallback:', error.message);
       positions = null;
@@ -423,7 +416,6 @@ async function computeLatentLayoutUMAP(files) {
   
   // Fallback: Use original UMAP-like algorithm
   if (!positions) {
-    console.log('[UMAP] Using fallback UMAP-like algorithm...');
     const k = Math.min(15, Math.max(5, Math.floor(Math.sqrt(files.length))));
     const neighbors = await buildKNN(embeddings, k);
     
@@ -477,12 +469,9 @@ async function computeLatentLayoutUMAP(files) {
           }
         });
       }
-      if (e % 5 === 0 || e === epochs - 1) {
-        console.log(`[UMAP] Epoch ${e + 1}/${epochs}`);
-      }
     }
   }
-
+  
   // Scale to canvas
   const xs = positions.map(p => p[0]);
   const ys = positions.map(p => p[1]);
@@ -490,12 +479,21 @@ async function computeLatentLayoutUMAP(files) {
   const minY = Math.min(...ys), maxY = Math.max(...ys);
   const scaleX = (width - 2 * padding) / (maxX - minX || 1);
   const scaleY = (height - 2 * padding) / (maxY - minY || 1);
-  console.log(`[UMAP] Latent layout complete for ${files.length} nodes`);
+
+  const scaledPositions = positions.map(p => [
+    padding + (p[0] - minX) * scaleX,
+    padding + (p[1] - minY) * scaleY
+  ]);
+
+  // Cache UMAP layout (async, don't wait)
+  if (window.performanceCache) {
+    window.performanceCache.storeUMAP(files, positions).catch(() => {});
+  }
 
   return files.map((file, i) => ({
     ...file,
-    x: padding + (positions[i][0] - minX) * scaleX,
-    y: padding + (positions[i][1] - minY) * scaleY
+    x: scaledPositions[i][0],
+    y: scaledPositions[i][1]
   }));
 }
 
@@ -715,7 +713,6 @@ async function detectLatentClusters(nodes, links) {
   });
   
   if (clusters.length > 0) {
-    console.log(`[CLUSTER] Using hierarchical clustering: ${clusters.length} workspace clusters with ${clusters.reduce((sum, c) => sum + (c.children?.length || 0), 0)} sub-clusters`);
     return clusters;
   }
   
@@ -727,7 +724,6 @@ async function detectLatentClusters(nodes, links) {
   // Try to use enhanced clustering service
   if (window.clusteringService && nodes.length > 20) {
     try {
-      console.log('[CLUSTER] Using enhanced auto-optimized clustering...');
       
       // Get embeddings from nodes (use cached embeddings if available)
       const embeddings = nodes.map(node => {
@@ -751,8 +747,6 @@ async function detectLatentClusters(nodes, links) {
       const k = result.k;
       const quality = window.clusteringService.computeQualityMetrics(embeddings, assignments);
       
-      console.log(`[CLUSTER] Auto-optimized to K=${k} (silhouette: ${result.silhouette.toFixed(3)})`);
-      console.log(`[CLUSTER] Quality - Cohesion: ${quality.cohesion.toFixed(3)}, Separation: ${quality.separation.toFixed(3)}, Balance: ${quality.balance.toFixed(3)}`);
       
       // Create cluster objects with quality metrics
       for (let i = 0; i < k; i++) {
@@ -795,7 +789,6 @@ async function detectLatentClusters(nodes, links) {
   
   // Fallback: Use simple k-means on spatial positions
   if (fallbackClusters.length === 0) {
-    console.log('[CLUSTER] Using fallback spatial clustering...');
     let k;
     if (nodes.length < 6) {
       k = Math.max(1, Math.floor(nodes.length / 2));

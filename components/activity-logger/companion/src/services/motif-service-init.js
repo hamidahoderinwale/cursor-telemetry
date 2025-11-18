@@ -21,18 +21,21 @@ function initializeMotifService(app, persistentDB, options = {}) {
       }
     });
     
-    createMotifRoutes({
-      app,
-      persistentDB,
-      motifService
-    });
-    
     console.log('[MOTIF] Motif service initialized');
-    return motifService;
   } catch (error) {
     console.warn('[MOTIF] Failed to initialize motif service:', error.message);
-    return null;
+    motifService = null;
   }
+  
+  // Always register routes, even if service is null
+  // Routes will return 503 if service is not available
+  createMotifRoutes({
+    app,
+    persistentDB,
+    motifService
+  });
+  
+  return motifService;
 }
 
 module.exports = initializeMotifService;

@@ -41,13 +41,11 @@ class CodeEmbeddingService {
           this.embeddingDimension = 768; // OpenRouter embeddings are typically 768D
           this.modelName = status.embeddingModel || 'openai/text-embedding-3-small';
           this.isInitialized = true;
-          console.log('[EMBEDDING] ✓ Using OpenRouter API for code embeddings');
-          console.log(`[EMBEDDING]   Model: ${this.modelName}`);
           return;
         }
       }
     } catch (apiError) {
-      console.debug('[EMBEDDING] OpenRouter API check failed, will use local models:', apiError.message);
+      // OpenRouter API check failed, will use local models
     }
 
     // Fallback: Use Transformers.js with code-specific models
@@ -58,17 +56,14 @@ class CodeEmbeddingService {
         this.embeddingDimension = 384; // Local models typically 384D
         this.modelName = 'Xenova/all-MiniLM-L6-v2';
         this.isInitialized = true;
-        console.log('[EMBEDDING] ✓ Using Transformers.js (local, free)');
         return;
       }
 
-      console.log('[EMBEDDING] Loading Transformers.js...');
       const transformers = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2');
       this.transformers = transformers;
       this.embeddingDimension = 384;
       this.modelName = 'Xenova/all-MiniLM-L6-v2';
       this.isInitialized = true;
-      console.log('[EMBEDDING] ✓ Transformers.js loaded successfully');
     } catch (error) {
       console.warn('[EMBEDDING] Failed to load Transformers.js:', error.message);
       this.isInitialized = false;
@@ -92,10 +87,24 @@ class CodeEmbeddingService {
       return this._createFallbackVector(file);
     }
 
-    // Check cache
+    // Check in-memory cache first
     const cacheKey = this._getCacheKey(file);
     if (this.embeddings.has(cacheKey)) {
       return this.embeddings.get(cacheKey);
+    }
+
+    // Check persistent cache
+    if (window.performanceCache) {
+      try {
+        const cached = await window.performanceCache.getEmbeddings([file], 24 * 60 * 60 * 1000);
+        if (cached && cached.length > 0) {
+          const embedding = cached[0];
+          this.embeddings.set(cacheKey, embedding);
+          return embedding;
+        }
+      } catch (e) {
+        // Cache check failed, continue with generation
+      }
     }
 
     try {
@@ -112,6 +121,12 @@ class CodeEmbeddingService {
         this.failureCount = 0;
         this.circuitOpen = false;
         this.embeddings.set(cacheKey, embedding);
+        
+        // Store in persistent cache (async, don't wait)
+        if (window.performanceCache) {
+          window.performanceCache.storeEmbeddings([file], [embedding]).catch(() => {});
+        }
+        
         return embedding;
       } else {
         // Increment failure count
@@ -288,6 +303,7 @@ class CodeEmbeddingService {
 
   /**
    * Generate embeddings for multiple files (batch processing)
+   * Optimized with persistent caching
    */
   async generateEmbeddingsBatch(files, options = {}) {
     const {
@@ -297,26 +313,62 @@ class CodeEmbeddingService {
 
     await this.initialize();
     
+    // Check persistent cache for all files at once
+    let cachedEmbeddings = null;
+    if (window.performanceCache) {
+      try {
+        cachedEmbeddings = await window.performanceCache.getEmbeddings(files, 24 * 60 * 60 * 1000);
+      } catch (e) {
+        // Batch cache check failed
+      }
+    }
+
     const embeddings = [];
     const total = files.length;
+    const filesToGenerate = [];
+    const cachedIndices = new Set();
 
-    for (let i = 0; i < files.length; i += batchSize) {
-      const batch = files.slice(i, i + batchSize);
+    // Use cached embeddings where available
+    if (cachedEmbeddings && cachedEmbeddings.length === files.length) {
+      for (let i = 0; i < files.length; i++) {
+        const cacheKey = this._getCacheKey(files[i]);
+        if (cachedEmbeddings[i]) {
+          embeddings[i] = cachedEmbeddings[i];
+          this.embeddings.set(cacheKey, cachedEmbeddings[i]);
+          cachedIndices.add(i);
+        } else {
+          filesToGenerate.push({ file: files[i], index: i });
+        }
+      }
+    } else {
+      // No cache, generate all
+      files.forEach((file, i) => {
+        filesToGenerate.push({ file, index: i });
+      });
+    }
+
+
+    // Generate missing embeddings in batches
+    for (let i = 0; i < filesToGenerate.length; i += batchSize) {
+      const batch = filesToGenerate.slice(i, i + batchSize);
       
       // Process batch in parallel
       const batchEmbeddings = await Promise.all(
-        batch.map(file => this.generateEmbedding(file))
+        batch.map(({ file }) => this.generateEmbedding(file))
       );
       
-      embeddings.push(...batchEmbeddings);
+      // Store in correct positions
+      batch.forEach(({ index }, j) => {
+        embeddings[index] = batchEmbeddings[j];
+      });
       
       // Progress callback
       if (onProgress) {
-        onProgress(i + batch.length, total);
+        onProgress(Math.min(i + batch.length + cachedIndices.size, total), total);
       }
       
       // Yield to browser
-      if (i + batchSize < files.length) {
+      if (i + batchSize < filesToGenerate.length) {
         await new Promise(resolve => {
           if (typeof requestIdleCallback !== 'undefined') {
             requestIdleCallback(() => resolve(), { timeout: 10 });
@@ -325,6 +377,11 @@ class CodeEmbeddingService {
           }
         });
       }
+    }
+
+    // Cache all embeddings together (async)
+    if (window.performanceCache && filesToGenerate.length > 0) {
+      window.performanceCache.storeEmbeddings(files, embeddings).catch(() => {});
     }
 
     return embeddings;

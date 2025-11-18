@@ -1,0 +1,430 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Cursor Telemetry - Complete Data Types Reference",
+  "description": "Comprehensive reference of all data types, event types, item types, and enums used throughout the Cursor Telemetry project",
+  "version": "1.0.0",
+  "lastUpdated": "2024-01-01",
+  
+  "itemTypes": {
+    "description": "Types of items in the timeline/activity view",
+    "values": [
+      "prompt",
+      "event",
+      "terminal",
+      "conversation-turn",
+      "status-message",
+      "temporal-thread",
+      "file-change-group",
+      "commit-group"
+    ],
+    "descriptions": {
+      "prompt": "AI prompt or interaction with Cursor AI",
+      "event": "File change or code modification event",
+      "terminal": "Terminal command execution",
+      "conversation-turn": "Individual turn in a conversation",
+      "status-message": "Status or system message",
+      "temporal-thread": "Grouped activities within a time window",
+      "file-change-group": "Grouped consecutive file changes",
+      "commit-group": "Grouped activities within a git commit"
+    }
+  },
+  
+  "eventTypes": {
+    "description": "Types of events tracked in the system",
+    "values": [
+      "file_change",
+      "code_change",
+      "file_create",
+      "file_delete",
+      "file_rename",
+      "state_create",
+      "state_fork",
+      "state_switch",
+      "state_merge",
+      "code_execution",
+      "conversation",
+      "prompt",
+      "response"
+    ],
+    "descriptions": {
+      "file_change": "File was modified",
+      "code_change": "Code content was changed",
+      "file_create": "New file was created",
+      "file_delete": "File was deleted",
+      "file_rename": "File was renamed",
+      "state_create": "New development state was created",
+      "state_fork": "State was forked (branched)",
+      "state_switch": "Switched to a different state",
+      "state_merge": "States were merged",
+      "code_execution": "Code was executed",
+      "conversation": "Conversation event",
+      "prompt": "AI prompt event",
+      "response": "AI response event"
+    }
+  },
+  
+  "databaseTables": {
+    "description": "All database tables in the SQLite database",
+    "tables": [
+      "entries",
+      "prompts",
+      "events",
+      "terminal_commands",
+      "conversations",
+      "conversation_turns",
+      "screenshots",
+      "states",
+      "state_events",
+      "annotations",
+      "rung1_tokens",
+      "rung2_edit_scripts",
+      "rung3_function_changes",
+      "rung3_functions",
+      "module_graph_nodes",
+      "module_graph_edges",
+      "clio_motifs",
+      "clio_clusters",
+      "shares",
+      "schema_config",
+      "prescriptions",
+      "todo_events",
+      "whiteboards"
+    ],
+    "note": "See DATABASE_SCHEMA.json for detailed table schemas"
+  },
+  
+  "privacyLevels": {
+    "description": "Privacy abstraction levels for data sharing",
+    "values": [
+      0,
+      1,
+      2,
+      3
+    ],
+    "descriptions": {
+      "0": "Raw Traces - Full code diffs, all metadata (lowest privacy)",
+      "1": "Code Abstracts - Stats only, no code content (recommended)",
+      "2": "Statement-Level - Descriptions only, no code or detailed metrics",
+      "3": "Workflow-Level - Patterns only, minimal detail (highest privacy)"
+    }
+  },
+  
+  "rungLevels": {
+    "description": "Abstraction rungs for privacy-preserving data representation",
+    "values": [
+      "rung1",
+      "rung2",
+      "rung3",
+      "module_graph",
+      "clio"
+    ],
+    "descriptions": {
+      "rung1": "Token-Level Abstraction - Token sequences with canonicalized identifiers",
+      "rung2": "Statement-Level Abstraction - Semantic edit scripts from AST differencing",
+      "rung3": "Function-Level Abstraction - Function-level changes and callgraph updates",
+      "module_graph": "File-Level Abstraction - File relationships and dependencies",
+      "clio": "Motifs - High-level workflow patterns (highest abstraction)"
+    }
+  },
+  
+  "piiRedactionOptions": {
+    "description": "PII redaction options for Rung 1",
+    "options": {
+      "redactEmails": "Redact email addresses",
+      "redactNames": "Redact person names",
+      "redactUrls": "Redact URLs",
+      "redactIpAddresses": "Redact IP addresses",
+      "redactFilePaths": "Redact file paths",
+      "redactNumbers": "Redact numbers",
+      "redactAllStrings": "Redact all string literals",
+      "redactAllNumbers": "Redact all numeric literals"
+    }
+  },
+  
+  "prescriptionCategories": {
+    "description": "Categories for AI behavior prescriptions",
+    "values": [
+      "formatting",
+      "behavior",
+      "domain",
+      "workflow",
+      "security",
+      "communication",
+      "constraints",
+      "allowlist",
+      "blocklist"
+    ]
+  },
+  
+  "prescriptionScopes": {
+    "description": "Scopes for prescription application",
+    "values": [
+      "global",
+      "workspace",
+      "file-type",
+      "file"
+    ]
+  },
+  
+  "viewModes": {
+    "description": "Activity view display modes",
+    "values": [
+      "timeline",
+      "storyboard",
+      "kanban"
+    ],
+    "descriptions": {
+      "timeline": "Chronological timeline view",
+      "storyboard": "Visual narrative storyboard view",
+      "kanban": "Kanban board view with grouping"
+    }
+  },
+  
+  "kanbanGroupings": {
+    "description": "Grouping options for Kanban view",
+    "values": [
+      "intent",
+      "time",
+      "type"
+    ],
+    "descriptions": {
+      "intent": "Group by development intent",
+      "time": "Group by time periods",
+      "type": "Group by activity type"
+    }
+  },
+  
+  "timelineGroupings": {
+    "description": "Grouping options for Timeline view",
+    "values": [
+      "none",
+      "file",
+      "session",
+      "conversation",
+      "workflow",
+      "workspace",
+      "model"
+    ]
+  },
+  
+  "timeRanges": {
+    "description": "Time range filter options",
+    "values": [
+      "today",
+      "week",
+      "month",
+      "all"
+    ]
+  },
+  
+  "densityModes": {
+    "description": "Visual density options",
+    "values": [
+      "compact",
+      "normal",
+      "spacious"
+    ]
+  },
+  
+  "apiEndpoints": {
+    "description": "Main API endpoint categories",
+    "endpoints": {
+      "data": [
+        "GET /api/data",
+        "GET /api/entries",
+        "GET /api/prompts",
+        "GET /api/events",
+        "GET /api/activity",
+        "GET /api/conversations",
+        "GET /api/terminal-commands"
+      ],
+      "analytics": [
+        "GET /api/analytics/context",
+        "GET /api/analytics/productivity",
+        "GET /api/analytics/errors"
+      ],
+      "schema": [
+        "GET /api/schema",
+        "GET /api/schema/:tableName",
+        "GET /api/schema/config/fields",
+        "GET /api/whiteboard/schema"
+      ],
+      "rungs": [
+        "GET /api/rung1/tokens",
+        "POST /api/rung1/extract",
+        "GET /api/rung2/edit-scripts",
+        "POST /api/rung2/extract",
+        "GET /api/rung3/functions",
+        "POST /api/rung3/extract",
+        "GET /api/rung3/call-graph"
+      ],
+      "sharing": [
+        "POST /api/share/create",
+        "GET /api/share/:shareId",
+        "GET /api/share/:shareId/info",
+        "DELETE /api/share/:shareId",
+        "GET /api/share"
+      ],
+      "export": [
+        "GET /api/export/database",
+        "POST /api/import/database"
+      ],
+      "states": [
+        "GET /api/states",
+        "POST /api/states",
+        "POST /api/states/:id/fork",
+        "GET /api/states/:id1/diff/:id2"
+      ],
+      "prescriptions": [
+        "GET /api/prescriptions",
+        "POST /api/prescriptions",
+        "PATCH /api/prescriptions/:id",
+        "DELETE /api/prescriptions/:id",
+        "POST /api/prescriptions/:id/toggle",
+        "GET /api/prescriptions/inject"
+      ]
+    }
+  },
+  
+  "dataModels": {
+    "description": "Core data model structures",
+    "models": {
+      "Entry": {
+        "id": "INTEGER (primary key)",
+        "session_id": "TEXT",
+        "workspace_path": "TEXT",
+        "file_path": "TEXT",
+        "source": "TEXT",
+        "before_code": "TEXT",
+        "after_code": "TEXT",
+        "notes": "TEXT",
+        "timestamp": "TEXT (ISO)",
+        "tags": "TEXT",
+        "prompt_id": "INTEGER (foreign key)",
+        "modelInfo": "TEXT (JSON)",
+        "type": "TEXT"
+      },
+      "Prompt": {
+        "id": "INTEGER (primary key)",
+        "timestamp": "TEXT (ISO)",
+        "text": "TEXT",
+        "workspace_path": "TEXT",
+        "conversation_id": "TEXT",
+        "model": "TEXT",
+        "model_name": "TEXT",
+        "context_files": "TEXT (JSON)",
+        "response": "TEXT",
+        "metadata": "TEXT (JSON)"
+      },
+      "Event": {
+        "id": "INTEGER (primary key)",
+        "type": "TEXT",
+        "timestamp": "TEXT (ISO)",
+        "workspace_path": "TEXT",
+        "file_path": "TEXT",
+        "details": "TEXT (JSON)",
+        "annotation": "TEXT",
+        "intent": "TEXT"
+      },
+      "TerminalCommand": {
+        "id": "INTEGER (primary key)",
+        "timestamp": "TEXT (ISO)",
+        "command": "TEXT",
+        "cwd": "TEXT",
+        "exit_code": "INTEGER",
+        "workspace_path": "TEXT",
+        "output": "TEXT"
+      },
+      "Conversation": {
+        "id": "TEXT (primary key)",
+        "workspace_id": "TEXT",
+        "workspace_path": "TEXT",
+        "title": "TEXT",
+        "created_at": "TEXT (ISO)",
+        "updated_at": "TEXT (ISO)",
+        "status": "TEXT",
+        "turns": "ARRAY of ConversationTurn"
+      },
+      "ConversationTurn": {
+        "id": "TEXT",
+        "conversation_id": "TEXT",
+        "turn_index": "INTEGER",
+        "role": "TEXT (user|assistant)",
+        "content": "TEXT",
+        "created_at": "TEXT (ISO)",
+        "model_name": "TEXT",
+        "context_files": "TEXT (JSON)",
+        "thinking_time_seconds": "REAL",
+        "total_tokens": "INTEGER"
+      },
+      "Rung1Token": {
+        "id": "INTEGER (primary key)",
+        "workspace_path": "TEXT",
+        "file_path": "TEXT",
+        "token_sequence": "TEXT (JSON)",
+        "canonical_sequence": "TEXT (JSON)",
+        "timestamp": "TEXT (ISO)",
+        "language": "TEXT"
+      },
+      "Rung2EditScript": {
+        "id": "INTEGER (primary key)",
+        "workspace_path": "TEXT",
+        "file_path": "TEXT",
+        "edit_script": "TEXT (JSON)",
+        "timestamp": "TEXT (ISO)",
+        "language": "TEXT"
+      },
+      "Rung3FunctionChange": {
+        "id": "INTEGER (primary key)",
+        "workspace_path": "TEXT",
+        "file_path": "TEXT",
+        "function_name": "TEXT",
+        "change_type": "TEXT (added|modified|deleted)",
+        "signature": "TEXT",
+        "timestamp": "TEXT (ISO)"
+      }
+    }
+  },
+  
+  "fieldTypes": {
+    "description": "Field data types used in the database",
+    "values": [
+      "INTEGER",
+      "TEXT",
+      "REAL",
+      "BLOB",
+      "BOOLEAN"
+    ],
+    "notes": "SQLite uses dynamic typing, but these are the declared types"
+  },
+  
+  "timestampFormats": {
+    "description": "Timestamp format used throughout the system",
+    "format": "ISO 8601",
+    "example": "2024-01-15T10:30:00.000Z",
+    "note": "All timestamps are stored as TEXT in ISO 8601 format"
+  },
+  
+  "jsonFields": {
+    "description": "Fields that contain JSON data (stored as TEXT)",
+    "fields": [
+      "modelInfo",
+      "context_files",
+      "details",
+      "metadata",
+      "tags",
+      "token_sequence",
+      "canonical_sequence",
+      "edit_script",
+      "config_json"
+    ]
+  },
+  
+  "references": {
+    "databaseSchema": "docs/DATABASE_SCHEMA.json",
+    "apiDocumentation": "http://localhost:43917/dashboard.html#api-docs",
+    "schemaApi": "http://localhost:43917/api/schema",
+    "whiteboardSchemaApi": "http://localhost:43917/api/whiteboard/schema"
+  }
+}
+

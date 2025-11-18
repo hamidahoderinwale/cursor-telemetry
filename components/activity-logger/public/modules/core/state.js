@@ -8,7 +8,7 @@ export const state = {
   connected: false,
   
   // UI State
-  currentView: 'overview',
+  currentView: 'activity',
   currentWorkspace: 'all',
   
   // Data Store

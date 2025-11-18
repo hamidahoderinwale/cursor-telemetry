@@ -74,8 +74,16 @@ function renderFileTypesChart() {
     options: {
       responsive: true,
       maintainAspectRatio: true,
+      aspectRatio: 2.5,
       plugins: {
-        legend: {position: 'bottom'}
+        legend: {
+          position: 'bottom',
+          labels: {
+            boxWidth: 10,
+            font: { size: 10 },
+            padding: 6
+          }
+        }
       }
     }
   });
@@ -180,7 +188,7 @@ function renderHourlyChart() {
   });
 }
 
-function renderAIActivityChart(timeScale = null) {
+async function renderAIActivityChart(timeScale = null) {
   const canvas = document.getElementById('aiActivityChart');
   if (!canvas) return;
   
@@ -282,35 +290,86 @@ function renderAIActivityChart(timeScale = null) {
     });
   }
   
-  // Assign items to buckets based on their timestamp
-  allPrompts.forEach(prompt => {
-    const promptTime = new Date(prompt.timestamp).getTime();
-    if (promptTime < startTime || promptTime > now) return; // Outside range
-    
-    const bucketIndex = Math.floor((promptTime - startTime) / bucketSize);
-    if (bucketIndex >= 0 && bucketIndex < buckets.length) {
-      buckets[bucketIndex].promptCount++;
+  // OPTIMIZATION: Use Web Worker for large datasets
+  if ((allPrompts.length + allEvents.length) > 1000 && window.analyticsWorkerHelper) {
+    try {
+      const processedBuckets = await window.analyticsWorkerHelper.processBuckets(
+        allPrompts,
+        allEvents,
+        startTime,
+        now,
+        bucketSize
+      );
+      // Merge processed buckets with our bucket structure
+      processedBuckets.forEach((processed, index) => {
+        if (buckets[index]) {
+          buckets[index].promptCount = processed.promptCount;
+          buckets[index].codeChanges = processed.codeChanges;
+          buckets[index].fileCount = processed.fileCount;
+        }
+      });
+    } catch (error) {
+      // Fallback to main thread processing
+      allPrompts.forEach(prompt => {
+        const promptTime = new Date(prompt.timestamp).getTime();
+        if (promptTime < startTime || promptTime > now) return;
+        
+        const bucketIndex = Math.floor((promptTime - startTime) / bucketSize);
+        if (bucketIndex >= 0 && bucketIndex < buckets.length) {
+          buckets[bucketIndex].promptCount++;
+        }
+      });
+      
+      allEvents.forEach(event => {
+        const eventTime = new Date(event.timestamp).getTime();
+        if (eventTime < startTime || eventTime > now) return;
+        
+        const bucketIndex = Math.floor((eventTime - startTime) / bucketSize);
+        if (bucketIndex >= 0 && bucketIndex < buckets.length) {
+          buckets[bucketIndex].fileCount++;
+          let changeSize = 0;
+          try {
+            const details = typeof event.details === 'string' ? JSON.parse(event.details) : event.details;
+            if (details.chars_added) changeSize += details.chars_added;
+            if (details.chars_deleted) changeSize += details.chars_deleted;
+          } catch (e) {
+            changeSize = 100;
+          }
+          buckets[bucketIndex].codeChanges += changeSize / 1024;
+        }
+      });
     }
-  });
-  
-  allEvents.forEach(event => {
-    const eventTime = new Date(event.timestamp).getTime();
-    if (eventTime < startTime || eventTime > now) return; // Outside range
-    
-    const bucketIndex = Math.floor((eventTime - startTime) / bucketSize);
-    if (bucketIndex >= 0 && bucketIndex < buckets.length) {
-      buckets[bucketIndex].fileCount++;
-      let changeSize = 0;
-      try {
-        const details = typeof event.details === 'string' ? JSON.parse(event.details) : event.details;
-        if (details.chars_added) changeSize += details.chars_added;
-        if (details.chars_deleted) changeSize += details.chars_deleted;
-      } catch (e) {
-        changeSize = 100;
+  } else {
+    // Main thread processing for smaller datasets
+    allPrompts.forEach(prompt => {
+      const promptTime = new Date(prompt.timestamp).getTime();
+      if (promptTime < startTime || promptTime > now) return; // Outside range
+      
+      const bucketIndex = Math.floor((promptTime - startTime) / bucketSize);
+      if (bucketIndex >= 0 && bucketIndex < buckets.length) {
+        buckets[bucketIndex].promptCount++;
       }
-      buckets[bucketIndex].codeChanges += changeSize / 1024;
-    }
-  });
+    });
+    
+    allEvents.forEach(event => {
+      const eventTime = new Date(event.timestamp).getTime();
+      if (eventTime < startTime || eventTime > now) return; // Outside range
+      
+      const bucketIndex = Math.floor((eventTime - startTime) / bucketSize);
+      if (bucketIndex >= 0 && bucketIndex < buckets.length) {
+        buckets[bucketIndex].fileCount++;
+        let changeSize = 0;
+        try {
+          const details = typeof event.details === 'string' ? JSON.parse(event.details) : event.details;
+          if (details.chars_added) changeSize += details.chars_added;
+          if (details.chars_deleted) changeSize += details.chars_deleted;
+        } catch (e) {
+          changeSize = 100;
+        }
+        buckets[bucketIndex].codeChanges += changeSize / 1024;
+      }
+    });
+  }
   
   if (buckets.every(b => b.promptCount === 0 && b.codeChanges === 0)) {
     canvas.style.display = 'none';
@@ -399,7 +458,7 @@ function renderAIActivityChart(timeScale = null) {
     },
     options: {
       responsive: true,
-      maintainAspectRatio: true,
+      maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
       plugins: {
         legend: {
@@ -495,9 +554,10 @@ function renderPromptTokensChart(hoursParam = 24) {
     canvas.style.display = 'none';
     const container = canvas.parentElement;
     container.innerHTML = `
-      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 250px; text-align: center;">
-        <div style="font-size: var(--text-md); font-weight: 500; color: var(--color-text); margin-bottom: var(--space-xs);">No Data Available</div>
-        <div style="font-size: var(--text-sm); color: var(--color-text-muted);">Prompt data will appear once you start using Cursor AI</div>
+      <div class="empty-state">
+        <div class="empty-state-title">No Data Available</div>
+        <div class="empty-state-description">Data will appear here once you start using Cursor AI features</div>
+        <div class="empty-state-hint">Try sending a prompt or making code changes to see analytics</div>
       </div>
     `;
     return;
@@ -549,22 +609,49 @@ function renderPromptTokensChart(hoursParam = 24) {
       const text = prompt.text || prompt.prompt || prompt.preview || '';
       const charCount = text.length;
       
-      // Check multiple sources for context usage
-      let contextUsage = prompt.contextUsage || prompt.context_usage || 0;
+      // Check multiple sources for context usage - more thorough check
+      let contextUsage = prompt.contextUsage || prompt.context_usage || 
+                        prompt.promptTokens || prompt.prompt_tokens ||
+                        prompt.contextWindowUsage || prompt.context_window_usage || 0;
+      
+      // Handle token values - convert to percentage if > 100 (assuming 100k token context window)
+      if (contextUsage > 100) {
+        contextUsage = (contextUsage / 100000) * 100;
+      }
       
       // If no direct contextUsage, try to estimate from file count
-      if (contextUsage === 0) {
-        const contextFileCount = prompt.context_file_count || prompt.contextFileCount || 0;
-        const atFileCount = prompt.atFiles?.length || 0;
-        const contextFiles = prompt.contextFiles?.attachedFiles?.length || prompt.contextFiles?.codebaseFiles?.length || 0;
+      if (contextUsage === 0 || contextUsage === null || isNaN(contextUsage)) {
+        const contextFileCount = prompt.context_file_count || prompt.contextFileCount || 
+                                prompt.contextFilesCount || prompt.context_files_count || 0;
+        const atFileCount = prompt.atFiles?.length || 
+                           (Array.isArray(prompt.atFiles) ? prompt.atFiles.length : 0) || 0;
+        const contextFiles = prompt.contextFiles?.attachedFiles?.length || 
+                            prompt.contextFiles?.codebaseFiles?.length ||
+                            (prompt.contextFiles && Array.isArray(prompt.contextFiles) ? prompt.contextFiles.length : 0) || 0;
+        
+        // Check contextFilesJson
+        let contextFilesJsonCount = 0;
+        try {
+          const contextFilesJson = prompt.contextFilesJson || prompt.context_files_json || prompt.contextFiles || prompt.context_files;
+          if (contextFilesJson) {
+            const parsed = typeof contextFilesJson === 'string' ? JSON.parse(contextFilesJson) : contextFilesJson;
+            if (Array.isArray(parsed)) {
+              contextFilesJsonCount = parsed.length;
+            } else if (parsed && typeof parsed === 'object') {
+              contextFilesJsonCount = Object.keys(parsed).length;
+            }
+          }
+        } catch (e) {
+          // Ignore parse errors
+        }
         
         // Estimate: roughly 2-5% per file referenced
-        const totalFileRefs = contextFileCount || atFileCount || contextFiles;
+        const totalFileRefs = contextFileCount || atFileCount || contextFiles || contextFilesJsonCount;
         if (totalFileRefs > 0) {
           contextUsage = Math.min(100, totalFileRefs * 3); // Estimate 3% per file
         } else {
-          // Check for @ references in text
-          const atMatches = (text.match(/@\w+/g) || []).length;
+          // Check for @ references in text (more comprehensive pattern)
+          const atMatches = (text.match(/@[\w\-\.\/\\]+/g) || []).length;
           if (atMatches > 0) {
             contextUsage = Math.min(100, atMatches * 5); // Estimate 5% per @ reference
           }
@@ -588,50 +675,21 @@ function renderPromptTokensChart(hoursParam = 24) {
     canvas.style.display = 'none';
     const container = canvas.parentElement;
     container.innerHTML = `
-      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 250px; text-align: center;">
-        <div style="font-size: var(--text-md); font-weight: 500; color: var(--color-text); margin-bottom: var(--space-xs);">No Data Available</div>
-        <div style="font-size: var(--text-sm); color: var(--color-text-muted);">Prompt data will appear once you start using Cursor AI</div>
+      <div class="empty-state">
+        <div class="empty-state-title">No Data Available</div>
+        <div class="empty-state-description">Data will appear here once you start using Cursor AI features</div>
+        <div class="empty-state-hint">Try sending a prompt or making code changes to see analytics</div>
       </div>
     `;
     return;
   }
   
-  // Show helpful message if no context data but there are prompts
+  // Show chart even if no context data - display prompts with 0% context
+  // This provides value by showing prompt activity over time
   if (!hasContextData) {
-    canvas.style.display = 'none';
-    const container = canvas.parentElement;
-    const timeLabel = hours === 24 ? '24 hours' : hours === 72 ? '3 days' : hours === 168 ? '7 days' : hours === 720 ? '30 days' : `${hours} hours`;
-    
-    // Count prompts with context in the time window
-    const windowStart = now - (hours * 60 * 60 * 1000);
-    const promptsInWindow = prompts.filter(p => {
-      const promptTime = new Date(p.timestamp).getTime();
-      return promptTime >= windowStart;
-    });
-    
-    const promptsWithContext = promptsInWindow.filter(p => {
-      const contextUsage = p.contextUsage || p.context_usage || 0;
-      const contextFileCount = p.context_file_count || p.contextFileCount || 0;
-      const atFiles = p.atFiles?.length || 0;
-      const atMatches = ((p.text || p.prompt || p.preview || '').match(/@\w+/g) || []).length;
-      return contextUsage > 0 || contextFileCount > 0 || atFiles > 0 || atMatches > 0;
-    });
-    
-    container.innerHTML = `
-      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 250px; text-align: center; padding: var(--space-lg);">
-        <div style="font-size: var(--text-md); font-weight: 500; color: var(--color-text); margin-bottom: var(--space-xs);">No Context Data Available</div>
-        <div style="font-size: var(--text-sm); color: var(--color-text-muted); margin-bottom: var(--space-md);">
-          No prompts with context data in the last ${timeLabel}. Try selecting a longer time range (3d, 7d, or 30d) or wait for new activity.
-        </div>
-        <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-bottom: var(--space-xs);">
-          Prompts in window: ${promptsInWindow.length} | With context: ${promptsWithContext.length}
-        </div>
-        <div style="font-size: var(--text-xs); color: var(--color-text-muted);">
-          Total prompts: ${prompts.length}
-        </div>
-      </div>
-    `;
-    return;
+    // Still render the chart, but with all context values at 0
+    // This shows prompt activity even without context data
+    console.log('[CHART] No context data found, showing prompts with 0% context usage');
   }
 
   const avgContextUsage = buckets.map(b => 
@@ -713,7 +771,7 @@ function renderPromptTokensChart(hoursParam = 24) {
     },
     options: {
       responsive: true,
-      maintainAspectRatio: true,
+      maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
       plugins: {
         legend: { 
@@ -1141,7 +1199,9 @@ function updateAIActivityChartTimescale(scale) {
   
   // Re-render chart with new time scale
   if (window.renderAIActivityChart) {
-    window.renderAIActivityChart(scale);
+    window.renderAIActivityChart(scale).catch(err => {
+      console.warn('[CHART] Error updating AI Activity Chart:', err);
+    });
   }
 }
 
@@ -1150,7 +1210,7 @@ function updateAIActivityChartTimescale(scale) {
  * Render AI Model Usage Analytics
  * Shows model distribution and usage patterns with charts
  */
-function renderModelUsageAnalytics() {
+async function renderModelUsageAnalytics() {
   const container = document.getElementById('modelUsageAnalytics');
   if (!container) {
     // Silently return if container not found (view might not be active)
@@ -1165,18 +1225,19 @@ function renderModelUsageAnalytics() {
   
   if (prompts.length === 0) {
     container.innerHTML = `
-      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 250px; padding: var(--space-xl); text-align: center;">
-        <div style="font-size: var(--text-lg); color: var(--color-text); margin-bottom: var(--space-xs); font-weight: 500;">No Data Available</div>
-        <div style="font-size: var(--text-sm); color: var(--color-text-muted);">Model usage data will appear as you use AI features in Cursor</div>
+      <div class="empty-state">
+        <div class="empty-state-title">No Model Data Available</div>
+        <div class="empty-state-description">Model usage data will appear as you use AI features in Cursor</div>
+        <div class="empty-state-hint">Start a conversation or use AI-powered editing to see model analytics</div>
       </div>
     `;
     return;
   }
 
   // Parse model information from prompts
-  const modelCounts = new Map();
-  const modeCounts = new Map();
-  const modelModeCombos = new Map();
+  let modelCounts = new Map();
+  let modeCounts = new Map();
+  let modelModeCombos = new Map();
   const modelTimeSeries = new Map(); // Track model usage over time
   
   // Helper to extract model name
@@ -1223,29 +1284,73 @@ function renderModelUsageAnalytics() {
     return normalized;
   };
 
-  prompts.forEach(p => {
-    const modelName = getModelName(p);
-    const mode = getMode(p);
-    const timestamp = new Date(p.timestamp).getTime();
-    
-    // Count models
-    modelCounts.set(modelName, (modelCounts.get(modelName) || 0) + 1);
-    
-    // Count modes
-    modeCounts.set(mode, (modeCounts.get(mode) || 0) + 1);
-    
-    // Count model-mode combinations
-    const combo = `${modelName} (${mode})`;
-    modelModeCombos.set(combo, (modelModeCombos.get(combo) || 0) + 1);
-    
-    // Track model usage over time (by day)
-    const day = new Date(timestamp).toDateString();
-    if (!modelTimeSeries.has(modelName)) {
-      modelTimeSeries.set(modelName, new Map());
+  // OPTIMIZATION: Use Web Worker for large datasets
+  if (prompts.length > 1000 && window.analyticsWorkerHelper) {
+    try {
+      const modelUsageData = await window.analyticsWorkerHelper.calculateModelUsage(prompts);
+      // Convert to Maps for compatibility
+      modelCounts = new Map(Object.entries(modelUsageData.modelCounts));
+      modeCounts = new Map(Object.entries(modelUsageData.modeCounts));
+      modelModeCombos = new Map(Object.entries(modelUsageData.modelModeCombos));
+      
+      // Still need to calculate time series on main thread (not in worker yet)
+      prompts.forEach(p => {
+        const modelName = getModelName(p);
+        const timestamp = new Date(p.timestamp).getTime();
+        const day = new Date(timestamp).toDateString();
+        if (!modelTimeSeries.has(modelName)) {
+          modelTimeSeries.set(modelName, new Map());
+        }
+        const dayCounts = modelTimeSeries.get(modelName);
+        dayCounts.set(day, (dayCounts.get(day) || 0) + 1);
+      });
+    } catch (error) {
+      // Fallback to main thread processing
+      prompts.forEach(p => {
+        const modelName = getModelName(p);
+        const mode = getMode(p);
+        const timestamp = new Date(p.timestamp).getTime();
+        
+        modelCounts.set(modelName, (modelCounts.get(modelName) || 0) + 1);
+        modeCounts.set(mode, (modeCounts.get(mode) || 0) + 1);
+        
+        const combo = `${modelName} (${mode})`;
+        modelModeCombos.set(combo, (modelModeCombos.get(combo) || 0) + 1);
+        
+        const day = new Date(timestamp).toDateString();
+        if (!modelTimeSeries.has(modelName)) {
+          modelTimeSeries.set(modelName, new Map());
+        }
+        const dayCounts = modelTimeSeries.get(modelName);
+        dayCounts.set(day, (dayCounts.get(day) || 0) + 1);
+      });
     }
-    const dayCounts = modelTimeSeries.get(modelName);
-    dayCounts.set(day, (dayCounts.get(day) || 0) + 1);
-  });
+  } else {
+    // Main thread processing for smaller datasets
+    prompts.forEach(p => {
+      const modelName = getModelName(p);
+      const mode = getMode(p);
+      const timestamp = new Date(p.timestamp).getTime();
+      
+      // Count models
+      modelCounts.set(modelName, (modelCounts.get(modelName) || 0) + 1);
+      
+      // Count modes
+      modeCounts.set(mode, (modeCounts.get(mode) || 0) + 1);
+      
+      // Count model-mode combinations
+      const combo = `${modelName} (${mode})`;
+      modelModeCombos.set(combo, (modelModeCombos.get(combo) || 0) + 1);
+      
+      // Track model usage over time (by day)
+      const day = new Date(timestamp).toDateString();
+      if (!modelTimeSeries.has(modelName)) {
+        modelTimeSeries.set(modelName, new Map());
+      }
+      const dayCounts = modelTimeSeries.get(modelName);
+      dayCounts.set(day, (dayCounts.get(day) || 0) + 1);
+    });
+  }
 
   // Sort by frequency
   const sortedModels = Array.from(modelCounts.entries()).sort((a, b) => b[1] - a[1]);

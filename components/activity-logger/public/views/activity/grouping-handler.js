@@ -20,6 +20,20 @@ function groupTimelineItems(items, groupingType) {
   
   const groups = new Map();
   
+  // Debug logging for conversation grouping
+  if (groupingType === 'conversation') {
+    console.log('[GROUPING] Grouping by conversation:', {
+      totalItems: items.length,
+      itemTypes: items.map(i => i.itemType),
+      sampleItem: items[0] ? {
+        itemType: items[0].itemType,
+        conversationId: items[0].conversationId,
+        conversation_id: items[0].conversation_id,
+        composerId: items[0].composerId
+      } : null
+    });
+  }
+  
   items.forEach(item => {
     let groupKey = '';
     let groupLabel = '';
@@ -81,6 +95,26 @@ function groupTimelineItems(items, groupingType) {
         groupLabel = window.getWorkspaceName ? window.getWorkspaceName(workspace) : workspace.split('/').pop();
         break;
         
+      case 'conversation':
+        // Group by conversation ID
+        // Check multiple possible field names for conversation ID
+        let conversationId = item.conversation_id || item.conversationId || item.composerId || 
+                            item.parent_conversation_id || item.parentConversationId || '';
+        const conversationTitle = item.conversation_title || item.conversationTitle || '';
+        
+        if (conversationId) {
+          // Use conversation ID as key, title as label
+          groupKey = conversationId;
+          groupLabel = conversationTitle && conversationTitle !== 'Untitled Conversation' && conversationTitle !== 'Untitled'
+            ? conversationTitle
+            : `Conversation ${conversationId.substring(0, 8)}`;
+        } else {
+          // Items without conversation ID go to "Standalone" group
+          groupKey = '_standalone';
+          groupLabel = 'Standalone Items';
+        }
+        break;
+        
       default:
         return items;
     }
@@ -106,7 +140,7 @@ function groupTimelineItems(items, groupingType) {
     group.metadata.count++;
     
     if (item.itemType === 'event') group.metadata.events++;
-    if (item.itemType === 'prompt') group.metadata.prompts++;
+    if (item.itemType === 'prompt' || item.itemType === 'conversation-turn') group.metadata.prompts++;
     if (item.itemType === 'terminal') group.metadata.terminals++;
     
     const itemTime = item.sortTime || (item.timestamp ? new Date(item.timestamp).getTime() : Date.now());
@@ -133,6 +167,20 @@ function groupTimelineItems(items, groupingType) {
       // Sort groups by most recent activity
       return (b.metadata.lastTime || 0) - (a.metadata.lastTime || 0);
     });
+  
+  // Debug logging for conversation grouping results
+  if (groupingType === 'conversation') {
+    console.log('[GROUPING] Conversation grouping complete:', {
+      totalGroups: groupedItems.length,
+      groups: groupedItems.map(g => ({
+        label: g.label,
+        count: g.metadata.count,
+        events: g.metadata.events,
+        prompts: g.metadata.prompts,
+        terminals: g.metadata.terminals
+      }))
+    });
+  }
   
   return groupedItems;
 }
@@ -188,33 +236,41 @@ function renderGroupedTimeline(groups) {
     return '<div class="empty-state">No items to display</div>';
   }
   
-  return groups.map(group => {
-    const isExpanded = groupExpanded.has(group.key);
-    const duration = group.metadata.lastTime && group.metadata.firstTime 
-      ? Math.round((group.metadata.lastTime - group.metadata.firstTime) / 1000 / 60)
-      : 0;
-    
-    return `
-      <div class="timeline-group" data-group-key="${group.key}">
-        <div class="timeline-group-header" onclick="toggleGroup('${group.key}')">
-          <div class="timeline-group-title">
-            <span class="group-icon">${isExpanded ? '▼' : '▶'}</span>
-            <span class="group-label">${window.escapeHtml ? window.escapeHtml(group.label) : group.label}</span>
-            <span class="group-badge">${group.metadata.count} items</span>
+  // Mark that we're rendering grouped timeline to prevent double-grouping
+  window._isRenderingGroupedTimeline = true;
+  
+  try {
+    return groups.map(group => {
+      const isExpanded = groupExpanded.has(group.key);
+      const duration = group.metadata.lastTime && group.metadata.firstTime 
+        ? Math.round((group.metadata.lastTime - group.metadata.firstTime) / 1000 / 60)
+        : 0;
+      
+      return `
+        <div class="timeline-group" data-group-key="${group.key}">
+          <div class="timeline-group-header" onclick="toggleGroup('${group.key}')">
+            <div class="timeline-group-title">
+              <span class="group-icon">${isExpanded ? '▼' : '▶'}</span>
+              <span class="group-label">${window.escapeHtml ? window.escapeHtml(group.label) : group.label}</span>
+              <span class="group-badge">${group.metadata.count} items</span>
+            </div>
+            <div class="timeline-group-meta">
+              <span>${group.metadata.events} events</span>
+              <span>${group.metadata.prompts} prompts</span>
+              ${group.metadata.terminals > 0 ? `<span>${group.metadata.terminals} commands</span>` : ''}
+              ${duration > 0 ? `<span>${duration} min</span>` : ''}
+            </div>
           </div>
-          <div class="timeline-group-meta">
-            <span>${group.metadata.events} events</span>
-            <span>${group.metadata.prompts} prompts</span>
-            ${group.metadata.terminals > 0 ? `<span>${group.metadata.terminals} commands</span>` : ''}
-            ${duration > 0 ? `<span>${duration} min</span>` : ''}
+          <div class="timeline-group-items" style="display: ${isExpanded ? 'block' : 'none'}">
+            ${window.renderUnifiedTimeline ? window.renderUnifiedTimeline(group.items) : ''}
           </div>
         </div>
-        <div class="timeline-group-items" style="display: ${isExpanded ? 'block' : 'none'}">
-          ${window.renderUnifiedTimeline ? window.renderUnifiedTimeline(group.items) : ''}
-        </div>
-      </div>
-    `;
-  }).join('');
+      `;
+    }).join('');
+  } finally {
+    // Always clear the flag after rendering
+    window._isRenderingGroupedTimeline = false;
+  }
 }
 
 /**

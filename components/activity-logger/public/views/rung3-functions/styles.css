@@ -1,0 +1,451 @@
+/**
+ * Rung 3 Functions View Styles
+ */
+
+.rung3-functions-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: var(--space-lg, 1.5rem);
+  gap: var(--space-md, 1rem);
+}
+
+.rung3-functions-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-md, 1rem);
+}
+
+.rung3-functions-title-section {
+  flex: 1;
+}
+
+.rung3-functions-title {
+  font-size: var(--text-2xl, 1.5rem);
+  font-weight: 600;
+  margin: 0 0 var(--space-xs, 0.5rem) 0;
+  color: var(--color-text, #1a1a1a);
+}
+
+.rung3-functions-subtitle {
+  font-size: var(--text-sm, 0.875rem);
+  color: var(--color-text-muted, #666);
+  margin: 0;
+}
+
+.rung3-functions-actions {
+  display: flex;
+  gap: var(--space-sm, 0.75rem);
+}
+
+.rung3-functions-controls-bar {
+  display: flex;
+  gap: var(--space-md, 1rem);
+  padding: var(--space-md, 1rem);
+  background: var(--color-bg-secondary, #f5f5f5);
+  border-radius: var(--radius-sm, 0.125rem);
+  flex-wrap: wrap;
+}
+
+.rung3-functions-main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md, 1rem);
+  overflow: hidden;
+}
+
+.rung3-functions-stats-panel {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--space-md, 1rem);
+}
+
+.rung3-functions-stat-card {
+  padding: var(--space-md, 1rem);
+  background: var(--color-bg, #fff);
+  border: 1px solid var(--color-border, #ddd);
+  border-radius: var(--radius-sm, 0.125rem);
+  box-shadow: var(--shadow-sm, 0 1px 1px 0 rgba(0, 0, 0, 0.05));
+}
+
+.rung3-functions-stat-label {
+  font-size: var(--text-xs, 0.75rem);
+  color: var(--color-text-muted, #666);
+  margin-bottom: var(--space-xs, 0.5rem);
+}
+
+.rung3-functions-stat-value {
+  font-size: var(--text-2xl, 1.5rem);
+  font-weight: 600;
+  color: var(--color-text, #1a1a1a);
+}
+
+.rung3-functions-tabs {
+  display: flex;
+  gap: var(--space-sm, 0.75rem);
+  border-bottom: 1px solid var(--color-border, #ddd);
+}
+
+.rung3-functions-tab {
+  padding: var(--space-sm, 0.75rem) var(--space-md, 1rem);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  font-size: var(--text-sm, 0.875rem);
+  color: var(--color-text-muted, #666);
+  transition: all 0.2s;
+}
+
+.rung3-functions-tab:hover {
+  color: var(--color-text, #1a1a1a);
+}
+
+.rung3-functions-tab.active {
+  color: var(--color-primary, #3b82f6);
+  border-bottom-color: var(--color-primary, #3b82f6);
+}
+
+.rung3-functions-tab-content {
+  display: none;
+  flex: 1;
+  overflow: hidden;
+}
+
+.rung3-functions-tab-content.active {
+  display: flex;
+  flex-direction: column;
+}
+
+.rung3-functions-list-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-bg, #fff);
+  border: 1px solid var(--color-border, #ddd);
+  border-radius: var(--radius-sm, 0.125rem);
+  overflow: hidden;
+}
+
+.rung3-functions-list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-md, 1rem);
+  border-bottom: 1px solid var(--color-border, #ddd);
+}
+
+.rung3-functions-section-title {
+  font-size: var(--text-lg, 1.125rem);
+  font-weight: 600;
+  margin: 0;
+  color: var(--color-text, #1a1a1a);
+}
+
+.rung3-functions-list-stats {
+  font-size: var(--text-sm, 0.875rem);
+  color: var(--color-text-muted, #666);
+}
+
+.rung3-functions-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-md, 1rem);
+}
+
+.rung3-functions-loading {
+  text-align: center;
+  padding: var(--space-xl, 2rem);
+  color: var(--color-text-muted, #666);
+}
+
+.rung3-functions-change-item,
+.rung3-functions-function-item {
+  padding: var(--space-md, 1rem);
+  border: 1px solid var(--color-border, #ddd);
+  border-radius: var(--radius-sm, 0.125rem);
+  margin-bottom: var(--space-sm, 0.75rem);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.rung3-functions-change-item:hover,
+.rung3-functions-function-item:hover {
+  background: var(--color-bg-secondary, #f5f5f5);
+  border-color: var(--color-primary, #3b82f6);
+}
+
+.rung3-functions-change-header,
+.rung3-functions-function-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-sm, 0.75rem);
+}
+
+.rung3-functions-change-function,
+.rung3-functions-function-name {
+  font-weight: 500;
+  color: var(--color-text, #1a1a1a);
+}
+
+.rung3-functions-change-meta,
+.rung3-functions-function-meta {
+  font-size: var(--text-xs, 0.75rem);
+  color: var(--color-text-muted, #666);
+}
+
+.rung3-functions-change-type-badge {
+  padding: 2px 6px;
+  border-radius: var(--radius-sm, 0.125rem);
+  font-size: var(--text-xs, 0.75rem);
+  font-weight: 500;
+}
+
+.rung3-functions-change-type-badge.add {
+  background: rgba(34, 197, 94, 0.15);
+  color: #22c55e;
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.rung3-functions-change-type-badge.remove {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.rung3-functions-change-type-badge.modify {
+  background: rgba(59, 130, 246, 0.15);
+  color: #3b82f6;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.rung3-functions-callgraph-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-bg, #fff);
+  border: 1px solid var(--color-border, #ddd);
+  border-radius: var(--radius-sm, 0.125rem);
+  overflow: hidden;
+}
+
+.rung3-functions-callgraph-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-md, 1rem);
+  border-bottom: 1px solid var(--color-border, #ddd);
+}
+
+.rung3-functions-callgraph-stats {
+  display: flex;
+  gap: var(--space-md, 1rem);
+  font-size: var(--text-sm, 0.875rem);
+  color: var(--color-text-muted, #666);
+}
+
+.rung3-functions-callgraph {
+  flex: 1;
+  overflow: auto;
+  padding: var(--space-md, 1rem);
+  min-height: 400px;
+}
+
+.rung3-functions-details-panel {
+  position: fixed;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 400px;
+  background: var(--color-bg, #fff);
+  border-left: 1px solid var(--color-border, #ddd);
+  box-shadow: var(--shadow-lg, 0 4px 8px -2px rgba(0, 0, 0, 0.1));
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+}
+
+.rung3-functions-details-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-md, 1rem);
+  border-bottom: 1px solid var(--color-border, #ddd);
+}
+
+.rung3-functions-details-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-md, 1rem);
+}
+
+.rung3-functions-detail-section {
+  margin-bottom: var(--space-md, 1rem);
+}
+
+.rung3-functions-detail-label {
+  font-size: var(--text-xs, 0.75rem);
+  font-weight: 500;
+  color: var(--color-text-muted, #666);
+  margin-bottom: var(--space-xs, 0.5rem);
+}
+
+.rung3-functions-detail-value {
+  font-size: var(--text-sm, 0.875rem);
+  color: var(--color-text, #1a1a1a);
+  word-break: break-all;
+}
+
+.control-group-search {
+  flex: 1;
+  min-width: 200px;
+}
+
+.control-input-search {
+  width: 100%;
+}
+
+.btn-copy {
+  background: none;
+  border: 1px solid var(--color-border, #ddd);
+  border-radius: var(--radius-sm, 0.125rem);
+  padding: 2px 6px;
+  margin-left: var(--space-xs, 0.5rem);
+  cursor: pointer;
+  font-size: var(--text-xs, 0.75rem);
+  transition: all 0.2s;
+}
+
+.btn-copy:hover {
+  background: var(--color-bg-secondary, #f5f5f5);
+  border-color: var(--color-primary, #3b82f6);
+}
+
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm, 0.125rem);
+  font-size: var(--text-xs, 0.75rem);
+  font-weight: 500;
+}
+
+.badge-language {
+  background: rgba(59, 130, 246, 0.15);
+  color: #3b82f6;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.rung3-callgraph-visualization {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg, 1.5rem);
+}
+
+.rung3-callgraph-section {
+  background: var(--color-bg-secondary, #f5f5f5);
+  border-radius: var(--radius-sm, 0.125rem);
+  padding: var(--space-md, 1rem);
+}
+
+.rung3-callgraph-section-title {
+  font-size: var(--text-base, 1rem);
+  font-weight: 600;
+  margin: 0 0 var(--space-md, 1rem) 0;
+  color: var(--color-text, #1a1a1a);
+}
+
+.rung3-callgraph-nodes,
+.rung3-callgraph-edges {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: var(--space-sm, 0.75rem);
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.rung3-callgraph-node-item {
+  background: var(--color-bg, #fff);
+  border: 1px solid var(--color-border, #ddd);
+  border-radius: var(--radius-sm, 0.125rem);
+  padding: var(--space-sm, 0.75rem);
+  transition: all 0.2s;
+}
+
+.rung3-callgraph-node-item:hover {
+  border-color: var(--color-primary, #3b82f6);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.rung3-callgraph-node-name {
+  font-weight: 500;
+  color: var(--color-text, #1a1a1a);
+  font-family: var(--font-mono, monospace);
+  font-size: var(--text-sm, 0.875rem);
+  margin-bottom: var(--space-xs, 0.5rem);
+}
+
+.rung3-callgraph-node-meta {
+  font-size: var(--text-xs, 0.75rem);
+  color: var(--color-text-muted, #666);
+}
+
+.rung3-callgraph-edge-item {
+  background: var(--color-bg, #fff);
+  border: 1px solid var(--color-border, #ddd);
+  border-radius: var(--radius-sm, 0.125rem);
+  padding: var(--space-sm, 0.75rem);
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs, 0.5rem);
+  transition: all 0.2s;
+}
+
+.rung3-callgraph-edge-item:hover {
+  border-color: var(--color-primary, #3b82f6);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.rung3-callgraph-edge-source,
+.rung3-callgraph-edge-target {
+  font-family: var(--font-mono, monospace);
+  font-size: var(--text-sm, 0.875rem);
+  color: var(--color-text, #1a1a1a);
+}
+
+.rung3-callgraph-edge-arrow {
+  color: var(--color-primary, #3b82f6);
+  font-weight: 600;
+}
+
+.rung3-callgraph-more {
+  grid-column: 1 / -1;
+  text-align: center;
+  color: var(--color-text-muted, #666);
+  font-size: var(--text-sm, 0.875rem);
+  padding: var(--space-sm, 0.75rem);
+  font-style: italic;
+}
+
+.rung3-pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: var(--space-md, 1rem);
+  padding: var(--space-md, 1rem);
+  margin-top: var(--space-md, 1rem);
+  border-top: 1px solid var(--color-border, #ddd);
+}
+
+.rung3-pagination-info {
+  font-size: var(--text-sm, 0.875rem);
+  color: var(--color-text-muted, #666);
+}
+
+.rung3-pagination button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+

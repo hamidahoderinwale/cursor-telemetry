@@ -19,6 +19,14 @@ class SchemaConfigView {
   }
 
   async loadSchema() {
+    // Show loading state
+    if (window.showLoadingState) {
+      const container = document.getElementById('schema-config-container') || document.getElementById('viewContainer');
+      if (container) {
+        window.showLoadingState(container, 'Loading schema configuration...', 'text');
+      }
+    }
+    
     try {
       // Create abort controller for timeout (compatible with older browsers)
       // Use longer timeout for production (Render backend can be slow on cold start)
@@ -99,6 +107,14 @@ class SchemaConfigView {
       this.connectionError = error;
       // Set empty schema so UI can show error message
       this.schema = { tables: [] };
+      
+      // Show error state
+      if (window.showErrorState) {
+        const container = document.getElementById('schema-config-container') || document.getElementById('viewContainer');
+        if (container) {
+          window.showErrorState(container, error, () => this.loadSchema());
+        }
+      }
     }
   }
 

@@ -8,18 +8,28 @@ const { nanoid } = require('nanoid');
 function createMotifRoutes(deps) {
   const { app, persistentDB, motifService } = deps;
 
-  if (!motifService) {
-    console.warn('[MOTIF] Motif service not available, motif routes disabled');
-    return;
-  }
-
   console.log('[MOTIF] Registering motif routes...');
+
+  // Helper function to check if service is available
+  const checkService = (res) => {
+    if (!motifService) {
+      res.status(503).json({
+        success: false,
+        error: 'Motif service not available',
+        message: 'The motif service is not initialized. This feature may not be available in this installation.'
+      });
+      return false;
+    }
+    return true;
+  };
 
   /**
    * GET /api/motifs
    * Get all motifs with optional filters
    */
   app.get('/api/motifs', async (req, res) => {
+    if (!checkService(res)) return;
+    
     try {
       const filters = {
         intentClass: req.query.intent_class || null,
@@ -50,6 +60,8 @@ function createMotifRoutes(deps) {
    * Get single motif by ID
    */
   app.get('/api/motifs/:id', async (req, res) => {
+    if (!checkService(res)) return;
+    
     try {
       const motifId = req.params.id;
       const motif = await motifService.getMotif(motifId);
@@ -79,6 +91,8 @@ function createMotifRoutes(deps) {
    * Get motif frequency timeline
    */
   app.get('/api/motifs/:id/timeline', async (req, res) => {
+    if (!checkService(res)) return;
+    
     try {
       const motifId = req.params.id;
       const timeRange = req.query.range || null;
@@ -103,6 +117,8 @@ function createMotifRoutes(deps) {
    * Extract motifs from canonical DAGs
    */
   app.post('/api/motifs/extract', async (req, res) => {
+    if (!checkService(res)) return;
+    
     try {
       const { canonicalDAGs, options = {} } = req.body;
 
@@ -134,6 +150,8 @@ function createMotifRoutes(deps) {
    * Get summary statistics for motifs
    */
   app.get('/api/motifs/summary', async (req, res) => {
+    if (!checkService(res)) return;
+    
     try {
       const motifs = await motifService.getMotifs();
 

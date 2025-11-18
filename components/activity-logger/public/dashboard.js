@@ -216,7 +216,9 @@ function handleRealtimeUpdate(data) {
   }
   
   // Fire and forget - don't block on stats calculation
-  calculateStats().catch(err => console.warn('[STATS] Error calculating stats:', err));
+  if (window.calculateStats) {
+    window.calculateStats().catch(err => console.warn('[STATS] Error calculating stats:', err));
+  }
   renderCurrentView();
 }
 
@@ -731,7 +733,7 @@ function renderPromptsList(prompts) {
 }
 
 // NOTE: renderPromptEmptyState and getPromptStatusIcon are now in app/ui-helpers.js
-// NOTE: formatTimeAgo is already in utils/time-formatting.js
+// NOTE: formatTimeAgo is already in utils/formatting/time-formatting.js
 
 function groupIntoThreads(entries) {
   const threadMap = new Map();
@@ -801,12 +803,12 @@ function renderActivityChart_DISABLED() {
   
   if (allEvents.length === 0 && allPrompts.length === 0) {
     const context = ctx.getContext('2d');
-    context.font = '500 16px "Stack Sans Text", "Inter", sans-serif';
+    context.font = '500 16px "Geist Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
     context.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-text') || '#1f2937';
     context.textAlign = 'center';
     context.textBaseline = 'middle';
     context.fillText('No Data Available', ctx.width / 2, ctx.height / 2 - 10);
-    context.font = '14px "Stack Sans Text", "Inter", sans-serif';
+    context.font = '14px "Geist Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
     context.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-text-muted') || '#6b7280';
     context.fillText('Activity data will appear here once you start coding', ctx.width / 2, ctx.height / 2 + 15);
     return;
@@ -1780,12 +1782,12 @@ function createChart(canvasId, config) {
 // ===================================
 // Prompt Relationship Finding
 // ===================================
-// NOTE: findRelatedPrompts is now in utils/dashboard-helpers.js
+// NOTE: findRelatedPrompts is now in app/dashboard-helpers.js
 
 // ===================================
 // Utility Functions
 // ===================================
-// NOTE: Utility functions are now in utils/dashboard-helpers.js:
+// NOTE: Utility functions are now in app/dashboard-helpers.js:
 // - truncate, isImageFile, copyToClipboard, filterEventsByWorkspace, filterActivityByTimeRange
 // NOTE: escapeHtml is in utils/templates.js
 
@@ -1822,304 +1824,8 @@ document.head.appendChild(fadeOutStyle);
 // ===================================
 // Initialization
 // ===================================
-
-// Wait for both DOM and deferred scripts to load
-function initializeWhenReady() {
-  // Check if critical functions are available (from deferred scripts)
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initializeWhenReady);
-    return;
-  }
-  
-  // Wait a tick for deferred scripts to execute
-  if (document.readyState === 'interactive' || document.readyState === 'loading') {
-    setTimeout(initializeWhenReady, 0);
-    return;
-  }
-  
-  // Initialize status popup FIRST (before any console.logs)
-  if (typeof initStatusPopup === 'function') {
-    initStatusPopup();
-  }
-  
-  console.log('Initializing Cursor Telemetry Dashboard');
-
-  // Setup navigation
-  document.querySelectorAll('.nav-link').forEach(link => {
-    link.addEventListener('click', (e) => {
-      e.preventDefault();
-      const view = link.dataset.view;
-      if (view) switchView(view);
-    });
-  });
-
-  // Setup workspace selector
-  document.getElementById('workspaceSelect')?.addEventListener('change', (e) => {
-    state.currentWorkspace = e.target.value;
-    renderCurrentView();
-  });
-
-  // Setup modal close on overlay click
-  document.querySelectorAll('.modal-overlay').forEach(overlay => {
-    overlay.addEventListener('click', () => {
-      overlay.parentElement.classList.remove('active');
-    });
-  });
-
-  // Initialize persistent storage and data synchronization
-  let storage, aggregator, synchronizer;
-  
-  try {
-    storage = new PersistentStorage();
-    aggregator = new AnalyticsAggregator(storage);
-    synchronizer = new DataSynchronizer(storage, aggregator);
-    
-    console.log('Persistence system enabled');
-  } catch (error) {
-    console.warn('Persistence system not available:', error);
-    storage = null;
-  }
-  
-  // Initialize WebSocket (disabled - using HTTP polling instead)
-  // Socket.IO is not configured on the companion service
-  // const wsManager = new WebSocketManager();
-  // wsManager.connect();
-
-  // Use optimized initialization with warm-start
-  if (storage && synchronizer) {
-    // Start dashboard initialization immediately - don't wait for storage
-    state.connected = true;
-    updateConnectionStatus(true);
-    
-    // Initialize dashboard right away (will use cache if available)
-    (window.initializeDashboard || (() => { 
-      console.error('[ERROR] initializeDashboard not available'); 
-      return Promise.resolve();
-    }))().catch(err => {
-      console.error('[ERROR] Dashboard initialization failed:', err);
-    });
-    
-    // Initialize storage and synchronizer in background (non-blocking)
-    Promise.resolve().then(async () => {
-      try {
-        await storage.init();
-        console.log('[DATA] Storage initialized');
-        
-        // Start synchronizer in background (non-blocking)
-        synchronizer.initialize().then((stats) => {
-          console.log('[DATA] Synchronizer ready:', stats);
-        }).catch(error => {
-          console.warn('Synchronizer initialization failed (non-critical):', error.message);
-        });
-      } catch (error) {
-        console.warn('[WARNING] Storage initialization failed (non-critical):', error.message);
-      }
-    });
-    
-    // Initialize search engine after data is loaded (defer to idle time)
-    if (typeof requestIdleCallback !== 'undefined') {
-      requestIdleCallback(() => {
-        if (typeof window.initializeSearch === 'function') {
-          window.initializeSearch().catch(err => {
-            console.warn('[SEARCH] Initial search initialization failed, will retry:', err);
-          });
-        }
-      }, { timeout: 2000 });
-    } else {
-      setTimeout(() => {
-        if (typeof window.initializeSearch === 'function') {
-          window.initializeSearch().catch(err => {
-            console.warn('[SEARCH] Initial search initialization failed, will retry:', err);
-          });
-        }
-      }, 2000);
-    }
-    
-    console.log('[SUCCESS] Dashboard initialized with warm-start');
-    
-    // Refresh is now handled by RefreshManager (optimized scheduling)
-    // No need for duplicate refresh logic here
-  } else {
-    // No persistence - use traditional fetch
-    initializeNonPersistent();
-  }
-  
-  // Non-persistent initialization function
-  function initializeNonPersistent() {
-    (window.initializeDashboard || (() => { console.error('[ERROR] initializeDashboard not available'); return Promise.resolve(); }))().then(() => {
-      state.connected = true;
-      updateConnectionStatus(true);
-      // Initialize search engine after data is loaded
-      setTimeout(() => {
-        if (typeof window.initializeSearch === 'function') {
-          window.initializeSearch().catch(err => {
-            console.warn('[SEARCH] Initial search initialization failed:', err);
-          });
-        }
-      }, 500);
-    }).catch(error => {
-      console.error('Initial data fetch failed:', error);
-      updateConnectionStatus(false);
-      // Fallback to old method
-      (window.fetchAllData || (() => { console.error('[ERROR] fetchAllData not available'); return Promise.resolve(); }))().then(() => {
-        renderCurrentView();
-        setTimeout(() => {
-          if (typeof window.initializeSearch === 'function') {
-            window.initializeSearch().catch(err => {
-              console.warn('[SEARCH] Search initialization failed:', err);
-            });
-          }
-        }, 500);
-      });
-    });
-    
-    // Setup auto-refresh with debouncing
-    let refreshInProgress = false;
-    let lastRefreshTime = Date.now();
-    const MIN_REFRESH_INTERVAL = CONFIG.REFRESH_INTERVAL; // Match the interval to prevent overlap
-    
-    setInterval(async () => {
-      if (refreshInProgress || (Date.now() - lastRefreshTime) < MIN_REFRESH_INTERVAL) {
-        console.log('[SYNC] Skipping refresh - already in progress or too soon');
-        return;
-      }
-      
-      refreshInProgress = true;
-      lastRefreshTime = Date.now();
-      
-      try {
-        await (window.fetchRecentData || (() => { console.error('[ERROR] fetchRecentData not available'); }))();
-        // Fire and forget - don't block on stats calculation
-  calculateStats().catch(err => console.warn('[STATS] Error calculating stats:', err));
-        renderCurrentView();
-        // Update status on successful sync
-        if (window.state && window.state.connected) {
-          updateConnectionStatus(true, 'Connected - synced');
-        }
-      } catch (error) {
-        console.error('Refresh error:', error);
-        // Update status if sync fails
-        if (window.state && window.state.connected) {
-          updateConnectionStatus(false, 'Sync failed - retrying...');
-        }
-      } finally {
-        refreshInProgress = false;
-      }
-    }, CONFIG.REFRESH_INTERVAL);
-  }
-
-  // Setup search palette keyboard shortcuts and event listeners
-  document.addEventListener('keydown', (e) => {
-    // CMD+K or CTRL+K to open search
-    if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-      e.preventDefault();
-      openSearchPalette();
-    }
-    
-    // ESC to close search
-    if (e.key === 'Escape') {
-      const palette = document.getElementById('searchPalette');
-      if (palette && palette.classList.contains('active')) {
-        closeSearchPalette();
-      }
-    }
-    
-    // Arrow keys for navigation
-    const palette = document.getElementById('searchPalette');
-    if (palette && palette.classList.contains('active')) {
-      if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        navigateSearchResults('down');
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        navigateSearchResults('up');
-      } else if (e.key === 'Enter' && searchSelectedIndex >= 0) {
-        e.preventDefault();
-        selectSearchResult(searchSelectedIndex);
-      }
-    }
-  });
-  
-  // Setup search input with debouncing and example visibility
-  const searchInput = document.getElementById('searchInput');
-  if (searchInput) {
-    let debounceTimeout;
-    searchInput.addEventListener('input', (e) => {
-      // Update examples visibility
-      if (window.updateSearchExamples) {
-        window.updateSearchExamples();
-      }
-      
-      // Debounce search
-      clearTimeout(debounceTimeout);
-      const query = e.target.value.trim();
-      if (query.length > 0) {
-        debounceTimeout = setTimeout(() => {
-          if (window.performSearch) {
-            window.performSearch(query);
-          }
-        }, 300); // 300ms debounce
-      } else {
-        // Show examples when empty
-        if (window.updateSearchExamples) {
-          window.updateSearchExamples();
-        }
-      }
-    });
-    
-    // Handle keyboard navigation
-    searchInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        const query = searchInput.value.trim();
-        if (query && window.performSearch) {
-          window.performSearch(query);
-        }
-      } else if (e.key === 'Escape') {
-        if (window.closeSearchPalette) {
-          window.closeSearchPalette();
-        }
-      } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-        e.preventDefault();
-        if (window.navigateSearchResults) {
-          window.navigateSearchResults(e.key === 'ArrowDown' ? 'down' : 'up');
-        }
-      }
-    });
-  }
-  
-  // Setup search trigger button
-  const searchTrigger = document.getElementById('searchTrigger');
-  if (searchTrigger) {
-    searchTrigger.addEventListener('click', () => {
-      openSearchPalette();
-    });
-  }
-  
-  // Close search when clicking overlay
-  const searchPalette = document.getElementById('searchPalette');
-  if (searchPalette) {
-    const overlay = searchPalette.querySelector('.modal-overlay');
-    if (overlay) {
-      overlay.addEventListener('click', () => {
-        closeSearchPalette();
-      });
-    }
-  }
-  
-  console.log('Dashboard initialized');
-}
-
-// Start initialization - wait for DOM and deferred scripts
-if (document.readyState === 'complete' || document.readyState === 'interactive') {
-  // DOM already loaded, wait a tick for deferred scripts
-  setTimeout(initializeWhenReady, 0);
-} else {
-  document.addEventListener('DOMContentLoaded', () => {
-    // Wait a tick for deferred scripts to execute
-    setTimeout(initializeWhenReady, 0);
-  });
-}
+// NOTE: Initialization is handled by app/dashboard-lifecycle.js
+// This file no longer handles DOMContentLoaded - dashboard-lifecycle.js does
 
 // ===================================
 // Search Engine
@@ -2130,3 +1836,8 @@ if (document.readyState === 'complete' || document.readyState === 'interactive')
 // Prompt Management
 // ===================================
 // NOTE: refreshPrompts and checkClipboardStatus are now in app/ui-helpers.js
+
+// Export critical functions to window
+window.calculateStats = calculateStats;
+window.handleRealtimeUpdate = handleRealtimeUpdate;
+window.handleTerminalCommand = handleTerminalCommand;

@@ -122,6 +122,8 @@ const createStartupService = require('./services/startup.js');
 const { extractModelInfo } = require('./utils/model-detector.js');
 
 // Import route modules
+// NOTE: New route registry available at ./routes/index.js for organized route registration
+// Keeping individual imports for backward compatibility during migration
 const createCoreRoutes = require('./routes/core.js');
 const createWorkspaceRoutes = require('./routes/workspace.js');
 const createRawDataRoutes = require('./routes/raw-data.js');
@@ -140,13 +142,23 @@ const createFileContentsRoutes = require('./routes/file-contents.js');
 const createMCPRoutes = require('./routes/mcp.js');
 const createExportImportRoutes = require('./routes/export-import.js');
 const createSharingRoutes = require('./routes/sharing.js');
+const setupAccountRoutes = require('./routes/account.js');
 const createWhiteboardRoutes = require('./routes/whiteboard.js');
 const createAIRoutes = require('./routes/ai.js');
+const createConversationRoutes = require('./routes/conversations.js');
 const createAnnotationRoutes = require('./routes/annotations.js');
 const createStateRoutes = require('./routes/states.js');
 const createPlotRoutes = require('./routes/plots.js');
 const initializeMotifService = require('./services/motif-service-init.js');
 const SharingService = require('./services/sharing-service.js');
+const ConversationManager = require('./services/conversation-manager.js');
+const ConversationCapture = require('./services/conversation-capture.js');
+const ConversationContext = require('./services/conversation-context.js');
+
+// New architecture components (available for gradual migration)
+const serviceContainer = require('./core/service-container.js');
+const DataAccessService = require('./services/data-access/data-access-service.js');
+// const { registerAllRoutes } = require('./routes/index.js'); // Uncomment when ready to migrate
 
 // Initialize persistent database
 const persistentDB = new PersistentDB();
@@ -154,8 +166,8 @@ const persistentDB = new PersistentDB();
 // Initialize schema migrations
 const schemaMigrations = new SchemaMigrations(persistentDB);
 
-// Initialize sharing service
-const sharingService = new SharingService(persistentDB);
+// Initialize sharing service (will be updated with account service after routes setup)
+let sharingService = new SharingService(persistentDB);
 
 // Initialize analytics trackers
 const contextAnalyzer = new ContextAnalyzer(persistentDB);
@@ -288,10 +300,18 @@ function broadcastConversationUpdate(conversationId, data) {
 }
 
 // Middleware
+// OPTIMIZATION: Enhanced compression with better settings for large payloads
 app.use(
   compression({
+    level: 6, // Balance between compression and CPU (1-9, 6 is good default)
     threshold: 1024, // Only compress responses > 1KB
-    level: 6, // Balance between compression ratio and speed
+    filter: (req, res) => {
+      // Compress JSON and text responses
+      if (req.headers['x-no-compression']) {
+        return false;
+      }
+      return compression.filter(req, res);
+    }
   })
 );
 // CORS configuration - explicitly allow all origins and methods
@@ -1458,37 +1478,14 @@ createMCPRoutes({
   conversationStreams,
 });
 
-createExportImportRoutes({
-  app,
-  persistentDB,
-  db,
-  abstractionEngine,
-  schemaMigrations,
-  dataAccessControl,
-  motifService,
-});
-
-// Sharing routes
-createSharingRoutes({
-  app,
-  sharingService,
-  persistentDB,
-  cursorDbParser,
-});
-
-// AI routes (OpenRouter embeddings and chat)
-createAIRoutes({
-  app,
-});
-
-// Motif service and routes (Rung 6)
+// Motif service and routes (Rung 6) - Initialize before use
 const motifService = initializeMotifService(app, persistentDB, {
   minClusterSize: 10,
   similarityThreshold: 0.7,
   maxMotifLength: 20
 });
 
-// Module Graph service and routes (File-level abstraction)
+// Module Graph service and routes (File-level abstraction) - Initialize before use
 const ModuleGraphService = require('./services/module-graph/module-graph-service.js');
 const createModuleGraphRoutes = require('./routes/module-graph.js');
 let moduleGraphService = null;
@@ -1502,6 +1499,118 @@ try {
 } catch (error) {
   console.warn('[MODULE-GRAPH] Failed to initialize module graph service:', error.message);
 }
+
+// Rung 1 service and routes (Token-level abstraction) - Initialize before use
+const Rung1Service = require('./services/rung1/rung1-service.js');
+const createRung1Routes = require('./routes/rung1.js');
+let rung1Service = null;
+try {
+  rung1Service = new Rung1Service(cursorDbParser, persistentDB);
+  createRung1Routes({
+    app,
+    rung1Service
+  });
+  console.log('[RUNG1] Rung 1 service initialized');
+} catch (error) {
+  console.warn('[RUNG1] Failed to initialize Rung 1 service:', error.message);
+}
+
+// Rung 2 service and routes (Statement-level semantic edit scripts) - Initialize before use
+const Rung2Service = require('./services/rung2/rung2-service.js');
+const createRung2Routes = require('./routes/rung2.js');
+let rung2Service = null;
+try {
+  rung2Service = new Rung2Service(cursorDbParser, persistentDB);
+  createRung2Routes({
+    app,
+    rung2Service
+  });
+  console.log('[RUNG2] Rung 2 service initialized');
+} catch (error) {
+  console.warn('[RUNG2] Failed to initialize Rung 2 service:', error.message);
+}
+
+// Rung 3 service and routes (Function-level representation) - Initialize before use
+const Rung3Service = require('./services/rung3/rung3-service.js');
+const createRung3Routes = require('./routes/rung3.js');
+let rung3Service = null;
+try {
+  rung3Service = new Rung3Service(cursorDbParser, persistentDB);
+  createRung3Routes({
+    app,
+    rung3Service
+  });
+  console.log('[RUNG3] Rung 3 service initialized');
+} catch (error) {
+  console.warn('[RUNG3] Failed to initialize Rung 3 service:', error.message);
+}
+
+createExportImportRoutes({
+  app,
+  persistentDB,
+  db,
+  abstractionEngine,
+  schemaMigrations,
+  dataAccessControl,
+  motifService,
+  moduleGraphService,
+  rung1Service,
+  rung2Service,
+  rung3Service,
+});
+
+// Account routes (authentication, cloud sync) - setup first to get account service
+const accountServiceInstance = setupAccountRoutes(app, persistentDB, {
+  accountServiceUrl: process.env.ACCOUNT_SERVICE_URL || 'https://api.cursor-telemetry.com',
+  localMode: process.env.ACCOUNT_LOCAL_MODE === 'true'
+});
+
+// Update sharing service with account service reference
+if (accountServiceInstance) {
+  sharingService = new SharingService(persistentDB, accountServiceInstance);
+}
+
+// Sharing routes (now with account service support)
+createSharingRoutes({
+  app,
+  sharingService,
+  persistentDB,
+  cursorDbParser,
+  accountService: accountServiceInstance,
+});
+
+// Initialize conversation services
+const conversationManager = new ConversationManager(persistentDB);
+const conversationCapture = new ConversationCapture(persistentDB, conversationManager);
+const conversationContext = ConversationContext;
+
+// Initialize ClioService for RAG pipeline (if available)
+let clioService = null;
+try {
+  const { ClioService } = require('./services/clio');
+  clioService = new ClioService(persistentDB, {
+    minClusterSize: 5,
+    similarityThreshold: 0.7
+  });
+  console.log('[CONVERSATIONS] ClioService initialized for RAG pipeline');
+} catch (error) {
+  console.warn('[CONVERSATIONS] ClioService not available:', error.message);
+}
+
+// Conversation routes
+createConversationRoutes({
+  app,
+  persistentDB,
+  conversationManager,
+  conversationCapture,
+  conversationContext,
+  clioService
+});
+
+// AI routes (OpenRouter embeddings and chat)
+createAIRoutes({
+  app,
+});
 
 // Annotation routes (event annotation, intent classification, state summarization)
 createAnnotationRoutes({
@@ -1849,71 +1958,6 @@ app.post('/debug/enqueue', (req, res) => {
   enqueue('event', event);
 
   res.json({ success: true, entry, event });
-});
-
-// Socket.IO connection handling with conversation streaming
-io.on('connection', (socket) => {
-  console.log(`Client connected: ${socket.id}`);
-
-  // Track client's subscribed conversation streams
-  const clientStreams = new Set();
-
-  // Send initial data when client connects
-  socket.emit('initial-data', {
-    entries: db.entries,
-    prompts: db.prompts,
-    queue: queueSystem.getQueue(),
-    ideState: ideStateCapture ? ideStateCapture.getLatestState() : null,
-    activeStreams: Array.from(conversationStreams.keys()),
-    timestamp: Date.now(),
-  });
-
-  socket.on('disconnect', () => {
-    console.log(`Client disconnected: ${socket.id}`);
-    // Clean up client streams
-    clientStreams.clear();
-  });
-
-  // Subscribe to conversation stream
-  socket.on('subscribe-conversation', (conversationId) => {
-    if (conversationId) {
-      clientStreams.add(conversationId);
-      console.log(`[WS] Client ${socket.id} subscribed to conversation: ${conversationId}`);
-
-      // Enable streaming for this conversation if not already enabled
-      if (!conversationStreams.has(conversationId)) {
-        conversationStreams.set(conversationId, {
-          id: conversationId,
-          enabled: true,
-          startTime: Date.now(),
-          subscribers: new Set(),
-        });
-      }
-
-      // Add this client to the conversation's subscriber list
-      const stream = conversationStreams.get(conversationId);
-      if (stream && stream.subscribers) {
-        stream.subscribers.add(socket.id);
-      }
-    }
-  });
-
-  // Unsubscribe from conversation stream
-  socket.on('unsubscribe-conversation', (conversationId) => {
-    if (conversationId) {
-      clientStreams.delete(conversationId);
-      const stream = conversationStreams.get(conversationId);
-      if (stream && stream.subscribers) {
-        stream.subscribers.delete(socket.id);
-        // If no more subscribers, optionally disable streaming
-        if (stream.subscribers.size === 0) {
-          // Keep stream enabled but mark as inactive
-          stream.enabled = false;
-        }
-      }
-      console.log(`[WS] Client ${socket.id} unsubscribed from conversation: ${conversationId}`);
-    }
-  });
 });
 
 // Export/import routes are now handled by export-import routes module (see route initialization above)

@@ -49,16 +49,106 @@ function cosineSimilarity(vec1, vec2) {
 /**
  * Compute TF-IDF analysis for files
  * Optimized to handle large datasets by limiting computation
+ * Uses Web Worker for computation and persistent caching
  */
 // OPTIMIZATION: Make TF-IDF computation async to allow yielding
 async function computeTFIDFAnalysis(files) {
+  // Check cache first
+  if (window.performanceCache) {
+    try {
+      const cached = await window.performanceCache.getTFIDF(files, 24 * 60 * 60 * 1000);
+      if (cached) {
+        return cached;
+      }
+    } catch (e) {
+      // Cache check failed
+    }
+  }
+
+  // Try Web Worker for computation (non-blocking)
+  if (typeof Worker !== 'undefined') {
+    try {
+      return await computeTFIDFWithWorker(files);
+    } catch (e) {
+      // Web Worker failed, falling back to main thread
+    }
+  }
+
+  // Fallback to main thread computation
+  return await computeTFIDFMainThread(files);
+}
+
+/**
+ * Compute TF-IDF using Web Worker (non-blocking)
+ */
+async function computeTFIDFWithWorker(files) {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker('/workers/tfidf-worker.js');
+    const messageId = Date.now() + Math.random();
+
+    const timeout = setTimeout(() => {
+      worker.terminate();
+      reject(new Error('TF-IDF computation timeout'));
+    }, 60000); // 60 second timeout
+
+    worker.onmessage = (e) => {
+      const { type, id, result, error } = e.data;
+      if (id === messageId) {
+        clearTimeout(timeout);
+        worker.terminate();
+        
+        if (type === 'result') {
+          // Cache result (async)
+          if (window.performanceCache) {
+            window.performanceCache.storeTFIDF(files, result).catch(e => {
+              // Failed to cache results
+            });
+          }
+          resolve(result);
+        } else {
+          reject(new Error(error || 'TF-IDF computation failed'));
+        }
+      }
+    };
+
+    worker.onerror = (error) => {
+      clearTimeout(timeout);
+      worker.terminate();
+      reject(error);
+    };
+
+    worker.postMessage({
+      type: 'computeTFIDF',
+      id: messageId,
+      payload: {
+        files: files.map(f => ({
+          path: f.path,
+          name: f.name,
+          content: (f.content || '').substring(0, 50000), // Limit content size
+          changes: f.changes || 0,
+          lastModified: f.lastModified,
+          size: f.size || (f.content || '').length
+        })),
+        options: {
+          maxFiles: 500,
+          maxSimilarities: 3000,
+          similarityThreshold: 0.1
+        }
+      }
+    });
+  });
+}
+
+/**
+ * Compute TF-IDF on main thread (fallback)
+ */
+async function computeTFIDFMainThread(files) {
   const MAX_FILES_FOR_TFIDF = 500; // Reduced from 1000 for faster computation
   const MAX_SIMILARITIES = 3000; // Reduced from 5000 for faster computation
   
   // For very large datasets, limit to most active files
   let filesToProcess = files;
   if (files.length > MAX_FILES_FOR_TFIDF) {
-    console.log(`[TF-IDF] Large dataset (${files.length} files), limiting to ${MAX_FILES_FOR_TFIDF} most active files`);
     // Sort by activity (changes, recency, size) and take top N
     filesToProcess = [...files]
       .sort((a, b) => {
@@ -96,7 +186,6 @@ async function computeTFIDFAnalysis(files) {
     }
   }
   
-  console.log(`[TF-IDF] Tokenized ${documents.length} files`);
   
   // Calculate term frequencies
   const termFreqs = new Map();
@@ -138,7 +227,6 @@ async function computeTFIDFAnalysis(files) {
   const shouldLimit = totalPairs > MAX_SIMILARITIES;
   
   if (shouldLimit) {
-    console.log(`[TF-IDF] Large similarity matrix (${totalPairs} pairs), computing top ${MAX_SIMILARITIES} similarities...`);
     // For large datasets, use a smarter approach:
     // 1. Compute similarities for files that share common terms (faster)
     // 2. Limit total computations to prevent timeout
@@ -218,9 +306,8 @@ async function computeTFIDFAnalysis(files) {
     .sort((a, b) => b.tfidf - a.tfidf)
     .slice(0, 50);
   
-  console.log(`[TF-IDF] Computed ${similarities.length} similarities from ${documents.length} files`);
   
-  return {
+  const result = {
     tfidfStats: {
       totalTerms,
       uniqueTerms: docFreqs.size,
@@ -233,6 +320,15 @@ async function computeTFIDFAnalysis(files) {
     },
     similarities
   };
+
+  // Cache result (async, don't wait)
+  if (window.performanceCache) {
+    window.performanceCache.storeTFIDF(files, result).catch(e => {
+      // Failed to cache results
+    });
+  }
+
+  return result;
 }
 
 // Export to window for global access

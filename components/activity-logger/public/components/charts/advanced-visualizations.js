@@ -23,13 +23,27 @@ class AdvancedVisualizations {
     // Also update state reference to ensure we have latest data
     this.state = window.state;
   }
+  
+  // Refresh state reference (call before rendering to get latest data)
+  refreshState() {
+    this.state = window.state;
+  }
 
   /**
    * Render context evolution timeline
    */
   async renderContextEvolutionTimeline() {
     const container = document.getElementById('contextEvolutionTimeline');
-    if (!container) return;
+    if (!container) {
+      console.warn('[CONTEXT] Container #contextEvolutionTimeline not found');
+      return;
+    }
+    
+    // Always update container to show we're working
+    container.innerHTML = '<div style="padding: var(--space-lg); text-align: center; color: var(--color-text-muted);">Loading...</div>';
+    
+    // Refresh state to get latest data
+    this.refreshState();
 
     const prompts = this.state?.data?.prompts || [];
     
@@ -238,17 +252,16 @@ class AdvancedVisualizations {
       }
     }
 
-    if (changes.length === 0) {
-      container.innerHTML = `
-        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 300px; padding: var(--space-xl); text-align: center;">
-          <div style="font-size: var(--text-lg); color: var(--color-text); margin-bottom: var(--space-xs); font-weight: 500;">No Context Changes Tracked</div>
-          <div style="font-size: var(--text-sm); color: var(--color-text-muted);">Context evolution data will appear as you work with Cursor</div>
-        </div>
-      `;
-      return;
-    }
-
     try {
+      if (changes.length === 0) {
+        container.innerHTML = `
+          <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 300px; padding: var(--space-xl); text-align: center;">
+            <div style="font-size: var(--text-lg); color: var(--color-text); margin-bottom: var(--space-xs); font-weight: 500;">No Context Changes Tracked</div>
+            <div style="font-size: var(--text-sm); color: var(--color-text-muted);">Context evolution data will appear as you work with Cursor</div>
+          </div>
+        `;
+        return;
+      }
       // Sort by timestamp
       const sortedChanges = changes.sort((a, b) => a.timestamp - b.timestamp);
       
@@ -424,7 +437,16 @@ class AdvancedVisualizations {
    */
   async renderPromptToCodeCorrelation(timeSpan = null) {
     const container = document.getElementById('promptToCodeCorrelation');
-    if (!container) return;
+    if (!container) {
+      console.warn('[PROMPT-CODE] Container #promptToCodeCorrelation not found');
+      return;
+    }
+    
+    // Always update container to show we're working
+    container.innerHTML = '<div style="padding: var(--space-lg); text-align: center; color: var(--color-text-muted);">Loading...</div>';
+    
+    // Refresh state to get latest data
+    this.refreshState();
 
     // Get or initialize time span from stored value or default
     if (!timeSpan) {
@@ -744,12 +766,14 @@ class AdvancedVisualizations {
       console.warn('[GIT] Container #gitCommitTimeline not found');
       return;
     }
+    
+    // Always update container to show we're working
+    container.innerHTML = '<div style="padding: var(--space-lg); text-align: center; color: var(--color-text-muted);">Loading...</div>';
+    
+    // Refresh state to get latest data
+    this.refreshState();
 
     try {
-      // Show loading state
-      if (container.innerHTML.trim() === '' || container.innerHTML.includes('Loading')) {
-        container.innerHTML = '<div style="padding: var(--space-lg); text-align: center; color: var(--color-text-muted);">Loading git data...</div>';
-      }
 
       // Try to fetch git data from raw-data endpoint
       let gitData = [];
@@ -895,11 +919,12 @@ class AdvancedVisualizations {
       console.warn('[HOTSPOTS] Container #fileHotspots not found');
       return;
     }
-
-    // Show loading state
-    if (container.innerHTML.trim() === '' || container.innerHTML.includes('Loading')) {
-      container.innerHTML = '<div style="padding: var(--space-lg); text-align: center; color: var(--color-text-muted);">Analyzing file activity...</div>';
-    }
+    
+    // Always update container to show we're working
+    container.innerHTML = '<div style="padding: var(--space-lg); text-align: center; color: var(--color-text-muted);">Loading...</div>';
+    
+    // Refresh state to get latest data
+    this.refreshState();
 
     // Get events from multiple sources - always check window.state for latest data
     let events = window.state?.data?.events || this.state?.data?.events || [];
@@ -1073,58 +1098,203 @@ window.advancedVisualizations = new AdvancedVisualizations();
 
 // Export functions for backward compatibility with error handling
 window.renderContextEvolutionTimeline = () => {
+  const container = document.getElementById('contextEvolutionTimeline');
   try {
     if (window.advancedVisualizations) {
-      return window.advancedVisualizations.renderContextEvolutionTimeline();
+      return window.advancedVisualizations.renderContextEvolutionTimeline().catch(err => {
+        console.error('[VISUALIZATIONS] Error rendering context evolution timeline:', err);
+        if (container) {
+          container.innerHTML = `
+            <div style="padding: var(--space-lg); text-align: center; color: var(--color-text-muted);">
+              <div style="margin-bottom: var(--space-xs);">Unable to load visualization</div>
+              <div style="font-size: var(--text-xs);">${err.message || 'Unknown error'}</div>
+            </div>
+          `;
+        }
+        throw err;
+      });
     } else {
       console.warn('[VISUALIZATIONS] advancedVisualizations not initialized yet');
-      return Promise.resolve();
+      if (container) {
+        container.innerHTML = `
+          <div style="padding: var(--space-lg); text-align: center; color: var(--color-text-muted);">
+            <div style="margin-bottom: var(--space-xs);">Initializing visualization...</div>
+            <div style="font-size: var(--text-xs);">Please wait</div>
+          </div>
+        `;
+      }
+      // Retry after a short delay
+      return new Promise((resolve) => {
+        setTimeout(() => {
+          if (window.advancedVisualizations) {
+            window.renderContextEvolutionTimeline().then(resolve).catch(() => resolve());
+          } else {
+            resolve();
+          }
+        }, 500);
+      });
     }
   } catch (error) {
     console.error('[VISUALIZATIONS] Error rendering context evolution timeline:', error);
-    return Promise.reject(error);
+    if (container) {
+      container.innerHTML = `
+        <div style="padding: var(--space-lg); text-align: center; color: var(--color-text-muted);">
+          <div style="margin-bottom: var(--space-xs);">Error loading visualization</div>
+          <div style="font-size: var(--text-xs);">${error.message || 'Unknown error'}</div>
+        </div>
+      `;
+    }
+    return Promise.resolve();
   }
 };
 
 window.renderPromptToCodeCorrelation = (timeSpan) => {
+  const container = document.getElementById('promptToCodeCorrelation');
   try {
     if (window.advancedVisualizations) {
-      return window.advancedVisualizations.renderPromptToCodeCorrelation(timeSpan);
+      return window.advancedVisualizations.renderPromptToCodeCorrelation(timeSpan).catch(err => {
+        console.error('[VISUALIZATIONS] Error rendering prompt-to-code correlation:', err);
+        if (container) {
+          container.innerHTML = `
+            <div style="padding: var(--space-lg); text-align: center; color: var(--color-text-muted);">
+              <div style="margin-bottom: var(--space-xs);">Unable to load visualization</div>
+              <div style="font-size: var(--text-xs);">${err.message || 'Unknown error'}</div>
+            </div>
+          `;
+        }
+        throw err;
+      });
     } else {
       console.warn('[VISUALIZATIONS] advancedVisualizations not initialized yet');
-      return Promise.resolve();
+      if (container) {
+        container.innerHTML = `
+          <div style="padding: var(--space-lg); text-align: center; color: var(--color-text-muted);">
+            <div style="margin-bottom: var(--space-xs);">Initializing visualization...</div>
+            <div style="font-size: var(--text-xs);">Please wait</div>
+          </div>
+        `;
+      }
+      return new Promise((resolve) => {
+        setTimeout(() => {
+          if (window.advancedVisualizations) {
+            window.renderPromptToCodeCorrelation(timeSpan).then(resolve).catch(() => resolve());
+          } else {
+            resolve();
+          }
+        }, 500);
+      });
     }
   } catch (error) {
     console.error('[VISUALIZATIONS] Error rendering prompt-to-code correlation:', error);
-    return Promise.reject(error);
+    if (container) {
+      container.innerHTML = `
+        <div style="padding: var(--space-lg); text-align: center; color: var(--color-text-muted);">
+          <div style="margin-bottom: var(--space-xs);">Error loading visualization</div>
+          <div style="font-size: var(--text-xs);">${error.message || 'Unknown error'}</div>
+        </div>
+      `;
+    }
+    return Promise.resolve();
   }
 };
 
 window.renderGitCommitTimeline = () => {
+  const container = document.getElementById('gitCommitTimeline');
   try {
     if (window.advancedVisualizations) {
-      return window.advancedVisualizations.renderGitCommitTimeline();
+      return window.advancedVisualizations.renderGitCommitTimeline().catch(err => {
+        console.error('[VISUALIZATIONS] Error rendering git commit timeline:', err);
+        if (container) {
+          container.innerHTML = `
+            <div style="padding: var(--space-lg); text-align: center; color: var(--color-text-muted);">
+              <div style="margin-bottom: var(--space-xs);">Unable to load visualization</div>
+              <div style="font-size: var(--text-xs);">${err.message || 'Unknown error'}</div>
+            </div>
+          `;
+        }
+        throw err;
+      });
     } else {
       console.warn('[VISUALIZATIONS] advancedVisualizations not initialized yet');
-      return Promise.resolve();
+      if (container) {
+        container.innerHTML = `
+          <div style="padding: var(--space-lg); text-align: center; color: var(--color-text-muted);">
+            <div style="margin-bottom: var(--space-xs);">Initializing visualization...</div>
+            <div style="font-size: var(--text-xs);">Please wait</div>
+          </div>
+        `;
+      }
+      return new Promise((resolve) => {
+        setTimeout(() => {
+          if (window.advancedVisualizations) {
+            window.renderGitCommitTimeline().then(resolve).catch(() => resolve());
+          } else {
+            resolve();
+          }
+        }, 500);
+      });
     }
   } catch (error) {
     console.error('[VISUALIZATIONS] Error rendering git commit timeline:', error);
-    return Promise.reject(error);
+    if (container) {
+      container.innerHTML = `
+        <div style="padding: var(--space-lg); text-align: center; color: var(--color-text-muted);">
+          <div style="margin-bottom: var(--space-xs);">Error loading visualization</div>
+          <div style="font-size: var(--text-xs);">${error.message || 'Unknown error'}</div>
+        </div>
+      `;
+    }
+    return Promise.resolve();
   }
 };
 
 window.renderFileHotspots = () => {
+  const container = document.getElementById('fileHotspots');
   try {
     if (window.advancedVisualizations) {
-      return window.advancedVisualizations.renderFileHotspots();
+      return window.advancedVisualizations.renderFileHotspots().catch(err => {
+        console.error('[VISUALIZATIONS] Error rendering file hotspots:', err);
+        if (container) {
+          container.innerHTML = `
+            <div style="padding: var(--space-lg); text-align: center; color: var(--color-text-muted);">
+              <div style="margin-bottom: var(--space-xs);">Unable to load visualization</div>
+              <div style="font-size: var(--text-xs);">${err.message || 'Unknown error'}</div>
+            </div>
+          `;
+        }
+        throw err;
+      });
     } else {
       console.warn('[VISUALIZATIONS] advancedVisualizations not initialized yet');
-      return Promise.resolve();
+      if (container) {
+        container.innerHTML = `
+          <div style="padding: var(--space-lg); text-align: center; color: var(--color-text-muted);">
+            <div style="margin-bottom: var(--space-xs);">Initializing visualization...</div>
+            <div style="font-size: var(--text-xs);">Please wait</div>
+          </div>
+        `;
+      }
+      return new Promise((resolve) => {
+        setTimeout(() => {
+          if (window.advancedVisualizations) {
+            window.renderFileHotspots().then(resolve).catch(() => resolve());
+          } else {
+            resolve();
+          }
+        }, 500);
+      });
     }
   } catch (error) {
     console.error('[VISUALIZATIONS] Error rendering file hotspots:', error);
-    return Promise.reject(error);
+    if (container) {
+      container.innerHTML = `
+        <div style="padding: var(--space-lg); text-align: center; color: var(--color-text-muted);">
+          <div style="margin-bottom: var(--space-xs);">Error loading visualization</div>
+          <div style="font-size: var(--text-xs);">${error.message || 'Unknown error'}</div>
+        </div>
+      `;
+    }
+    return Promise.resolve();
   }
 };
 

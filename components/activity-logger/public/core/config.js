@@ -2,7 +2,7 @@
  * Dashboard Configuration
  */
 
-// Use external config (from config.js) if available, otherwise use defaults
+// Use external config (from config/config.js) if available, otherwise use defaults
 const EXTERNAL_CONFIG = window.CONFIG || {};
 
 // Render backend URL
@@ -30,8 +30,8 @@ const DASHBOARD_CONFIG = {
   }
 };
 
-// Merge external config values (from config.js) into DASHBOARD_CONFIG if they exist
-// This allows config.js to override defaults, but ensures ENABLE_SEMANTIC_SEARCH stays false unless explicitly set to true
+// Merge external config values (from config/config.js) into DASHBOARD_CONFIG if they exist
+// This allows config/config.js to override defaults, but ensures ENABLE_SEMANTIC_SEARCH stays false unless explicitly set to true
 if (EXTERNAL_CONFIG.ENABLE_SEMANTIC_SEARCH === true) {
   DASHBOARD_CONFIG.ENABLE_SEMANTIC_SEARCH = true;
 } else {
@@ -43,7 +43,7 @@ const CONFIG = DASHBOARD_CONFIG;
 
 // Export for use in other modules
 window.DASHBOARD_CONFIG = DASHBOARD_CONFIG;
-// Only set window.CONFIG if it doesn't already exist (config.js will set it later)
+// Only set window.CONFIG if it doesn't already exist (config/config.js will set it later)
 if (!window.CONFIG || !window.CONFIG.ENABLE_SEMANTIC_SEARCH) {
   window.CONFIG = CONFIG;
 }

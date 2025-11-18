@@ -3,25 +3,32 @@
  */
 
 :root {
+  /* Color Palette */
+  --taupe: #4c443c;
+  --white: #ffffff;
+  --iron-grey: #474747;
+  --crayola-blue: #2176ff;
+  --golden-chestnut: #be7c4d;
+  
   /* Colors - Primary */
-  --color-primary: #8B5CF6;
-  --color-primary-light: #A78BFA;
-  --color-primary-dark: #7C3AED;
+  --color-primary: var(--crayola-blue);
+  --color-primary-light: #4a8fff;
+  --color-primary-dark: #1a5acc;
   
   /* Colors - Secondary */
-  --color-secondary: #6366F1;
-  --color-accent: #EC4899;
-  --color-success: #10B981;
-  --color-warning: #F59E0B;
-  --color-error: #EF4444;
+  --color-secondary: var(--golden-chestnut);
+  --color-accent: var(--golden-chestnut);
+  --color-success: var(--crayola-blue);
+  --color-warning: var(--golden-chestnut);
+  --color-error: #d32f2f;
   
   /* Colors - Neutral */
-  --color-background: #0F172A;
-  --color-surface: #1E293B;
-  --color-surface-light: #334155;
-  --color-border: #475569;
-  --color-text: #E2E8F0;
-  --color-text-muted: #94A3B8;
+  --color-background: var(--white);
+  --color-surface: var(--white);
+  --color-surface-light: #f0f0f0;
+  --color-border: #e0e0e0;
+  --color-text: var(--iron-grey);
+  --color-text-muted: var(--taupe);
   
   /* Spacing */
   --spacing-xs: 0.25rem;
@@ -32,8 +39,8 @@
   --spacing-2xl: 3rem;
   
   /* Typography */
-  --font-family: "Stack Sans Text", "Inter", sans-serif;
-  --font-family-mono: 'SF Mono', Monaco, monospace;
+  --font-family: "Geist Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-family-mono: "Geist Mono", "SF Mono", Monaco, "Cascadia Code", "Roboto Mono", monospace;
   
   --font-size-xs: 0.75rem;
   --font-size-sm: 0.875rem;

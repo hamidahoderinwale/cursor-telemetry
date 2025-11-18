@@ -1,6 +1,6 @@
 /**
  * Chart Renderers Module
- * Extracted from new-dashboard.js to reduce file size
+ * Extracted from dashboard.js to reduce file size
  * Handles all Chart.js-based visualizations
  */
 

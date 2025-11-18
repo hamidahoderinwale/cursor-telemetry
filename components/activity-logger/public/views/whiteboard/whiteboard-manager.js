@@ -16,15 +16,20 @@ class WhiteboardManager {
     this.aiQueryGenerator = new AIQueryGenerator();
   }
 
-  addQueryBlock(title = 'Untitled Query') {
+  addQueryBlock(title = null) {
     const queryId = `query-${this.nextQueryId++}`;
+    // Generate a better default title if not provided
+    if (!title) {
+      const queryNumber = this.queries.size + 1;
+      title = `Query ${queryNumber}`;
+    }
     const queryBlock = this.createQueryBlock(queryId, title);
     
     this.container.appendChild(queryBlock);
     this.hideEmptyState();
     
     // Initialize query block
-    this.initializeQueryBlock(queryId);
+    this.initializeQueryBlock(queryId, title);
     
     return queryId;
   }
@@ -61,22 +66,46 @@ class WhiteboardManager {
     return block;
   }
 
-  initializeQueryBlock(queryId) {
+  initializeQueryBlock(queryId, initialTitle = null) {
     const block = document.getElementById(queryId);
     if (!block) return;
 
+    // Get title from input or use provided/default
+    const titleInput = block.querySelector('.query-title-input');
+    const title = initialTitle || titleInput?.value || `Query ${this.queries.size + 1}`;
+
     const query = {
       id: queryId,
-      title: 'Untitled Query',
+      title: title,
       mode: 'natural', // 'natural', 'sql', 'builder'
       query: '',
       sql: '',
       results: null,
       visualization: null,
-      position: { x: 0, y: 0 }
+      position: { x: 0, y: 0 },
+      status: 'idle', // 'idle', 'generating', 'ready', 'running', 'success', 'error'
+      lastExecuted: null
     };
 
     this.queries.set(queryId, query);
+
+    // Initialize status
+    this.updateQueryStatus(queryId, 'idle', 'Ready to start');
+
+    // Title input handler - update query title on change
+    if (titleInput) {
+      titleInput.addEventListener('blur', () => {
+        const newTitle = titleInput.value.trim() || `Query ${this.queries.size}`;
+        query.title = newTitle;
+        titleInput.value = newTitle;
+      });
+      titleInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          titleInput.blur();
+        }
+      });
+    }
 
     // Tab switching
     const tabs = block.querySelectorAll('.query-tab');
@@ -185,11 +214,8 @@ class WhiteboardManager {
     }
 
     try {
-      const statusEl = block.querySelector('.query-status');
-      if (statusEl) {
-        statusEl.textContent = 'Generating...';
-        statusEl.className = 'query-status generating';
-      }
+      query.status = 'generating';
+      this.updateQueryStatus(queryId, 'generating', 'Generating SQL...');
 
       const sql = await this.aiQueryGenerator.generateSQL(naturalQuery || query.query);
       query.sql = sql;
@@ -200,17 +226,12 @@ class WhiteboardManager {
         sqlInput.value = sql;
       }
 
-      if (statusEl) {
-        statusEl.textContent = '✓';
-        statusEl.className = 'query-status ready';
-      }
+      query.status = 'ready';
+      this.updateQueryStatus(queryId, 'ready', 'Ready to execute');
     } catch (error) {
       console.error('Query generation error:', error);
-      const statusEl = block.querySelector('.query-status');
-      if (statusEl) {
-        statusEl.textContent = '✗';
-        statusEl.className = 'query-status error';
-      }
+      query.status = 'error';
+      this.updateQueryStatus(queryId, 'error', 'Generation failed');
       alert('Failed to generate query: ' + error.message);
     }
   }
@@ -220,13 +241,11 @@ class WhiteboardManager {
     if (!query) return;
 
     const block = document.getElementById(queryId);
-    const statusEl = block.querySelector('.query-status');
+    if (!block) return;
     
     try {
-      if (statusEl) {
-        statusEl.textContent = 'Running...';
-        statusEl.className = 'query-status running';
-      }
+      query.status = 'running';
+      this.updateQueryStatus(queryId, 'running', 'Executing query...');
 
       // Get query text based on mode
       let sql = query.sql;
@@ -258,16 +277,14 @@ class WhiteboardManager {
       // Update all charts that use this query (reactive updates)
       this.visualizationEngine.updateChartsForQuery(queryId, results);
 
-      if (statusEl) {
-        statusEl.textContent = '✓';
-        statusEl.className = 'query-status success';
-      }
+      query.status = 'success';
+      query.lastExecuted = new Date();
+      const resultCount = results?.length || 0;
+      this.updateQueryStatus(queryId, 'success', `${resultCount} result${resultCount !== 1 ? 's' : ''}`);
     } catch (error) {
       console.error('Query execution error:', error);
-      if (statusEl) {
-        statusEl.textContent = '✗';
-        statusEl.className = 'query-status error';
-      }
+      query.status = 'error';
+      this.updateQueryStatus(queryId, 'error', `Error: ${error.message.substring(0, 30)}...`);
       this.showError(queryId, error.message);
     }
   }
@@ -662,6 +679,36 @@ class WhiteboardManager {
         element.style.zIndex = '';
       }
     });
+  }
+
+  updateQueryStatus(queryId, status, message = '') {
+    const query = this.queries.get(queryId);
+    if (!query) return;
+    
+    query.status = status;
+    const block = document.getElementById(queryId);
+    if (!block) return;
+    
+    const statusEl = block.querySelector('.query-status');
+    if (!statusEl) return;
+    
+    // Update status class
+    statusEl.className = `query-status ${status}`;
+    
+    // Update status text/icon and tooltip
+    const statusConfig = {
+      'idle': { icon: '○', text: 'Idle', color: '#6b7280' },
+      'generating': { icon: '⟳', text: 'Generating...', color: '#f59e0b' },
+      'ready': { icon: '✓', text: 'Ready', color: '#6b7280' },
+      'running': { icon: '⟳', text: 'Running...', color: '#8b5cf6' },
+      'success': { icon: '✓', text: message || 'Success', color: '#10b981' },
+      'error': { icon: '✗', text: message || 'Error', color: '#ef4444' }
+    };
+    
+    const config = statusConfig[status] || statusConfig['idle'];
+    statusEl.textContent = config.icon;
+    statusEl.title = message || config.text;
+    statusEl.setAttribute('aria-label', message || config.text);
   }
 
   deleteQuery(queryId) {

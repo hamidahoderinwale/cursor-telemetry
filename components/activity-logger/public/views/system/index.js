@@ -13,19 +13,16 @@ function renderSystemView(container) {
       fetchSystemResources().then(() => {
         if (window.renderSystemResourcesChart) window.renderSystemResourcesChart();
         if (window.renderSystemResourceStats) window.renderSystemResourceStats();
-        if (window.renderResourceDistributionChart) window.renderResourceDistributionChart();
         if (window.renderPerformanceTrends) window.renderPerformanceTrends();
       }).catch(() => {
         // Still try to render even if fetch fails
         if (window.renderSystemResourcesChart) window.renderSystemResourcesChart();
         if (window.renderSystemResourceStats) window.renderSystemResourceStats();
-        if (window.renderResourceDistributionChart) window.renderResourceDistributionChart();
         if (window.renderPerformanceTrends) window.renderPerformanceTrends();
       });
     } else {
       if (window.renderSystemResourcesChart) window.renderSystemResourcesChart();
       if (window.renderSystemResourceStats) window.renderSystemResourceStats();
-      if (window.renderResourceDistributionChart) window.renderResourceDistributionChart();
       if (window.renderPerformanceTrends) window.renderPerformanceTrends();
     }
   }, 100);
@@ -281,83 +278,6 @@ function renderSystemResourceStats() {
       </div>
     </div>
   `;
-}
-
-/**
- * Render resource distribution chart
- */
-function renderResourceDistributionChart() {
-  const canvas = document.getElementById('resourceDistributionChart');
-  if (!canvas || !window.Chart) return;
-
-  const data = (window.state?.data?.systemResources || []).slice(-100);
-  
-  if (data.length === 0) return;
-
-  if (canvas.chart) {
-    canvas.chart.destroy();
-  }
-
-  const memoryData = data.map(d => {
-    const memBytes = d.memory?.rss || d.memory?.heapUsed || d.memory || 0;
-    return parseFloat((memBytes / 1024 / 1024).toFixed(1));
-  });
-
-  // Create bins for distribution
-  const bins = [0, 50, 100, 150, 200, 300, 500, 1000, Infinity];
-  const distribution = new Array(bins.length - 1).fill(0);
-  
-  memoryData.forEach(mem => {
-    for (let i = 0; i < bins.length - 1; i++) {
-      if (mem >= bins[i] && mem < bins[i + 1]) {
-        distribution[i]++;
-        break;
-      }
-    }
-  });
-
-  const labels = bins.slice(0, -1).map((bin, i) => {
-    if (i === bins.length - 2) return `${bin}+ MB`;
-    return `${bin}-${bins[i + 1]} MB`;
-  });
-
-  canvas.chart = new Chart(canvas.getContext('2d'), {
-    type: 'bar',
-    data: {
-      labels,
-      datasets: [{
-        label: 'Memory Usage Distribution',
-        data: distribution,
-        backgroundColor: '#3b82f6',
-        borderColor: '#2563eb',
-        borderWidth: 1
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: true,
-      plugins: {
-        legend: {
-          display: false
-        }
-      },
-      scales: {
-        y: {
-          beginAtZero: true,
-          title: {
-            display: true,
-            text: 'Frequency'
-          }
-        },
-        x: {
-          title: {
-            display: true,
-            text: 'Memory Range'
-          }
-        }
-      }
-    }
-  });
 }
 
 /**
@@ -829,6 +749,5 @@ window.renderSystemView = renderSystemView;
 window.renderSystemResourcesChart = renderSystemResourcesChart;
 window.fetchSystemResources = fetchSystemResources;
 window.renderSystemResourceStats = renderSystemResourceStats;
-window.renderResourceDistributionChart = renderResourceDistributionChart;
 window.renderPerformanceTrends = renderPerformanceTrends;
 

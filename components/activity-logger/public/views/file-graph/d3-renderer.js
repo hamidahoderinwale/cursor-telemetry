@@ -85,7 +85,6 @@ function renderD3FileGraph(container, nodes, links) {
             annotationStatus.style.display = 'none';
           }
           
-          console.log('[FILE-GRAPH] Cluster annotations complete:', annotatedClusters.map(c => c.name));
         })
         .catch(err => {
           console.warn('[FILE-GRAPH] Failed to annotate clusters:', err.message);
@@ -206,7 +205,8 @@ function renderD3FileGraph(container, nodes, links) {
       .force('center', d3.forceCenter(width / 2, height / 2).strength(0.1))
       .force('collision', d3.forceCollide().radius(35))
       .force('cluster', forceCluster(clusters))
-      .alphaDecay(0.02) // Faster convergence
+      .alphaDecay(0.03) // Faster convergence (increased from 0.02)
+      .alphaMin(0.01) // Stop simulation earlier when stable
       .velocityDecay(0.4); // Higher friction for stability
   } else if (layoutAlgorithm === 'circular') {
     // Circular layout
@@ -332,40 +332,69 @@ function renderD3FileGraph(container, nodes, links) {
   window.graphLabels = labels;
   window.labelsVisible = true;
   
-  // Update positions on tick
+  // Optimized tick handler with requestAnimationFrame throttling
+  let tickFrame = null;
+  let graphRendered = false;
+  
   simulation.on('tick', () => {
-    // Update cluster hulls
-    if (clusters.length > 0) {
-      g.selectAll('.cluster-hulls path')
-        .attr('d', d => {
-          const points = d.nodes.map(n => [n.x || 0, n.y || 0]).filter(p => !isNaN(p[0]) && !isNaN(p[1]));
-          return convexHull(points);
+    // Throttle updates using requestAnimationFrame for smoother rendering
+    if (tickFrame === null) {
+      tickFrame = requestAnimationFrame(() => {
+        // Update cluster hulls
+        if (clusters.length > 0) {
+          g.selectAll('.cluster-hulls path')
+            .attr('d', d => {
+              const points = d.nodes.map(n => [n.x || 0, n.y || 0]).filter(p => !isNaN(p[0]) && !isNaN(p[1]));
+              return convexHull(points);
+            });
+          
+          g.selectAll('.cluster-labels text')
+            .attr('x', d => {
+              const xs = d.nodes.map(n => n.x).filter(x => !isNaN(x));
+              return xs.length > 0 ? d3.mean(xs) : width / 2;
+            })
+            .attr('y', d => {
+              const ys = d.nodes.map(n => n.y).filter(y => !isNaN(y));
+              return ys.length > 0 ? d3.min(ys) - 30 : height / 2;
+            });
+        }
+        
+        link
+          .attr('x1', d => d.source.x || 0)
+          .attr('y1', d => d.source.y || 0)
+          .attr('x2', d => d.target.x || 0)
+          .attr('y2', d => d.target.y || 0);
+        
+        node.attr('transform', d => {
+          const x = d.x || 0;
+          const y = d.y || 0;
+          // Only update if values are valid numbers
+          if (isNaN(x) || isNaN(y)) return 'translate(0,0)';
+          return `translate(${x},${y})`;
         });
-      
-      g.selectAll('.cluster-labels text')
-        .attr('x', d => {
-          const xs = d.nodes.map(n => n.x).filter(x => !isNaN(x));
-          return xs.length > 0 ? d3.mean(xs) : width / 2;
-        })
-        .attr('y', d => {
-          const ys = d.nodes.map(n => n.y).filter(y => !isNaN(y));
-          return ys.length > 0 ? d3.min(ys) - 30 : height / 2;
-        });
+        
+        tickFrame = null;
+        
+        // Mark as rendered when simulation is stable enough (alpha < 0.1)
+        if (!graphRendered && simulation.alpha() < 0.1) {
+          graphRendered = true;
+          // Dispatch event that graph is ready
+          window.dispatchEvent(new CustomEvent('graph-rendered', { 
+            detail: { alpha: simulation.alpha() } 
+          }));
+        }
+      });
     }
-    
-    link
-      .attr('x1', d => d.source.x || 0)
-      .attr('y1', d => d.source.y || 0)
-      .attr('x2', d => d.target.x || 0)
-      .attr('y2', d => d.target.y || 0);
-    
-    node.attr('transform', d => {
-      const x = d.x || 0;
-      const y = d.y || 0;
-      // Only update if values are valid numbers
-      if (isNaN(x) || isNaN(y)) return 'translate(0,0)';
-      return `translate(${x},${y})`;
-    });
+  });
+  
+  // Stop simulation earlier when stable (alpha < 0.05) for better performance
+  simulation.on('end', () => {
+    if (!graphRendered) {
+      graphRendered = true;
+      window.dispatchEvent(new CustomEvent('graph-rendered', { 
+        detail: { alpha: 0 } 
+      }));
+    }
   });
   
   // Store nodes and links for external access

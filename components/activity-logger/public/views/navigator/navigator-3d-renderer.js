@@ -404,7 +404,6 @@ function renderNavigator3D(container, nodes, links) {
     navigatorState.nodeGroup3D = null;
   };
   
-  console.log('[NAVIGATOR-3D] 3D visualization initialized');
 }
 
 /**

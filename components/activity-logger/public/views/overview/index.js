@@ -104,11 +104,6 @@ function renderOverviewView(container) {
   const mostActiveWorkspace = Array.from(workspaceActivity.entries())
     .sort((a, b) => b[1] - a[1])[0];
   
-  // Calculate productivity pulse (current activity vs average)
-  const avgDailyActivity = (weekEvents + weekPrompts) / 7;
-  const currentActivity = todayEvents + todayPrompts;
-  const productivityPulse = avgDailyActivity > 0 ? (currentActivity / avgDailyActivity) * 100 : 0;
-  
   // Calculate programming language distribution
   const languageMap = {
     '.py': 'Python',
@@ -179,17 +174,15 @@ function renderOverviewView(container) {
     }
   });
   
-  // Sort languages by frequency and get top languages
-  const topLanguages = Array.from(languageStats.entries())
-    .sort((a, b) => b[1] - a[1])
+  // Sort languages by percentage and get top languages
+  const languageData = Array.from(languageStats.entries())
+    .map(([lang, count]) => ({
+      language: lang,
+      count: count,
+      percentage: totalFileChanges > 0 ? parseFloat(((count / totalFileChanges) * 100).toFixed(1)) : 0
+    }))
+    .sort((a, b) => b.percentage - a.percentage) // Sort by percentage (descending)
     .slice(0, 10); // Top 10 languages
-  
-  // Calculate percentages
-  const languageData = topLanguages.map(([lang, count]) => ({
-    language: lang,
-    count: count,
-    percentage: totalFileChanges > 0 ? ((count / totalFileChanges) * 100).toFixed(1) : 0
-  }));
   
   container.innerHTML = `
     <div class="overview-view">
@@ -215,70 +208,6 @@ function renderOverviewView(container) {
           <a href="#activity" class="btn btn-primary" onclick="window.switchView('activity')">View Activity</a>
           <a href="#analytics" class="btn" onclick="window.switchView('analytics')">View Analytics</a>
         </div>
-      </div>
-      
-      <!-- Activity Heatmap -->
-      <div class="card">
-        <div class="card-header">
-          <h3 class="card-title">Activity Heatmap</h3>
-          <p class="card-subtitle">Past year of development activity</p>
-        </div>
-        <div class="card-body">
-          <div id="activityHeatmap"></div>
-        </div>
-      </div>
-      
-      <!-- Two Column Layout -->
-      <div class="overview-grid-2col">
-        
-        <!-- Productivity Pulse -->
-        <div class="card">
-          <div class="card-header">
-            <h3 class="card-title" title="Compares today's activity (file changes + AI prompts) to your weekly average. Shows how productive today is relative to your typical day.">Productivity Pulse</h3>
-            <p class="card-subtitle">Today vs. weekly average (interactions: file changes + AI prompts)</p>
-          </div>
-          <div class="card-body">
-              <div class="productivity-pulse">
-              <div class="pulse-gauge" title="Today is ${productivityPulse.toFixed(0)}% of your weekly daily average. ${productivityPulse >= 100 ? 'Above' : 'Below'} average productivity.">
-                <svg viewBox="0 0 200 120" class="pulse-svg">
-                  <path d="M 20 100 A 80 80 0 0 1 180 100" 
-                        fill="none" 
-                        stroke="var(--color-border)" 
-                        stroke-width="8" 
-                        stroke-linecap="round"/>
-                  <path d="M 20 100 A 80 80 0 0 1 180 100" 
-                        fill="none" 
-                        stroke="var(--color-primary)" 
-                        stroke-width="8" 
-                        stroke-linecap="round"
-                        stroke-dasharray="${Math.min(100, productivityPulse) / 100 * 251.2} 251.2"
-                        class="pulse-arc"/>
-                  <text x="100" y="75" text-anchor="middle" class="pulse-value">${productivityPulse.toFixed(0)}%</text>
-                  <text x="100" y="90" text-anchor="middle" class="pulse-label">of weekly avg</text>
-                </svg>
-              </div>
-              <div class="pulse-stats">
-                <div class="pulse-stat-item" title="Total interactions today: ${todayEvents} file changes + ${todayPrompts} AI prompts = ${currentActivity} interactions">
-                  <span class="pulse-stat-label">Today</span>
-                  <span class="pulse-stat-value">${currentActivity}</span>
-                  <span class="pulse-stat-unit" style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: 2px;">interactions</span>
-                  <span class="pulse-stat-breakdown" style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: 2px; text-align: center;">
-                    ${todayEvents} events + ${todayPrompts} prompts
-                  </span>
-                </div>
-                <div class="pulse-stat-item" title="Average daily interactions over the last 7 days: ${Math.round(weekEvents / 7)} file changes + ${Math.round(weekPrompts / 7)} AI prompts per day">
-                  <span class="pulse-stat-label">Daily Avg</span>
-                  <span class="pulse-stat-value">${avgDailyActivity.toFixed(1)}</span>
-                  <span class="pulse-stat-unit" style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: 2px;">interactions/day</span>
-                  <span class="pulse-stat-breakdown" style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: 2px; text-align: center;">
-                    ${Math.round(weekEvents / 7)} events + ${Math.round(weekPrompts / 7)} prompts
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-        
       </div>
       
       <!-- Two Column Layout -->
@@ -393,30 +322,6 @@ function renderOverviewView(container) {
       }
     }
   })();
-  
-  // Render visualizations after DOM is ready
-  // Use multiple attempts to ensure data is loaded
-  const renderHeatmap = () => {
-    const heatmapContainer = document.getElementById('activityHeatmap');
-    if (!heatmapContainer) return;
-    
-    if (window.renderActivityHeatmap) {
-      window.renderActivityHeatmap(heatmapContainer);
-    } else {
-      heatmapContainer.innerHTML = `
-        <div class="empty-state">
-          <div class="empty-state-text" style="font-style: normal;">Heatmap renderer not available</div>
-        </div>
-      `;
-    }
-  };
-  
-  // Try immediately
-  setTimeout(renderHeatmap, 100);
-  
-  // Retry after data might have loaded
-  setTimeout(renderHeatmap, 1000);
-  setTimeout(renderHeatmap, 3000);
 }
 
 // Export to window for global access

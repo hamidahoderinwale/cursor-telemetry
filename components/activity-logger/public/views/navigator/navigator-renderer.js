@@ -1271,7 +1271,6 @@ async function handleNavigatorSearch(event) {
       }
     }
     
-    console.log(`[NAVIGATOR] Found ${results.length} search results`);
   } catch (error) {
     console.warn('[NAVIGATOR] Search failed:', error.message);
   } finally {

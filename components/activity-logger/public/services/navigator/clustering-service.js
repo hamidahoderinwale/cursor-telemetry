@@ -36,8 +36,6 @@ class ClusteringService {
     let bestClusters = null;
     const scores = [];
 
-    console.log(`[CLUSTERING] Auto-optimizing K from ${minK} to ${maxK}...`);
-
     // Try different K values
     for (let k = minK; k <= maxK; k += step) {
       const clusters = this._kMeans(embeddings, k, maxIterations);
@@ -51,8 +49,6 @@ class ClusteringService {
         bestClusters = clusters;
       }
     }
-
-    console.log(`[CLUSTERING] Optimal K: ${bestK} (silhouette: ${bestScore.toFixed(3)})`);
 
     return {
       k: bestK,

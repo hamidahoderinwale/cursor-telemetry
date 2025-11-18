@@ -74,6 +74,95 @@ async function renderAnalyticsView(container) {
               <div class="data-status-info-text">
                 <h4>Telemetry Active</h4>
                 <p>Tracking ${totalPrompts.toLocaleString()} prompts and ${totalEvents.toLocaleString()} events</p>
+                ${(() => {
+                  // Check for data quality issues
+                  const prompts = window.state.data.prompts || [];
+                  const events = window.state.data.events || [];
+                  
+                  // Check model data availability - more thorough check
+                  const promptsWithModel = prompts.filter(p => {
+                    // Check all possible model field locations
+                    if (p.modelName || p.model_name || p.model) return true;
+                    if (p.modelInfo) {
+                      const modelInfo = typeof p.modelInfo === 'string' ? 
+                        (() => { try { return JSON.parse(p.modelInfo); } catch(e) { return {}; } })() : 
+                        p.modelInfo;
+                      if (modelInfo?.model || modelInfo?.modelName || modelInfo?.model_name) return true;
+                    }
+                    if (p.metadata?.model) return true;
+                    if (p.modelType || p.model_type) return true;
+                    return false;
+                  }).length;
+                  
+                  // Check events with diff stats - check multiple field names
+                  const fileChangeEvents = events.filter(e => {
+                    const type = e.type || '';
+                    return type === 'file-change' || type === 'file_change' || 
+                           type === 'code-change' || type === 'code_change' || 
+                           type === 'file-edit' || type === 'file_edit';
+                  });
+                  
+                  const eventsWithDiffStats = fileChangeEvents.filter(e => {
+                    try {
+                      const details = typeof e.details === 'string' ? JSON.parse(e.details) : (e.details || {});
+                      // Check multiple possible field names for line changes
+                      return details?.lines_added !== undefined || 
+                             details?.lines_removed !== undefined ||
+                             details?.linesAdded !== undefined ||
+                             details?.linesRemoved !== undefined ||
+                             details?.diff_stats?.lines_added !== undefined ||
+                             details?.diff_stats?.lines_removed !== undefined ||
+                             details?.chars_added !== undefined ||
+                             details?.chars_removed !== undefined;
+                    } catch {
+                      return false;
+                    }
+                  }).length;
+                  
+                  const issues = [];
+                  // Only show warning if we have prompts but none have model info
+                  if (prompts.length > 0 && promptsWithModel === 0) {
+                    issues.push('Model information not available (all prompts show "unknown")');
+                  } else if (prompts.length > 0 && promptsWithModel < prompts.length * 0.5) {
+                    // Show info if less than 50% have model info
+                    issues.push(`Model information partially available (${promptsWithModel} of ${prompts.length} prompts have model data)`);
+                  }
+                  
+                  // Only show warning if we have file change events but none have diff stats
+                  if (fileChangeEvents.length > 0 && eventsWithDiffStats === 0) {
+                    issues.push('Line change statistics not available for file changes');
+                  } else if (fileChangeEvents.length > 0 && eventsWithDiffStats < fileChangeEvents.length * 0.5) {
+                    // Show info if less than 50% have diff stats
+                    issues.push(`Line change statistics partially available (${eventsWithDiffStats} of ${fileChangeEvents.length} file changes have stats)`);
+                  }
+                  
+                  if (issues.length > 0) {
+                    return `
+                      <div class="data-quality-notice" style="margin-top: var(--space-sm);">
+                        <div class="data-quality-notice-header" onclick="this.parentElement.classList.toggle('expanded')">
+                          <div style="display: flex; align-items: center; gap: var(--space-xs);">
+                            <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor" style="flex-shrink: 0;">
+                              <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+                            </svg>
+                            <span style="font-size: var(--text-sm); font-weight: 600; color: #856404;">Data Quality Notice</span>
+                          </div>
+                          <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor" class="data-quality-notice-chevron" style="transition: transform 0.2s;">
+                            <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd"/>
+                          </svg>
+                        </div>
+                        <div class="data-quality-notice-content">
+                          <ul style="margin: var(--space-xs) 0; padding-left: var(--space-md); font-size: var(--text-sm); color: #856404; line-height: 1.6;">
+                            ${issues.map(issue => `<li style="margin-bottom: var(--space-xs);">${issue}</li>`).join('')}
+                          </ul>
+                          <div style="margin-top: var(--space-sm); padding: var(--space-sm); background: rgba(255, 255, 255, 0.5); border-radius: var(--radius-sm); font-size: var(--text-xs); color: #856404; line-height: 1.5;">
+                            <strong>Note:</strong> Data is loading correctly, but some fields may be missing. This is normal if the companion service hasn't captured model information or if events were created before diff stats were added.
+                          </div>
+                        </div>
+                      </div>
+                    `;
+                  }
+                  return '';
+                })()}
               </div>
             </div>
             <div class="data-status-info-right">
@@ -91,42 +180,42 @@ async function renderAnalyticsView(container) {
         <!-- Left Panel: Charts -->
         <div class="analytics-charts-panel">
           <!-- AI Activity & Code Output -->
-      <div class="card">
-        <div class="card-header">
-          <div class="chart-header-controls">
-            <h3 class="card-title" title="Shows the correlation between AI prompts and resulting code changes over time. The chart displays prompt frequency alongside code modifications to help identify patterns in your AI-assisted development workflow. Use the time scale buttons to view different time periods">AI Activity & Code Output</h3>
-            <div class="timescale-controls" id="aiActivityTimescaleControls">
-              <button class="btn-timescale active" data-scale="hourly" onclick="updateAIActivityChartTimescale('hourly')" title="View activity aggregated by hour - shows the last 24 hours">Hourly</button>
-              <button class="btn-timescale" data-scale="daily" onclick="updateAIActivityChartTimescale('daily')" title="View activity aggregated by day - shows the last 30 days">Daily</button>
-              <button class="btn-timescale" data-scale="weekly" onclick="updateAIActivityChartTimescale('weekly')" title="View activity aggregated by week - shows the last 12 weeks">Weekly</button>
-              <button class="btn-timescale" data-scale="monthly" onclick="updateAIActivityChartTimescale('monthly')" title="View activity aggregated by month - shows the last 12 months">Monthly</button>
+          <div class="card">
+            <div class="card-header">
+              <div class="chart-header-controls">
+                <h3 class="card-title" title="Shows the correlation between AI prompts and resulting code changes over time. The chart displays prompt frequency alongside code modifications to help identify patterns in your AI-assisted development workflow. Use the time scale buttons to view different time periods">AI Activity & Code Output</h3>
+                <div class="timescale-controls" id="aiActivityTimescaleControls">
+                  <button class="btn-timescale active" data-scale="hourly" onclick="updateAIActivityChartTimescale('hourly')" title="View activity aggregated by hour - shows the last 24 hours">Hourly</button>
+                  <button class="btn-timescale" data-scale="daily" onclick="updateAIActivityChartTimescale('daily')" title="View activity aggregated by day - shows the last 30 days">Daily</button>
+                  <button class="btn-timescale" data-scale="weekly" onclick="updateAIActivityChartTimescale('weekly')" title="View activity aggregated by week - shows the last 12 weeks">Weekly</button>
+                  <button class="btn-timescale" data-scale="monthly" onclick="updateAIActivityChartTimescale('monthly')" title="View activity aggregated by month - shows the last 12 months">Monthly</button>
+                </div>
+              </div>
+              <p class="card-subtitle">Shows the relationship between AI prompts and resulting code changes over time.</p>
+            </div>
+            <div class="card-body">
+              <canvas id="aiActivityChart" class="chart-container"></canvas>
             </div>
           </div>
-          <p class="card-subtitle">Prompt frequency and code changes correlation. Select time scale to view different time periods.</p>
-        </div>
-        <div class="card-body">
-          <canvas id="aiActivityChart" class="chart-container"></canvas>
-        </div>
-      </div>
 
-      <!-- Context Usage Over Time -->
-      <div class="card">
-        <div class="card-header">
-          <div class="chart-header-controls">
-            <h3 class="card-title" title="Tracks how much of the AI context window you're using over time. The context window is the maximum number of tokens the AI can consider. Higher usage means more files or code were included in your prompts. Color coding: Green = Normal (under 70%), Orange = Medium-High (70-90%), Red = High (over 90%)">Context Usage Over Time</h3>
-            <div class="timescale-controls">
-              <button class="btn-timescale active" data-hours="24" onclick="updateContextChartTimescale(24)" title="Show context usage for the last 24 hours">24h</button>
-              <button class="btn-timescale" data-hours="72" onclick="updateContextChartTimescale(72)" title="Show context usage for the last 3 days">3d</button>
-              <button class="btn-timescale" data-hours="168" onclick="updateContextChartTimescale(168)" title="Show context usage for the last 7 days">7d</button>
-              <button class="btn-timescale" data-hours="720" onclick="updateContextChartTimescale(720)" title="Show context usage for the last 30 days">30d</button>
+          <!-- Context Usage Over Time -->
+          <div class="card">
+            <div class="card-header">
+              <div class="chart-header-controls">
+                <h3 class="card-title" title="Tracks how much of the AI context window you're using over time. The context window is the maximum number of tokens the AI can consider. Higher usage means more files or code were included in your prompts. Color coding: Green = Normal (under 70%), Orange = Medium-High (70-90%), Red = High (over 90%)">Context Usage Over Time</h3>
+                <div class="timescale-controls">
+                  <button class="btn-timescale active" data-hours="24" onclick="updateContextChartTimescale(24)" title="Show context usage for the last 24 hours">24h</button>
+                  <button class="btn-timescale" data-hours="72" onclick="updateContextChartTimescale(72)" title="Show context usage for the last 3 days">3d</button>
+                  <button class="btn-timescale" data-hours="168" onclick="updateContextChartTimescale(168)" title="Show context usage for the last 7 days">7d</button>
+                  <button class="btn-timescale" data-hours="720" onclick="updateContextChartTimescale(720)" title="Show context usage for the last 30 days">30d</button>
+                </div>
+              </div>
+              <p class="card-subtitle">Tracks how much of the AI context window is used over time. <span style="color: #10b981; font-weight: 500;">Green</span> = Normal (&lt;70%), <span style="color: #f59e0b; font-weight: 500;">Orange</span> = Medium-High (70–90%), <span style="color: #ef4444; font-weight: 500;">Red</span> = High (&gt;90%)</p>
+            </div>
+            <div class="card-body">
+              <canvas id="promptTokensChart" class="chart-container-small"></canvas>
             </div>
           </div>
-          <p class="card-subtitle">AI context window utilization with smart scaling (auto-adjusts range for better detail). Color-coded: <span style="color: #10b981;">Green</span> = Normal, <span style="color: #f59e0b;">Orange</span> = Medium-High, <span style="color: #ef4444;">Red</span> = High</p>
-        </div>
-        <div class="card-body">
-          <canvas id="promptTokensChart" class="chart-container-small"></canvas>
-        </div>
-      </div>
 
       <!-- Model Usage Analytics -->
       <div class="card">
@@ -147,17 +236,9 @@ async function renderAnalyticsView(container) {
             <p class="card-subtitle">Extension breakdown</p>
           </div>
           <div class="card-body">
-            <canvas id="fileTypesChart"></canvas>
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="card-header">
-            <h3 class="card-title" title="Activity timeline showing development events aggregated into 15-minute intervals. Useful for identifying peak activity periods and understanding your daily coding patterns">Recent Activity (15-min intervals)</h3>
-            <p class="card-subtitle">Last 12 hours of activity</p>
-          </div>
-          <div class="card-body">
-            <canvas id="hourlyChart"></canvas>
+            <div class="chart-container-small">
+              <canvas id="fileTypesChart"></canvas>
+            </div>
           </div>
         </div>
       </div>
@@ -486,60 +567,88 @@ async function renderAnalyticsView(container) {
       console.warn('[ANALYTICS] Chart containers not found, charts may not render');
     }
     
-    // Render basic charts immediately - these are fast
-    if (window.renderAIActivityChart) {
-      try {
-        // Auto-detect and set initial time scale button
-        const state = window.state || {};
-        const allEvents = state.data?.events || [];
-        const allPrompts = state.data?.prompts || [];
-        const now = Date.now();
-        const oldestEvent = allEvents.length > 0 ? Math.min(...allEvents.map(e => new Date(e.timestamp).getTime())) : now;
-        const oldestPrompt = allPrompts.length > 0 ? Math.min(...allPrompts.map(p => new Date(p.timestamp).getTime())) : now;
-        const oldestData = Math.min(oldestEvent, oldestPrompt);
-        const daysSpan = (now - oldestData) / (24 * 60 * 60 * 1000);
-        
-        // Set initial active button based on data span
-        let initialScale = 'daily';
-        if (daysSpan < 1) {
-          initialScale = 'hourly';
-        } else if (daysSpan <= 7) {
-          initialScale = 'daily';
-        } else if (daysSpan <= 90) {
-          initialScale = 'daily';
-        } else {
-          initialScale = 'weekly';
+    // OPTIMIZATION: Debounce chart rendering to prevent multiple renders
+    const debouncedRenderCharts = window.debounce ? window.debounce(async () => {
+      // Render basic charts - these are fast
+      if (window.renderAIActivityChart) {
+        try {
+          // Auto-detect and set initial time scale button
+          const state = window.state || {};
+          const allEvents = state.data?.events || [];
+          const allPrompts = state.data?.prompts || [];
+          const now = Date.now();
+          const oldestEvent = allEvents.length > 0 ? Math.min(...allEvents.map(e => new Date(e.timestamp).getTime())) : now;
+          const oldestPrompt = allPrompts.length > 0 ? Math.min(...allPrompts.map(p => new Date(p.timestamp).getTime())) : now;
+          const oldestData = Math.min(oldestEvent, oldestPrompt);
+          const daysSpan = (now - oldestData) / (24 * 60 * 60 * 1000);
+          
+          // Set initial active button based on data span
+          let initialScale = 'daily';
+          if (daysSpan < 1) {
+            initialScale = 'hourly';
+          } else if (daysSpan <= 7) {
+            initialScale = 'daily';
+          } else if (daysSpan <= 90) {
+            initialScale = 'daily';
+          } else {
+            initialScale = 'weekly';
+          }
+          
+          // Update button state
+          const controls = document.getElementById('aiActivityTimescaleControls');
+          if (controls) {
+            controls.querySelectorAll('.btn-timescale').forEach(btn => {
+              if (btn.dataset.scale === initialScale) {
+                btn.classList.add('active');
+              } else {
+                btn.classList.remove('active');
+              }
+            });
+          }
+          
+          // Render with auto-detected scale (pass null to use auto-detect logic)
+          await window.renderAIActivityChart(null);
+        } catch (err) {
+          console.error('[CHART] Error rendering AI Activity Chart:', err);
         }
-        
-        // Update button state
-        const controls = document.getElementById('aiActivityTimescaleControls');
-        if (controls) {
-          controls.querySelectorAll('.btn-timescale').forEach(btn => {
-            if (btn.dataset.scale === initialScale) {
-              btn.classList.add('active');
-            } else {
-              btn.classList.remove('active');
-            }
+      } else {
+        console.warn('[CHART] renderAIActivityChart not available');
+      }
+      
+      if (window.renderPromptTokensChart) {
+        try {
+          window.renderPromptTokensChart();
+        } catch (err) {
+          console.error('[CHART] Error rendering Prompt Tokens Chart:', err);
+        }
+      } else {
+        console.warn('[CHART] renderPromptTokensChart not available');
+      }
+    }, 100) : (() => {
+      // Fallback if debounce not available
+      if (window.renderAIActivityChart) {
+        try {
+          window.renderAIActivityChart(null).catch(err => {
+            console.error('[CHART] Error rendering AI Activity Chart:', err);
           });
+        } catch (err) {
+          console.error('[CHART] Error rendering AI Activity Chart:', err);
         }
-        
-        // Render with auto-detected scale (pass null to use auto-detect logic)
-        window.renderAIActivityChart(null);
-      } catch (err) {
-        console.error('[CHART] Error rendering AI Activity Chart:', err);
       }
-    } else {
-      console.warn('[CHART] renderAIActivityChart not available');
-    }
+      if (window.renderPromptTokensChart) {
+        try {
+          window.renderPromptTokensChart();
+        } catch (err) {
+          console.error('[CHART] Error rendering Prompt Tokens Chart:', err);
+        }
+      }
+    });
     
-    if (window.renderPromptTokensChart) {
-      try {
-        window.renderPromptTokensChart();
-      } catch (err) {
-        console.error('[CHART] Error rendering Prompt Tokens Chart:', err);
-      }
+    // Use requestAnimationFrame for smooth rendering
+    if (typeof requestAnimationFrame !== 'undefined') {
+      requestAnimationFrame(debouncedRenderCharts);
     } else {
-      console.warn('[CHART] renderPromptTokensChart not available');
+      debouncedRenderCharts();
     }
     
     if (window.renderFileTypesChart) {
@@ -550,16 +659,6 @@ async function renderAnalyticsView(container) {
       }
     } else {
       console.warn('[CHART] renderFileTypesChart not available');
-    }
-    
-    if (window.renderHourlyChart) {
-      try {
-        window.renderHourlyChart();
-      } catch (err) {
-        console.error('[CHART] Error rendering Hourly Chart:', err);
-      }
-    } else {
-      console.warn('[CHART] renderHourlyChart not available');
     }
     
     console.log('[ANALYTICS] Fast charts rendered');
@@ -615,7 +714,9 @@ async function renderAnalyticsView(container) {
     
     if (window.renderModelUsageAnalytics) {
       try {
-        window.renderModelUsageAnalytics();
+        window.renderModelUsageAnalytics().catch(err => {
+          console.error('[CHART] Error rendering Model Usage Analytics:', err);
+        });
       } catch (err) {
         console.error('[CHART] Error rendering Model Usage Analytics:', err);
       }
@@ -663,7 +764,7 @@ async function renderAnalyticsView(container) {
         }
         
         // Show loading state
-        if (containerElement.innerHTML.trim() === '') {
+        if (containerElement.innerHTML.trim() === '' || containerElement.innerHTML.includes('Loading...')) {
           containerElement.innerHTML = '<div style="padding: var(--space-lg); text-align: center; color: var(--color-text-muted);">Loading...</div>';
         }
         
@@ -672,11 +773,12 @@ async function renderAnalyticsView(container) {
           if (window.performanceOptimizer && window.performanceOptimizer.lazyLoad) {
             window.performanceOptimizer.lazyLoad(`#${id}`, (element) => {
               render().catch(err => {
-                console.warn(`[ANALYTICS] Failed to render ${id}:`, err.message);
+                console.warn(`[ANALYTICS] Failed to render ${id}:`, err);
+                const errorMsg = err?.message || err?.toString() || 'Unknown error';
                 containerElement.innerHTML = `
                   <div style="padding: var(--space-lg); text-align: center; color: var(--color-text-muted);">
-                    <div style="margin-bottom: var(--space-xs);">Unable to load ${id}</div>
-                    <div style="font-size: var(--text-xs);">${err.message || 'Unknown error'}</div>
+                    <div style="margin-bottom: var(--space-xs);">Unable to load visualization</div>
+                    <div style="font-size: var(--text-xs);">${errorMsg}</div>
                   </div>
                 `;
               });
@@ -685,11 +787,12 @@ async function renderAnalyticsView(container) {
             // Render immediately with a small delay to ensure DOM is ready
             setTimeout(() => {
               render().catch(err => {
-                console.warn(`[ANALYTICS] Failed to render ${id}:`, err.message);
+                console.warn(`[ANALYTICS] Failed to render ${id}:`, err);
+                const errorMsg = err?.message || err?.toString() || 'Unknown error';
                 containerElement.innerHTML = `
                   <div style="padding: var(--space-lg); text-align: center; color: var(--color-text-muted);">
-                    <div style="margin-bottom: var(--space-xs);">Unable to load ${id}</div>
-                    <div style="font-size: var(--text-xs);">${err.message || 'Unknown error'}</div>
+                    <div style="margin-bottom: var(--space-xs);">Unable to load visualization</div>
+                    <div style="font-size: var(--text-xs);">${errorMsg}</div>
                   </div>
                 `;
               });
@@ -699,7 +802,8 @@ async function renderAnalyticsView(container) {
           console.warn(`[ANALYTICS] Render function for ${id} not available`);
           containerElement.innerHTML = `
             <div style="padding: var(--space-lg); text-align: center; color: var(--color-text-muted);">
-              Visualization renderer not available
+              <div style="margin-bottom: var(--space-xs);">Visualization renderer not available</div>
+              <div style="font-size: var(--text-xs);">The render function for this chart is not loaded</div>
             </div>
           `;
         }
@@ -709,9 +813,17 @@ async function renderAnalyticsView(container) {
     // Render immediately and also retry after a delay
     renderAdvancedVisualizations();
     
-    // Retry after a delay to catch any initialization issues
+    // Retry after delays to catch any initialization issues
+    setTimeout(renderAdvancedVisualizations, 500);
     setTimeout(renderAdvancedVisualizations, 1000);
+    setTimeout(renderAdvancedVisualizations, 2000);
     setTimeout(renderAdvancedVisualizations, 3000);
+    
+    // Also listen for data updates to re-render charts
+    window.addEventListener('data-updated', () => {
+      console.log('[ANALYTICS] Data updated, re-rendering charts...');
+      renderAdvancedVisualizations();
+    });
   }
   
   // Load more data for analytics if needed
@@ -932,7 +1044,13 @@ async function renderAnalyticsView(container) {
       .slice(0, 10);
     
     if (sorted.length === 0) {
-      ctx.parentElement.innerHTML = '<div style="padding: var(--space-md); text-align: center; color: var(--color-text-muted);">No context file data</div>';
+      ctx.parentElement.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-state-title">No Context File Data</div>
+          <div class="empty-state-description">Context file analytics will appear when you use @ mentions in your prompts</div>
+          <div class="empty-state-hint">Try referencing files with @filename in your AI conversations</div>
+        </div>
+      `;
       return;
     }
     
@@ -978,7 +1096,13 @@ async function renderAnalyticsView(container) {
       .filter(t => t !== null && t > 0 && t < 300); // Filter outliers
     
     if (thinkingTimes.length === 0) {
-      ctx.parentElement.innerHTML = '<div style="padding: var(--space-md); text-align: center; color: var(--color-text-muted);">No thinking time data</div>';
+      ctx.parentElement.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-state-title">No Thinking Time Data</div>
+          <div class="empty-state-description">Thinking time metrics will appear as AI models process your prompts</div>
+          <div class="empty-state-hint">Response time data is captured automatically during AI interactions</div>
+        </div>
+      `;
       return;
     }
     

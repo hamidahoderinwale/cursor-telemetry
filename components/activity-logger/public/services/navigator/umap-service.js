@@ -28,7 +28,6 @@ class UMAPService {
       return embeddings.map(() => [0, 0]);
     }
 
-    console.log(`[UMAP] Computing UMAP layout for ${n} points (k=${nNeighbors}, metric=${metric})...`);
 
     // Step 1: Build fuzzy simplicial set (kNN graph with probabilities)
     const knnGraph = await this._buildFuzzySimplicialSet(embeddings, nNeighbors, metric);
@@ -47,7 +46,6 @@ class UMAPService {
       }
     );
 
-    console.log(`[UMAP] UMAP layout complete`);
     return optimizedPositions;
   }
 
@@ -61,14 +59,28 @@ class UMAPService {
     // Adaptive k based on dataset size
     const adaptiveK = Math.min(k, Math.max(5, Math.floor(Math.sqrt(n))));
     
-    console.log(`[UMAP] Building fuzzy simplicial set (k=${adaptiveK})...`);
 
+    // OPTIMIZATION: Use approximate kNN for large datasets (sample-based)
+    const useApproximate = n > 500;
+    const sampleSize = useApproximate ? Math.min(500, Math.floor(n * 0.3)) : n;
+    
     for (let i = 0; i < n; i++) {
       const neighbors = [];
       const distances = [];
 
-      // Find k nearest neighbors
-      for (let j = 0; j < n; j++) {
+      // Find k nearest neighbors (use sampling for large datasets)
+      const candidates = useApproximate 
+        ? (() => {
+            // Sample candidates + include all neighbors from previous iterations
+            const sampled = new Set([i]);
+            while (sampled.size < sampleSize) {
+              sampled.add(Math.floor(Math.random() * n));
+            }
+            return Array.from(sampled);
+          })()
+        : Array.from({ length: n }, (_, j) => j);
+
+      for (const j of candidates) {
         if (i === j) continue;
         
         let dist;
@@ -186,7 +198,6 @@ class UMAPService {
     const n = positions.length;
     const learningRate = 1.0;
     
-    console.log(`[UMAP] Optimizing layout (${nEpochs} epochs)...`);
 
     for (let epoch = 0; epoch < nEpochs; epoch++) {
       // Attractive forces (for neighbors in high-dim space)
@@ -241,7 +252,6 @@ class UMAPService {
 
       // Yield periodically
       if (epoch % 5 === 0 || epoch === nEpochs - 1) {
-        console.log(`[UMAP] Epoch ${epoch + 1}/${nEpochs}`);
         
         if (epoch < nEpochs - 1) {
           await new Promise(resolve => {

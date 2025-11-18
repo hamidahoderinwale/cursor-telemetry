@@ -1,6 +1,6 @@
 /**
  * Analytics Renderers Module
- * Extracted from new-dashboard.js
+ * Extracted from dashboard.js
  * Handles HTML-based analytics sections (not Chart.js charts)
  */
 

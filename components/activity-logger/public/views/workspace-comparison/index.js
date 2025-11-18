@@ -77,15 +77,55 @@ function renderWorkspaceComparisonView(container) {
     </div>
   `;
 
+  // Reset selected workspaces on view render to ensure fresh default selection
+  selectedWorkspaces = [];
+
   // Initialize
   setTimeout(() => {
     loadAvailableWorkspaces().then(() => {
-      // Automatically select first two workspaces if none are selected
-      if (selectedWorkspaces.length === 0 && availableWorkspaces.length >= 2) {
-        // Select first two workspaces
-        addWorkspace(availableWorkspaces[0].path);
-        addWorkspace(availableWorkspaces[1].path);
-      } else if (selectedWorkspaces.length === 0 && availableWorkspaces.length === 1) {
+      // Automatically select two most active workspaces by default
+      if (availableWorkspaces.length >= 2) {
+        // Get current workspace if it exists and is not 'all'
+        const currentWorkspace = window.state?.currentWorkspace;
+        const normalizePath = (path) => {
+          if (!path) return '';
+          return path.replace(/\/$/, '').toLowerCase().trim();
+        };
+        
+        let workspacesToSelect = [];
+        
+        // If there's a current workspace (not 'all'), prioritize it
+        if (currentWorkspace && currentWorkspace !== 'all') {
+          const normalizedCurrent = normalizePath(currentWorkspace);
+          const currentWs = availableWorkspaces.find(ws => 
+            normalizePath(ws.path) === normalizedCurrent ||
+            normalizePath(ws.path).includes(normalizedCurrent) ||
+            normalizedCurrent.includes(normalizePath(ws.path))
+          );
+          
+          if (currentWs) {
+            workspacesToSelect.push(currentWs);
+            // Add the next most active workspace that's not the current one
+            const nextWs = availableWorkspaces.find(ws => ws.path !== currentWs.path);
+            if (nextWs) {
+              workspacesToSelect.push(nextWs);
+            }
+          } else {
+            // Current workspace not found in available, just select top 2
+            workspacesToSelect = availableWorkspaces.slice(0, 2);
+          }
+        } else {
+          // No current workspace, select top 2 most active
+          workspacesToSelect = availableWorkspaces.slice(0, 2);
+        }
+        
+        // Add selected workspaces
+        workspacesToSelect.forEach(ws => {
+          if (ws) {
+            addWorkspace(ws.path);
+          }
+        });
+      } else if (availableWorkspaces.length === 1) {
         // If only one workspace, select it
         addWorkspace(availableWorkspaces[0].path);
       }

@@ -239,6 +239,79 @@ class PersistentDB {
             })
           );
 
+          // Conversation turns table (individual user/assistant messages with timing)
+          tables.push(
+            new Promise((res, rej) => {
+              this.db.run(
+                `
+              CREATE TABLE IF NOT EXISTS conversation_turns (
+                id TEXT PRIMARY KEY,
+                conversation_id TEXT NOT NULL,
+                turn_index INTEGER NOT NULL,
+                role TEXT NOT NULL,
+                content TEXT NOT NULL,
+                model_name TEXT,
+                model_provider TEXT,
+                prompt_tokens INTEGER DEFAULT 0,
+                completion_tokens INTEGER DEFAULT 0,
+                total_tokens INTEGER DEFAULT 0,
+                request_start_time INTEGER,
+                request_end_time INTEGER,
+                request_duration_ms INTEGER,
+                first_token_time INTEGER,
+                time_to_first_token_ms INTEGER,
+                thinking_time INTEGER DEFAULT 0,
+                thinking_time_seconds REAL DEFAULT 0,
+                streaming BOOLEAN DEFAULT 0,
+                context_files TEXT,
+                referenced_files TEXT,
+                code_blocks TEXT,
+                metadata TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+              )
+            `,
+                (err) => {
+                  if (err) {
+                    console.error('Error creating conversation_turns table:', err);
+                    rej(err);
+                  } else {
+                    // Create indexes for efficient queries
+                    this.db.run(
+                      `CREATE INDEX IF NOT EXISTS idx_turns_conversation ON conversation_turns(conversation_id)`,
+                      (idxErr) => {
+                        if (idxErr)
+                          console.warn('Error creating turns conversation index:', idxErr);
+                      }
+                    );
+                    this.db.run(
+                      `CREATE INDEX IF NOT EXISTS idx_turns_conversation_index ON conversation_turns(conversation_id, turn_index)`,
+                      (idxErr) => {
+                        if (idxErr)
+                          console.warn('Error creating turns conversation_index index:', idxErr);
+                      }
+                    );
+                    this.db.run(
+                      `CREATE INDEX IF NOT EXISTS idx_turns_role ON conversation_turns(role)`,
+                      (idxErr) => {
+                        if (idxErr)
+                          console.warn('Error creating turns role index:', idxErr);
+                      }
+                    );
+                    this.db.run(
+                      `CREATE INDEX IF NOT EXISTS idx_turns_created_at ON conversation_turns(created_at)`,
+                      (idxErr) => {
+                        if (idxErr)
+                          console.warn('Error creating turns created_at index:', idxErr);
+                      }
+                    );
+                    res();
+                  }
+                }
+              );
+            })
+          );
+
           // Events table (for detailed event tracking)
           tables.push(
             new Promise((res, rej) => {
@@ -442,6 +515,8 @@ class PersistentDB {
               CREATE TABLE IF NOT EXISTS share_links (
                 id TEXT PRIMARY KEY,
                 share_id TEXT UNIQUE NOT NULL,
+                account_id TEXT,
+                device_id TEXT,
                 workspaces TEXT,
                 abstraction_level INTEGER DEFAULT 1,
                 filters TEXT,
@@ -457,12 +532,25 @@ class PersistentDB {
                     console.error('Error creating share_links table:', err);
                     rej(err);
                   } else {
+                    // Add account_id column if it doesn't exist (migration)
+                    this.db.run(
+                      `ALTER TABLE share_links ADD COLUMN account_id TEXT`,
+                      () => {} // Ignore error if column already exists
+                    );
+                    this.db.run(
+                      `ALTER TABLE share_links ADD COLUMN device_id TEXT`,
+                      () => {} // Ignore error if column already exists
+                    );
                     this.db.run(
                       `CREATE INDEX IF NOT EXISTS idx_share_links_expires ON share_links(expires_at)`,
                       () => {}
                     );
                     this.db.run(
                       `CREATE INDEX IF NOT EXISTS idx_share_links_created ON share_links(created_at)`,
+                      () => {}
+                    );
+                    this.db.run(
+                      `CREATE INDEX IF NOT EXISTS idx_share_links_account ON share_links(account_id)`,
                       () => {}
                     );
                     res();
@@ -759,6 +847,209 @@ class PersistentDB {
             })
           );
 
+          // Rung 1: Token-level abstraction
+          tables.push(
+            new Promise((res, rej) => {
+              this.db.run(
+                `
+          CREATE TABLE IF NOT EXISTS rung1_tokens (
+            id TEXT PRIMARY KEY,
+            diff_id TEXT,
+            file_path TEXT,
+            file_id TEXT,
+            language TEXT,
+            token_sequence TEXT,
+            canonical_sequence TEXT,
+            token_count INTEGER,
+            identifier_count INTEGER,
+            string_literal_count INTEGER,
+            numeric_literal_count INTEGER,
+            timestamp TEXT,
+            workspace_path TEXT,
+            linked_prompt_id TEXT,
+            metadata TEXT
+          )
+        `,
+                (err) => {
+                  if (err) {
+                    console.error('Error creating rung1_tokens table:', err);
+                    rej(err);
+                  } else {
+                    this.db.run(
+                      `CREATE INDEX IF NOT EXISTS idx_rung1_file ON rung1_tokens(file_id)`,
+                      () => {
+                        this.db.run(
+                          `CREATE INDEX IF NOT EXISTS idx_rung1_timestamp ON rung1_tokens(timestamp)`,
+                          () => {
+                            this.db.run(
+                              `CREATE INDEX IF NOT EXISTS idx_rung1_language ON rung1_tokens(language)`,
+                              () => {
+                                res();
+                              }
+                            );
+                          }
+                        );
+                      }
+                    );
+                  }
+                }
+              );
+            })
+          );
+
+          // Rung 2: Statement-level (semantic edit scripts)
+          tables.push(
+            new Promise((res, rej) => {
+              this.db.run(
+                `
+          CREATE TABLE IF NOT EXISTS rung2_edit_scripts (
+            id TEXT PRIMARY KEY,
+            diff_id TEXT,
+            file_path TEXT,
+            file_id TEXT,
+            language TEXT,
+            edit_operations TEXT,
+            operation_count INTEGER,
+            operation_types TEXT,
+            ast_node_types TEXT,
+            change_style TEXT,
+            timestamp TEXT,
+            workspace_path TEXT,
+            linked_prompt_id TEXT,
+            intent_category TEXT,
+            metadata TEXT
+          )
+        `,
+                (err) => {
+                  if (err) {
+                    console.error('Error creating rung2_edit_scripts table:', err);
+                    rej(err);
+                  } else {
+                    this.db.run(
+                      `CREATE INDEX IF NOT EXISTS idx_rung2_file ON rung2_edit_scripts(file_id)`,
+                      () => {
+                        this.db.run(
+                          `CREATE INDEX IF NOT EXISTS idx_rung2_timestamp ON rung2_edit_scripts(timestamp)`,
+                          () => {
+                            this.db.run(
+                              `CREATE INDEX IF NOT EXISTS idx_rung2_intent ON rung2_edit_scripts(intent_category)`,
+                              () => {
+                                this.db.run(
+                                  `CREATE INDEX IF NOT EXISTS idx_rung2_language ON rung2_edit_scripts(language)`,
+                                  () => {
+                                    res();
+                                  }
+                                );
+                              }
+                            );
+                          }
+                        );
+                      }
+                    );
+                  }
+                }
+              );
+            })
+          );
+
+          // Rung 3: Function-level representation
+          tables.push(
+            new Promise((res, rej) => {
+              this.db.run(
+                `
+          CREATE TABLE IF NOT EXISTS rung3_function_changes (
+            id TEXT PRIMARY KEY,
+            diff_id TEXT,
+            file_path TEXT,
+            file_id TEXT,
+            language TEXT,
+            change_type TEXT,
+            function_id TEXT,
+            function_name TEXT,
+            signature_before TEXT,
+            signature_after TEXT,
+            parameter_changes TEXT,
+            return_type_changed INTEGER,
+            callgraph_updates TEXT,
+            docstring_changed INTEGER,
+            timestamp TEXT,
+            workspace_path TEXT,
+            linked_prompt_id TEXT,
+            intent_category TEXT,
+            metadata TEXT
+          )
+        `,
+                (err) => {
+                  if (err) {
+                    console.error('Error creating rung3_function_changes table:', err);
+                    rej(err);
+                  } else {
+                    this.db.run(
+                      `CREATE INDEX IF NOT EXISTS idx_rung3_file ON rung3_function_changes(file_id)`,
+                      () => {
+                        this.db.run(
+                          `CREATE INDEX IF NOT EXISTS idx_rung3_function ON rung3_function_changes(function_id)`,
+                          () => {
+                            this.db.run(
+                              `CREATE INDEX IF NOT EXISTS idx_rung3_timestamp ON rung3_function_changes(timestamp)`,
+                              () => {
+                                this.db.run(
+                                  `CREATE INDEX IF NOT EXISTS idx_rung3_change_type ON rung3_function_changes(change_type)`,
+                                  () => {
+                                    res();
+                                  }
+                                );
+                              }
+                            );
+                          }
+                        );
+                      }
+                    );
+                  }
+                }
+              );
+            })
+          );
+
+          tables.push(
+            new Promise((res, rej) => {
+              this.db.run(
+                `
+          CREATE TABLE IF NOT EXISTS rung3_functions (
+            id TEXT PRIMARY KEY,
+            file_id TEXT,
+            function_name TEXT,
+            canonical_signature TEXT,
+            parameter_count INTEGER,
+            return_type TEXT,
+            first_seen TEXT,
+            last_modified TEXT,
+            call_count INTEGER,
+            metadata TEXT
+          )
+        `,
+                (err) => {
+                  if (err) {
+                    console.error('Error creating rung3_functions table:', err);
+                    rej(err);
+                  } else {
+                    this.db.run(
+                      `CREATE INDEX IF NOT EXISTS idx_rung3_func_file ON rung3_functions(file_id)`,
+                      () => {
+                        this.db.run(
+                          `CREATE INDEX IF NOT EXISTS idx_rung3_func_signature ON rung3_functions(canonical_signature)`,
+                          () => {
+                            res();
+                          }
+                        );
+                      }
+                    );
+                  }
+                }
+              );
+            })
+          );
+
           // Whiteboards table (for saved whiteboard configurations)
           tables.push(
             new Promise((res, rej) => {
@@ -804,6 +1095,9 @@ class PersistentDB {
           );
 
           this.db.run(`CREATE INDEX IF NOT EXISTS idx_events_timestamp ON events(timestamp)`);
+
+          // Migration: Add new fields to rung tables
+          this.migrateRungTables();
           this.db.run(`CREATE INDEX IF NOT EXISTS idx_events_session ON events(session_id)`);
           this.db.run(`CREATE INDEX IF NOT EXISTS idx_events_type ON events(type)`);
 
@@ -3259,13 +3553,15 @@ class PersistentDB {
     return new Promise((resolve, reject) => {
       const stmt = this.db.prepare(`
         INSERT OR REPLACE INTO share_links 
-        (id, share_id, workspaces, abstraction_level, filters, created_at, expires_at, access_count, last_accessed, metadata)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (id, share_id, account_id, device_id, workspaces, abstraction_level, filters, created_at, expires_at, access_count, last_accessed, metadata)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
 
       stmt.run(
         shareData.id || shareData.shareId,
         shareData.shareId,
+        shareData.account_id || null,
+        shareData.device_id || null,
         JSON.stringify(shareData.workspaces || []),
         shareData.abstractionLevel || 1,
         JSON.stringify(shareData.filters || {}),
@@ -3303,6 +3599,8 @@ class PersistentDB {
           resolve({
             id: row.id,
             shareId: row.share_id,
+            account_id: row.account_id || null,
+            device_id: row.device_id || null,
             workspaces: JSON.parse(row.workspaces || '[]'),
             abstractionLevel: row.abstraction_level,
             filters: JSON.parse(row.filters || '{}'),
@@ -3383,13 +3681,23 @@ class PersistentDB {
   }
 
   /**
-   * Get all share links
+   * Get all share links (optionally filtered by account_id)
    */
-  async getAllShareLinks() {
+  async getAllShareLinks(accountId = null) {
     await this.init();
 
     return new Promise((resolve, reject) => {
-      this.db.all(`SELECT * FROM share_links ORDER BY created_at DESC`, [], (err, rows) => {
+      let query = `SELECT * FROM share_links`;
+      const params = [];
+      
+      if (accountId) {
+        query += ` WHERE account_id = ?`;
+        params.push(accountId);
+      }
+      
+      query += ` ORDER BY created_at DESC`;
+      
+      this.db.all(query, params, (err, rows) => {
         if (err) {
           reject(err);
         } else {
@@ -3397,6 +3705,8 @@ class PersistentDB {
             rows.map((row) => ({
               id: row.id,
               shareId: row.share_id,
+              account_id: row.account_id || null,
+              device_id: row.device_id || null,
               workspaces: JSON.parse(row.workspaces || '[]'),
               abstractionLevel: row.abstraction_level,
               filters: JSON.parse(row.filters || '{}'),
@@ -3408,6 +3718,64 @@ class PersistentDB {
             }))
           );
         }
+      });
+    });
+  }
+
+  /**
+   * Migrate rung tables to add new fields
+   */
+  migrateRungTables() {
+    const migrations = [
+      // Rung 1: Add conversation_id, event_type, linking_confidence
+      `ALTER TABLE rung1_tokens ADD COLUMN conversation_id TEXT`,
+      `ALTER TABLE rung1_tokens ADD COLUMN event_type TEXT DEFAULT 'UNKNOWN'`,
+      `ALTER TABLE rung1_tokens ADD COLUMN linking_confidence TEXT DEFAULT 'none'`,
+      
+      // Rung 2: Add conversation_id, event_type, linking_confidence
+      `ALTER TABLE rung2_edit_scripts ADD COLUMN conversation_id TEXT`,
+      `ALTER TABLE rung2_edit_scripts ADD COLUMN event_type TEXT DEFAULT 'UNKNOWN'`,
+      `ALTER TABLE rung2_edit_scripts ADD COLUMN linking_confidence TEXT DEFAULT 'none'`,
+      
+      // Rung 3: Add conversation_id, event_type, linking_confidence
+      `ALTER TABLE rung3_function_changes ADD COLUMN conversation_id TEXT`,
+      `ALTER TABLE rung3_function_changes ADD COLUMN event_type TEXT DEFAULT 'UNKNOWN'`,
+      `ALTER TABLE rung3_function_changes ADD COLUMN linking_confidence TEXT DEFAULT 'none'`,
+    ];
+
+    migrations.forEach((migration) => {
+      this.db.run(migration, (err) => {
+        // Ignore "duplicate column" errors (column already exists)
+        if (err && !err.message.includes('duplicate column')) {
+          console.warn(`[MIGRATION] Warning: ${err.message}`);
+        }
+      });
+    });
+
+    // Create new indexes for the new fields
+    this.db.run(`CREATE INDEX IF NOT EXISTS idx_rung1_conversation ON rung1_tokens(conversation_id)`, () => {
+      this.db.run(`CREATE INDEX IF NOT EXISTS idx_rung1_event_type ON rung1_tokens(event_type)`, () => {
+        this.db.run(`CREATE INDEX IF NOT EXISTS idx_rung2_conversation ON rung2_edit_scripts(conversation_id)`, () => {
+          this.db.run(`CREATE INDEX IF NOT EXISTS idx_rung2_event_type ON rung2_edit_scripts(event_type)`, () => {
+            this.db.run(`CREATE INDEX IF NOT EXISTS idx_rung3_conversation ON rung3_function_changes(conversation_id)`, () => {
+              this.db.run(`CREATE INDEX IF NOT EXISTS idx_rung3_event_type ON rung3_function_changes(event_type)`, () => {
+                // Create table for tracking extraction timestamps (incremental updates)
+                this.db.run(`
+                  CREATE TABLE IF NOT EXISTS rung_extraction_timestamps (
+                    workspace_path TEXT,
+                    rung_type TEXT,
+                    last_extraction_timestamp TEXT,
+                    PRIMARY KEY (workspace_path, rung_type)
+                  )
+                `, (err) => {
+                  if (err) {
+                    console.warn('[MIGRATION] Error creating extraction timestamps table:', err.message);
+                  }
+                });
+              });
+            });
+          });
+        });
       });
     });
   }

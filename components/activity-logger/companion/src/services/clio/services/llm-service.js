@@ -204,32 +204,123 @@ Return only the title, no quotes or additional text.`;
   }
 
   /**
-   * Make chat completion request
+   * Make chat completion request with timing metadata
+   * @param {string} prompt - User prompt
+   * @param {Object} options - Request options
+   * @param {number} [options.temperature=0.7] - Temperature
+   * @param {number} [options.maxTokens=1000] - Max tokens
+   * @param {string} [options.systemPrompt] - System prompt
+   * @param {Function} [options.onToken] - Callback for streaming tokens
+   * @returns {Promise<Object>} Response with content and timing metadata
    */
   async chatCompletion(prompt, options = {}) {
     const {
       temperature = 0.7,
       maxTokens = 1000,
-      systemPrompt = 'You are a helpful assistant that analyzes software development patterns.'
+      systemPrompt = 'You are a helpful assistant that analyzes software development patterns.',
+      onToken = null
     } = options;
 
-    if (this.useOpenAI) {
-      return await this.chatViaOpenAI(prompt, { temperature, maxTokens, systemPrompt });
-    } else if (this.useOpenRouter) {
-      return await this.chatViaOpenRouter(prompt, { temperature, maxTokens, systemPrompt });
-    } else if (this.useHuggingFace) {
-      return await this.chatViaHuggingFace(prompt, { temperature, maxTokens });
-    } else {
-      throw new Error('No LLM API available. Set OPENAI_API_KEY, OPENROUTER_API_KEY, or HF_TOKEN');
+    const requestStartTime = Date.now();
+    let firstTokenTime = null;
+    let responseData = null;
+    let error = null;
+
+    try {
+      if (this.useOpenAI) {
+        responseData = await this.chatViaOpenAI(prompt, { 
+          temperature, 
+          maxTokens, 
+          systemPrompt,
+          onToken: onToken ? (token) => {
+            if (!firstTokenTime) {
+              firstTokenTime = Date.now();
+            }
+            onToken(token);
+          } : null
+        });
+      } else if (this.useOpenRouter) {
+        responseData = await this.chatViaOpenRouter(prompt, { 
+          temperature, 
+          maxTokens, 
+          systemPrompt,
+          onToken: onToken ? (token) => {
+            if (!firstTokenTime) {
+              firstTokenTime = Date.now();
+            }
+            onToken(token);
+          } : null
+        });
+      } else if (this.useHuggingFace) {
+        responseData = await this.chatViaHuggingFace(prompt, { 
+          temperature, 
+          maxTokens,
+          onToken: onToken ? (token) => {
+            if (!firstTokenTime) {
+              firstTokenTime = Date.now();
+            }
+            onToken(token);
+          } : null
+        });
+      } else {
+        throw new Error('No LLM API available. Set OPENAI_API_KEY, OPENROUTER_API_KEY, or HF_TOKEN');
+      }
+    } catch (err) {
+      error = err;
+      throw err;
+    } finally {
+      const requestEndTime = Date.now();
+      
+      // Return response with timing metadata
+      if (responseData && typeof responseData === 'object' && responseData.content) {
+        return {
+          ...responseData,
+          timing: {
+            requestStartTime,
+            requestEndTime,
+            requestDurationMs: requestEndTime - requestStartTime,
+            firstTokenTime: firstTokenTime || requestEndTime,
+            timeToFirstTokenMs: firstTokenTime ? firstTokenTime - requestStartTime : null
+          }
+        };
+      }
+      
+      // For backward compatibility, return string with timing if responseData is a string
+      return {
+        content: responseData || '',
+        timing: {
+          requestStartTime,
+          requestEndTime: Date.now(),
+          requestDurationMs: Date.now() - requestStartTime,
+          firstTokenTime: firstTokenTime || Date.now(),
+          timeToFirstTokenMs: firstTokenTime ? firstTokenTime - requestStartTime : null
+        },
+        error: error ? error.message : null
+      };
     }
   }
 
   /**
-   * Chat via OpenAI API
+   * Chat via OpenAI API with timing capture
    */
   async chatViaOpenAI(prompt, options) {
     await fetchPromise;
     const fetch = fetchModule;
+
+    const requestBody = {
+      model: 'gpt-4o-mini', // Cost-effective model
+      messages: [
+        { role: 'system', content: options.systemPrompt },
+        { role: 'user', content: prompt }
+      ],
+      temperature: options.temperature,
+      max_tokens: options.maxTokens
+    };
+
+    // Enable streaming if onToken callback is provided
+    if (options.onToken) {
+      requestBody.stream = true;
+    }
 
     const response = await fetch(this.openaiEndpoint, {
       method: 'POST',
@@ -237,15 +328,7 @@ Return only the title, no quotes or additional text.`;
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${this.openaiKey}`
       },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini', // Cost-effective model
-        messages: [
-          { role: 'system', content: options.systemPrompt },
-          { role: 'user', content: prompt }
-        ],
-        temperature: options.temperature,
-        max_tokens: options.maxTokens
-      })
+      body: JSON.stringify(requestBody)
     });
 
     if (!response.ok) {
@@ -254,15 +337,45 @@ Return only the title, no quotes or additional text.`;
     }
 
     const data = await response.json();
-    return data.choices[0]?.message?.content || '';
+    
+    // Extract token usage if available
+    const usage = data.usage || {};
+    
+    return {
+      content: data.choices[0]?.message?.content || '',
+      tokens: {
+        prompt: usage.prompt_tokens || 0,
+        completion: usage.completion_tokens || 0,
+        total: usage.total_tokens || 0
+      },
+      model: {
+        name: data.model || 'gpt-4o-mini',
+        provider: 'openai'
+      }
+    };
   }
 
   /**
-   * Chat via OpenRouter API
+   * Chat via OpenRouter API with timing capture
    */
   async chatViaOpenRouter(prompt, options) {
     await fetchPromise;
     const fetch = fetchModule;
+
+    const requestBody = {
+      model: this.chatModel,
+      messages: [
+        { role: 'system', content: options.systemPrompt },
+        { role: 'user', content: prompt }
+      ],
+      temperature: options.temperature,
+      max_tokens: options.maxTokens
+    };
+
+    // Enable streaming if onToken callback is provided
+    if (options.onToken) {
+      requestBody.stream = true;
+    }
 
     const response = await fetch(this.openRouterEndpoint, {
       method: 'POST',
@@ -272,15 +385,7 @@ Return only the title, no quotes or additional text.`;
         'HTTP-Referer': 'https://github.com/cursor-telemetry',
         'X-Title': 'Cursor Telemetry Clio'
       },
-      body: JSON.stringify({
-        model: this.chatModel,
-        messages: [
-          { role: 'system', content: options.systemPrompt },
-          { role: 'user', content: prompt }
-        ],
-        temperature: options.temperature,
-        max_tokens: options.maxTokens
-      })
+      body: JSON.stringify(requestBody)
     });
 
     if (!response.ok) {
@@ -289,11 +394,26 @@ Return only the title, no quotes or additional text.`;
     }
 
     const data = await response.json();
-    return data.choices[0]?.message?.content || '';
+    
+    // Extract token usage if available
+    const usage = data.usage || {};
+    
+    return {
+      content: data.choices[0]?.message?.content || '',
+      tokens: {
+        prompt: usage.prompt_tokens || 0,
+        completion: usage.completion_tokens || 0,
+        total: usage.total_tokens || 0
+      },
+      model: {
+        name: data.model?.id || this.chatModel,
+        provider: 'openrouter'
+      }
+    };
   }
 
   /**
-   * Chat via Hugging Face API
+   * Chat via Hugging Face API with timing capture
    */
   async chatViaHuggingFace(prompt, options) {
     await fetchPromise;
@@ -321,11 +441,27 @@ Return only the title, no quotes or additional text.`;
     }
 
     const data = await response.json();
+    
     // Hugging Face returns array of generated text
+    let content = '';
     if (Array.isArray(data) && data[0]?.generated_text) {
-      return data[0].generated_text;
+      content = data[0].generated_text;
+    } else {
+      content = JSON.stringify(data);
     }
-    return JSON.stringify(data);
+    
+    return {
+      content: content,
+      tokens: {
+        prompt: 0, // HF API doesn't always provide token counts
+        completion: 0,
+        total: 0
+      },
+      model: {
+        name: this.hfEndpoint.split('/').pop() || 'huggingface-model',
+        provider: 'huggingface'
+      }
+    };
   }
 
   /**

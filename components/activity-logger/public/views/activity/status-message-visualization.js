@@ -33,22 +33,12 @@ async function checkServiceHealth() {
   try {
     const apiBase = window.CONFIG?.API_BASE_URL || 'http://localhost:43917';
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 1000); // Faster timeout
+    const timeoutId = setTimeout(() => controller.abort(), 1000);
     
-    // Wrap in try-catch to silently handle all errors
-    let response;
-    try {
-      response = await fetch(`${apiBase}/health`, { 
-        signal: controller.signal,
-        mode: 'cors'
-      });
-    } catch (fetchError) {
-      // Silently catch fetch errors - NO logging
-      clearTimeout(timeoutId);
-      serviceOffline = true;
-      lastFailureTime = Date.now();
-      return false;
-    }
+    const response = await fetch(`${apiBase}/health`, { 
+      signal: controller.signal,
+      mode: 'cors'
+    });
     
     clearTimeout(timeoutId);
     
@@ -58,8 +48,7 @@ async function checkServiceHealth() {
       return true;
     }
   } catch (e) {
-    // Completely silent - no logging, no errors, nothing
-    // This is expected when service is offline
+    // Expected when service is offline
   }
   
   serviceOffline = true;

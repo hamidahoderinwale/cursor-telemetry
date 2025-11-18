@@ -3,7 +3,7 @@
  */
 
 function createExportImportRoutes(deps) {
-  const { app, persistentDB, db, abstractionEngine, schemaMigrations, dataAccessControl, motifService } = deps;
+  const { app, persistentDB, db, abstractionEngine, schemaMigrations, dataAccessControl, motifService, moduleGraphService, rung1Service, rung2Service, rung3Service } = deps;
 
   // Streaming export handler for large datasets
   async function handleStreamingExport(req, res, options) {
@@ -17,6 +17,10 @@ function createExportImportRoutes(deps) {
       excludeTerminal,
       excludeContext,
       excludeMotifs,
+      excludeModuleGraph,
+      excludeRung1,
+      excludeRung2,
+      excludeRung3,
       noCodeDiffs,
       noLinkedData,
       noTemporalChunks,
@@ -24,6 +28,8 @@ function createExportImportRoutes(deps) {
       abstractPrompts,
       extractPatterns,
       fieldFilter, // Pass field filter from main handler
+      rung1PIIOptions, // PII redaction options for Rung 1
+      rung1FuzzSemanticExpressiveness, // Semantic expressiveness fuzzing option for Rung 1
     } = options;
 
     try {
@@ -369,6 +375,131 @@ function createExportImportRoutes(deps) {
         writeChunk('    "proceduralClio": { "motifs": [], "note": "Motifs excluded from export" },\n');
       }
 
+      // Module Graph (Rung 4 - File-level abstraction)
+      if (!excludeModuleGraph && moduleGraphService) {
+        writeChunk('    "moduleGraph": {\n');
+        writeChunk('      "version": "1.0",\n');
+        writeChunk('      "rung": 4,\n');
+        writeChunk('      "description": "Content-free, compositional module graph with typed signals (imports, calls, context, navigation, tools)",\n');
+        try {
+          const workspace = req.query.workspace || req.query.workspace_path || null;
+          const graph = await moduleGraphService.getModuleGraph(workspace, { forceRefresh: false });
+          
+          writeChunk('      "nodes": ' + JSON.stringify(graph.nodes || []).split('\n').join('\n      ') + ',\n');
+          writeChunk('      "edges": ' + JSON.stringify(graph.edges || []).split('\n').join('\n      ') + ',\n');
+          writeChunk('      "events": ' + JSON.stringify(graph.events || []).split('\n').join('\n      ') + ',\n');
+          writeChunk('      "hierarchy": ' + JSON.stringify(graph.hierarchy || {}).split('\n').join('\n      ') + ',\n');
+          writeChunk('      "metadata": ' + JSON.stringify(graph.metadata || {}).split('\n').join('\n      ') + '\n');
+        } catch (error) {
+          console.warn('[EXPORT] Failed to export module graph:', error.message);
+          writeChunk('      "error": "' + error.message.replace(/"/g, '\\"') + '"\n');
+        }
+        writeChunk('    },\n');
+      } else {
+        writeChunk('    "moduleGraph": { "note": "Module graph excluded from export" },\n');
+      }
+
+      // Rung 1: Token-level abstraction
+      if (!excludeRung1 && rung1Service) {
+        writeChunk('    "rung1": {\n');
+        writeChunk('      "version": "1.0",\n');
+        writeChunk('      "rung": 1,\n');
+        writeChunk('      "description": "Token-level abstraction with canonicalized identifiers",\n');
+        try {
+          const workspace = req.query.workspace || req.query.workspace_path || null;
+          
+          // Parse PII options from query params or options object
+          const piiOptions = rung1PIIOptions || {
+            redactEmails: req.query.rung1_redact_emails !== 'false',
+            redactNames: req.query.rung1_redact_names !== 'false',
+            redactNumbers: req.query.rung1_redact_numbers !== 'false',
+            redactUrls: req.query.rung1_redact_urls !== 'false',
+            redactIpAddresses: req.query.rung1_redact_ip_addresses !== 'false',
+            redactFilePaths: req.query.rung1_redact_file_paths !== 'false',
+            redactAllStrings: req.query.rung1_redact_all_strings !== 'false',
+            redactAllNumbers: req.query.rung1_redact_all_numbers !== 'false',
+          };
+          
+          // Parse fuzzing option from query params or options object
+          const fuzzSemanticExpressiveness = rung1FuzzSemanticExpressiveness !== undefined
+            ? rung1FuzzSemanticExpressiveness
+            : req.query.rung1_fuzz_semantic_expressiveness === 'true';
+          
+          // Temporarily update Rung 1 service with options
+          const originalPIIOptions = { ...rung1Service.piiOptions };
+          const originalFuzzOption = rung1Service.fuzzSemanticExpressiveness;
+          rung1Service.updatePIIOptions(piiOptions);
+          rung1Service.setFuzzSemanticExpressiveness(fuzzSemanticExpressiveness);
+          
+          // Get tokens with options applied
+          const tokens = await rung1Service.getTokens(workspace, {});
+          const stats = await rung1Service.getTokenStats(workspace);
+          
+          // Restore original options
+          rung1Service.updatePIIOptions(originalPIIOptions);
+          rung1Service.setFuzzSemanticExpressiveness(originalFuzzOption);
+          
+          writeChunk('      "tokens": ' + JSON.stringify(tokens || []).split('\n').join('\n      ') + ',\n');
+          writeChunk('      "stats": ' + JSON.stringify(stats || {}).split('\n').join('\n      ') + ',\n');
+          writeChunk('      "piiOptions": ' + JSON.stringify(piiOptions).split('\n').join('\n      ') + ',\n');
+          writeChunk('      "fuzzSemanticExpressiveness": ' + JSON.stringify(fuzzSemanticExpressiveness) + '\n');
+        } catch (error) {
+          console.warn('[EXPORT] Failed to export Rung 1:', error.message);
+          writeChunk('      "error": "' + error.message.replace(/"/g, '\\"') + '"\n');
+        }
+        writeChunk('    },\n');
+      } else {
+        writeChunk('    "rung1": { "note": "Rung 1 excluded from export" },\n');
+      }
+
+      // Rung 2: Statement-level (semantic edit scripts)
+      if (!excludeRung2 && rung2Service) {
+        writeChunk('    "rung2": {\n');
+        writeChunk('      "version": "1.0",\n');
+        writeChunk('      "rung": 2,\n');
+        writeChunk('      "description": "Semantic edit scripts from AST differencing",\n');
+        try {
+          const workspace = req.query.workspace || req.query.workspace_path || null;
+          const scripts = await rung2Service.getEditScripts(workspace, {});
+          const operations = await rung2Service.getOperationTypes(workspace);
+          
+          writeChunk('      "editScripts": ' + JSON.stringify(scripts || []).split('\n').join('\n      ') + ',\n');
+          writeChunk('      "operations": ' + JSON.stringify(operations || {}).split('\n').join('\n      ') + '\n');
+        } catch (error) {
+          console.warn('[EXPORT] Failed to export Rung 2:', error.message);
+          writeChunk('      "error": "' + error.message.replace(/"/g, '\\"') + '"\n');
+        }
+        writeChunk('    },\n');
+      } else {
+        writeChunk('    "rung2": { "note": "Rung 2 excluded from export" },\n');
+      }
+
+      // Rung 3: Function-level representation
+      if (!excludeRung3 && rung3Service) {
+        writeChunk('    "rung3": {\n');
+        writeChunk('      "version": "1.0",\n');
+        writeChunk('      "rung": 3,\n');
+        writeChunk('      "description": "Function-level changes and callgraph updates",\n');
+        try {
+          const workspace = req.query.workspace || req.query.workspace_path || null;
+          const changes = await rung3Service.getFunctionChanges(workspace, {});
+          const functions = await rung3Service.getFunctions(workspace, {});
+          const callgraph = await rung3Service.getCallGraph(workspace);
+          const stats = await rung3Service.getFunctionStats(workspace);
+          
+          writeChunk('      "functionChanges": ' + JSON.stringify(changes || []).split('\n').join('\n      ') + ',\n');
+          writeChunk('      "functions": ' + JSON.stringify(functions || []).split('\n').join('\n      ') + ',\n');
+          writeChunk('      "callgraph": ' + JSON.stringify(callgraph || {}).split('\n').join('\n      ') + ',\n');
+          writeChunk('      "stats": ' + JSON.stringify(stats || {}).split('\n').join('\n      ') + '\n');
+        } catch (error) {
+          console.warn('[EXPORT] Failed to export Rung 3:', error.message);
+          writeChunk('      "error": "' + error.message.replace(/"/g, '\\"') + '"\n');
+        }
+        writeChunk('    },\n');
+      } else {
+        writeChunk('    "rung3": { "note": "Rung 3 excluded from export" },\n');
+      }
+
       // Workspaces (small)
       writeChunk(
         `    "workspaces": ${JSON.stringify(db.workspaces || [])
@@ -483,6 +614,10 @@ function createExportImportRoutes(deps) {
       const excludeTerminal = req.query.exclude_terminal === 'true';
       const excludeContext = req.query.exclude_context === 'true';
       const excludeMotifs = req.query.exclude_motifs === 'true';
+      const excludeModuleGraph = req.query.exclude_module_graph === 'true';
+      const excludeRung1 = req.query.exclude_rung1 === 'true';
+      const excludeRung2 = req.query.exclude_rung2 === 'true';
+      const excludeRung3 = req.query.exclude_rung3 === 'true';
 
       // Options
       const noCodeDiffs = req.query.no_code_diffs === 'true';
@@ -502,7 +637,7 @@ function createExportImportRoutes(deps) {
         `[EXPORT] Limit: ${limit}, Since: ${since ? new Date(since).toISOString() : 'all'}, Until: ${until ? new Date(until).toISOString() : 'all'}`
       );
       console.log(
-        `[EXPORT] Exclude: events=${excludeEvents}, prompts=${excludePrompts}, terminal=${excludeTerminal}, context=${excludeContext}, motifs=${excludeMotifs}`
+        `[EXPORT] Exclude: events=${excludeEvents}, prompts=${excludePrompts}, terminal=${excludeTerminal}, context=${excludeContext}, motifs=${excludeMotifs}, moduleGraph=${excludeModuleGraph}, rung1=${excludeRung1}, rung2=${excludeRung2}, rung3=${excludeRung3}`
       );
       console.log(
         `[EXPORT] Abstraction Level: ${abstractionLevel}, Abstract Prompts: ${abstractPrompts}, Extract Patterns: ${extractPatterns}`
@@ -510,6 +645,21 @@ function createExportImportRoutes(deps) {
       console.log(
         `[EXPORT] Streaming: ${useStreaming || limit > streamThreshold} (threshold: ${streamThreshold})`
       );
+
+      // Parse Rung 1 PII options from query params
+      const rung1PIIOptions = {
+        redactEmails: req.query.rung1_redact_emails !== 'false',
+        redactNames: req.query.rung1_redact_names !== 'false',
+        redactNumbers: req.query.rung1_redact_numbers !== 'false',
+        redactUrls: req.query.rung1_redact_urls !== 'false',
+        redactIpAddresses: req.query.rung1_redact_ip_addresses !== 'false',
+        redactFilePaths: req.query.rung1_redact_file_paths !== 'false',
+        redactAllStrings: req.query.rung1_redact_all_strings !== 'false',
+        redactAllNumbers: req.query.rung1_redact_all_numbers !== 'false',
+      };
+      
+      // Parse semantic expressiveness fuzzing option
+      const rung1FuzzSemanticExpressiveness = req.query.rung1_fuzz_semantic_expressiveness === 'true';
 
       // Use streaming for large exports or if explicitly requested
       if (useStreaming || limit > streamThreshold) {
@@ -523,6 +673,10 @@ function createExportImportRoutes(deps) {
           excludeTerminal,
           excludeContext,
           excludeMotifs,
+          excludeModuleGraph,
+          excludeRung1,
+          excludeRung2,
+          excludeRung3,
           noCodeDiffs,
           noLinkedData,
           noTemporalChunks,
@@ -530,6 +684,8 @@ function createExportImportRoutes(deps) {
           abstractPrompts,
           extractPatterns,
           fieldFilter, // Pass field filter to streaming handler
+          rung1PIIOptions, // Pass PII options to streaming handler
+          rung1FuzzSemanticExpressiveness, // Pass fuzzing option to streaming handler
         });
       }
 
@@ -988,6 +1144,140 @@ function createExportImportRoutes(deps) {
         console.warn('[EXPORT] Could not get schema version:', err.message);
       }
 
+      // Get module graph data (Rung 4) if not excluded
+      let moduleGraphData = null;
+      if (!excludeModuleGraph && moduleGraphService) {
+        try {
+          const workspace = req.query.workspace || req.query.workspace_path || null;
+          const graph = await moduleGraphService.getModuleGraph(workspace, { forceRefresh: false });
+          moduleGraphData = {
+            version: '1.0',
+            rung: 4,
+            description: 'Content-free, compositional module graph with typed signals (imports, calls, context, navigation, tools)',
+            nodes: graph.nodes || [],
+            edges: graph.edges || [],
+            events: graph.events || [],
+            hierarchy: graph.hierarchy || {},
+            metadata: graph.metadata || {}
+          };
+        } catch (error) {
+          console.warn('[EXPORT] Failed to export module graph:', error.message);
+          moduleGraphData = { error: error.message };
+        }
+      } else if (excludeModuleGraph) {
+        moduleGraphData = { note: 'Module graph excluded from export' };
+      } else {
+        moduleGraphData = { note: 'Module graph service not available' };
+      }
+
+      // Get Rung 1 data (Token-level abstraction)
+      let rung1Data = null;
+      if (!excludeRung1 && rung1Service) {
+        try {
+          const workspace = req.query.workspace || req.query.workspace_path || null;
+          
+          // Use PII options parsed earlier (or parse from query params if not available)
+          const piiOptions = rung1PIIOptions || {
+            redactEmails: req.query.rung1_redact_emails !== 'false',
+            redactNames: req.query.rung1_redact_names !== 'false',
+            redactNumbers: req.query.rung1_redact_numbers !== 'false',
+            redactUrls: req.query.rung1_redact_urls !== 'false',
+            redactIpAddresses: req.query.rung1_redact_ip_addresses !== 'false',
+            redactFilePaths: req.query.rung1_redact_file_paths !== 'false',
+            redactAllStrings: req.query.rung1_redact_all_strings !== 'false',
+            redactAllNumbers: req.query.rung1_redact_all_numbers !== 'false',
+          };
+          
+          // Use fuzzing option parsed earlier (or parse from query params if not available)
+          const fuzzSemanticExpressiveness = rung1FuzzSemanticExpressiveness !== undefined 
+            ? rung1FuzzSemanticExpressiveness 
+            : req.query.rung1_fuzz_semantic_expressiveness === 'true';
+          
+          // Temporarily update Rung 1 service with options
+          const originalPIIOptions = { ...rung1Service.piiOptions };
+          const originalFuzzOption = rung1Service.fuzzSemanticExpressiveness;
+          rung1Service.updatePIIOptions(piiOptions);
+          rung1Service.setFuzzSemanticExpressiveness(fuzzSemanticExpressiveness);
+          
+          // Get tokens with options applied
+          const tokens = await rung1Service.getTokens(workspace, {});
+          const stats = await rung1Service.getTokenStats(workspace);
+          
+          // Restore original options
+          rung1Service.updatePIIOptions(originalPIIOptions);
+          rung1Service.setFuzzSemanticExpressiveness(originalFuzzOption);
+          
+          rung1Data = {
+            version: '1.0',
+            rung: 1,
+            description: 'Token-level abstraction with canonicalized identifiers',
+            tokens: tokens || [],
+            stats: stats || {},
+            piiOptions: piiOptions, // Include applied PII options in export
+            fuzzSemanticExpressiveness: fuzzSemanticExpressiveness // Include fuzzing option in export
+          };
+        } catch (error) {
+          console.warn('[EXPORT] Failed to export Rung 1:', error.message);
+          rung1Data = { error: error.message };
+        }
+      } else if (excludeRung1) {
+        rung1Data = { note: 'Rung 1 excluded from export' };
+      } else {
+        rung1Data = { note: 'Rung 1 service not available' };
+      }
+
+      // Get Rung 2 data (Statement-level semantic edit scripts)
+      let rung2Data = null;
+      if (!excludeRung2 && rung2Service) {
+        try {
+          const workspace = req.query.workspace || req.query.workspace_path || null;
+          const scripts = await rung2Service.getEditScripts(workspace, {});
+          const operations = await rung2Service.getOperationTypes(workspace);
+          rung2Data = {
+            version: '1.0',
+            rung: 2,
+            description: 'Semantic edit scripts from AST differencing',
+            editScripts: scripts || [],
+            operations: operations || {}
+          };
+        } catch (error) {
+          console.warn('[EXPORT] Failed to export Rung 2:', error.message);
+          rung2Data = { error: error.message };
+        }
+      } else if (excludeRung2) {
+        rung2Data = { note: 'Rung 2 excluded from export' };
+      } else {
+        rung2Data = { note: 'Rung 2 service not available' };
+      }
+
+      // Get Rung 3 data (Function-level representation)
+      let rung3Data = null;
+      if (!excludeRung3 && rung3Service) {
+        try {
+          const workspace = req.query.workspace || req.query.workspace_path || null;
+          const changes = await rung3Service.getFunctionChanges(workspace, {});
+          const functions = await rung3Service.getFunctions(workspace, {});
+          const callgraph = await rung3Service.getCallGraph(workspace);
+          const stats = await rung3Service.getFunctionStats(workspace);
+          rung3Data = {
+            version: '1.0',
+            rung: 3,
+            description: 'Function-level changes and callgraph updates',
+            functionChanges: changes || [],
+            functions: functions || [],
+            callgraph: callgraph || {},
+            stats: stats || {}
+          };
+        } catch (error) {
+          console.warn('[EXPORT] Failed to export Rung 3:', error.message);
+          rung3Data = { error: error.message };
+        }
+      } else if (excludeRung3) {
+        rung3Data = { note: 'Rung 3 excluded from export' };
+      } else {
+        rung3Data = { note: 'Rung 3 service not available' };
+      }
+
       // Get in-memory data with improved, organized structure
       const exportData = {
         // ============================================
@@ -1013,6 +1303,7 @@ function createExportImportRoutes(deps) {
             excludeTerminal,
             excludeContext,
             excludeMotifs,
+            excludeModuleGraph,
             noCodeDiffs,
             noLinkedData,
             noTemporalChunks,
@@ -1164,6 +1455,18 @@ function createExportImportRoutes(deps) {
             // and not persisted. Only motifs (Rung 6) are stored in the database.
             note: 'Only motifs (Rung 6) are exported. Full Clio clusters, facets, and canonical DAGs are computed on-demand and not persisted.'
           },
+
+          // Module Graph (Rung 4 - File-level abstraction)
+          moduleGraph: moduleGraphData,
+
+          // Rung 1: Token-level abstraction
+          rung1: rung1Data,
+
+          // Rung 2: Statement-level (semantic edit scripts)
+          rung2: rung2Data,
+
+          // Rung 3: Function-level representation
+          rung3: rung3Data,
         },
 
         // ============================================

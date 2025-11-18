@@ -196,6 +196,35 @@ async function exportDatabaseWithFilters({ dateFrom, dateTo, limit = 1000, types
     if (!types.motifs) {
       url.searchParams.set('exclude_motifs', 'true');
     }
+    if (!types.moduleGraph) {
+      url.searchParams.set('exclude_module_graph', 'true');
+    }
+    if (!types.rung1) {
+      url.searchParams.set('exclude_rung1', 'true');
+    } else {
+      // Add Rung 1 PII redaction options
+      if (options.rung1PIIOptions) {
+        const pii = options.rung1PIIOptions;
+        if (pii.redactEmails !== undefined) url.searchParams.set('rung1_redact_emails', pii.redactEmails.toString());
+        if (pii.redactNames !== undefined) url.searchParams.set('rung1_redact_names', pii.redactNames.toString());
+        if (pii.redactUrls !== undefined) url.searchParams.set('rung1_redact_urls', pii.redactUrls.toString());
+        if (pii.redactIpAddresses !== undefined) url.searchParams.set('rung1_redact_ip_addresses', pii.redactIpAddresses.toString());
+        if (pii.redactFilePaths !== undefined) url.searchParams.set('rung1_redact_file_paths', pii.redactFilePaths.toString());
+        if (pii.redactNumbers !== undefined) url.searchParams.set('rung1_redact_numbers', pii.redactNumbers.toString());
+        if (pii.redactAllStrings !== undefined) url.searchParams.set('rung1_redact_all_strings', pii.redactAllStrings.toString());
+        if (pii.redactAllNumbers !== undefined) url.searchParams.set('rung1_redact_all_numbers', pii.redactAllNumbers.toString());
+      }
+      // Add semantic expressiveness fuzzing option
+      if (options.rung1FuzzSemanticExpressiveness !== undefined) {
+        url.searchParams.set('rung1_fuzz_semantic_expressiveness', options.rung1FuzzSemanticExpressiveness.toString());
+      }
+    }
+    if (!types.rung2) {
+      url.searchParams.set('exclude_rung2', 'true');
+    }
+    if (!types.rung3) {
+      url.searchParams.set('exclude_rung3', 'true');
+    }
     
     // Options
     if (!options.includeCodeDiffs) {

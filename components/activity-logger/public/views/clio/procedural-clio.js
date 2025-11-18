@@ -8,13 +8,16 @@ function renderProceduralClioView(container) {
   container.innerHTML = window.renderProceduralClioTemplate();
   
   // Initialize components (Rung 6 only - no rung selector)
-  initializeSummaryBar();
-  initializeMotifMap();
-  initializeMotifDetailsPanel();
-  initializeMotifFilters();
-  
-  // Load data
-  loadProceduralClioData();
+  // Use setTimeout to ensure DOM is ready and container has dimensions
+  setTimeout(() => {
+    initializeSummaryBar();
+    initializeMotifMap();
+    initializeMotifDetailsPanel();
+    initializeMotifFilters();
+    
+    // Load data
+    loadProceduralClioData();
+  }, 100);
 }
 
 /**
@@ -110,67 +113,121 @@ function initializeSummaryBar() {
  */
 function initializeMotifMap() {
   const mapContainer = document.getElementById('clio-motif-map');
-  if (!mapContainer) return;
-  
-  // Initialize D3.js visualization
-  if (typeof d3 === 'undefined') {
-    console.warn('[CLIO] D3.js not loaded, motif map will not render');
+  if (!mapContainer) {
+    console.error('[CLIO] Motif map container not found');
     return;
   }
   
-  // Set up SVG
-  const width = mapContainer.clientWidth || 800;
-  const height = mapContainer.clientHeight || 600;
+  // Initialize D3.js visualization
+  if (typeof d3 === 'undefined') {
+    console.error('[CLIO] D3.js not loaded, motif map will not render. Please ensure D3.js is included.');
+    mapContainer.innerHTML = '<div style="padding: 2rem; text-align: center; color: var(--color-text-muted);">D3.js library not loaded. Please refresh the page.</div>';
+    return;
+  }
   
-  const svg = d3.select(mapContainer)
-    .append('svg')
-    .attr('width', width)
-    .attr('height', height)
-    .attr('class', 'motif-map-svg');
-  
-  // Add zoom behavior
-  const zoom = d3.zoom()
-    .scaleExtent([0.5, 4])
-    .on('zoom', (event) => {
-      svg.select('g.motif-map-content').attr('transform', event.transform);
-    });
-  
-  svg.call(zoom);
-  
-  // Create content group
-  const contentGroup = svg.append('g').attr('class', 'motif-map-content');
-  
-  // Store references for later updates
-  window.clioMotifMap = {
-    svg,
-    contentGroup,
-    width,
-    height,
-    selectedMotif: null
+  // Wait for container to have dimensions
+  const checkDimensions = () => {
+    const width = mapContainer.clientWidth || 800;
+    const height = mapContainer.clientHeight || 600;
+    
+    if (width === 0 || height === 0) {
+      // Retry after a short delay
+      setTimeout(checkDimensions, 100);
+      return;
+    }
+    
+    // Clear any existing content
+    d3.select(mapContainer).selectAll('*').remove();
+    
+    // Set up SVG
+    const svg = d3.select(mapContainer)
+      .append('svg')
+      .attr('width', width)
+      .attr('height', height)
+      .attr('class', 'motif-map-svg')
+      .style('background', 'var(--color-bg-secondary, #f9fafb)');
+    
+    // Add zoom behavior
+    const zoom = d3.zoom()
+      .scaleExtent([0.5, 4])
+      .on('zoom', (event) => {
+        svg.select('g.motif-map-content').attr('transform', event.transform);
+      });
+    
+    svg.call(zoom);
+    
+    // Create content group
+    const contentGroup = svg.append('g').attr('class', 'motif-map-content');
+    
+    // Store references for later updates
+    window.clioMotifMap = {
+      svg,
+      contentGroup,
+      width,
+      height,
+      selectedMotif: null
+    };
+    
+    console.log('[CLIO] Motif map initialized:', { width, height });
+    
+    // Load motif data and render
+    loadMotifMapData();
   };
   
-  // Load motif data and render
-  loadMotifMapData();
+  // Start checking dimensions
+  checkDimensions();
 }
 
   /**
    * Load and render motif map data (Rung 6 only)
    */
   async function loadMotifMapData() {
+    const { contentGroup } = window.clioMotifMap || {};
+    if (!contentGroup) {
+      console.error('[CLIO] Cannot load motif data: map not initialized');
+      return;
+    }
+    
     try {
       const apiBase = window.CONFIG?.API_BASE || 'http://localhost:43917';
+      console.log('[CLIO] Loading motif data from:', `${apiBase}/api/motifs`);
+      
       const response = await fetch(`${apiBase}/api/motifs`);
       
       if (!response.ok) {
+        if (response.status === 404) {
+          throw new Error('Motif service not available (404)');
+        }
         throw new Error(`API error: ${response.status}`);
       }
       
       const data = await response.json();
-      renderMotifMap(data.motifs || []);
+      const motifs = data.motifs || [];
+      
+      console.log('[CLIO] Loaded motif data:', {
+        count: motifs.length,
+        hasData: motifs.length > 0
+      });
+      
+      if (motifs.length === 0) {
+        renderMotifMapPlaceholder('No motifs found. Motifs will appear as patterns are detected in your code changes.');
+      } else {
+        renderMotifMap(motifs);
+      }
     } catch (error) {
-      console.warn('[MOTIF] Failed to load motif data:', error.message);
-      // Render placeholder
-      renderMotifMapPlaceholder();
+      console.error('[CLIO] Failed to load motif data:', error);
+      
+      // Show appropriate error message
+      let errorMessage = 'Failed to load motif data.';
+      if (error.message.includes('404') || error.message.includes('not available')) {
+        errorMessage = 'Motif service not available. The service needs to be initialized to detect patterns.';
+      } else if (error.message.includes('Failed to fetch')) {
+        errorMessage = 'Cannot connect to motif service. Please check if the service is running.';
+      } else {
+        errorMessage = `Error: ${error.message}`;
+      }
+      
+      renderMotifMapPlaceholder(errorMessage);
     }
   }
 
@@ -179,7 +236,18 @@ function initializeMotifMap() {
  */
 function renderMotifMap(motifs) {
   const { contentGroup, width, height } = window.clioMotifMap || {};
-  if (!contentGroup) return;
+  if (!contentGroup) {
+    console.error('[CLIO] Cannot render motif map: map not initialized');
+    return;
+  }
+  
+  if (!motifs || motifs.length === 0) {
+    console.warn('[CLIO] No motifs to render');
+    renderMotifMapPlaceholder('No motifs found.');
+    return;
+  }
+  
+  console.log('[CLIO] Rendering', motifs.length, 'motifs');
   
   // Clear existing
   contentGroup.selectAll('*').remove();
@@ -302,16 +370,36 @@ function renderMotifMap(motifs) {
 /**
  * Render placeholder when no data
  */
-function renderMotifMapPlaceholder() {
+function renderMotifMapPlaceholder(message = 'Loading motif data...') {
   const { contentGroup, width, height } = window.clioMotifMap || {};
-  if (!contentGroup) return;
+  if (!contentGroup) {
+    console.error('[CLIO] Cannot render placeholder: map not initialized');
+    return;
+  }
   
+  // Clear existing content
+  contentGroup.selectAll('*').remove();
+  
+  // Add text
   contentGroup.append('text')
     .attr('x', width / 2)
-    .attr('y', height / 2)
+    .attr('y', height / 2 - 10)
     .attr('text-anchor', 'middle')
     .attr('fill', '#6b7280')
-    .text('Loading motif data...');
+    .attr('font-size', '16px')
+    .attr('font-weight', '500')
+    .text(message);
+  
+  // Add subtitle if it's an error/empty state
+  if (message !== 'Loading motif data...') {
+    contentGroup.append('text')
+      .attr('x', width / 2)
+      .attr('y', height / 2 + 20)
+      .attr('text-anchor', 'middle')
+      .attr('fill', '#9ca3af')
+      .attr('font-size', '14px')
+      .text('Motifs are recurring patterns detected in your development workflow.');
+  }
 }
 
 /**
@@ -647,11 +735,27 @@ function initializeMotifDetailsPanel() {
       if (summaryResponse.ok) {
         const summaryData = await summaryResponse.json();
         updateSummaryBar(summaryData.summary || {});
+      } else if (summaryResponse.status === 503 || summaryResponse.status === 404) {
+        // Service not available - this is expected if motif service isn't initialized
+        const errorData = await summaryResponse.json().catch(() => ({}));
+        console.log('[MOTIF] Motif service not available:', errorData.error || 'Service not initialized');
+        // Show a user-friendly message in the summary bar if it exists
+        const summaryBar = document.getElementById('procedural-clio-summary-bar');
+        if (summaryBar) {
+          summaryBar.innerHTML = `
+            <div style="padding: var(--space-md); text-align: center; color: var(--color-text-muted);">
+              <p>Motif service is not available. Data will appear once the service is initialized.</p>
+            </div>
+          `;
+        }
       }
       
       // Motif map data is loaded separately in initializeMotifMap
     } catch (error) {
-      console.warn('[MOTIF] Failed to load Procedural Clio data:', error.message);
+      // Only log non-404/503 errors (404/503 means service not available)
+      if (!error.message.includes('404') && !error.message.includes('503') && !error.message.includes('not available')) {
+        console.warn('[MOTIF] Failed to load Procedural Clio data:', error.message);
+      }
     }
   }
 

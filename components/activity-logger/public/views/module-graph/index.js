@@ -91,12 +91,15 @@ async function loadModuleGraphData() {
       throw new Error(data.error || 'Failed to load graph data');
     }
     } catch (error) {
-    console.error('[MODULE-GRAPH] Error loading graph data:', error);
+    // Only log non-404/503 errors (404/503 means service not available)
+    if (!error.message.includes('404') && !error.message.includes('503') && !error.message.includes('not available')) {
+      console.error('[MODULE-GRAPH] Error loading graph data:', error);
+    }
     const graphContainer = document.getElementById('module-graph-graph');
     if (graphContainer) {
       graphContainer.innerHTML = `
-        <div class="module-graph-loading" style="color: var(--color-error, #ef4444);">
-          Error loading module graph: ${error.message}
+        <div class="module-graph-loading" style="color: var(--color-text-muted);">
+          Module graph service not available. Data will appear once the service is initialized.
         </div>
       `;
     }
@@ -128,6 +131,11 @@ async function loadModuleGraphTimeline() {
     const response = await fetch(url);
     
     if (!response.ok) {
+      // Handle 503 (service unavailable) gracefully
+      if (response.status === 503) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || 'Module graph service not available');
+      }
       throw new Error(`API error: ${response.status}`);
     }
 
@@ -139,12 +147,15 @@ async function loadModuleGraphTimeline() {
       throw new Error(data.error || 'Failed to load events');
     }
   } catch (error) {
-    console.error('[MODULE-GRAPH] Error loading timeline:', error);
+    // Only log non-404/503 errors (404/503 means service not available)
+    if (!error.message.includes('404') && !error.message.includes('503') && !error.message.includes('not available')) {
+      console.error('[MODULE-GRAPH] Error loading timeline:', error);
+    }
     const timelineContainer = document.getElementById('module-graph-timeline');
     if (timelineContainer) {
       timelineContainer.innerHTML = `
-        <div class="module-graph-timeline-loading" style="color: var(--color-error, #ef4444);">
-          Error loading events: ${error.message}
+        <div class="module-graph-timeline-loading" style="color: var(--color-text-muted);">
+          Timeline data not available. Data will appear once the service is initialized.
         </div>
       `;
     }

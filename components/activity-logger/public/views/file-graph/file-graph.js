@@ -58,17 +58,32 @@ async function initializeD3FileGraph() {
     // OPTIMIZATION: Try fast API endpoint first (pre-computed graph data)
     updateProgress('Loading pre-computed relationships...', 10);
     let graphData = null;
-    try {
-      const graphResponse = await fetch(`${apiBase}/api/analytics/context/file-relationships?minCount=1`);
-      if (graphResponse.ok) {
-        const graphResult = await graphResponse.json();
-        if (graphResult.success && graphResult.data) {
-          graphData = graphResult.data;
-          console.log(`[GRAPH] Loaded ${graphData.nodes?.length || 0} nodes and ${graphData.edges?.length || 0} edges from fast API`);
+    
+    // Check if companion service is online before attempting fetch
+    if (!(window.state && window.state.companionServiceOnline === false)) {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
+        
+        const graphResponse = await fetch(`${apiBase}/api/analytics/context/file-relationships?minCount=1`, {
+          signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+        
+        if (graphResponse.ok) {
+          const graphResult = await graphResponse.json();
+          if (graphResult.success && graphResult.data) {
+            graphData = graphResult.data;
+          }
+        }
+      } catch (e) {
+        // Fast API endpoint not available, falling back to file-contents
+        // Mark service as offline if we get network errors
+        if ((e.name === 'AbortError' || e.message?.includes('NetworkError') || e.message?.includes('Failed to fetch')) && window.state) {
+          window.state.companionServiceOnline = false;
         }
       }
-    } catch (e) {
-      console.log('[GRAPH] Fast API endpoint not available, falling back to file-contents');
     }
     
     // Check cache for file contents (optimization)
@@ -86,7 +101,6 @@ async function initializeD3FileGraph() {
         const similaritiesData = JSON.parse(similaritiesCache);
         if (Date.now() - similaritiesData.timestamp < 10 * 60 * 1000) { // 10 minute expiry
           precomputedSimilarities = similaritiesData.similarities;
-          console.log(`[GRAPH] Found ${precomputedSimilarities.length} precomputed similarities`);
         }
       }
     } catch (e) {
@@ -97,7 +111,6 @@ async function initializeD3FileGraph() {
       try {
         const cachedData = JSON.parse(cached);
         if (Date.now() - cachedData.timestamp < cacheExpiry) {
-          console.log('[GRAPH] Using cached file data');
           data = cachedData.data;
         }
       } catch (e) {
@@ -108,46 +121,60 @@ async function initializeD3FileGraph() {
     // Fetch file contents from persistent database if not cached
     if (!data) {
       updateProgress('Loading file contents from database...', 20);
-      console.log('[FILE] Fetching file contents from SQLite for TF-IDF analysis...');
       let response;
-      try {
-        // OPTIMIZATION: Start with smaller limit for faster initial load, can load more on demand
-        // Reduced from 1000 to 500 for faster initial response
-        response = await fetch(`${apiBase}/api/file-contents?limit=500`);
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-        data = await response.json();
-        
-        // Cache the data
+      
+      // Check if companion service is online before attempting fetch
+      if (!(window.state && window.state.companionServiceOnline === false)) {
         try {
-          sessionStorage.setItem(cacheKey, JSON.stringify({
-            data: data,
-            timestamp: Date.now()
-          }));
-        } catch (e) {
-          // Cache storage failed, continue anyway
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 5000);
+          
+          // OPTIMIZATION: Start with smaller limit for faster initial load, can load more on demand
+          // Reduced from 500 to 300 for faster initial response
+          response = await fetch(`${apiBase}/api/file-contents?limit=300`, {
+            signal: controller.signal
+          });
+          
+          clearTimeout(timeoutId);
+          
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          }
+          data = await response.json();
+        
+          // Cache the data
+          try {
+            sessionStorage.setItem(cacheKey, JSON.stringify({
+              data: data,
+              timestamp: Date.now()
+            }));
+          } catch (e) {
+            // Cache storage failed, continue anyway
+          }
+        } catch (error) {
+          // Mark service as offline if we get network errors
+          if ((error.name === 'AbortError' || error.message?.includes('NetworkError') || error.message?.includes('Failed to fetch')) && window.state) {
+            window.state.companionServiceOnline = false;
+          }
+          console.warn('[FILE] Failed to fetch file contents:', error.message);
+          // Don't return immediately - try to use graphData if available
         }
-      } catch (error) {
-        console.warn('[FILE] Failed to fetch file contents:', error.message);
-        // Don't return immediately - try to use graphData if available
-        if (!graphData) {
-          container.innerHTML = `
-            <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: var(--color-text-muted); padding: 2rem; text-align: center;">
-              <div style="font-size: 1.1rem; font-weight: 500; margin-bottom: 0.5rem; color: var(--color-text);">Companion service not available</div>
-              <div style="font-size: 0.9rem; margin-bottom: 1rem;">File contents cannot be loaded. Make sure the companion service is running on port 43917.</div>
-              <div style="font-size: 0.85rem; opacity: 0.8;">Error: ${error.message}</div>
-            </div>
-          `;
-          return;
-        }
+      }
+      
+      if (!graphData && !data) {
+        container.innerHTML = `
+          <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: var(--color-text-muted); padding: 2rem; text-align: center;">
+            <div style="font-size: 1.1rem; font-weight: 500; margin-bottom: 0.5rem; color: var(--color-text);">Companion service not available</div>
+            <div style="font-size: 0.9rem; margin-bottom: 1rem;">File contents cannot be loaded. Make sure the companion service is running on port 43917.</div>
+          </div>
+        `;
+        return;
       }
     }
     
     // If we have graphData from fast API, use it directly (much faster!)
     if (graphData && graphData.nodes && graphData.nodes.length > 0) {
       updateProgress('Rendering graph...', 80);
-      console.log(`[GRAPH] Using fast API data: ${graphData.nodes.length} nodes, ${graphData.edges.length} edges`);
       
       // Convert graphData format to our format
       const files = graphData.nodes.map(node => ({
@@ -206,7 +233,23 @@ async function initializeD3FileGraph() {
       // Render immediately
       if (window.renderD3FileGraph) {
         window.renderD3FileGraph(container, files, links);
-        console.log('[GRAPH] Graph rendered from fast API data');
+        
+        // Clear loading spinner immediately when graph starts rendering
+        requestAnimationFrame(() => {
+          const loadingSpinner = container.querySelector('.loading-spinner');
+          if (loadingSpinner) {
+            const loadingDiv = loadingSpinner.closest('div');
+            if (loadingDiv && loadingDiv.parentElement === container) {
+              loadingDiv.style.transition = 'opacity 0.3s ease-out';
+              loadingDiv.style.opacity = '0';
+              setTimeout(() => {
+                if (loadingDiv.parentElement === container) {
+                  loadingDiv.remove();
+                }
+              }, 300);
+            }
+          }
+        });
       } else {
         console.warn('[GRAPH] renderD3FileGraph function not available');
       }
@@ -214,24 +257,36 @@ async function initializeD3FileGraph() {
       // Store for later use
       window.fileGraphData = { nodes: files, links: links, tfidfStats: null, similarities: null };
       
-      // Render similar pairs
+      // Render similar pairs (defer to avoid blocking)
       if (window.renderSimilarFilePairs) {
-        window.renderSimilarFilePairs(links, files);
+        requestAnimationFrame(() => {
+          window.renderSimilarFilePairs(links, files);
+        });
       }
       
+      // Show "Graph loaded!" message briefly, then fade out
       updateProgress('Graph loaded!', 100);
       setTimeout(() => {
-        if (container.querySelector('.loading-spinner')) {
-          // Clear loading state if still showing
+        const loadingDiv = container.querySelector('.loading-spinner');
+        if (loadingDiv) {
+          const loadingParent = loadingDiv.closest('div');
+          if (loadingParent && loadingParent.parentElement === container) {
+            loadingParent.style.transition = 'opacity 0.3s ease-out';
+            loadingParent.style.opacity = '0';
+            setTimeout(() => {
+              if (loadingParent.parentElement === container) {
+                loadingParent.remove();
+              }
+            }, 300);
+          }
         }
-      }, 500);
+      }, 800);
       
       return; // Early return - we're done!
     }
     
     // If no file contents, try to build graph from events data
     if (!data.files || data.files.length === 0) {
-      console.log('[FILE] No file contents available, attempting to build graph from events...');
       const allEvents = window.state?.data?.events || [];
       
       if (allEvents.length === 0) {
@@ -294,7 +349,6 @@ async function initializeD3FileGraph() {
       data.files = Array.from(fileMap.values());
       data.totalSize = data.files.reduce((sum, f) => sum + (f.content?.length || 0), 0);
       
-      console.log(`[FILE] Built file list from ${allEvents.length} events: ${data.files.length} unique files`);
       
       if (data.files.length === 0) {
         container.innerHTML = `
@@ -317,7 +371,6 @@ async function initializeD3FileGraph() {
       }
     }
     
-    console.log(`[DATA] Loaded ${data.files.length} files (${(data.totalSize / 1024 / 1024).toFixed(2)} MB) from database`);
     
     // Get unique file extensions from the data, grouping Git files
     const allExts = [...new Set(data.files.map(f => {
@@ -368,7 +421,6 @@ async function initializeD3FileGraph() {
     const eventsByFilePath = new Map();
     const allEvents = window.state.data.events || [];
     
-    console.log(`[GRAPH] Building event lookup map from ${allEvents.length} events...`);
     updateProgress(`Processing ${allEvents.length} events...`, 10);
     
     // OPTIMIZATION: Process events in smaller batches with progress updates
@@ -421,7 +473,6 @@ async function initializeD3FileGraph() {
       }
     }
     
-    console.log(`[GRAPH] Event lookup map built with ${eventsByFilePath.size} keys`);
     
     // Helper function to check if file should be excluded
     const shouldExcludeFile = (file) => {
@@ -528,9 +579,6 @@ async function initializeD3FileGraph() {
       ? filteredFiles.slice(0, MAX_FILES_TO_PROCESS)
       : filteredFiles;
     
-    if (filteredFiles.length > MAX_FILES_TO_PROCESS) {
-      console.log(`[GRAPH] Limiting to ${MAX_FILES_TO_PROCESS} files (of ${filteredFiles.length}) to prevent timeout`);
-    }
     
     // Process files in batches with yield points (async)
     const files = [];
@@ -648,7 +696,6 @@ async function initializeD3FileGraph() {
       return hasContent || hasEvents || hasChanges || hasMentions;
     });
     
-    console.log(`[DATA] Filtered to ${validFiles.length} files with allowed extensions (excluded ${files.length - validFiles.length} files with no content/events/changes)`);
     
     // Replace files array with filtered results
     files.length = 0;
@@ -681,9 +728,6 @@ async function initializeD3FileGraph() {
       ? files.slice(0, MAX_FILES_FOR_GRAPH) 
       : files;
     
-    if (files.length > MAX_FILES_FOR_GRAPH) {
-      console.log(`[GRAPH] Limiting to ${MAX_FILES_FOR_GRAPH} files (of ${files.length}) for faster loading`);
-    }
     
     // Build file ID to file object map for quick lookup
     const fileMap = new Map();
@@ -694,7 +738,6 @@ async function initializeD3FileGraph() {
     
     // If we have precomputed similarities, use them (MUCH faster!)
     if (precomputedSimilarities && precomputedSimilarities.length > 0) {
-      console.log(`[GRAPH] Using ${precomputedSimilarities.length} precomputed similarities (fast path)`);
       const MAX_LINKS = 3000;
       let linkCount = 0;
       
@@ -717,10 +760,8 @@ async function initializeD3FileGraph() {
         }
       }
       
-      console.log(`[GRAPH] Created ${links.length} connections from precomputed similarities (threshold: ${threshold})`);
     } else {
       // Fallback: compute similarities on-the-fly (slower)
-      console.log('[GRAPH] Computing similarities on-the-fly (no precomputed cache found)');
       
       // Build file-to-prompts mapping from context files
       // Also build conversation-to-files mapping for enhanced relationships
@@ -734,7 +775,6 @@ async function initializeD3FileGraph() {
         try {
           const hierarchyBuilder = new window.ConversationHierarchyBuilder();
           hierarchy = hierarchyBuilder.buildHierarchy(prompts, []);
-          console.log(`[GRAPH] Built conversation hierarchy: ${hierarchy.metadata.totalConversations} conversations`);
         } catch (error) {
           console.warn('[GRAPH] Failed to build conversation hierarchy:', error);
         }
@@ -785,7 +825,6 @@ async function initializeD3FileGraph() {
       // Boost similarity for files in same conversation
       const conversationBoost = 0.15; // 15% boost for files in same conversation
       
-      console.log(`[GRAPH] Built file-to-prompt map with ${filePromptMap.size} files`);
       
       // Pre-build session sets for files (optimization to avoid repeated computation)
       const fileSessionMap = new Map();
@@ -900,7 +939,6 @@ async function initializeD3FileGraph() {
         console.warn(`[GRAPH] Link limit reached (${MAX_LINKS}), some connections may be missing`);
       }
       
-      console.log(`[GRAPH] Created ${links.length} connections between files (threshold: ${threshold})`);
     }
     
     // Store basic data immediately for rendering
@@ -909,15 +947,70 @@ async function initializeD3FileGraph() {
     // Render basic graph FIRST (progressive enhancement) - OPTIMIZATION
     if (window.renderD3FileGraph) {
       window.renderD3FileGraph(container, files, links);
-      console.log('[GRAPH] Basic graph rendered, computing TF-IDF in background...');
+      
+      // Clear loading spinner immediately when graph starts rendering
+      // Don't wait for simulation to stabilize - graph is visible
+      const loadingSpinner = container.querySelector('.loading-spinner');
+      if (loadingSpinner) {
+        // Fade out loading state quickly
+        requestAnimationFrame(() => {
+          const loadingDiv = loadingSpinner.closest('div');
+          if (loadingDiv && loadingDiv.parentElement === container) {
+            loadingDiv.style.transition = 'opacity 0.3s ease-out';
+            loadingDiv.style.opacity = '0';
+            setTimeout(() => {
+              if (loadingDiv.parentElement === container) {
+                loadingDiv.remove();
+              }
+            }, 300);
+          }
+        });
+      }
     }
+    
+    // Listen for graph-rendered event to show "Graph loaded!" message
+    let graphRenderedFlag = false;
+    const onGraphRendered = () => {
+      graphRenderedFlag = true;
+      updateProgress('Graph loaded!', 100);
+      // Clear the message after a short delay
+      setTimeout(() => {
+        const loadingDiv = container.querySelector('.loading-spinner');
+        if (loadingDiv) {
+          const loadingParent = loadingDiv.closest('div');
+          if (loadingParent && loadingParent.parentElement === container) {
+            loadingParent.style.transition = 'opacity 0.3s ease-out';
+            loadingParent.style.opacity = '0';
+            setTimeout(() => {
+              if (loadingParent.parentElement === container) {
+                loadingParent.remove();
+              }
+            }, 300);
+          }
+        }
+      }, 1000);
+      window.removeEventListener('graph-rendered', onGraphRendered);
+    };
+    window.addEventListener('graph-rendered', onGraphRendered);
+    
+    // Fallback: if event doesn't fire within 2 seconds, assume graph is ready
+    setTimeout(() => {
+      window.removeEventListener('graph-rendered', onGraphRendered);
+      if (!graphRenderedFlag) {
+        graphRenderedFlag = true;
+        updateProgress('Graph loaded!', 100);
+      }
+    }, 2000);
     
     // OPTIMIZATION: Compute TF-IDF asynchronously (defer heavy computation)
     // This allows the graph to render immediately while TF-IDF computes in background
     // Use idle time for this heavy computation
     const computeTFIDF = async () => {
       try {
-        updateProgress('Computing TF-IDF analysis...', 75);
+        // Only show TF-IDF progress if graph is already rendered
+        if (graphRenderedFlag) {
+          updateProgress('Computing TF-IDF analysis...', 75);
+        }
         // computeTFIDFAnalysis is now async, so await it
         const {tfidfStats, similarities} = await window.computeTFIDFAnalysis(files);
         
@@ -929,13 +1022,9 @@ async function initializeD3FileGraph() {
         
         // Update TF-IDF stats in UI
         updateTFIDFStats(tfidfStats);
-        
-        updateProgress('Graph loaded!', 100);
-        console.log('[GRAPH] TF-IDF analysis complete');
       } catch (error) {
         console.warn('[GRAPH] TF-IDF analysis failed:', error);
         // Graph still works without TF-IDF
-        updateProgress('Graph loaded!', 100);
       }
     };
     

@@ -76,18 +76,38 @@ const initProgress = {
     const step = this.steps.find(s => s.id === stepId);
     if (!step) return;
     
+    const wasDone = step.done;
     step.done = stepProgress === 100 || stepProgress === null;
     this.current = this.steps.findIndex(s => s.id === stepId);
     
-    // Calculate overall progress: (completed steps + current step progress) / total steps
-    const completedSteps = this.steps.filter(s => s.done).length;
-    const currentStepPercent = stepProgress !== null ? stepProgress / 100 : 0;
+    // Calculate overall progress accurately
+    // Count steps that are fully completed (excluding current step)
+    const completedSteps = this.steps.filter(s => s.done && s.id !== stepId).length;
+    
+    // Get current step's contribution (0-1)
+    let currentStepPercent = 0;
+    if (stepProgress !== null) {
+      // Clamp stepProgress to 0-100 range
+      const clampedProgress = Math.max(0, Math.min(100, stepProgress));
+      currentStepPercent = clampedProgress / 100;
+    } else if (step.done && !wasDone) {
+      // If step just became done but no progress value, count as 1.0
+      currentStepPercent = 1.0;
+    } else if (step.done && wasDone) {
+      // Step was already done, don't add to currentStepPercent (it's already in completedSteps)
+      currentStepPercent = 0;
+    }
+    
+    // Calculate overall: (completed steps + current step progress) / total steps
     const overallPercent = Math.round(((completedSteps + currentStepPercent) / this.steps.length) * 100);
+    
+    // Clamp overall percent to 0-100 range to prevent exceeding 100%
+    const clampedOverallPercent = Math.max(0, Math.min(100, overallPercent));
     
     const label = stepProgress !== null ? `${step.label}... ${stepProgress}%` : step.label;
     
-    updateConnectionStatus(false, label, overallPercent);
-    console.log(`[PROGRESS] ${label} (${overallPercent}% overall)`);
+    updateConnectionStatus(false, label, clampedOverallPercent);
+    console.log(`[PROGRESS] ${label} (${clampedOverallPercent}% overall)`);
   },
   
   complete(finalMessage = null) {

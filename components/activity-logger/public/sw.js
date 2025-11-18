@@ -13,9 +13,9 @@ const PRECACHE_ASSETS = [
   '/core/config.js',
   '/core/state.js',
   '/core/api-client.js',
-  '/utils/helpers.js',
-  '/utils/templates.js',
-  '/utils/time-formatting.js',
+  '/utils/core/helpers.js',
+  '/utils/dom/templates.js',
+  '/utils/formatting/time-formatting.js',
   '/views/activity/timeline-helpers.js',
   '/app/status-popup.js',
   '/dashboard.js'
@@ -28,9 +28,28 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       console.log('[SW] Caching core assets');
-      return cache.addAll(PRECACHE_ASSETS.map(url => new Request(url, {cache: 'reload'})));
+      // Cache assets individually to prevent one failure from blocking installation
+      return Promise.allSettled(
+        PRECACHE_ASSETS.map(url => {
+          return fetch(new Request(url, {cache: 'reload'}))
+            .then(response => {
+              if (response.ok) {
+                return cache.put(url, response);
+              } else {
+                console.warn(`[SW] Failed to cache ${url}: ${response.status} ${response.statusText}`);
+              }
+            })
+            .catch(err => {
+              console.warn(`[SW] Failed to fetch ${url}:`, err.message);
+              // Don't throw - allow other assets to cache
+            });
+        })
+      ).then(() => {
+        console.log('[SW] Asset caching complete');
+      });
     }).catch(err => {
-      console.warn('[SW] Failed to cache some assets:', err);
+      console.warn('[SW] Failed to open cache:', err);
+      // Don't fail installation if cache fails
     })
   );
   

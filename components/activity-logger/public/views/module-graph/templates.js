@@ -172,5 +172,5 @@ function renderModuleGraphTemplate() {
 }
 
 // Export to window
-window.renderModuleGraphFileGraphTemplate = renderModuleGraphFileGraphTemplate;
+window.renderModuleGraphTemplate = renderModuleGraphTemplate;
 

@@ -1,17 +1,54 @@
 /**
  * Data Initialization Module
  * Handles dashboard initialization, cache loading, and data fetching
+ * 
+ * Uses DataAccessService for hybrid architecture:
+ * - Primary: Companion Service API (real-time, processed data)
+ * - Fallback: IndexedDB cache (historical data when offline)
  */
 
 // Dependencies: window.CONFIG, window.state, window.APIClient, window.initProgress, window.updateConnectionStatus, window.persistentStorage
 
 /**
+ * Initialize DataAccessService (hybrid architecture)
+ */
+function initializeDataAccessService() {
+  // Wait for required dependencies to be available
+  if (!window.APIClient || !window.persistentStorage) {
+    console.warn('[DATA-ACCESS] Dependencies not ready, will initialize later');
+    return null;
+  }
+  
+  if (!window.DataAccessService || !window.CompanionDBReader) {
+    console.warn('[DATA-ACCESS] DataAccessService classes not loaded yet');
+    return null;
+  }
+  
+  try {
+    const dbReader = new window.CompanionDBReader(window.persistentStorage);
+    const dataAccessService = new window.DataAccessService(
+      window.APIClient,
+      dbReader,
+      window.persistentStorage
+    );
+    
+    window.dataAccessService = dataAccessService;
+    return dataAccessService;
+  } catch (error) {
+    console.error('[DATA-ACCESS] Failed to initialize:', error);
+    return null;
+  }
+}
+
+/**
  * Optimized initialization with warm-start and limited initial window
  */
 async function initializeDashboard() {
-  console.log('[LAUNCH] Initializing dashboard with warm-start...');
   
   try {
+    // Initialize DataAccessService (hybrid architecture)
+    const dataAccessService = initializeDataAccessService();
+    
     // Step 1: Load from IndexedDB cache first (instant UI)
     window.initProgress.update('cache', 0);
     
@@ -28,11 +65,22 @@ async function initializeDashboard() {
     let serverHealth = null;
     let isConnected = false;
     
-    // Start health check but don't block on it - render UI first
+    // Use DataAccessService for health check if available, otherwise fallback to APIClient
     const healthCheckPromise = (async () => {
       try {
-        const health = await window.APIClient.get('/health', { timeout: 5000, retries: 0, silent: true });
-        return health;
+        if (dataAccessService) {
+          const isOnline = await dataAccessService.checkCompanionOnline();
+          if (isOnline) {
+            // Get health info via API
+            const health = await window.APIClient.get('/health', { timeout: 5000, retries: 0, silent: true });
+            return health;
+          }
+          return null;
+        } else {
+          // Fallback to direct API call
+          const health = await window.APIClient.get('/health', { timeout: 5000, retries: 0, silent: true });
+          return health;
+        }
       } catch (error) {
         return null; // Return null on error, will be handled below
       }
@@ -91,7 +139,6 @@ async function initializeDashboard() {
     const cacheStale = false;
     
     // Skip blocking data fetch - use cached data immediately, sync in background
-    console.log('[SUCCESS] Using cached data, syncing in background...');
     window.initProgress.update('data', 100);
     
     // Background sync will happen when health check completes (see above)
@@ -148,7 +195,6 @@ async function initializeDashboard() {
                         const newEvents = response.data.filter(e => !existingIds.has(e.id));
                         if (newEvents.length > 0) {
                             window.state.data.events = [...(window.state.data.events || []), ...newEvents];
-                            console.log(`[BACKGROUND] Loaded ${newEvents.length} additional events`);
                             // Update stats (debounced)
                             if (window.calculateStats) {
                                 window.calculateStats();
@@ -176,7 +222,6 @@ async function initializeDashboard() {
     }
     
     // Step 6: Heavy analytics will be loaded on-demand via analyticsManager
-    console.log('Heavy analytics deferred until idle/tab focus');
     
   } catch (error) {
     console.error('[ERROR] Initialization error:', error);
@@ -220,7 +265,6 @@ async function initializeDashboard() {
  * Optimized: Loads recent data first, then older data in background
  */
 async function loadFromCache(progressCallback = null) {
-  console.log('[PACKAGE] Loading from cache...');
   
   // Update progress: Starting
   if (progressCallback) progressCallback(5);
@@ -253,12 +297,10 @@ async function loadFromCache(progressCallback = null) {
     
     await Promise.race([initPromise, timeoutPromise]);
     dbInitialized = true;
-    console.log('[CACHE] IndexedDB initialized successfully');
     if (progressCallback) progressCallback(30);
   } catch (initError) {
     // If init times out, try to load data anyway (IndexedDB might be ready)
     // Don't return early - try to load data even if init seemed slow
-    console.log('[CACHE] IndexedDB init timeout, attempting to load data anyway...');
     dbInitialized = false;
     if (progressCallback) progressCallback(25);
   }
@@ -275,11 +317,9 @@ async function loadFromCache(progressCallback = null) {
       );
       await Promise.race([retryPromise, retryTimeout]);
       dbInitialized = true;
-      console.log('[CACHE] IndexedDB initialized on retry');
       if (progressCallback) progressCallback(40);
     } catch (retryError) {
       // Still not ready, but continue to try loading
-      console.log('[CACHE] IndexedDB still not ready, will skip cache and continue');
       // Initialize empty state and continue
       if (!window.state) {
         window.state = { data: { events: [], prompts: [] } };
@@ -320,9 +360,7 @@ async function loadFromCache(progressCallback = null) {
         const lastEvents = await Promise.race([eventsPromise, eventsTimeout]);
         if (lastEvents && lastEvents.length > 0) {
           window.state.data.events = lastEvents;
-          console.log(`[SUCCESS] Loaded ${lastEvents.length} events from cache`);
         } else {
-          console.log(`[CACHE] No events found in cache (tried to load 20)`);
         }
         if (progressCallback) progressCallback(70);
       } catch (eventsError) {
@@ -353,9 +391,7 @@ async function loadFromCache(progressCallback = null) {
         const lastPrompts = await Promise.race([promptsPromise, promptsTimeout]);
         if (lastPrompts && lastPrompts.length > 0) {
           window.state.data.prompts = lastPrompts;
-          console.log(`[SUCCESS] Loaded ${lastPrompts.length} prompts from cache`);
         } else {
-          console.log(`[CACHE] No prompts found in cache (tried to load 20)`);
         }
         if (progressCallback) progressCallback(90);
       } catch (promptsError) {
@@ -363,7 +399,6 @@ async function loadFromCache(progressCallback = null) {
         if (promptsError.message && !promptsError.message.includes('timeout')) {
           console.warn('[CACHE] Failed to load prompts:', promptsError.message);
         } else {
-          console.log('[CACHE] Prompt loading timed out (database may be large, continuing with empty prompts)');
         }
         // Continue with empty prompts array
         if (!window.state.data.prompts) {
@@ -382,7 +417,6 @@ async function loadFromCache(progressCallback = null) {
     // Log final state
     const eventCount = (window.state.data.events || []).length;
     const promptCount = (window.state.data.prompts || []).length;
-    console.log(`[CACHE] Final state: ${eventCount} events, ${promptCount} prompts loaded`);
     
     // Don't calculate stats or render here - let main initialization handle it
     // This makes cache loading faster and non-blocking
@@ -450,11 +484,9 @@ async function loadFromCache(progressCallback = null) {
           const cached = await window.persistentStorage.getAll();
           if (cached.events && cached.events.length > 0) {
             window.state.data.events = cached.events;
-            console.log(`[SUCCESS] Loaded ${cached.events.length} events from cache (fallback)`);
           }
           if (cached.prompts && cached.prompts.length > 0) {
             window.state.data.prompts = cached.prompts;
-            console.log(`[SUCCESS] Loaded ${cached.prompts.length} prompts from cache (fallback)`);
           }
           
           // If we got data, break out of retry loop
@@ -474,27 +506,9 @@ async function loadFromCache(progressCallback = null) {
 
 /**
  * Fetch only recent data (last 24 hours by default)
+ * Uses DataAccessService for hybrid architecture (API with cache fallback)
  */
 async function fetchRecentData() {
-  // FIX: Check if APIClient is available before using it
-  if (!window.APIClient || typeof window.APIClient.get !== 'function') {
-    console.error('[ERROR] APIClient is not available. Ensure core/api-client.js is loaded before dashboard.js');
-    // Fallback to using cached data only
-    if (!window.state) {
-      console.error('[ERROR] state is not defined');
-      return;
-    }
-    if (!window.state.data) {
-      window.state.data = {};
-    }
-    if (!window.state.data.events) window.state.data.events = [];
-    if (!window.state.data.prompts) window.state.data.prompts = [];
-    if (window.calculateStats) {
-      window.calculateStats();
-    }
-    return;
-  }
-  
   // FIX: Ensure state.data exists
   if (!window.state) {
     console.error('[ERROR] state is not defined');
@@ -516,24 +530,83 @@ async function fetchRecentData() {
   
   const pageSize = 20; // Ultra-minimal initial load for fastest startup (load more in background)
   
+  // Use DataAccessService if available (hybrid architecture)
+  if (window.dataAccessService) {
+    try {
+      const [activity, prompts, workspaces] = await Promise.allSettled([
+        window.dataAccessService.getActivity({ limit: pageSize, since: new Date(startTime).toISOString() }),
+        window.dataAccessService.getPrompts({ limit: pageSize, since: new Date(startTime).toISOString() }),
+        window.dataAccessService.getWorkspaces()
+      ]);
+      
+      // Process results
+      const activityData = activity.status === 'fulfilled' ? activity.value : [];
+      const promptsData = prompts.status === 'fulfilled' ? prompts.value : [];
+      const workspacesData = workspaces.status === 'fulfilled' ? workspaces.value : [];
+      
+      // Update state
+      if (activityData.length > 0) {
+        const existingIds = new Set((window.state.data.events || []).map(e => e.id));
+        const newEvents = activityData.filter(e => !existingIds.has(e.id));
+        window.state.data.events = [...(window.state.data.events || []), ...newEvents];
+      }
+      
+      if (promptsData.length > 0) {
+        const existingIds = new Set((window.state.data.prompts || []).map(p => p.id));
+        const newPrompts = promptsData.filter(p => !existingIds.has(p.id));
+        window.state.data.prompts = [...(window.state.data.prompts || []), ...newPrompts];
+      }
+      
+      if (workspacesData.length > 0) {
+        window.state.data.workspaces = workspacesData;
+      }
+      
+      // Update stats
+      if (window.calculateStats) {
+        window.calculateStats();
+      }
+      
+      return;
+    } catch (error) {
+      console.warn('[DATA-ACCESS] DataAccessService fetch failed, falling back to direct API:', error.message);
+      // Fall through to legacy implementation
+    }
+  }
+  
+  // Fallback to legacy implementation if DataAccessService not available
+  if (!window.APIClient || typeof window.APIClient.get !== 'function') {
+    console.error('[ERROR] APIClient is not available. Ensure core/api-client.js is loaded before dashboard.js');
+    // Fallback to using cached data only
+    if (!window.state.data.events) window.state.data.events = [];
+    if (!window.state.data.prompts) window.state.data.prompts = [];
+    if (window.calculateStats) {
+      window.calculateStats();
+    }
+    return;
+  }
+  
   try {
-    // Fetch recent events in parallel for faster loading (cloud-optimized)
+    // OPTIMIZATION: Fetch recent events in parallel with caching for faster loading
     // Use longer timeout for slow endpoints (cursor database queries)
+    const cacheTTL = 2 * 60 * 1000; // 2 minutes cache for initial load
     const [activityResult, promptsResult, workspacesResult] = await Promise.allSettled([
       window.APIClient.get(`/api/activity?limit=${pageSize}`, { 
         timeout: 30000,  // 30 seconds for database queries
         retries: 1,
-        silent: true  // Suppress error logging for expected offline scenarios
+        silent: true,  // Suppress error logging for expected offline scenarios
+        cacheTTL: cacheTTL  // Cache for faster subsequent loads
       }),
       window.APIClient.get(`/entries?limit=${pageSize}`, { 
         timeout: 30000,  // 30 seconds for database queries
         retries: 1,
-        silent: true  // Suppress error logging for expected offline scenarios
+        silent: true,  // Suppress error logging for expected offline scenarios
+        cacheTTL: cacheTTL  // Cache for faster subsequent loads
       }),
       window.APIClient.get('/api/workspaces', { 
         timeout: 30000,  // 30 seconds for workspace queries
         retries: 1,
-        silent: true  // Suppress error logging for expected offline scenarios
+        silent: true,  // Suppress error logging for expected offline scenarios
+        cacheTTL: 5 * 60 * 1000  // 5 minutes cache for workspaces (change less frequently)
       })
     ]);
     
@@ -710,7 +783,6 @@ async function fetchRecentData() {
       const promptCount = window.state.data.prompts.length;
       if (eventCount > 0 || promptCount > 0) {
         // Log less frequently - only on significant updates
-        console.log(`[SYNC] Data updated. Events: ${eventCount}, Prompts: ${promptCount}`);
       }
     }
     if (window.calculateStats) {
@@ -719,7 +791,6 @@ async function fetchRecentData() {
     
     // FIX: Re-render current view to update charts with fresh data
     if (window.state.currentView === 'analytics') {
-      console.log('[CHART] Re-rendering charts with fresh data...');
       setTimeout(() => {
         if (window.renderCurrentView) {
           window.renderCurrentView();
@@ -752,7 +823,6 @@ async function precomputeFileSimilarities(files) {
     : files;
   
   if (files.length > MAX_FILES_FOR_PRECOMPUTE) {
-    console.log(`[GRAPH] Limiting similarity precomputation to ${MAX_FILES_FOR_PRECOMPUTE} files (of ${files.length})`);
   }
   
   // Check if we need to recompute (cache expiry: 10 minutes)
@@ -765,7 +835,6 @@ async function precomputeFileSimilarities(files) {
       const cachedData = JSON.parse(cached);
       if (Date.now() - cachedData.timestamp < cacheExpiry && 
           cachedData.fileCount === filesToProcess.length) {
-        console.log('[GRAPH] Similarities already cached, skipping precomputation');
         return;
       }
     }
@@ -773,7 +842,6 @@ async function precomputeFileSimilarities(files) {
     // Cache invalid, continue
   }
   
-  console.log('[GRAPH] Precomputing file similarities in background...');
   
   // Use requestIdleCallback to compute when browser is idle
   if (typeof requestIdleCallback !== 'undefined') {
@@ -888,7 +956,6 @@ async function precomputeFileSimilarities(files) {
             fileCount: filesToProcess.length,
             timestamp: Date.now()
           }));
-          console.log(`[GRAPH] Precomputed ${similarities.length} file similarities (cached)`);
         } catch (e) {
           console.warn('[GRAPH] Failed to cache similarities:', e.message);
         }
@@ -1009,7 +1076,6 @@ async function precomputeFileSimilarities(files) {
             fileCount: filesToProcess.length,
             timestamp: Date.now()
           }));
-          console.log(`[GRAPH] Precomputed ${similarities.length} file similarities (cached)`);
         } catch (e) {
           console.warn('[GRAPH] Failed to cache similarities:', e.message);
         }
@@ -1037,7 +1103,6 @@ async function preloadFileGraphData() {
         try {
           const cachedData = JSON.parse(cached);
           if (Date.now() - cachedData.timestamp < cacheExpiry) {
-            console.log('[GRAPH] File graph data already cached, skipping preload');
             return;
           }
         } catch (e) {
@@ -1047,7 +1112,6 @@ async function preloadFileGraphData() {
       
       // Fetch file graph data in background
       const apiBase = window.CONFIG?.API_BASE || window.DASHBOARD_CONFIG?.API_BASE || 'http://localhost:43917';
-      console.log('[GRAPH] Preloading file graph data in background...');
       
       // Use AbortController for timeout (more compatible than AbortSignal.timeout)
       const controller = new AbortController();
@@ -1072,7 +1136,6 @@ async function preloadFileGraphData() {
             data: data,
             timestamp: Date.now()
           }));
-          console.log(`[GRAPH] Preloaded ${data.files.length} files for file graph (cached)`);
           
           // Precompute similarities in background (non-blocking)
           // This allows the file graph to render instantly with precomputed similarities
@@ -1117,14 +1180,12 @@ async function preloadFileGraphData() {
 async function fetchOlderHistory() {
   // This can be implemented later if needed
   // For now, we rely on cached data for older history
-  console.log('[SYNC] Older history fetch deferred (using cached data)');
 }
 
 /**
  * Fallback: Fetch all data (used when initialization fails)
  */
 async function fetchAllData() {
-  console.log('[SYNC] Fetching all data (fallback mode)...');
   // This is a simplified version - can be enhanced later
   await fetchRecentData();
 }
@@ -1141,7 +1202,6 @@ function checkForShareLink() {
   const finalShareId = shareId || shareIdFromPath;
   
   if (finalShareId) {
-    console.log('[SHARING] Share link detected:', finalShareId);
     // Wait for sharing handler to load, then import
     const checkSharingHandler = setInterval(() => {
       if (window.handleShareLinkImport) {

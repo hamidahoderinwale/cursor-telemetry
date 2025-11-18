@@ -53,14 +53,21 @@ class RefreshManager {
         console.log('[REFRESH] Tab visible - refreshing...');
         this.scheduleFastRefresh();
       } else {
-        // Tab hidden - pause fast refreshes, keep slow sync
-        console.log('[REFRESH] Tab hidden - pausing fast refreshes');
+        // Tab hidden - pause fast refreshes, but allow background loading
+        console.log('[REFRESH] Tab hidden - pausing fast refreshes (background loading still active)');
         this.clearFastRefresh();
+        // Note: Slow sync and initial data loading will continue in background
       }
     };
     
     document.addEventListener('visibilitychange', handleVisibilityChange);
     this.isTabVisible = !document.hidden;
+    
+    // Allow initial loading even if tab starts hidden
+    // This ensures data loads when the page is opened in a background tab
+    if (document.hidden) {
+      console.log('[REFRESH] Tab initially hidden - allowing background loading');
+    }
   }
   
   /**

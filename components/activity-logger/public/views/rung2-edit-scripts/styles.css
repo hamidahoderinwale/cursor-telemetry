@@ -1,0 +1,283 @@
+/**
+ * Rung 2 Edit Scripts View Styles
+ */
+
+.rung2-edit-scripts-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: var(--space-lg, 1.5rem);
+  gap: var(--space-md, 1rem);
+}
+
+.rung2-edit-scripts-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-md, 1rem);
+}
+
+.rung2-edit-scripts-title-section {
+  flex: 1;
+}
+
+.rung2-edit-scripts-title {
+  font-size: var(--text-2xl, 1.5rem);
+  font-weight: 600;
+  margin: 0 0 var(--space-xs, 0.5rem) 0;
+  color: var(--color-text, #1a1a1a);
+}
+
+.rung2-edit-scripts-subtitle {
+  font-size: var(--text-sm, 0.875rem);
+  color: var(--color-text-muted, #666);
+  margin: 0;
+}
+
+.rung2-edit-scripts-actions {
+  display: flex;
+  gap: var(--space-sm, 0.75rem);
+}
+
+.rung2-edit-scripts-controls-bar {
+  display: flex;
+  gap: var(--space-md, 1rem);
+  padding: var(--space-md, 1rem);
+  background: var(--color-bg-secondary, #f5f5f5);
+  border-radius: var(--radius-sm, 0.125rem);
+  flex-wrap: wrap;
+}
+
+.rung2-edit-scripts-main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md, 1rem);
+  overflow: hidden;
+}
+
+.rung2-edit-scripts-stats-panel {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--space-md, 1rem);
+}
+
+.rung2-edit-scripts-stat-card {
+  padding: var(--space-md, 1rem);
+  background: var(--color-bg, #fff);
+  border: 1px solid var(--color-border, #ddd);
+  border-radius: var(--radius-sm, 0.125rem);
+  box-shadow: var(--shadow-sm, 0 1px 1px 0 rgba(0, 0, 0, 0.05));
+}
+
+.rung2-edit-scripts-stat-label {
+  font-size: var(--text-xs, 0.75rem);
+  color: var(--color-text-muted, #666);
+  margin-bottom: var(--space-xs, 0.5rem);
+}
+
+.rung2-edit-scripts-stat-value {
+  font-size: var(--text-2xl, 1.5rem);
+  font-weight: 600;
+  color: var(--color-text, #1a1a1a);
+}
+
+.rung2-edit-scripts-list-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-bg, #fff);
+  border: 1px solid var(--color-border, #ddd);
+  border-radius: var(--radius-sm, 0.125rem);
+  overflow: hidden;
+}
+
+.rung2-edit-scripts-list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-md, 1rem);
+  border-bottom: 1px solid var(--color-border, #ddd);
+}
+
+.rung2-edit-scripts-section-title {
+  font-size: var(--text-lg, 1.125rem);
+  font-weight: 600;
+  margin: 0;
+  color: var(--color-text, #1a1a1a);
+}
+
+.rung2-edit-scripts-list-stats {
+  font-size: var(--text-sm, 0.875rem);
+  color: var(--color-text-muted, #666);
+}
+
+.rung2-edit-scripts-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-md, 1rem);
+}
+
+.rung2-edit-scripts-loading {
+  text-align: center;
+  padding: var(--space-xl, 2rem);
+  color: var(--color-text-muted, #666);
+}
+
+.rung2-edit-scripts-script-item {
+  padding: var(--space-md, 1rem);
+  border: 1px solid var(--color-border, #ddd);
+  border-radius: var(--radius-sm, 0.125rem);
+  margin-bottom: var(--space-sm, 0.75rem);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.rung2-edit-scripts-script-item:hover {
+  background: var(--color-bg-secondary, #f5f5f5);
+  border-color: var(--color-primary, #3b82f6);
+}
+
+.rung2-edit-scripts-script-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-sm, 0.75rem);
+}
+
+.rung2-edit-scripts-script-file {
+  font-weight: 500;
+  color: var(--color-text, #1a1a1a);
+}
+
+.rung2-edit-scripts-script-meta {
+  font-size: var(--text-xs, 0.75rem);
+  color: var(--color-text-muted, #666);
+}
+
+.rung2-edit-scripts-script-operations {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs, 0.5rem);
+  margin-top: var(--space-sm, 0.75rem);
+}
+
+.rung2-edit-scripts-operation-badge {
+  padding: 2px 6px;
+  background: var(--color-bg-secondary, #f5f5f5);
+  border: 1px solid var(--color-border, #ddd);
+  border-radius: var(--radius-sm, 0.125rem);
+  font-size: var(--text-xs, 0.75rem);
+  color: var(--color-text, #1a1a1a);
+}
+
+.rung2-edit-scripts-details-panel {
+  position: fixed;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 400px;
+  background: var(--color-bg, #fff);
+  border-left: 1px solid var(--color-border, #ddd);
+  box-shadow: var(--shadow-lg, 0 4px 8px -2px rgba(0, 0, 0, 0.1));
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+}
+
+.rung2-edit-scripts-details-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-md, 1rem);
+  border-bottom: 1px solid var(--color-border, #ddd);
+}
+
+.rung2-edit-scripts-details-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-md, 1rem);
+}
+
+.rung2-edit-scripts-detail-section {
+  margin-bottom: var(--space-md, 1rem);
+}
+
+.rung2-edit-scripts-detail-label {
+  font-size: var(--text-xs, 0.75rem);
+  font-weight: 500;
+  color: var(--color-text-muted, #666);
+  margin-bottom: var(--space-xs, 0.5rem);
+}
+
+.rung2-edit-scripts-detail-value {
+  font-size: var(--text-sm, 0.875rem);
+  color: var(--color-text, #1a1a1a);
+  word-break: break-all;
+}
+
+.control-group-search {
+  flex: 1;
+  min-width: 200px;
+}
+
+.control-input-search {
+  width: 100%;
+}
+
+.btn-copy {
+  background: none;
+  border: 1px solid var(--color-border, #ddd);
+  border-radius: var(--radius-sm, 0.125rem);
+  padding: 2px 6px;
+  margin-left: var(--space-xs, 0.5rem);
+  cursor: pointer;
+  font-size: var(--text-xs, 0.75rem);
+  transition: all 0.2s;
+}
+
+.btn-copy:hover {
+  background: var(--color-bg-secondary, #f5f5f5);
+  border-color: var(--color-primary, #3b82f6);
+}
+
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm, 0.125rem);
+  font-size: var(--text-xs, 0.75rem);
+  font-weight: 500;
+}
+
+.badge-language {
+  background: rgba(59, 130, 246, 0.15);
+  color: #3b82f6;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.badge-change-style {
+  background: rgba(139, 92, 246, 0.15);
+  color: #8b5cf6;
+  border: 1px solid rgba(139, 92, 246, 0.3);
+}
+
+.rung2-pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: var(--space-md, 1rem);
+  padding: var(--space-md, 1rem);
+  margin-top: var(--space-md, 1rem);
+  border-top: 1px solid var(--color-border, #ddd);
+}
+
+.rung2-pagination-info {
+  font-size: var(--text-sm, 0.875rem);
+  color: var(--color-text-muted, #666);
+}
+
+.rung2-pagination button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+

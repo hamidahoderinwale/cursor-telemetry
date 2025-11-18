@@ -93,7 +93,7 @@ function renderWhiteboardView(container) {
         <div class="query-block" data-query-id="">
           <div class="query-block-header">
             <div class="query-block-title">
-              <input type="text" class="query-title-input" placeholder="Query title" value="Untitled Query">
+              <input type="text" class="query-title-input" placeholder="Enter query title..." value="">
               <span class="query-status" title="Query status"></span>
             </div>
             <div class="query-block-actions">

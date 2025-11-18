@@ -688,6 +688,7 @@ async function importFromShareLink(shareId) {
 
 /**
  * View and manage all share links
+ * Shows account-linked shares if authenticated
  */
 async function viewShareLinks() {
   try {
@@ -727,6 +728,7 @@ async function viewShareLinks() {
                         ${window.location.origin}${window.location.pathname}?share=${link.shareId}
                       </div>
                       <div style="font-size: var(--text-xs); color: var(--color-text-muted);">
+                        ${link.account_linked ? '<div style="color: var(--color-primary); margin-bottom: 4px;"><svg width="12" height="12" viewBox="0 0 20 20" fill="currentColor" style="vertical-align: middle; margin-right: 4px;"><path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd"/></svg> Account-linked</div>' : ''}
                         <div>Workspaces: ${link.workspaces?.length || 0}</div>
                         <div>Created: ${new Date(link.createdAt).toLocaleString()}</div>
                         <div>Expires: ${link.isExpired ? '<span style="color: var(--color-error);">Expired</span>' : link.expiresAt ? new Date(link.expiresAt).toLocaleString() : 'Never'}</div>

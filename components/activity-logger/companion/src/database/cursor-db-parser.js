@@ -96,9 +96,16 @@ class CursorDatabaseParser {
 
       // Extract additional metadata that might contain context usage and model info
       // Query for keys that might contain context/token information
-      const metadataQuery = `SELECT key, value FROM ItemTable WHERE key LIKE 'aiService.%' AND (key LIKE '%context%' OR key LIKE '%token%' OR key LIKE '%model%' OR key LIKE '%usage%')`;
+      // Also check for model information in request context or other structures
+      const metadataQuery = `SELECT key, value FROM ItemTable WHERE key LIKE 'aiService.%' AND (key LIKE '%context%' OR key LIKE '%token%' OR key LIKE '%model%' OR key LIKE '%usage%' OR key LIKE '%request%')`;
       const { stdout: metadataData } = await execAsync(
         `sqlite3 "${dbPath}" "${metadataQuery}"`
+      ).catch(() => ({ stdout: '' }));
+      
+      // Also try to extract model info from messageRequestContext if available
+      const requestContextQuery = `SELECT value FROM ItemTable WHERE key LIKE 'aiService.messageRequestContext%' OR key LIKE '%messageRequestContext%' LIMIT 10`;
+      const { stdout: requestContextData } = await execAsync(
+        `sqlite3 "${dbPath}" "${requestContextQuery}"`
       ).catch(() => ({ stdout: '' }));
 
       // Try to extract conversation metadata if it exists
@@ -268,12 +275,44 @@ class CursorDatabaseParser {
             genArray.forEach((item, idx) => {
               const text = item.text || item.textDescription || item.content || item.message;
               if (text && text.trim()) {
-                // Extract model information - check for actual model used vs "auto"
-                const model = item.model || item.model_name || item.assistant_model || null;
+                // Extract model information - check multiple possible locations
+                // Check direct fields first
+                let model = item.model || item.model_name || item.assistant_model || 
+                           item.modelName || null;
+                
+                // Check nested metadata structures
+                if (!model && item.metadata) {
+                  model = item.metadata.model || item.metadata.model_name || 
+                         item.metadata.assistant_model || item.metadata.modelName || null;
+                }
+                
+                // Check request context or other nested structures
+                if (!model && item.requestContext) {
+                  model = item.requestContext.model || item.requestContext.model_name || null;
+                }
+                
+                // Check for actual/resolved model (the model that was actually used)
                 const actualModel =
-                  item.actual_model || item.resolved_model || item.selected_model || model;
+                  item.actual_model || item.resolved_model || item.selected_model ||
+                  item.actualModel || item.resolvedModel || item.selectedModel ||
+                  (item.metadata && (item.metadata.actual_model || item.metadata.resolved_model)) ||
+                  model;
+                
                 const isAuto =
-                  !model || model.toLowerCase() === 'auto' || model.toLowerCase().includes('auto');
+                  !model || 
+                  (typeof model === 'string' && (model.toLowerCase() === 'auto' || model.toLowerCase().includes('auto')));
+                
+                // Debug logging for missing model information
+                if (!model && !actualModel && idx < 3) {
+                  console.log('[CURSOR-DB-PARSER] Model not found in generation item:', {
+                    hasModel: !!item.model,
+                    hasModelName: !!item.model_name,
+                    hasAssistantModel: !!item.assistant_model,
+                    hasMetadata: !!item.metadata,
+                    metadataKeys: item.metadata ? Object.keys(item.metadata) : [],
+                    itemKeys: Object.keys(item).slice(0, 10) // First 10 keys for debugging
+                  });
+                }
 
                 // Extract context usage from various possible fields
                 const contextUsage =

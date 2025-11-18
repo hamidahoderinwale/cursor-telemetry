@@ -4,12 +4,75 @@
 
 // Store current filters in module scope
 let currentWorkspaceFilter = 'all';
-let currentTimeRangeFilter = 'all';
+let currentTimeRangeFilter = window.state?.activityTimeRangeFilter || 'week'; // Default to "This Week" for better UX
+let currentViewMode = window.state?.activityViewMode || 'timeline'; // 'timeline', 'kanban', or 'storyboard'
+let currentKanbanGrouping = window.state?.kanbanGrouping || 'intent'; // 'intent', 'time', or 'type'
 
 async function renderActivityView(container) {
   let events = window.state?.data?.events || [];
   let prompts = window.state?.data?.prompts || [];
   let terminalCommands = window.state?.data?.terminalCommands || [];
+  let conversations = [];
+  
+  // Fetch conversations with turns from API (optimized with batching)
+  try {
+    if (window.APIClient) {
+      // Only add workspaceId if filtering by a specific workspace
+      const workspaceParam = currentWorkspaceFilter !== 'all' ? `?workspaceId=${encodeURIComponent(currentWorkspaceFilter)}` : '';
+      const conversationsResponse = await window.APIClient.get(`/api/conversations${workspaceParam}`, { silent: true, cacheTTL: 2 * 60 * 1000 });
+      if (conversationsResponse && conversationsResponse.success && conversationsResponse.data) {
+        // OPTIMIZATION: Limit initial fetch and use batching for details
+        const conversationsToFetch = conversationsResponse.data.slice(0, 50);
+        
+        // Use batch request manager if available, otherwise fallback to parallel with limit
+        if (window.batchRequestManager) {
+          conversations = await Promise.all(
+            conversationsToFetch.map((conv, index) => 
+              window.batchRequestManager.batchRequest(
+                'conversation-details',
+                () => window.APIClient.get(`/api/conversations/${conv.id}`, { silent: true, cacheTTL: 5 * 60 * 1000 }),
+                conversationsToFetch.length - index // Higher priority for earlier items
+              ).then(response => {
+                if (response && response.success && response.data) {
+                  return response.data;
+                }
+                return conv;
+              }).catch(() => conv)
+            )
+          );
+          // Flush batch to execute immediately
+          await window.batchRequestManager.flush();
+        } else {
+          // Fallback: Parallel requests with concurrency limit
+          const CONCURRENCY_LIMIT = 10;
+          conversations = [];
+          for (let i = 0; i < conversationsToFetch.length; i += CONCURRENCY_LIMIT) {
+            const batch = conversationsToFetch.slice(i, i + CONCURRENCY_LIMIT);
+            const batchResults = await Promise.allSettled(
+              batch.map(conv => 
+                window.APIClient.get(`/api/conversations/${conv.id}`, { silent: true, cacheTTL: 5 * 60 * 1000 })
+                  .then(response => {
+                    if (response && response.success && response.data) {
+                      return response.data;
+                    }
+                    return conv;
+                  })
+                  .catch(() => conv)
+              )
+            );
+            conversations.push(...batchResults.map(r => r.status === 'fulfilled' ? r.value : conversationsToFetch[i + batchResults.indexOf(r)]));
+            
+            // Yield to browser between batches
+            if (i + CONCURRENCY_LIMIT < conversationsToFetch.length) {
+              await new Promise(resolve => setTimeout(resolve, 0));
+            }
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.debug('[ACTIVITY] Failed to fetch conversations, continuing without them:', error);
+  }
   
   // Sync with global workspace selector if available
   const globalWorkspace = window.state?.currentWorkspace;
@@ -64,6 +127,15 @@ async function renderActivityView(container) {
              normalizedCmdWorkspace.includes(normalizedFilter) ||
              normalizedFilter.includes(normalizedCmdWorkspace);
     });
+    
+    // Filter conversations by workspace
+    conversations = conversations.filter(conv => {
+      const convWorkspace = conv.workspace_id || conv.workspace_path || '';
+      const normalizedConvWorkspace = normalizeWorkspacePath(convWorkspace);
+      return normalizedConvWorkspace === normalizedFilter || 
+             normalizedConvWorkspace.includes(normalizedFilter) ||
+             normalizedFilter.includes(normalizedConvWorkspace);
+    });
   }
   
   // Enhance prompts with context information
@@ -99,6 +171,11 @@ async function renderActivityView(container) {
     }
     
     events = events.filter(event => new Date(event.timestamp).getTime() >= cutoffTime);
+    prompts = prompts.filter(prompt => new Date(prompt.timestamp).getTime() >= cutoffTime);
+    conversations = conversations.filter(conv => {
+      const convTime = new Date(conv.created_at || conv.last_message_at || conv.updated_at).getTime();
+      return convTime >= cutoffTime;
+    });
   }
   
   // Filter out git internal files from events
@@ -127,16 +204,129 @@ async function renderActivityView(container) {
     return true; // Keep non-file-change events
   });
   
-  // Merge events, prompts, and terminal commands into unified timeline
-  // First, sort by timestamp to establish initial order
-  let timelineItems = [
+  // Convert conversations to individual timeline items - one per turn
+  // This allows interleaving conversation turns with file changes and terminal commands
+  const conversationTurnItems = [];
+  const conversationTurnIds = new Set(); // Track turn IDs to avoid duplicates
+  const conversationPromptIds = new Set(); // Track prompt IDs that are part of conversations
+  
+  conversations.forEach(conv => {
+    const turns = conv.turns || [];
+    const conversationId = conv.id;
+    const conversationTitle = conv.title || 'Conversation';
+    const workspace = {
+      id: conv.workspace_id,
+      path: conv.workspace_path,
+      name: conv.workspace_path ? conv.workspace_path.split('/').pop() : null
+    };
+    
+    // Create individual timeline items for each turn
+    turns.forEach((turn, turnIndex) => {
+      const turnId = turn.id || `turn-${conversationId}-${turnIndex}`;
+      conversationTurnIds.add(turnId);
+      
+      // If this turn has a prompt_id, mark it so we don't show it as a standalone prompt
+      if (turn.prompt_id) {
+        conversationPromptIds.add(turn.prompt_id);
+      }
+      const turnTimestamp = turn.created_at;
+      const sortTime = new Date(turnTimestamp).getTime();
+      const isUser = turn.role === 'user';
+      const isAssistant = turn.role === 'assistant';
+      
+      // Parse context and referenced files
+      let contextFiles = [];
+      let referencedFiles = [];
+      try {
+        contextFiles = turn.context_files ? 
+          (typeof turn.context_files === 'string' ? JSON.parse(turn.context_files) : turn.context_files) : [];
+        referencedFiles = turn.referenced_files ? 
+          (typeof turn.referenced_files === 'string' ? JSON.parse(turn.referenced_files) : turn.referenced_files) : [];
+      } catch (e) {
+        // Ignore parse errors
+      }
+      
+      // Parse code blocks
+      let codeBlocks = [];
+      try {
+        codeBlocks = turn.code_blocks ? 
+          (typeof turn.code_blocks === 'string' ? JSON.parse(turn.code_blocks) : turn.code_blocks) : [];
+      } catch (e) {
+        // Ignore parse errors
+      }
+      
+      conversationTurnItems.push({
+        id: turn.id || `turn-${conversationId}-${turnIndex}`,
+        itemType: 'conversation-turn',
+        sortTime: sortTime,
+        originalTimestamp: sortTime,
+        conversationId: conversationId,
+        conversationTitle: conversationTitle,
+        turnIndex: turn.turn_index || turnIndex,
+        role: turn.role,
+        isUser: isUser,
+        isAssistant: isAssistant,
+        content: turn.content,
+        timestamp: turnTimestamp,
+        created_at: turnTimestamp,
+        // Timing metadata
+        thinkingTimeSeconds: turn.thinking_time_seconds || 0,
+        thinking_time_seconds: turn.thinking_time_seconds || 0,
+        request_duration_ms: turn.request_duration_ms || null,
+        requestDurationMs: turn.request_duration_ms || null,
+        time_to_first_token_ms: turn.time_to_first_token_ms || null,
+        timeToFirstTokenMs: turn.time_to_first_token_ms || null,
+        // Token usage
+        total_tokens: turn.total_tokens || 0,
+        totalTokens: turn.total_tokens || 0,
+        prompt_tokens: turn.prompt_tokens || 0,
+        completion_tokens: turn.completion_tokens || 0,
+        // Model info
+        model_name: turn.model_name || null,
+        modelName: turn.model_name || null,
+        model_provider: turn.model_provider || null,
+        streaming: turn.streaming || false,
+        // Context and files
+        context_files: contextFiles,
+        referenced_files: referencedFiles,
+        code_blocks: codeBlocks,
+        // Workspace
+        workspace: workspace,
+        workspace_path: conv.workspace_path,
+        workspace_id: conv.workspace_id,
+        // Conversation metadata
+        conversation_status: conv.status,
+        conversation_created_at: conv.created_at,
+        conversation_updated_at: conv.updated_at
+      });
+    });
+  });
+  
+  // Filter out prompts that are already part of conversations (to avoid duplicates)
+  // Only show standalone prompts that aren't part of any conversation
+  const standalonePrompts = prompts.filter(prompt => {
+    const promptId = prompt.id || prompt.prompt_id;
+    // Exclude if this prompt is already part of a conversation
+    if (promptId && conversationPromptIds.has(promptId)) {
+      return false;
+    }
+    // Exclude if this prompt is linked to a conversation turn
+    if (prompt.conversation_id || prompt.conversationId) {
+      return false;
+    }
+    return true; // Keep standalone prompts
+  });
+  
+  // OPTIMIZATION: Use Web Worker for sorting/filtering large datasets
+  // Interleave all items chronologically: events, prompts, terminal commands, and conversation turns
+  const allItems = [
     ...filteredEvents.map(event => ({
       ...event,
       itemType: 'event',
       sortTime: new Date(event.timestamp).getTime(),
       originalTimestamp: new Date(event.timestamp).getTime()
     })),
-    ...prompts.map(prompt => ({
+    ...standalonePrompts.map(prompt => ({
       ...prompt,
       itemType: 'prompt',
       sortTime: new Date(prompt.timestamp).getTime(),
@@ -146,11 +336,30 @@ async function renderActivityView(container) {
     ...terminalCommands.map(cmd => ({
       ...cmd,
       itemType: 'terminal',
-      sortTime: cmd.timestamp,
-      originalTimestamp: cmd.timestamp,
-      id: cmd.id
-    }))
-  ].sort((a, b) => b.sortTime - a.sortTime);
+      sortTime: typeof cmd.timestamp === 'number' ? cmd.timestamp : new Date(cmd.timestamp).getTime(),
+      originalTimestamp: typeof cmd.timestamp === 'number' ? cmd.timestamp : new Date(cmd.timestamp).getTime(),
+      id: cmd.id || `terminal-${cmd.timestamp}`
+    })),
+    ...conversationTurnItems // Individual conversation turns, not collapsed blocks
+  ];
+  
+  // OPTIMIZATION: Use Web Worker for sorting if available and dataset is large
+  let timelineItems;
+  if (allItems.length > 1000 && window.dataWorkerHelper) {
+    try {
+      timelineItems = await window.dataWorkerHelper.processTimeline(allItems, {
+        sortBy: 'sortTime',
+        sortOrder: 'desc',
+        limit: null
+      });
+    } catch (error) {
+      // Fallback to main thread sorting
+      timelineItems = [...allItems].sort((a, b) => b.sortTime - a.sortTime);
+    }
+  } else {
+    // For smaller datasets, sort directly on main thread
+    timelineItems = [...allItems].sort((a, b) => b.sortTime - a.sortTime);
+  }
   
   // Assign sequence indices based on position in timeline (reverse chronological)
   // Higher sequence number = appears earlier in timeline = happened more recently
@@ -234,6 +443,18 @@ async function renderActivityView(container) {
     }
   });
   
+  // Extract from conversations
+  conversations.forEach(conv => {
+    const wsPath = conv.workspace_id || conv.workspace_path || '';
+    if (wsPath) {
+      const normalized = normalizeWorkspacePath(wsPath);
+      if (normalized) {
+        const displayName = wsPath.split('/').pop() || wsPath.split('\\').pop() || wsPath;
+        workspaceMap.set(normalized, displayName);
+      }
+    }
+  });
+  
   // Also use workspaces from state if available
   (window.state?.data?.workspaces || []).forEach(ws => {
     const wsPath = ws.path || ws.id || ws.name || '';
@@ -248,14 +469,87 @@ async function renderActivityView(container) {
   
   const uniqueWorkspaces = Array.from(workspaceMap.entries()).sort((a, b) => a[1].localeCompare(b[1]));
   
-  // Apply grouping if enabled
-  let displayItems = timelineItems;
-  let isGrouped = false;
+  // Smart grouping: Auto-group consecutive file changes to same file
+  // This reduces clutter when there are many rapid changes
+  const shouldAutoGroup = !window.currentGrouping || window.currentGrouping === 'none';
+  if (shouldAutoGroup && timelineItems.length > 10) {
+    displayItems = groupConsecutiveFileChanges(timelineItems);
+  } else {
+    displayItems = timelineItems;
+  }
   
+  // Apply explicit grouping if enabled
+  let isGrouped = false;
   if (window.currentGrouping && window.currentGrouping !== 'none') {
-    displayItems = window.groupTimelineItems ? window.groupTimelineItems(timelineItems, window.currentGrouping) : timelineItems;
+    displayItems = window.groupTimelineItems ? window.groupTimelineItems(displayItems, window.currentGrouping) : displayItems;
     isGrouped = true;
   }
+  
+  // Debug logging
+  console.log('[ACTIVITY] Rendering timeline:', {
+    timelineItemsCount: timelineItems.length,
+    displayItemsCount: displayItems.length,
+    eventsCount: events.length,
+    promptsCount: prompts.length,
+    terminalCommandsCount: terminalCommands.length,
+    conversationsCount: conversations.length,
+    hasRenderUnifiedTimeline: !!window.renderUnifiedTimeline,
+    hasRenderGroupedTimeline: !!window.renderGroupedTimeline,
+    isGrouped: isGrouped,
+    stateDataEvents: window.state?.data?.events?.length || 0,
+    stateDataPrompts: window.state?.data?.prompts?.length || 0
+  });
+  
+  // Calculate accurate counts from displayed items (after grouping/limiting)
+  const countDisplayedItems = (items) => {
+    let events = 0, prompts = 0, terminals = 0, conversations = 0, threads = 0;
+    
+    items.forEach(item => {
+      if (item.itemType === 'temporal-thread') {
+        threads++;
+        // Count items within threads
+        if (item.items) {
+          item.items.forEach(subItem => {
+            if (subItem.itemType === 'event') events++;
+            else if (subItem.itemType === 'prompt') prompts++;
+            else if (subItem.itemType === 'terminal') terminals++;
+            else if (subItem.itemType === 'conversation-turn') conversations++;
+          });
+        }
+      } else {
+        if (item.itemType === 'event') events++;
+        else if (item.itemType === 'prompt') prompts++;
+        else if (item.itemType === 'terminal') terminals++;
+        else if (item.itemType === 'conversation-turn') conversations++;
+      }
+    });
+    
+    return { events, prompts, terminals, conversations, threads, total: items.length };
+  };
+  
+  const displayedCounts = countDisplayedItems(displayItems);
+  
+  // Build clearer subtitle
+  const subtitleParts = [];
+  if (displayedCounts.threads > 0) {
+    subtitleParts.push(`${displayedCounts.threads} session${displayedCounts.threads !== 1 ? 's' : ''}`);
+  }
+  if (displayedCounts.events > 0) {
+    subtitleParts.push(`${displayedCounts.events} file change${displayedCounts.events !== 1 ? 's' : ''}`);
+  }
+  if (displayedCounts.prompts > 0) {
+    subtitleParts.push(`${displayedCounts.prompts} prompt${displayedCounts.prompts !== 1 ? 's' : ''}`);
+  }
+  if (displayedCounts.conversations > 0) {
+    subtitleParts.push(`${displayedCounts.conversations} conversation turn${displayedCounts.conversations !== 1 ? 's' : ''}`);
+  }
+  if (displayedCounts.terminals > 0) {
+    subtitleParts.push(`${displayedCounts.terminals} command${displayedCounts.terminals !== 1 ? 's' : ''}`);
+  }
+  
+  const subtitle = subtitleParts.length > 0 
+    ? `Showing ${displayedCounts.total} item${displayedCounts.total !== 1 ? 's' : ''} (${subtitleParts.join(', ')})`
+    : `Showing ${displayedCounts.total} item${displayedCounts.total !== 1 ? 's' : ''}`;
   
   container.innerHTML = `
     <div class="activity-view">
@@ -265,9 +559,33 @@ async function renderActivityView(container) {
         <div class="card-header">
           <div>
             <h3 class="card-title" title="Chronological timeline of all your development activity including file changes, AI prompts, and terminal commands. Items are displayed in chronological order with the most recent first. Use filters to narrow down by workspace, time range, or grouping">Activity Timeline</h3>
-            <p class="card-subtitle">${timelineItems.length} items (${filteredEvents.length} file changes, ${prompts.length} AI prompts, ${terminalCommands.length} terminal commands)</p>
+            <p class="card-subtitle">${subtitle}</p>
           </div>
           <div class="activity-header-controls" style="display: flex; gap: var(--space-sm); align-items: center; flex-wrap: wrap;">
+            <!-- View Toggle -->
+            <div class="view-toggle">
+              <button class="${currentViewMode === 'timeline' ? 'active' : ''}" onclick="switchActivityView('timeline')" title="Timeline View">
+                Timeline
+              </button>
+              <button class="${currentViewMode === 'storyboard' ? 'active' : ''}" onclick="switchActivityView('storyboard')" title="Storyboard View - Visual narrative of your development history">
+                📖 Storyboard
+              </button>
+              <button class="${currentViewMode === 'kanban' ? 'active' : ''}" onclick="switchActivityView('kanban')" title="Kanban Board View">
+                Kanban
+              </button>
+            </div>
+            ${currentViewMode === 'kanban' ? `
+              <select class="select-input" id="kanbanGroupingFilter" onchange="updateKanbanGrouping(this.value)" style="min-width: 150px;">
+                <option value="intent" ${currentKanbanGrouping === 'intent' ? 'selected' : ''}>Group by Intent</option>
+                <option value="time" ${currentKanbanGrouping === 'time' ? 'selected' : ''}>Group by Time</option>
+                <option value="type" ${currentKanbanGrouping === 'type' ? 'selected' : ''}>Group by Type</option>
+              </select>
+            ` : ''}
+            ${currentViewMode === 'storyboard' ? `
+              <div style="font-size: var(--text-xs); color: var(--color-text-muted); padding: var(--space-xs) var(--space-sm); background: var(--color-bg-alt); border-radius: var(--radius-sm);">
+                📖 Visual narrative of your development story
+              </div>
+            ` : ''}
             ${currentWorkspaceFilter !== 'all' ? `
               <button class="btn btn-sm" onclick="if(window.showShareModal) window.showShareModal(['${window.escapeHtml ? window.escapeHtml(currentWorkspaceFilter) : currentWorkspaceFilter}']); else alert('Sharing feature not available');" title="Share this workspace view" style="padding: 6px 12px;">
                 <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor" style="vertical-align: middle; margin-right: 4px;">
@@ -294,18 +612,29 @@ async function renderActivityView(container) {
               }).join('')}
             </select>
             <select class="select-input" id="timeRangeFilter" onchange="filterActivityByTimeRange(this.value)">
-              <option value="all" ${currentTimeRangeFilter === 'all' ? 'selected' : ''}>All Time</option>
               <option value="today" ${currentTimeRangeFilter === 'today' ? 'selected' : ''}>Today</option>
               <option value="week" ${currentTimeRangeFilter === 'week' ? 'selected' : ''}>This Week</option>
               <option value="month" ${currentTimeRangeFilter === 'month' ? 'selected' : ''}>This Month</option>
+              <option value="all" ${currentTimeRangeFilter === 'all' ? 'selected' : ''}>All Time</option>
             </select>
-            <select class="select-input" id="groupingFilter" onchange="updateGrouping(this.value)" style="min-width: 150px;">
-              <option value="none" ${(window.currentGrouping || 'none') === 'none' ? 'selected' : ''}>No Grouping</option>
-              <option value="file" ${(window.currentGrouping || 'none') === 'file' ? 'selected' : ''}>Group by File</option>
-              <option value="session" ${(window.currentGrouping || 'none') === 'session' ? 'selected' : ''}>Group by Session</option>
-              <option value="workflow" ${(window.currentGrouping || 'none') === 'workflow' ? 'selected' : ''}>Group by Workflow</option>
-              <option value="workspace" ${(window.currentGrouping || 'none') === 'workspace' ? 'selected' : ''}>Group by Workspace</option>
-              <option value="model" ${(window.currentGrouping || 'none') === 'model' ? 'selected' : ''}>Group by Model</option>
+            ${currentViewMode === 'timeline' ? `
+              <select class="select-input" id="groupingFilter" onchange="updateGrouping(this.value)" style="min-width: 150px;">
+                <option value="none" ${(window.currentGrouping || 'none') === 'none' ? 'selected' : ''}>No Grouping</option>
+                <option value="file" ${(window.currentGrouping || 'none') === 'file' ? 'selected' : ''}>Group by File</option>
+                <option value="session" ${(window.currentGrouping || 'none') === 'session' ? 'selected' : ''}>Group by Session</option>
+                <option value="conversation" ${(window.currentGrouping || 'none') === 'conversation' ? 'selected' : ''}>Group by Conversation</option>
+                <option value="workflow" ${(window.currentGrouping || 'none') === 'workflow' ? 'selected' : ''}>Group by Workflow</option>
+                <option value="workspace" ${(window.currentGrouping || 'none') === 'workspace' ? 'selected' : ''}>Group by Workspace</option>
+                <option value="model" ${(window.currentGrouping || 'none') === 'model' ? 'selected' : ''}>Group by Model</option>
+              </select>
+            ` : ''}
+            ${currentViewMode === 'storyboard' ? `
+              <!-- Storyboard view doesn't need grouping options - it groups automatically by sessions and scenes -->
+            ` : ''}
+            <select class="select-input" id="densityFilter" onchange="updateDensity(this.value)" style="min-width: 120px;" title="Control visual density of timeline items">
+              <option value="normal" ${(window.currentDensity || 'normal') === 'normal' ? 'selected' : ''}>Normal</option>
+              <option value="compact" ${(window.currentDensity || 'normal') === 'compact' ? 'selected' : ''}>Compact</option>
+              <option value="spacious" ${(window.currentDensity || 'normal') === 'spacious' ? 'selected' : ''}>Spacious</option>
             </select>
           </div>
         </div>
@@ -326,11 +655,56 @@ async function renderActivityView(container) {
             <div id="activitySearchResults" class="activity-search-results"></div>
           </div>
           
-          <!-- Timeline Content -->
-          ${isGrouped && window.renderGroupedTimeline ? 
-            window.renderGroupedTimeline(displayItems) : 
-            (timelineItems.length > 0 ? window.renderUnifiedTimeline(displayItems) : '<div class="empty-state"><div class="empty-state-text">No activity recorded</div><div class="empty-state-hint">Activity will appear as you work in Cursor</div></div>')
-          }
+          <!-- Timeline, Storyboard, or Kanban Content -->
+          ${(() => {
+            if (timelineItems.length === 0) {
+              return '<div class="empty-state"><div class="empty-state-text">No activity recorded</div><div class="empty-state-hint">Activity will appear as you work in Cursor</div></div>';
+            }
+            
+            // Storyboard view
+            if (currentViewMode === 'storyboard' && window.renderStoryboardTimeline) {
+              try {
+                // For storyboard, use all timeline items (not grouped/limited)
+                return window.renderStoryboardTimeline(timelineItems);
+              } catch (error) {
+                console.error('[ACTIVITY] Error rendering storyboard:', error);
+                return '<div class="empty-state"><div class="empty-state-text">Error rendering storyboard</div><div class="empty-state-hint">' + error.message + '</div></div>';
+              }
+            }
+            
+            // Kanban view
+            if (currentViewMode === 'kanban' && window.renderKanbanBoard) {
+              try {
+                return window.renderKanbanBoard(displayItems, currentKanbanGrouping);
+              } catch (error) {
+                console.error('[ACTIVITY] Error rendering kanban board:', error);
+                return '<div class="empty-state"><div class="empty-state-text">Error rendering kanban board</div><div class="empty-state-hint">' + error.message + '</div></div>';
+              }
+            }
+            
+            // Timeline view
+            if (isGrouped && window.renderGroupedTimeline) {
+              try {
+                return window.renderGroupedTimeline(displayItems);
+              } catch (error) {
+                console.error('[ACTIVITY] Error rendering grouped timeline:', error);
+                return '<div class="empty-state"><div class="empty-state-text">Error rendering timeline</div><div class="empty-state-hint">' + error.message + '</div></div>';
+              }
+            }
+            
+            if (window.renderUnifiedTimeline) {
+              try {
+                return window.renderUnifiedTimeline(displayItems);
+              } catch (error) {
+                console.error('[ACTIVITY] Error rendering unified timeline:', error);
+                return '<div class="empty-state"><div class="empty-state-text">Error rendering timeline</div><div class="empty-state-hint">' + error.message + '</div></div>';
+              }
+            }
+            
+            // Fallback if render function not available
+            console.warn('[ACTIVITY] renderUnifiedTimeline not available, showing fallback');
+            return '<div class="empty-state"><div class="empty-state-text">Timeline renderer not loaded</div><div class="empty-state-hint">Please refresh the page</div></div>';
+          })()}
         </div>
       </div>
 
@@ -361,8 +735,183 @@ function filterActivityByWorkspace(workspace) {
   }
 }
 
+function updateGrouping(grouping) {
+  window.currentGrouping = grouping;
+  const container = document.getElementById('viewContainer');
+  if (container) {
+    renderActivityView(container);
+  }
+}
+
+function updateDensity(density) {
+  window.currentDensity = density;
+  document.body.setAttribute('data-timeline-density', density);
+  // Apply density styles via CSS custom properties
+  const root = document.documentElement;
+  if (density === 'compact') {
+    root.style.setProperty('--timeline-item-spacing', 'var(--space-xs)');
+    root.style.setProperty('--timeline-card-padding', 'var(--space-sm)');
+  } else if (density === 'spacious') {
+    root.style.setProperty('--timeline-item-spacing', 'var(--space-lg)');
+    root.style.setProperty('--timeline-card-padding', 'var(--space-lg)');
+  } else {
+    root.style.setProperty('--timeline-item-spacing', 'var(--space-md)');
+    root.style.setProperty('--timeline-card-padding', 'var(--space-md)');
+  }
+}
+
+function switchActivityView(mode) {
+  if (mode !== 'timeline' && mode !== 'kanban' && mode !== 'storyboard') {
+    console.warn('[ACTIVITY] Invalid view mode:', mode);
+    return;
+  }
+  currentViewMode = mode;
+  // Persist to state if available
+  if (window.state) {
+    window.state.activityViewMode = mode;
+  }
+  // Re-render the view
+  const container = document.getElementById('viewContainer');
+  if (container) {
+    renderActivityView(container);
+  }
+}
+
+function updateKanbanGrouping(grouping) {
+  if (grouping !== 'intent' && grouping !== 'time' && grouping !== 'type') {
+    console.warn('[ACTIVITY] Invalid kanban grouping:', grouping);
+    return;
+  }
+  currentKanbanGrouping = grouping;
+  // Persist to state if available
+  if (window.state) {
+    window.state.kanbanGrouping = grouping;
+  }
+  // Re-render the view
+  const container = document.getElementById('viewContainer');
+  if (container) {
+    renderActivityView(container);
+  }
+}
+
+/**
+ * Group consecutive file changes to the same file
+ * This reduces visual clutter when there are many rapid edits
+ */
+function groupConsecutiveFileChanges(items) {
+  const grouped = [];
+  let currentGroup = null;
+  const GROUP_TIME_WINDOW = 5 * 60 * 1000; // 5 minutes
+  
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    
+    // Only group file_change events
+    if (item.itemType === 'event' && (item.type === 'file_change' || item.type === 'code_change')) {
+      const filePath = getFilePathFromEvent(item);
+      
+      if (filePath && currentGroup && 
+          currentGroup.filePath === filePath &&
+          currentGroup.items.length > 0) {
+        const lastItem = currentGroup.items[currentGroup.items.length - 1];
+        const timeDiff = Math.abs(new Date(item.timestamp) - new Date(lastItem.timestamp));
+        
+        // Group if same file and within time window
+        if (timeDiff < GROUP_TIME_WINDOW) {
+          currentGroup.items.push(item);
+          continue;
+        }
+      }
+      
+      // Start new group or add to existing if same file
+      if (currentGroup && currentGroup.filePath === filePath) {
+        currentGroup.items.push(item);
+      } else {
+        // Save previous group if it has multiple items
+        if (currentGroup && currentGroup.items.length > 1) {
+          grouped.push({
+            itemType: 'file-change-group',
+            filePath: currentGroup.filePath,
+            items: currentGroup.items,
+            timestamp: currentGroup.items[0].timestamp,
+            sortTime: currentGroup.items[0].sortTime,
+            workspace: currentGroup.items[0].workspace_path || currentGroup.items[0].workspacePath
+          });
+        } else if (currentGroup && currentGroup.items.length === 1) {
+          // Single item, add it directly
+          grouped.push(currentGroup.items[0]);
+        }
+        
+        // Start new group
+        if (filePath) {
+          currentGroup = {
+            filePath: filePath,
+            items: [item]
+          };
+        } else {
+          // No file path, add directly
+          grouped.push(item);
+          currentGroup = null;
+        }
+      }
+    } else {
+      // Non-file-change item: save current group and add this item
+      if (currentGroup) {
+        if (currentGroup.items.length > 1) {
+          grouped.push({
+            itemType: 'file-change-group',
+            filePath: currentGroup.filePath,
+            items: currentGroup.items,
+            timestamp: currentGroup.items[0].timestamp,
+            sortTime: currentGroup.items[0].sortTime,
+            workspace: currentGroup.items[0].workspace_path || currentGroup.items[0].workspacePath
+          });
+        } else if (currentGroup.items.length === 1) {
+          grouped.push(currentGroup.items[0]);
+        }
+        currentGroup = null;
+      }
+      grouped.push(item);
+    }
+  }
+  
+  // Don't forget the last group
+  if (currentGroup) {
+    if (currentGroup.items.length > 1) {
+      grouped.push({
+        itemType: 'file-change-group',
+        filePath: currentGroup.filePath,
+        items: currentGroup.items,
+        timestamp: currentGroup.items[0].timestamp,
+        sortTime: currentGroup.items[0].sortTime,
+        workspace: currentGroup.items[0].workspace_path || currentGroup.items[0].workspacePath
+      });
+    } else if (currentGroup.items.length === 1) {
+      grouped.push(currentGroup.items[0]);
+    }
+  }
+  
+  return grouped;
+}
+
+/**
+ * Extract file path from event
+ */
+function getFilePathFromEvent(event) {
+  try {
+    const details = typeof event.details === 'string' ? JSON.parse(event.details) : event.details;
+    return details?.file_path || event.file_path || event.path || '';
+  } catch (e) {
+    return event.file_path || event.path || '';
+  }
+}
+
 // Export to window for global access
 window.renderActivityView = renderActivityView;
 window.filterActivityByTimeRange = filterActivityByTimeRange;
 window.filterActivityByWorkspace = filterActivityByWorkspace;
+window.updateGrouping = updateGrouping;
+window.updateDensity = updateDensity;
+window.switchActivityView = switchActivityView;
+window.updateKanbanGrouping = updateKanbanGrouping;
 

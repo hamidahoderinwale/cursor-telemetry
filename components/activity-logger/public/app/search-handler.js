@@ -34,7 +34,6 @@ async function initializeSearch() {
   }
   
   try {
-    console.log('[SEARCH] Initializing search engine...');
     searchEngine = new window.SearchEngine();
     
     // Get current data from state
@@ -70,7 +69,6 @@ async function initializeSearch() {
       );
       
       await Promise.race([initPromise, timeoutPromise]);
-      console.log(`[SUCCESS] Search engine initialized with ${totalItems} items (${events.length} events, ${prompts.length} prompts, ${conversations.length} conversations, ${terminalCommands.length} terminal commands)`);
     } catch (timeoutError) {
       console.warn('[SEARCH] Search initialization timed out or failed, using fallback search:', timeoutError.message);
       // Continue without full search - basic search will still work
@@ -122,7 +120,6 @@ async function reinitializeSearch() {
     }
   }
   
-  console.log('[SEARCH] Re-initializing search engine with updated data...');
   await initializeSearch();
 }
 
@@ -507,21 +504,21 @@ function renderSearchResults(results) {
   if (results.length === 0) {
     resultsEl.innerHTML = `
       <div class="search-empty" style="
-        padding: var(--space-xl);
+        padding: 64px 32px;
         text-align: center;
         color: var(--color-text-muted);
       ">
-        <div style="display: flex; justify-content: center; margin-bottom: var(--space-md); opacity: 0.3;">
-          ${window.renderLucideIcon ? window.renderLucideIcon('search', { size: 48, color: 'currentColor' }) : '<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>'}
+        <div style="display: flex; justify-content: center; margin-bottom: 24px; opacity: 0.4;">
+          ${window.renderLucideIcon ? window.renderLucideIcon('search', { size: 64, color: 'currentColor' }) : '<svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>'}
         </div>
-        <div style="font-size: var(--text-lg); font-weight: 600; margin-bottom: var(--space-sm); color: var(--color-text);">No results found</div>
-        <div style="font-size: var(--text-sm); margin-bottom: var(--space-md); color: var(--color-text-secondary);">
-          Try different keywords or use the quick filters above
+        <div style="font-size: 20px; font-weight: 600; margin-bottom: 12px; color: var(--color-text);">No results found</div>
+        <div style="font-size: 14px; margin-bottom: 24px; color: var(--color-text-secondary); line-height: 1.6; max-width: 400px; margin-left: auto; margin-right: auto;">
+          Try different keywords or use the quick filters above to narrow your search
         </div>
-        <div style="display: flex; gap: var(--space-xs); justify-content: center; flex-wrap: wrap; font-size: var(--text-xs);">
-          <code style="padding: 4px 8px; background: var(--color-bg-alt); border-radius: var(--radius-sm);">type:prompt</code>
-          <code style="padding: 4px 8px; background: var(--color-bg-alt); border-radius: var(--radius-sm);">workspace:name</code>
-          <code style="padding: 4px 8px; background: var(--color-bg-alt); border-radius: var(--radius-sm);">date:today</code>
+        <div style="display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; font-size: 12px;">
+          <code style="padding: 6px 12px; background: var(--color-bg-alt); border: 1px solid var(--color-border); border-radius: 6px; font-family: var(--font-mono);">type:prompt</code>
+          <code style="padding: 6px 12px; background: var(--color-bg-alt); border: 1px solid var(--color-border); border-radius: 6px; font-family: var(--font-mono);">workspace:name</code>
+          <code style="padding: 6px 12px; background: var(--color-bg-alt); border: 1px solid var(--color-border); border-radius: 6px; font-family: var(--font-mono);">date:today</code>
         </div>
       </div>
     `;
@@ -602,20 +599,25 @@ function renderSearchResults(results) {
     const typeInfo = getTypeInfo(type);
     const typeHeader = Object.keys(groupedResults).length > 1 ? `
       <div class="search-result-group-header" style="
-        padding: var(--space-sm) var(--space-md);
-        background: var(--color-bg-alt);
-        border-bottom: 1px solid var(--color-border);
-        font-size: var(--text-xs);
-        font-weight: 600;
-        color: var(--color-text-muted);
+        padding: 12px 16px;
+        background: linear-gradient(to right, ${typeInfo.color}15, transparent);
+        border-bottom: 2px solid ${typeInfo.color}30;
+        font-size: 12px;
+        font-weight: 700;
+        color: ${typeInfo.color};
         text-transform: uppercase;
-        letter-spacing: 0.5px;
+        letter-spacing: 1px;
         display: flex;
         align-items: center;
-        gap: var(--space-xs);
+        gap: 10px;
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        backdrop-filter: blur(8px);
       ">
-        <span>${typeInfo.icon}</span>
-        <span>${typeInfo.label} (${typeResults.length})</span>
+        <span style="display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 6px; background: ${typeInfo.color}20;">${typeInfo.icon}</span>
+        <span>${typeInfo.label}</span>
+        <span style="margin-left: auto; padding: 2px 8px; background: ${typeInfo.color}20; border-radius: 12px; font-size: 11px; font-weight: 600;">${typeResults.length}</span>
       </div>
     ` : '';
     
@@ -639,86 +641,98 @@ function renderSearchResults(results) {
              data-index="${index}" 
              data-type="${type}"
              onclick="window.selectSearchResult(${index})"
-             onmouseenter="window.searchSelectedIndex = ${index}; window.renderSearchResults(window.searchResults)"
-             style="
-               padding: var(--space-md);
-               border-bottom: 1px solid var(--color-border);
-               cursor: pointer;
-               transition: background-color 0.15s ease;
-             ">
+             onmouseenter="window.searchSelectedIndex = ${index}; window.renderSearchResults(window.searchResults)">
           <div class="search-result-header" style="
             display: flex;
             align-items: flex-start;
-            gap: var(--space-sm);
-            margin-bottom: var(--space-xs);
+            gap: 12px;
+            margin-bottom: 8px;
           ">
-            <span class="search-result-type" style="
-              display: inline-flex;
+            <div style="
+              display: flex;
               align-items: center;
-              padding: 2px 8px;
+              justify-content: center;
+              width: 36px;
+              height: 36px;
+              min-width: 36px;
+              border-radius: 8px;
               background: ${typeInfo.color}15;
-              color: ${typeInfo.color};
-              border: 1px solid ${typeInfo.color}40;
-              border-radius: var(--radius-sm);
-              font-size: var(--text-xs);
-              font-weight: 600;
-              text-transform: uppercase;
-              letter-spacing: 0.3px;
-              white-space: nowrap;
-            ">${typeInfo.icon} ${typeInfo.label}</span>
+              border: 1.5px solid ${typeInfo.color}30;
+              flex-shrink: 0;
+            ">
+              <span style="color: ${typeInfo.color}; display: flex; align-items: center; justify-content: center;">
+                ${typeInfo.icon}
+              </span>
+            </div>
             <div style="flex: 1; min-width: 0;">
+              <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px; flex-wrap: wrap;">
+                <span class="search-result-type" style="
+                  display: inline-flex;
+                  align-items: center;
+                  gap: 4px;
+                  padding: 3px 10px;
+                  background: ${typeInfo.color}12;
+                  color: ${typeInfo.color};
+                  border: 1px solid ${typeInfo.color}25;
+                  border-radius: 6px;
+                  font-size: 11px;
+                  font-weight: 600;
+                  text-transform: uppercase;
+                  letter-spacing: 0.5px;
+                  white-space: nowrap;
+                ">${typeInfo.label}</span>
+              </div>
               <div class="search-result-title" style="
                 font-weight: 600;
-                font-size: var(--text-sm);
+                font-size: 15px;
                 color: var(--color-text);
-                margin-bottom: 2px;
-                line-height: 1.4;
+                margin-bottom: 8px;
+                line-height: 1.5;
               ">${highlightQuery(title, window.currentSearchQuery || '')}</div>
               <div class="search-result-meta" style="
                 display: flex;
                 align-items: center;
-                gap: var(--space-sm);
+                gap: 12px;
                 flex-wrap: wrap;
-                font-size: var(--text-xs);
+                font-size: 12px;
                 color: var(--color-text-muted);
-                margin-top: 4px;
               ">
-                ${time ? `<span style="display: inline-flex; align-items: center; gap: 4px;">${window.renderLucideIcon ? window.renderLucideIcon('clock', { size: 14, color: 'currentColor' }) : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>'} ${time}</span>` : ''}
-                ${workspace ? `<span style="display: inline-flex; align-items: center; gap: 4px;" title="${escapeHtml(workspace)}">${window.renderLucideIcon ? window.renderLucideIcon('folder', { size: 14, color: 'currentColor' }) : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/></svg>'} ${escapeHtml(workspace.split('/').pop() || workspace)}</span>` : ''}
-                ${filePath ? `<span style="display: inline-flex; align-items: center; gap: 4px;" title="${escapeHtml(filePath)}">${window.renderLucideIcon ? window.renderLucideIcon('file', { size: 14, color: 'currentColor' }) : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>'} ${escapeHtml(filePath.split('/').pop() || filePath)}</span>` : ''}
-                ${mode ? `<span style="display: inline-flex; align-items: center; gap: 4px;">${window.renderLucideIcon ? window.renderLucideIcon('bot', { size: 14, color: 'currentColor' }) : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>'} ${escapeHtml(mode)}</span>` : ''}
+                ${time ? `<span style="display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; background: var(--color-bg-alt); border-radius: 5px;">${window.renderLucideIcon ? window.renderLucideIcon('clock', { size: 13, color: 'currentColor' }) : '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>'} ${time}</span>` : ''}
+                ${workspace ? `<span style="display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; background: var(--color-bg-alt); border-radius: 5px;" title="${escapeHtml(workspace)}">${window.renderLucideIcon ? window.renderLucideIcon('folder', { size: 13, color: 'currentColor' }) : '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/></svg>'} ${escapeHtml(workspace.split('/').pop() || workspace)}</span>` : ''}
+                ${filePath ? `<span style="display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; background: var(--color-bg-alt); border-radius: 5px; font-family: var(--font-mono);" title="${escapeHtml(filePath)}">${window.renderLucideIcon ? window.renderLucideIcon('file', { size: 13, color: 'currentColor' }) : '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>'} ${escapeHtml(filePath.split('/').pop() || filePath)}</span>` : ''}
+                ${mode ? `<span style="display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; background: var(--color-bg-alt); border-radius: 5px;">${window.renderLucideIcon ? window.renderLucideIcon('bot', { size: 13, color: 'currentColor' }) : '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>'} ${escapeHtml(mode)}</span>` : ''}
               </div>
             </div>
           </div>
           ${snippet ? `
             <div class="search-result-snippet" style="
-              margin-top: var(--space-xs);
-              padding: var(--space-sm);
+              margin-top: 10px;
+              padding: 12px;
               background: var(--color-bg-alt);
-              border-radius: var(--radius-sm);
-              font-size: var(--text-xs);
+              border-radius: 8px;
+              font-size: 13px;
               color: var(--color-text-secondary);
-              line-height: 1.5;
-              border-left: 3px solid ${typeInfo.color}40;
+              line-height: 1.6;
+              border-left: 3px solid ${typeInfo.color}50;
             ">
               ${highlightQuery(snippet, window.currentSearchQuery || '')}
             </div>
           ` : ''}
           ${hasAnnotation && annotation ? `
             <div class="search-result-annotation" style="
-              margin-top: var(--space-xs);
-              padding: var(--space-xs) var(--space-sm);
-              background: var(--color-primary)10;
+              margin-top: 10px;
+              padding: 10px 12px;
+              background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(59, 130, 246, 0.05));
               border-left: 3px solid var(--color-primary);
-              border-radius: var(--radius-sm);
-              font-size: var(--text-xs);
+              border-radius: 8px;
+              font-size: 12px;
               color: var(--color-text-secondary);
               display: flex;
               align-items: center;
-              gap: 6px;
+              gap: 8px;
             ">
-              ${annotationLabel}
-              <span style="font-style: italic;">${escapeHtml(annotation)}</span>
+              <span style="font-size: 11px; padding: 2px 6px; background: var(--color-primary); color: white; border-radius: 4px; font-weight: 600;">AI</span>
+              <span style="font-style: italic; line-height: 1.5;">${escapeHtml(annotation)}</span>
             </div>
           ` : ''}
         </div>
@@ -857,7 +871,6 @@ async function toggleHuggingFaceSearch(enabled) {
   
   // Reinitialize search engine if it exists
   if (searchEngine && searchEngine.initialized) {
-    console.log(`[SEARCH] ${enabled ? 'Enabling' : 'Disabling'} Hugging Face semantic search...`);
     
     if (enabled) {
       // Initialize HF search
@@ -1000,13 +1013,28 @@ if (document.readyState === 'loading') {
 window.updateSemanticStatus = updateSemanticStatus;
 
 // Export search state for event listeners in dashboard.js
-Object.defineProperty(window, 'searchSelectedIndex', {
-  get: () => searchSelectedIndex,
-  set: (value) => { searchSelectedIndex = value; }
-});
-Object.defineProperty(window, 'searchResults', {
-  get: () => searchResults,
-  set: (value) => { searchResults = value; }
-});
+// Make these configurable so they can be redefined if needed
+try {
+  Object.defineProperty(window, 'searchSelectedIndex', {
+    get: () => searchSelectedIndex,
+    set: (value) => { searchSelectedIndex = value; },
+    configurable: true,
+    enumerable: true
+  });
+  Object.defineProperty(window, 'searchResults', {
+    get: () => searchResults,
+    set: (value) => { searchResults = value; },
+    configurable: true,
+    enumerable: true
+  });
+} catch (e) {
+  // If already defined, just update the values
+  if (window.searchSelectedIndex !== undefined) {
+    window.searchSelectedIndex = searchSelectedIndex;
+  }
+  if (window.searchResults !== undefined) {
+    window.searchResults = searchResults;
+  }
+}
 
 })(); // End IIFE

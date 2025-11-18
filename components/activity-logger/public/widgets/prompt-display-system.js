@@ -72,6 +72,29 @@ class PromptDisplaySystem {
   }
 
   /**
+   * Show thread view
+   */
+  showThreadView() {
+    if (window.switchView && typeof window.switchView === 'function') {
+      window.switchView('threads');
+    } else {
+      console.warn('[PromptDisplaySystem] switchView not available');
+    }
+  }
+
+  /**
+   * Show prompt search
+   */
+  showPromptSearch() {
+    // Open search palette if available
+    if (window.openSearchPalette && typeof window.openSearchPalette === 'function') {
+      window.openSearchPalette();
+    } else {
+      console.warn('[PromptDisplaySystem] openSearchPalette not available');
+    }
+  }
+
+  /**
    * Show prompt modal with enhanced display
    */
   showPromptModal(promptId) {
