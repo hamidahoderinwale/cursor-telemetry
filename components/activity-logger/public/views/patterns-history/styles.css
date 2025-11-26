@@ -1,0 +1,276 @@
+/**
+ * Patterns History View Styles - GitHub-style commit history
+ */
+
+.patterns-history-view {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--space-xl);
+}
+
+.patterns-history-view .view-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: var(--space-2xl);
+  gap: var(--space-xl);
+}
+
+.patterns-history-view .view-header-content {
+  flex: 1;
+}
+
+.patterns-history-view .view-title {
+  font-size: var(--text-3xl);
+  font-weight: 700;
+  color: var(--color-text);
+  margin-bottom: var(--space-sm);
+}
+
+.patterns-history-view .view-description {
+  font-size: var(--text-base);
+  color: var(--color-text-muted);
+  line-height: 1.6;
+}
+
+.pattern-type-selector {
+  display: flex;
+  gap: var(--space-xs);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-xs);
+}
+
+.pattern-type-btn {
+  padding: var(--space-sm) var(--space-md);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.pattern-type-btn:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text);
+}
+
+.pattern-type-btn.active {
+  background: var(--color-primary);
+  color: white;
+}
+
+.patterns-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.pattern-commit-item {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-lg);
+  transition: all var(--transition-base);
+}
+
+.pattern-commit-item:hover {
+  border-color: var(--color-primary);
+  box-shadow: 0 2px 8px var(--color-primary-alpha-10);
+}
+
+.pattern-commit-header {
+  display: flex;
+  gap: var(--space-md);
+  margin-bottom: var(--space-md);
+}
+
+.pattern-commit-avatar {
+  flex-shrink: 0;
+}
+
+.pattern-avatar-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+  color: white;
+}
+
+.pattern-commit-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.pattern-commit-message {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-xs);
+  flex-wrap: wrap;
+}
+
+.pattern-commit-hash {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+.pattern-commit-title {
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--color-text);
+  flex: 1;
+}
+
+.pattern-commit-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.pattern-commit-author {
+  font-weight: 500;
+}
+
+.pattern-commit-time {
+  color: var(--color-text-muted);
+}
+
+.pattern-commit-type-badge,
+.pattern-commit-intent-badge {
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.pattern-commit-frequency {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
+.pattern-commit-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  margin-top: var(--space-md);
+  padding-top: var(--space-md);
+  border-top: 1px solid var(--color-border);
+}
+
+.pattern-file-badge {
+  display: inline-block;
+  padding: 4px 8px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  font-family: var(--font-mono);
+  color: var(--color-text);
+}
+
+.pattern-file-more {
+  display: inline-block;
+  padding: 4px 8px;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+.pattern-commit-actions {
+  display: flex;
+  gap: var(--space-sm);
+  margin-top: var(--space-md);
+  padding-top: var(--space-md);
+  border-top: 1px solid var(--color-border);
+}
+
+.pattern-action-btn {
+  padding: var(--space-xs) var(--space-md);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  color: var(--color-text);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.pattern-action-btn:hover {
+  background: var(--color-primary);
+  color: white;
+  border-color: var(--color-primary);
+}
+
+.loading-state,
+.empty-state {
+  text-align: center;
+  padding: var(--space-3xl);
+  color: var(--color-text-muted);
+}
+
+.empty-state-icon {
+  font-size: 3rem;
+  margin-bottom: var(--space-md);
+  opacity: 0.5;
+}
+
+.empty-state-text {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  color: var(--color-text);
+  margin-bottom: var(--space-sm);
+}
+
+.empty-state-hint {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  line-height: 1.6;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .patterns-history-view .view-header {
+    flex-direction: column;
+  }
+
+  .pattern-type-selector {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .pattern-type-btn {
+    flex: 1;
+  }
+
+  .pattern-commit-header {
+    flex-direction: column;
+  }
+
+  .pattern-commit-actions {
+    flex-direction: column;
+  }
+
+  .pattern-action-btn {
+    width: 100%;
+  }
+}
+
+

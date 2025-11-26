@@ -58,7 +58,7 @@ class StateRecommendations {
 
     let html = `<div class="state-recommendations" style="padding: var(--space-md); background: var(--color-bg-alt); border-radius: var(--radius-md); margin-bottom: var(--space-md);">`;
     html += `<div class="recommendations-header" style="font-weight: 600; margin-bottom: var(--space-md); display: flex; align-items: center; gap: var(--space-xs);">`;
-    html += `<span>💡 Recommendations</span>`;
+    html += `<span>[Idea] Recommendations</span>`;
     html += `</div>`;
 
     this.recommendations.forEach((rec, index) => {

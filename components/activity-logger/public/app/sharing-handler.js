@@ -714,7 +714,7 @@ async function viewShareLinks() {
         <div class="modal-body export-modal-section">
           ${links.length === 0 ? `
             <div style="text-align: center; padding: var(--space-xl); color: var(--color-text-muted);">
-              <div style="font-size: 48px; margin-bottom: var(--space-md); opacity: 0.5;">🔗</div>
+              <div style="font-size: 48px; margin-bottom: var(--space-md); opacity: 0.5;">[Link]</div>
               <div>No share links created yet</div>
             </div>
           ` : `

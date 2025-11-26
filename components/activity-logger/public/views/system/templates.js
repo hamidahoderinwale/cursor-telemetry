@@ -9,8 +9,8 @@ function renderSystemViewTemplate(data) {
       <!-- System Resources Over Time Chart -->
       <div class="card">
         <div class="card-header">
-          <h3 class="card-title" title="Historical tracking of system resource usage including memory consumption (RSS, heap) and CPU load average. Data is collected every 5 seconds by the companion service. Useful for monitoring performance and identifying resource-intensive periods">System Resources Over Time</h3>
-          <p class="card-subtitle">Memory usage and CPU load tracking</p>
+          <h3 class="card-title" title="Historical tracking of Companion Service resource usage including memory consumption (heap) and system CPU load average. Data is collected every 5 seconds.">Companion Service Resources Over Time</h3>
+          <p class="card-subtitle">Companion process memory and system CPU load</p>
         </div>
         <div class="card-body">
           <canvas id="systemResourcesChart" class="system-chart-container"></canvas>
@@ -20,8 +20,8 @@ function renderSystemViewTemplate(data) {
       <!-- System Resource Statistics -->
       <div class="card">
         <div class="card-header">
-          <h3 class="card-title" title="Aggregated statistics about system resource usage including peak usage, averages, and trends">System Resource Statistics</h3>
-          <p class="card-subtitle">Peak usage, averages, and resource trends</p>
+          <h3 class="card-title" title="Companion Service resource usage (Node.js process memory and system CPU load)">Companion Service Resources</h3>
+          <p class="card-subtitle">Companion service process statistics</p>
         </div>
         <div class="card-body">
           <div id="systemResourceStats" style="min-height: 200px;"></div>

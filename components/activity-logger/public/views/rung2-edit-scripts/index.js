@@ -29,6 +29,29 @@ const rung2Cache = {
 const RUNG2_ITEMS_PER_PAGE = 50;
 let rung2CurrentPage = 0;
 
+// Helper function to wait for template to load
+function waitForTemplate(templateName, maxWait = 5000) {
+  return new Promise((resolve) => {
+    if (window[templateName]) {
+      resolve();
+      return;
+    }
+    
+    const startTime = Date.now();
+    const checkInterval = 50;
+    
+    const checkTemplate = setInterval(() => {
+      if (window[templateName]) {
+        clearInterval(checkTemplate);
+        resolve();
+      } else if (Date.now() - startTime > maxWait) {
+        clearInterval(checkTemplate);
+        resolve(); // Resolve anyway to prevent hanging
+      }
+    }, checkInterval);
+  });
+}
+
 if (!window.renderRung2EditScriptsTemplate) {
   const templatesScript = document.createElement('script');
   templatesScript.src = 'views/rung2-edit-scripts/templates.js';
@@ -36,7 +59,17 @@ if (!window.renderRung2EditScriptsTemplate) {
   document.head.appendChild(templatesScript);
 }
 
-function renderRung2EditScriptsView(container) {
+async function renderRung2EditScriptsView(container) {
+  // Wait for template to be available
+  if (!window.renderRung2EditScriptsTemplate) {
+    container.innerHTML = '<div class="loading-state">Loading templates...</div>';
+    await waitForTemplate('renderRung2EditScriptsTemplate', 5000);
+  }
+  
+  if (!window.renderRung2EditScriptsTemplate) {
+    return;
+  }
+  
   container.innerHTML = window.renderRung2EditScriptsTemplate();
   
   // Setup debounced filter handlers
@@ -187,10 +220,40 @@ function renderRung2EditScriptsList(scripts, resetPagination = false) {
   }
 
   if (!scripts || scripts.length === 0) {
+    // Check if we can provide more diagnostic information
+    const checkDiagnostics = async () => {
+      try {
+        const apiBase = window.CONFIG?.API_BASE || 'http://localhost:43917';
+        const workspace = getCurrentWorkspace();
+        const url = workspace 
+          ? `${apiBase}/api/rung1/tokens?workspace=${encodeURIComponent(workspace)}&limit=1`
+          : `${apiBase}/api/rung1/tokens?limit=1`;
+        
+        const response = await fetch(url);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && data.tokens && data.tokens.length > 0) {
+            // There is code data, but no edit scripts - might be a processing issue
+            return {
+              hasCodeData: true,
+              message: 'Code changes detected, but no edit scripts generated. This may indicate that the code changes don\'t contain parseable AST differences, or the AST parser encountered issues.'
+            };
+          }
+        }
+      } catch (e) {
+        // Ignore diagnostic errors
+      }
+      return {
+        hasCodeData: false,
+        message: 'No code changes found in Cursor database. Edit scripts are generated from code diffs tracked by Cursor.'
+      };
+    };
+
+    // Show initial message
     listContainer.innerHTML = `
       <div class="rung2-edit-scripts-loading" style="padding: 2rem; text-align: center; color: var(--color-text-muted);">
         <div style="margin-bottom: 0.5rem; font-weight: 500;">No edit scripts found</div>
-        <div style="font-size: 0.875rem; opacity: 0.7; margin-bottom: 1rem;">
+        <div style="font-size: 0.875rem; opacity: 0.7; margin-bottom: 1rem;" id="rung2-empty-state-message">
           Edit scripts are generated from AST differencing of your code changes.<br>
           Click "Extract Data" to process edit scripts from your Cursor database.
         </div>
@@ -199,6 +262,23 @@ function renderRung2EditScriptsList(scripts, resetPagination = false) {
         </button>
       </div>
     `;
+
+    // Run diagnostics asynchronously
+    checkDiagnostics().then(diag => {
+      const messageEl = document.getElementById('rung2-empty-state-message');
+      if (messageEl) {
+        messageEl.innerHTML = `
+          ${diag.message}<br><br>
+          <strong>What are edit scripts?</strong><br>
+          Edit scripts are semantic representations of code changes, extracted by comparing Abstract Syntax Trees (ASTs) before and after modifications. They capture high-level operations like ADD_FUNCTION, MODIFY_IF_CONDITION, ADD_IMPORT, etc.<br><br>
+          <strong>To generate edit scripts:</strong><br>
+          1. Make sure you have code changes tracked in Cursor<br>
+          2. Click "Extract Data" to process your code diffs<br>
+          3. The system will parse your code and extract semantic edit operations
+        `;
+      }
+    });
+
     return;
   }
 
@@ -309,7 +389,7 @@ function selectRung2EditScript(id) {
       <div class="rung2-edit-scripts-detail-label">File Path</div>
       <div class="rung2-edit-scripts-detail-value">
         <code style="background: var(--color-bg-secondary, #f5f5f5); padding: 2px 6px; border-radius: 4px;">${script.filePath || 'Unknown'}</code>
-        <button class="btn-copy" onclick="copyToClipboard('${(script.filePath || '').replace(/'/g, "\\'")}', event)" title="Copy file path">📋</button>
+        <button class="btn-copy" onclick="copyToClipboard('${(script.filePath || '').replace(/'/g, "\\'")}', event)" title="Copy file path"></button>
       </div>
     </div>
     <div class="rung2-edit-scripts-detail-section">
@@ -339,7 +419,7 @@ function selectRung2EditScript(id) {
     <div class="rung2-edit-scripts-detail-section">
       <div class="rung2-edit-scripts-detail-label">
         Edit Operations
-        <button class="btn-copy" onclick="copyToClipboard('${operationsJson.replace(/'/g, "\\'")}', event)" title="Copy operations JSON">📋</button>
+        <button class="btn-copy" onclick="copyToClipboard('${operationsJson.replace(/'/g, "\\'")}', event)" title="Copy operations JSON"></button>
       </div>
       <div class="rung2-edit-scripts-detail-value">
         <pre style="font-size: var(--text-xs, 0.75rem); overflow-x: auto; background: var(--color-bg-secondary, #f5f5f5); padding: var(--space-md, 1rem); border-radius: var(--radius-sm, 0.125rem);">${escapedOperations}</pre>
@@ -484,15 +564,49 @@ async function extractRung2EditScripts() {
       throw new Error(data.error || 'Extraction failed');
     }
     
-    // Show success message
-    listContainer.innerHTML = `<div class="rung2-edit-scripts-loading" style="color: var(--color-success);">
-      ${data.message || `Extracted ${data.count || 0} edit scripts`}. Refreshing...
-    </div>`;
+    const extractedCount = data.count || 0;
     
-    // Refresh data
-    setTimeout(() => {
-      refreshRung2EditScripts();
-    }, 500);
+    // Show success message with helpful information
+    if (extractedCount === 0) {
+      listContainer.innerHTML = `
+        <div class="rung2-edit-scripts-loading" style="padding: 2rem; text-align: center;">
+          <div style="color: var(--color-warning, #f59e0b); margin-bottom: 1rem; font-weight: 500;">
+            Extraction completed, but no edit scripts were generated
+          </div>
+          <div style="font-size: 0.875rem; color: var(--color-text-muted, #666); margin-bottom: 1rem; text-align: left; max-width: 600px; margin-left: auto; margin-right: auto;">
+            <strong>Possible reasons:</strong>
+            <ul style="text-align: left; margin-top: 0.5rem;">
+              <li>No code changes found in Cursor database</li>
+              <li>Code changes don't contain parseable AST differences (e.g., only whitespace changes)</li>
+              <li>AST parser couldn't parse the code (syntax errors, unsupported language)</li>
+              <li>All code changes were in files that couldn't be parsed</li>
+            </ul>
+            <div style="margin-top: 1rem;">
+              <strong>To generate edit scripts:</strong>
+              <ul style="text-align: left; margin-top: 0.5rem;">
+                <li>Make code changes in Cursor (add functions, modify conditions, add imports, etc.)</li>
+                <li>Ensure your code is syntactically valid</li>
+                <li>Supported languages: JavaScript, TypeScript, Python, Java</li>
+                <li>Try refreshing after making new changes</li>
+              </ul>
+            </div>
+          </div>
+          <button class="btn btn-sm" onclick="refreshRung2EditScripts()" style="margin-top: 0.5rem;">
+            Refresh
+          </button>
+        </div>
+      `;
+    } else {
+      // Show success message
+      listContainer.innerHTML = `<div class="rung2-edit-scripts-loading" style="color: var(--color-success, #10b981);">
+        ${data.message || `Extracted ${extractedCount} edit scripts`}. Refreshing...
+      </div>`;
+      
+      // Refresh data
+      setTimeout(() => {
+        refreshRung2EditScripts();
+      }, 500);
+    }
     
   } catch (error) {
     console.error('[RUNG2] Error extracting edit scripts:', error);
@@ -598,7 +712,7 @@ if (!window.copyToClipboard) {
         if (event && event.target) {
           const btn = event.target;
           const originalText = btn.textContent;
-          btn.textContent = '✓';
+          btn.textContent = '';
           setTimeout(() => {
             btn.textContent = originalText;
           }, 1000);
@@ -617,6 +731,18 @@ if (!window.copyToClipboard) {
   };
 }
 
+function toggleRung2Methodology() {
+  const content = document.getElementById('rung2-methodology-content');
+  const arrow = document.getElementById('rung2-methodology-arrow');
+  if (content.style.display === 'none') {
+    content.style.display = 'block';
+    arrow.textContent = '';
+  } else {
+    content.style.display = 'none';
+    arrow.textContent = '';
+  }
+}
+
 window.renderRung2EditScriptsView = renderRung2EditScriptsView;
 window.selectRung2EditScript = selectRung2EditScript;
 window.closeRung2EditScriptsDetails = closeRung2EditScriptsDetails;
@@ -627,4 +753,5 @@ window.refreshRung2EditScripts = refreshRung2EditScripts;
 window.exportRung2EditScripts = exportRung2EditScripts;
 window.rung2NextPage = rung2NextPage;
 window.rung2PreviousPage = rung2PreviousPage;
+window.toggleRung2Methodology = toggleRung2Methodology;
 

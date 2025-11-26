@@ -175,6 +175,61 @@ self.addEventListener('message', (event) => {
       })
     );
   }
+  
+  // Background sync request
+  if (event.data && event.data.type === 'SYNC_DATA') {
+    event.waitUntil(syncDataInBackground());
+  }
+});
+
+/**
+ * Background sync function - fetches data even when tab is closed
+ */
+async function syncDataInBackground() {
+  try {
+    // Get API base URL from stored config or use default
+    const clients = await self.clients.matchAll();
+    if (clients.length === 0) return;
+    
+    // Try to get config from first client
+    const client = clients[0];
+    const apiBase = client.url.includes('localhost') ? 'http://localhost:43917' : 
+                    (client.url.match(/https?:\/\/[^\/]+/) || [])[0] || 'http://localhost:43917';
+    
+    // Fetch latest data
+    const response = await fetch(`${apiBase}/queue?since=0`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    
+    if (response.ok) {
+      const data = await response.json();
+      
+      // Store in IndexedDB via postMessage to client
+      clients.forEach(client => {
+        client.postMessage({
+          type: 'BACKGROUND_SYNC_DATA',
+          data: data
+        });
+      });
+    }
+  } catch (error) {
+    // Silently handle errors in background sync
+  }
+}
+
+// Background sync event (when browser decides to sync)
+self.addEventListener('sync', (event) => {
+  if (event.tag === 'sync-data' || event.tag === 'sync-analytics') {
+    event.waitUntil(syncDataInBackground());
+  }
+});
+
+// Periodic background sync (Chrome/Edge)
+self.addEventListener('periodicsync', (event) => {
+  if (event.tag === 'sync-data' || event.tag === 'sync-analytics') {
+    event.waitUntil(syncDataInBackground());
+  }
 });
 
 console.log('[SW] Service worker loaded');

@@ -14,6 +14,54 @@
 function renderFileGraphView(container) {
   container.innerHTML = window.renderFileGraphViewTemplate();
 
+  // Register cleanup and pause/resume hooks
+  if (window.registerViewCleanup) {
+    window.registerViewCleanup('filegraph', () => {
+      // Cleanup D3 simulation
+      if (window.fileGraphSimulation) {
+        window.fileGraphSimulation.stop();
+        window.fileGraphSimulation = null;
+      }
+      // Cleanup SVG
+      if (window.graphSvg) {
+        window.graphSvg.remove();
+        window.graphSvg = null;
+      }
+      if (window.graphG) {
+        window.graphG = null;
+      }
+      // Cleanup 3D embeddings visualization
+      if (window.embeddings3DState?.cleanup) {
+        window.embeddings3DState.cleanup();
+      }
+    });
+  }
+  
+  if (window.registerViewPauseResume) {
+    window.registerViewPauseResume('filegraph',
+      () => {
+        // Pause D3 simulation
+        if (window.fileGraphSimulation) {
+          window.fileGraphSimulation.stop();
+        }
+        // Pause 3D embeddings animation
+        if (window.embeddings3DState?.pause) {
+          window.embeddings3DState.pause();
+        }
+      },
+      () => {
+        // Resume D3 simulation
+        if (window.fileGraphSimulation) {
+          window.fileGraphSimulation.alpha(0.3).restart();
+        }
+        // Resume 3D embeddings animation
+        if (window.embeddings3DState?.resume) {
+          window.embeddings3DState.resume();
+        }
+      }
+    );
+  }
+
   // Initialize file graph progressively - use idle time for non-critical work
   const initializeHeavy = () => {
     // Main graph - load first (critical)

@@ -550,6 +550,33 @@ a:focus:not(:focus-visible) {
   flex-shrink: 0;
 }
 
+/* Unavailable views (still loading) */
+.nav-link.view-unavailable {
+  opacity: 0.6;
+  cursor: wait;
+  position: relative;
+}
+
+.nav-link.view-unavailable::after {
+  content: '';
+  position: absolute;
+  right: var(--space-md);
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--color-text-muted);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.nav-link.view-unavailable:hover {
+  opacity: 0.8;
+}
+
 /* Sidebar Footer */
 .sidebar-footer {
   padding: var(--space-md);
@@ -653,6 +680,27 @@ a:focus:not(:focus-visible) {
   gap: var(--space-lg, 1.25rem);
 }
 
+@media (max-width: 768px) {
+  .stats-grid {
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: var(--space-md);
+  }
+  
+  .stat-card {
+    min-width: 140px;
+    min-height: 90px;
+    padding: var(--space-md) var(--space-sm);
+  }
+  
+  .stat-value {
+    font-size: 1.5rem;
+  }
+  
+  .stat-label {
+    font-size: 0.625rem;
+  }
+}
+
 .stat-card {
   display: flex;
   flex-direction: column;
@@ -721,6 +769,13 @@ a:focus:not(:focus-visible) {
   color: var(--color-text);
   line-height: 1.1;
   font-variant-numeric: tabular-nums;
+  transition: color var(--transition-fast);
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
+
+.stat-card:hover .stat-value {
+  color: var(--color-primary);
 }
 
 .stat-hint {
@@ -730,6 +785,11 @@ a:focus:not(:focus-visible) {
   margin-top: var(--space-xs, 0.25rem);
   opacity: 0.7;
   font-weight: 400;
+  text-align: center;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Complexity File Item Hover - Darker hover to keep text visible */
@@ -791,6 +851,29 @@ a:focus:not(:focus-visible) {
 @media (max-width: 768px) {
   .view-container {
     padding: var(--space-md);
+  }
+  
+  .stats-grid {
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: var(--space-md);
+  }
+  
+  .stat-card {
+    min-width: 140px;
+    min-height: 90px;
+    padding: var(--space-md) var(--space-sm);
+  }
+  
+  .stat-value {
+    font-size: 1.5rem;
+  }
+  
+  .stat-label {
+    font-size: 0.625rem;
+  }
+  
+  .dashboard-header {
+    padding: var(--space-md) var(--space-lg);
   }
 }
 
@@ -3767,7 +3850,7 @@ textarea:disabled {
 }
 
 .api-endpoint summary::before {
-  content: '▶';
+  content: '';
   display: inline-block;
   margin-right: var(--space-sm);
   transition: transform 0.2s;

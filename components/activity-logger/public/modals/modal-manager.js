@@ -118,6 +118,11 @@ class ModalManager {
     this.getEventTitle = null;
     this.findRelatedPrompts = window.findRelatedPrompts;
     this.groupIntoThreads = window.groupIntoThreads;
+    
+    // Diff cache for better performance
+    this.diffCache = new Map();
+    this.diffCacheTTL = 5 * 60 * 1000; // 5 minutes
+    this.pendingDiffFetches = new Map(); // Prevent duplicate fetches
   }
 
   async showEventModal(eventId) {
@@ -364,38 +369,8 @@ class ModalManager {
                         (details?.after_content && details.after_content.trim().length > 0);
       
       if (hasDiffStats && !hasContent) {
-        // Try to fetch full entry details
-        try {
-          const entryResponse = await fetch(`${window.CONFIG?.API_BASE || 'http://localhost:43917'}/api/entries/${event.id}`);
-          if (entryResponse.ok) {
-            const entryData = await entryResponse.json();
-            if (entryData && entryData.entry) {
-              const entry = entryData.entry;
-              // Merge the full entry data
-              if (entry.before_code && !details.before_content) {
-                details.before_content = entry.before_code;
-              }
-              if (entry.after_code && !details.after_content) {
-                details.after_content = entry.after_code;
-              }
-              if (entry.before_content && !details.before_content) {
-                details.before_content = entry.before_content;
-              }
-              if (entry.after_content && !details.after_content) {
-                details.after_content = entry.after_content;
-              }
-              console.log('[MODAL] Fetched full entry details, content available:', {
-                hasBefore: !!details.before_content,
-                hasAfter: !!details.after_content,
-                beforeLength: details.before_content?.length || 0,
-                afterLength: details.after_content?.length || 0
-              });
-            }
-          }
-        } catch (fetchError) {
-          console.debug('[MODAL] Could not fetch full entry details:', fetchError);
-          // Continue without full content - we'll show what we have
-        }
+        // Try to fetch full entry details with caching
+        details = await this._fetchDiffWithCache(event.id, details);
       }
       
       // Debug: Log code diff data structure
@@ -932,7 +907,7 @@ class ModalManager {
                 <div style="display: flex; gap: var(--space-sm); flex-wrap: wrap; margin-top: var(--space-xs); font-size: var(--text-xs);">
                   ${cmd.cwd ? `
                     <span style="color: var(--color-text-muted); font-family: var(--font-mono);">
-                      📁 ${truncate(cmd.cwd, 40)}
+                      [Folder] ${truncate(cmd.cwd, 40)}
                     </span>
                   ` : ''}
                   ${duration ? `
@@ -1265,19 +1240,64 @@ class ModalManager {
         </div>
         
         <div id="${diffId}_code_view" style="display: block;">
-          ${(details.before_content || details.after_content) && window.renderGitDiff ? `
-            ${window.renderGitDiff(
+          ${(details.before_content || details.after_content) && window.renderGitDiff ? (() => {
+            // Check if diff is very large
+            const beforeLines = (details.before_content || '').split('\n').length;
+            const afterLines = (details.after_content || '').split('\n').length;
+            const totalLines = Math.max(beforeLines, afterLines);
+            const isVeryLarge = totalLines > 500;
+            const initialMaxLines = isVeryLarge ? 200 : 500;
+            
+            const beforeContentStr = JSON.stringify(details.before_content || '');
+            const afterContentStr = JSON.stringify(details.after_content || '');
+            const filePathStr = JSON.stringify(filePath);
+            const escapeHtmlStr = escapeHtml ? 'window.escapeHtml' : '((text) => { const div = document.createElement("div"); div.textContent = text; return div.innerHTML; })';
+            
+            const initialDiff = window.renderGitDiff(
               details.before_content || '',
               details.after_content || '',
               {
-                maxLines: 200,
+                maxLines: initialMaxLines,
                 showLineNumbers: true,
                 collapseUnchanged: true,
                 filePath: filePath,
                 escapeHtml: escapeHtml
               }
-            )}
-          ` : `
+            );
+            
+            if (isVeryLarge) {
+              return `
+                <div id="${diffId}_diff_container">
+                  ${initialDiff}
+                  <div style="padding: var(--space-md); text-align: center; border-top: 1px solid var(--color-border); margin-top: var(--space-md);">
+                    <button onclick="
+                      const container = document.getElementById('${diffId}_diff_container');
+                      const beforeContent = ${beforeContentStr};
+                      const afterContent = ${afterContentStr};
+                      const filePath = ${filePathStr};
+                      const escapeHtmlFn = ${escapeHtmlStr};
+                      const fullDiff = window.renderGitDiff(
+                        beforeContent,
+                        afterContent,
+                        {
+                          maxLines: 10000,
+                          showLineNumbers: true,
+                          collapseUnchanged: false,
+                          filePath: filePath,
+                          escapeHtml: escapeHtmlFn
+                        }
+                      );
+                      container.innerHTML = fullDiff + '<div style=\\'padding: var(--space-sm); text-align: center; color: var(--color-text-muted); font-size: var(--text-xs);\\'>Showing all ${totalLines.toLocaleString()} lines</div>';
+                    " style="padding: var(--space-xs) var(--space-sm); background: var(--color-primary); color: white; border: none; border-radius: var(--radius-sm); cursor: pointer; font-size: var(--text-xs); font-weight: 500;">
+                      Load Full Diff (${totalLines.toLocaleString()} lines)
+                    </button>
+                  </div>
+                </div>
+              `;
+            } else {
+              return initialDiff;
+            }
+          })() : `
             <div style="display: grid; gap: var(--space-md);">
               ${details.before_content ? `
                 <div>
@@ -1506,10 +1526,10 @@ class ModalManager {
                     <span style="font-size: var(--text-xs); color: var(--color-text-muted);">${timeDiffText}</span>
                     ${!prompt.workspaceMatch ? `
                       <span style="font-size: var(--text-xs); color: var(--color-warning); font-weight: 500;" title="Different workspace: ${window.escapeHtml ? window.escapeHtml(prompt.promptWorkspace) : prompt.promptWorkspace}">
-                        ⚠ Different workspace
+                         Different workspace
                       </span>
                     ` : `
-                      <span style="font-size: var(--text-xs); color: var(--color-success); font-weight: 500;">✓ Same workspace</span>
+                      <span style="font-size: var(--text-xs); color: var(--color-success); font-weight: 500;"> Same workspace</span>
                     `}
                   </div>
                   <span class="badge badge-prompt" style="font-size: 10px; padding: 2px 6px;">
@@ -1606,22 +1626,49 @@ class ModalManager {
   
   _buildPromptModalHTML(prompt, promptText, linkedCodeChange, codeDetails) {
     const { escapeHtml } = this;
-    const displayText = promptText.length > 500 ? promptText.substring(0, 500) + '...' : promptText;
+    const promptId = `prompt-${prompt.id || Date.now()}`;
+    const isLong = promptText.length > 1000;
+    const previewLength = 1000;
+    const previewText = isLong ? promptText.substring(0, previewLength) : promptText;
     
     return `
       <div style="display: flex; flex-direction: column; gap: var(--space-xl);">
         
         <!-- Prompt Content -->
         <div>
-          <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">Prompt</h4>
+          <h4 style="margin-bottom: var(--space-md); color: var(--color-text); display: flex; align-items: center; justify-content: space-between;">
+            <span>Prompt</span>
+            ${isLong ? `
+              <span style="font-size: var(--text-xs); color: var(--color-text-muted); font-weight: normal;">
+                ${promptText.length.toLocaleString()} characters
+              </span>
+            ` : ''}
+          </h4>
           <div style="padding: var(--space-lg); background: var(--color-bg); border-radius: var(--radius-md); border-left: 4px solid var(--color-primary);">
-            <div style="font-size: var(--text-sm); color: var(--color-text); line-height: 1.6; white-space: pre-wrap;">
-              ${escapeHtml(displayText)}
+            <div id="${promptId}_preview" style="font-size: var(--text-sm); color: var(--color-text); line-height: 1.6; white-space: pre-wrap; word-wrap: break-word;">
+              ${escapeHtml(previewText)}
+              ${isLong ? '...' : ''}
             </div>
-            ${promptText.length > 500 ? `
-              <div style="margin-top: var(--space-sm); font-size: var(--text-xs); color: var(--color-text-muted);">
-                (Truncated - ${promptText.length} total characters)
+            ${isLong ? `
+              <div id="${promptId}_full" style="display: none; font-size: var(--text-sm); color: var(--color-text); line-height: 1.6; white-space: pre-wrap; word-wrap: break-word; margin-top: var(--space-md);">
+                ${escapeHtml(promptText)}
               </div>
+              <button onclick="
+                const preview = document.getElementById('${promptId}_preview');
+                const full = document.getElementById('${promptId}_full');
+                const btn = this;
+                if (full.style.display === 'none') {
+                  full.style.display = 'block';
+                  preview.style.display = 'none';
+                  btn.textContent = 'Show Less';
+                } else {
+                  full.style.display = 'none';
+                  preview.style.display = 'block';
+                  btn.textContent = 'Show More';
+                }
+              " style="margin-top: var(--space-sm); padding: var(--space-xs) var(--space-sm); background: var(--color-primary); color: white; border: none; border-radius: var(--radius-sm); cursor: pointer; font-size: var(--text-xs); font-weight: 500;">
+                Show More
+              </button>
             ` : ''}
           </div>
         </div>
@@ -1694,8 +1741,33 @@ class ModalManager {
                 diff_stats: codeDetails.diff_stats,
                 ...codeDetails
               }, 'Code generated from this prompt') : 
-              '<div style="padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md); color: var(--color-text-muted); text-align: center;">Code diff details not available</div>'
+              `<div id="diff-loading-${linkedCodeChange.id || Date.now()}" style="padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md);">
+                <div style="text-align: center; color: var(--color-text-muted); margin-bottom: var(--space-sm);">Code diff details not available</div>
+                <button onclick="
+                  const container = this.parentElement;
+                  container.innerHTML = '<div style=\\'text-align: center; padding: var(--space-md);\\'><div style=\\'width: 20px; height: 20px; border: 2px solid var(--color-border); border-top-color: var(--color-primary); border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto;\\'></div><div style=\\'margin-top: var(--space-sm); color: var(--color-text-muted);\\'>Loading diff...</div></div>';
+                  window.modalManager._loadDiffLazy('${linkedCodeChange.id || Date.now()}', container);
+                " style="padding: var(--space-xs) var(--space-sm); background: var(--color-primary); color: white; border: none; border-radius: var(--radius-sm); cursor: pointer; font-size: var(--text-xs);">
+                  Load Diff
+                </button>
+              </div>`
             }
+          </div>
+        ` : ''}
+        
+        <!-- Inline Diff Preview for Prompts (if no linked change but related events exist) -->
+        ${!linkedCodeChange && prompt.id ? `
+          <div>
+            <h4 style="margin-bottom: var(--space-md); color: var(--color-text);">Related Code Changes</h4>
+            <div id="prompt-diff-preview-${prompt.id}" style="padding: var(--space-md); background: var(--color-bg-alt); border-radius: var(--radius-md); border: 1px dashed var(--color-border); text-align: center;">
+              <button onclick="
+                const container = document.getElementById('prompt-diff-preview-${prompt.id}');
+                container.innerHTML = '<div style=\\'text-align: center; padding: var(--space-md);\\'><div style=\\'width: 20px; height: 20px; border: 2px solid var(--color-border); border-top-color: var(--color-primary); border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto;\\'></div><div style=\\'margin-top: var(--space-sm); color: var(--color-text-muted);\\'>Loading related changes...</div></div>';
+                window.modalManager._loadPromptRelatedDiffs('${prompt.id}', container);
+              " style="padding: var(--space-xs) var(--space-sm); background: var(--color-primary); color: white; border: none; border-radius: var(--radius-sm); cursor: pointer; font-size: var(--text-xs);">
+                Show Related Code Changes
+              </button>
+            </div>
           </div>
         ` : ''}
         
@@ -1917,6 +1989,81 @@ class ModalManager {
   }
 
   /**
+   * Fetch diff content with caching to avoid redundant API calls
+   */
+  async _fetchDiffWithCache(eventId, currentDetails) {
+    const cacheKey = `diff-${eventId}`;
+    
+    // Check cache first
+    const cached = this.diffCache.get(cacheKey);
+    if (cached && (Date.now() - cached.timestamp < this.diffCacheTTL)) {
+      console.log('[MODAL] Using cached diff for event:', eventId);
+      return { ...currentDetails, ...cached.data };
+    }
+    
+    // Check if already fetching
+    if (this.pendingDiffFetches.has(cacheKey)) {
+      console.log('[MODAL] Diff fetch already in progress for event:', eventId);
+      try {
+        const result = await this.pendingDiffFetches.get(cacheKey);
+        return { ...currentDetails, ...result };
+      } catch (error) {
+        console.debug('[MODAL] Pending diff fetch failed:', error);
+        return currentDetails;
+      }
+    }
+    
+    // Start new fetch
+    const fetchPromise = (async () => {
+      try {
+        const entryResponse = await fetch(`${window.CONFIG?.API_BASE || 'http://localhost:43917'}/api/entries/${eventId}`);
+        if (entryResponse.ok) {
+          const entryData = await entryResponse.json();
+          if (entryData && entryData.entry) {
+            const entry = entryData.entry;
+            const fetchedDetails = {};
+            
+            // Merge the full entry data
+            if (entry.before_code && !currentDetails.before_content) {
+              fetchedDetails.before_content = entry.before_code;
+            }
+            if (entry.after_code && !currentDetails.after_content) {
+              fetchedDetails.after_content = entry.after_code;
+            }
+            if (entry.before_content && !currentDetails.before_content) {
+              fetchedDetails.before_content = entry.before_content;
+            }
+            if (entry.after_content && !currentDetails.after_content) {
+              fetchedDetails.after_content = entry.after_content;
+            }
+            
+            // Cache the result
+            if (Object.keys(fetchedDetails).length > 0) {
+              this.diffCache.set(cacheKey, {
+                data: fetchedDetails,
+                timestamp: Date.now()
+              });
+              console.log('[MODAL] Fetched and cached diff for event:', eventId);
+            }
+            
+            return fetchedDetails;
+          }
+        }
+        return {};
+      } catch (fetchError) {
+        console.debug('[MODAL] Could not fetch full entry details:', fetchError);
+        return {};
+      } finally {
+        this.pendingDiffFetches.delete(cacheKey);
+      }
+    })();
+    
+    this.pendingDiffFetches.set(cacheKey, fetchPromise);
+    const result = await fetchPromise;
+    return { ...currentDetails, ...result };
+  }
+
+  /**
    * Extract model information from a prompt object
    */
   _extractModelInfoFromPrompt(prompt) {
@@ -1991,6 +2138,79 @@ class ModalManager {
     return info.model === 'Unknown' && 
            info.mode === 'Unknown' && 
            info.provider === 'Unknown';
+  }
+  
+  /**
+   * Lazy load diff for an event
+   */
+  async _loadDiffLazy(eventId, container) {
+    try {
+      const details = await this._fetchDiffWithCache(eventId, {});
+      if (details.before_content || details.after_content) {
+        container.innerHTML = this._buildCodeDiffHTML(details, 'Code diff loaded on demand');
+      } else {
+        container.innerHTML = '<div style="padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md); color: var(--color-text-muted); text-align: center;">Code diff details not available</div>';
+      }
+    } catch (error) {
+      console.error('[MODAL] Error loading diff:', error);
+      container.innerHTML = `<div style="padding: var(--space-md); background: var(--color-bg); border-radius: var(--radius-md); color: var(--color-error); text-align: center;">Error loading diff: ${error.message}</div>`;
+    }
+  }
+  
+  /**
+   * Load related diffs for a prompt
+   */
+  async _loadPromptRelatedDiffs(promptId, container) {
+    try {
+      // Find related events within 5 minutes of the prompt
+      const prompt = this.state?.data?.prompts?.find(p => p.id === promptId || String(p.id) === String(promptId));
+      if (!prompt) {
+        container.innerHTML = '<div style="padding: var(--space-md); color: var(--color-text-muted); text-align: center;">Prompt not found</div>';
+        return;
+      }
+      
+      const promptTime = new Date(prompt.timestamp).getTime();
+      const relatedEvents = (this.state?.data?.events || []).filter(e => {
+        const eventTime = new Date(e.timestamp).getTime();
+        const timeDiff = Math.abs(eventTime - promptTime);
+        return timeDiff < 5 * 60 * 1000 && (e.type === 'file_change' || e.type === 'code_change');
+      }).slice(0, 3); // Limit to 3 most recent
+      
+      if (relatedEvents.length === 0) {
+        container.innerHTML = '<div style="padding: var(--space-md); color: var(--color-text-muted); text-align: center;">No related code changes found</div>';
+        return;
+      }
+      
+      let html = '<div style="display: flex; flex-direction: column; gap: var(--space-md);">';
+      for (const event of relatedEvents) {
+        const eventDetails = typeof event.details === 'string' ? JSON.parse(event.details) : (event.details || {});
+        const hasContent = eventDetails.before_content || eventDetails.after_content || event.before_code || event.after_code;
+        
+        if (!hasContent) {
+          // Try to fetch with cache
+          const fetchedDetails = await this._fetchDiffWithCache(event.id, eventDetails);
+          if (fetchedDetails.before_content || fetchedDetails.after_content) {
+            html += this._buildCodeDiffHTML({
+              ...fetchedDetails,
+              file_path: eventDetails.file_path || event.file_path,
+              diff_stats: eventDetails.diff_stats
+            }, `Change from ${new Date(event.timestamp).toLocaleTimeString()}`);
+          }
+        } else {
+          html += this._buildCodeDiffHTML({
+            before_content: eventDetails.before_content || event.before_code,
+            after_content: eventDetails.after_content || event.after_code,
+            file_path: eventDetails.file_path || event.file_path,
+            diff_stats: eventDetails.diff_stats
+          }, `Change from ${new Date(event.timestamp).toLocaleTimeString()}`);
+        }
+      }
+      html += '</div>';
+      container.innerHTML = html;
+    } catch (error) {
+      console.error('[MODAL] Error loading related diffs:', error);
+      container.innerHTML = `<div style="padding: var(--space-md); color: var(--color-error); text-align: center;">Error loading related changes: ${error.message}</div>`;
+    }
   }
 }
 

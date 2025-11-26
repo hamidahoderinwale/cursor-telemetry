@@ -1,83 +1,70 @@
 # Cursor Companion Service
 
-A local-first companion service for the Cursor Activity Logger that provides file watching, AI-powered annotations, natural language state management, and comprehensive data capture.
+> **APPLICATION 1: Backend Data Collection & Export API**
+> 
+> This is the **standalone companion service** - a headless backend that captures development data and provides a complete REST API for export and analysis. **No dashboard UI is required to run this service.**
 
-## Features
+---
 
-### Core Data Capture
-- **File Watcher**: Monitors code changes using Chokidar with diff detection
-- **Cursor Database Mining**: Extracts AI prompts from Cursor's internal database
-- **Terminal Monitoring**: Captures shell commands and process execution
-- **System Metrics**: CPU, memory, and load average tracking
-- **Git Integration**: Commit and branch activity monitoring
+## What You Get
 
-### AI-Powered Features
-- **Event Annotation**: Automatic AI-generated descriptions for events
-- **Intent Classification**: Classifies development activity (feature, bug-fix, refactor, etc.)
-- **State Summarization**: Generates summaries for development states
-- **Natural Language Parser**: Parses commands like "Fork a state for trying authentication"
-- **Semantic Search**: Embedding-based search using OpenRouter API
+**Real-time Data Capture**
+- File changes with full diffs
+- AI prompts from Cursor
+- Terminal commands
+- System metrics (CPU, memory)
+- IDE state tracking
 
-### State Management
-- **State Creation**: Create development states with snapshots
-- **State Forking**: Fork states for experiments and features
-- **State Merging**: Merge states with conflict detection
-- **State Recommendations**: Intelligent suggestions for unfinished experiments
-- **State Graph**: Visual representation of state relationships
+**Historical Mining**
+- Git commit history
+- Shell history (.bash_history, .zsh_history)
+- Cursor log parsing
+- File timeline reconstruction
 
-### API & Integration
-- **REST API**: 50+ endpoints for data access and control
-- **WebSocket Server**: Real-time updates via Socket.IO
-- **MCP Server**: JSON-RPC integration with Cursor (optional)
-- **SQLite Database**: Persistent storage with comprehensive indexing
+**Complete REST API**
+- 50+ endpoints for data access
+- Export in JSON, CSV, SQLite formats
+- Privacy-preserving rungs system
+- Shareable links with controls
+
+**AI-Powered Features** (Optional)
+- Event annotations
+- Intent classification
+- State management
+- Semantic search
+- Natural language interface
+
+**What's NOT Included**
+- No dashboard UI
+- No visualizations
+- No web interface
+
+---
 
 ## Quick Start
 
-1. **Install dependencies**:
-   ```bash
-   cd companion
-   npm install
-   ```
+### Prerequisites
+- Node.js 16+
+- Cursor IDE (for prompt mining)
+- Optional: OpenRouter API key (for AI features)
 
-2. **Configure OpenRouter API** (optional but recommended):
-   ```bash
-   # Set environment variable
-   export OPENROUTER_API_KEY=your_api_key_here
-   
-   # Or create .env file
-   echo "OPENROUTER_API_KEY=your_api_key_here" > .env
-   ```
-
-3. **Start the service**:
-   ```bash
-   npm start
-   # or
-   node src/index.js
-   ```
-
-The service will:
-- Start HTTP server on `http://localhost:43917`
-- Initialize SQLite database at `data/companion.db`
-- Begin monitoring workspace directories
-- Start Cursor database mining (extracts prompts every 10s)
-- Enable AI features if OpenRouter API key is configured
-
-## Configuration
-
-### Environment Variables
+### Installation
 
 ```bash
-# Required for AI features
-OPENROUTER_API_KEY=your_api_key_here
+# 1. Navigate to companion directory
+cd cursor-telemetry/components/activity-logger/companion
 
-# Optional: Customize models
-OPENROUTER_EMBEDDING_MODEL=openai/text-embedding-3-small
-OPENROUTER_CHAT_MODEL=microsoft/phi-3-mini-128k-instruct:free
+# 2. Install dependencies
+npm install
+
+# 3. Configure (optional)
+cp env.example .env
+# Edit .env to add OPENROUTER_API_KEY if you want AI features
 ```
 
-### config.json
+### Configuration
 
-Located at `companion/config.json`:
+Edit `config.json`:
 
 ```json
 {
@@ -85,259 +72,526 @@ Located at `companion/config.json`:
   "auto_detect_workspaces": true,
   "port": 43917,
   "enable_clipboard": true,
-  "enable_screenshots": true,
-  "enable_mcp": false,
-  "ignore": ["node_modules", ".git", "dist"],
-  "cursor_db_poll_interval": 10000,
-  "max_file_size_mb": 5
+  "ignore": ["node_modules", ".git", "dist"]
 }
 ```
 
-## API Endpoints
+### Start the Service
 
-### AI & Annotations
+```bash
+# Start the service
+node src/index.js
 
-- `POST /api/ai/embeddings` - Generate embeddings for text
-- `POST /api/ai/chat` - Chat completions
-- `GET /api/ai/status` - Check AI service availability
-- `POST /api/annotations/event` - Annotate a single event
-- `POST /api/annotations/events/batch` - Batch annotate events
-- `POST /api/annotations/intent` - Classify intent for events
-- `POST /api/annotations/state-summary` - Generate state summary
-- `GET /api/annotations/events/:eventId` - Get annotations for event
-- `POST /api/annotations/refresh` - Re-annotate events
+# Service will start on http://localhost:43917
+```
 
-### State Management
+The service runs as a background process with:
+- HTTP REST API on port 43917
+- SQLite database at `data/companion.db`
+- Automatic workspace monitoring
+- Cursor prompt mining (every 10 seconds)
 
-- `POST /api/states/parse-command` - Parse natural language command
-- `POST /api/states/execute` - Execute natural language command
-- `POST /api/states/search` - Semantic search states
-- `GET /api/states/recommendations` - Get state recommendations
-- `GET /api/states` - List all states
-- `POST /api/states` - Create new state
-- `POST /api/states/:id/fork` - Fork a state
-- `GET /api/states/:id1/diff/:id2` - Get state diff
+---
 
-### Core Data
+## Usage Examples
 
-- `GET /api/data` - Complete dataset
-- `GET /api/entries` - File change history
-- `GET /api/prompts` - AI prompts with metadata
-- `GET /api/events` - Activity timeline
-- `GET /api/activity` - Combined activity feed
+### Export All Data
 
-### Analytics
+```bash
+# Export everything as JSON
+curl http://localhost:43917/api/export/data > export.json
 
-- `GET /api/analytics/context` - Context usage statistics
-- `GET /api/analytics/productivity` - Productivity metrics
-- `GET /api/analytics/errors` - Error statistics
+# Export as CSV
+curl http://localhost:43917/api/export/csv > entries.csv
+
+# Download SQLite database
+curl http://localhost:43917/api/export/database --output companion.db
+```
+
+### Export with Privacy Rungs
+
+```bash
+# Clio - Workflow patterns only (highest privacy)
+curl "http://localhost:43917/api/export/data?rung=clio" > clio.json
+
+# Module Graph - File dependencies (high privacy)
+curl "http://localhost:43917/api/export/data?rung=module_graph" > modules.json
+
+# Rung 3 - Function-level changes (medium privacy)
+curl "http://localhost:43917/api/export/data?rung=rung3" > functions.json
+
+# Rung 2 - Edit scripts (low privacy)
+curl "http://localhost:43917/api/export/data?rung=rung2" > edits.json
+
+# Rung 1 - Tokens (lowest privacy, PII redacted)
+curl "http://localhost:43917/api/export/data?rung=rung1" > tokens.json
+```
+
+### Query Real-Time Data
+
+```bash
+# Get recent file changes
+curl "http://localhost:43917/api/entries?limit=100"
+
+# Get AI prompts
+curl "http://localhost:43917/api/prompts?limit=50"
+
+# Get activity timeline
+curl "http://localhost:43917/api/events?limit=100"
+
+# Get terminal commands
+curl "http://localhost:43917/api/terminal/commands?limit=50"
+```
+
+### Historical Mining
+
+```bash
+# Mine git history for a workspace
+curl -X POST http://localhost:43917/api/mining/workspace \
+  -H "Content-Type: application/json" \
+  -d '{
+    "workspace": "/path/to/your/project",
+    "includeGit": true,
+    "includeShell": true,
+    "includeCursorLogs": true,
+    "sinceDays": 365
+  }'
+
+# Get mined commits
+curl "http://localhost:43917/api/historical/commits?limit=100"
+
+# Get mined shell commands
+curl "http://localhost:43917/api/historical/commands?limit=100"
+
+# Get mining statistics
+curl "http://localhost:43917/api/historical/stats"
+```
+
+### Create Shareable Links
+
+```bash
+# Create a time-limited share link
+curl -X POST http://localhost:43917/api/share/create \
+  -H "Content-Type: application/json" \
+  -d '{
+    "workspaces": ["/path/to/workspace"],
+    "abstractionLevel": 1,
+    "expirationDays": 7,
+    "name": "Project Alpha - Q4 2024",
+    "filters": {
+      "dateFrom": "2024-01-01",
+      "dateTo": "2024-12-31"
+    }
+  }'
+
+# Returns: { "success": true, "shareId": "abc123", "url": "http://..." }
+
+# Access shared data (send this URL to others)
+curl "http://localhost:43917/api/share/abc123"
+```
+
+---
+
+## Complete API Reference
+
+### Data Export Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/data` | GET | Complete dataset |
+| `/api/export/data` | GET | Export with privacy controls (`?rung=`) |
+| `/api/export/csv` | GET | Export entries as CSV |
+| `/api/export/database` | GET | Download SQLite database |
+| `/api/entries` | GET | File change history |
+| `/api/prompts` | GET | AI prompts with metadata |
+| `/api/events` | GET | Activity timeline |
+| `/api/terminal/commands` | GET | Terminal command history |
+
+### Historical Mining Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/mining/workspace` | POST | Mine all data for workspace |
+| `/api/mining/git-history` | POST | Mine git history only |
+| `/api/mining/shell-history` | POST | Mine shell history only |
+| `/api/mining/cursor-logs` | POST | Mine Cursor logs only |
+| `/api/mining/file-timeline` | POST | Mine file timestamps only |
+| `/api/mining/status` | GET | Get current mining status |
+| `/api/historical/commits` | GET | Get mined git commits |
+| `/api/historical/commands` | GET | Get mined shell commands |
+| `/api/historical/prompts` | GET | Get recovered prompts |
+| `/api/historical/stats` | GET | Get historical statistics |
+| `/api/historical/mining-runs` | GET | Get mining history |
+
+### Sharing Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/share/create` | POST | Create shareable link |
+| `/api/share/:shareId` | GET | Access shared data |
+| `/api/share/:shareId/info` | GET | Get share metadata |
+| `/api/share` | GET | List all share links |
+| `/api/share/:shareId` | DELETE | Delete share link |
+
+### Analytics Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/analytics/productivity` | GET | Productivity metrics |
+| `/api/analytics/context` | GET | Context window usage |
+| `/api/analytics/errors` | GET | Error tracking |
+| `/api/analytics/combined` | GET | Combined real-time + historical |
+
+### AI Endpoints (requires OpenRouter API key)
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/ai/embeddings` | POST | Generate embeddings |
+| `/api/ai/chat` | POST | Chat completions |
+| `/api/ai/status` | GET | Check AI availability |
+| `/api/annotations/event` | POST | Annotate event |
+| `/api/annotations/intent` | POST | Classify intent |
+| `/api/states/parse-command` | POST | Parse natural language |
+| `/api/states/search` | POST | Semantic state search |
 
 ### Health & Status
 
-- `GET /health` - Service health check
-- `GET /stats` - Activity statistics
-- `GET /config` - Current configuration
-- `POST /config` - Update configuration
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/health` | GET | Service health check |
+| `/stats` | GET | Activity statistics |
+| `/config` | GET | Current configuration |
+| `/config` | POST | Update configuration |
 
-## Services
+---
 
-### Event Annotation Service
+## Production Deployment
 
-Automatically annotates events with AI-generated descriptions:
-
-```javascript
-const EventAnnotationService = require('./services/event-annotation-service');
-const service = new EventAnnotationService();
-
-// Annotate an event
-const annotation = await service.annotateEvent(event, {
-  recentEvents: [...]
-});
-
-// Classify intent
-const classification = await service.classifyIntent(events);
-
-// Generate state summary
-const summary = await service.generateStateSummary(events, fileChanges);
-```
-
-### State Manager
-
-Manages development states with fork/merge capabilities:
-
-```javascript
-const StateManager = require('./services/state-manager');
-const manager = new StateManager(persistentDB);
-
-// Create state
-const state = await manager.createState('Feature: Auth', 'Authentication implementation');
-
-// Fork state
-const forked = await manager.forkState(sourceId, 'Experiment: JWT', 'Testing JWT approach');
-
-// Merge states
-const mergePlan = await manager.mergeStates([sourceId1, sourceId2], targetId);
-
-// List states
-const states = await manager.listStates({ intent: 'experiment' }, 'authentication');
-```
-
-### Natural Language Parser
-
-Parses natural language commands into structured actions:
-
-```javascript
-const NaturalLanguageParser = require('./services/natural-language-parser');
-const parser = new NaturalLanguageParser();
-
-// Parse command
-const parsed = await parser.parseCommand('Fork a state for trying authentication');
-// Returns: { action: 'fork', intent: 'experiment', topic: 'authentication' }
-```
-
-## Database Schema
-
-### Events Table
-- `id` - Unique identifier
-- `session_id` - Session identifier
-- `workspace_path` - Workspace path
-- `timestamp` - Event timestamp
-- `type` - Event type (file_change, state_fork, etc.)
-- `details` - JSON details
-- `annotation` - AI-generated annotation
-- `intent` - Classified intent
-- `tags` - JSON array of tags
-- `ai_generated` - Boolean flag
-- `annotation_id` - Foreign key to annotations table
-
-### States Table
-- `id` - Unique identifier
-- `name` - State name
-- `description` - State description
-- `parent_id` - Parent state (for forks)
-- `created_at` - Creation timestamp
-- `workspace_path` - Workspace path
-- `snapshot_hash` - Snapshot identifier
-- `metadata` - JSON metadata (intent, tags, etc.)
-
-### Annotations Table
-- `id` - Unique identifier
-- `event_id` - Foreign key to events
-- `type` - Annotation type (event_summary, intent_classification, state_summary)
-- `content` - Annotation content
-- `ai_generated` - Boolean flag
-- `model_name` - AI model used
-- `confidence` - Confidence score
-- `tags` - JSON array of tags
-- `created_at` - Creation timestamp
-
-## Development
-
-### Adding New Services
-
-1. Create service file in `src/services/`
-2. Export service class
-3. Initialize in `src/index.js`
-4. Create routes in `src/routes/` if needed
-
-### Adding New Routes
-
-1. Create route file in `src/routes/`
-2. Export route creation function
-3. Register in `src/index.js`:
-   ```javascript
-   const createMyRoutes = require('./routes/my-routes');
-   createMyRoutes({ app, persistentDB });
-   ```
-
-## Deployment
-
-### Docker
+### Using PM2
 
 ```bash
-docker build -f infra/docker/Dockerfile.companion -t cursor-companion .
+# Install PM2
+npm install -g pm2
+
+# Start service
+pm2 start src/index.js --name cursor-companion
+
+# Enable auto-start on reboot
+pm2 save
+pm2 startup
+
+# Monitor logs
+pm2 logs cursor-companion
+
+# Manage service
+pm2 stop cursor-companion
+pm2 restart cursor-companion
+pm2 delete cursor-companion
+```
+
+### Using Docker
+
+```bash
+# Build image
+docker build -f ../../../infra/docker/Dockerfile.companion -t cursor-companion .
+
+# Run container
 docker run -d \
   --name cursor-companion \
   -p 43917:43917 \
-  -e OPENROUTER_API_KEY=your_key \
+  -e OPENROUTER_API_KEY=your_key_here \
   -v $(pwd)/data:/app/data \
   cursor-companion
+
+# View logs
+docker logs -f cursor-companion
+
+# Stop container
+docker stop cursor-companion
+```
+
+### Using systemd (Linux)
+
+```bash
+# Create service file: /etc/systemd/system/cursor-companion.service
+[Unit]
+Description=Cursor Companion Service
+After=network.target
+
+[Service]
+Type=simple
+User=youruser
+WorkingDirectory=/path/to/cursor-telemetry/components/activity-logger/companion
+ExecStart=/usr/bin/node src/index.js
+Restart=on-failure
+Environment="OPENROUTER_API_KEY=your_key_here"
+
+[Install]
+WantedBy=multi-user.target
+
+# Enable and start
+sudo systemctl enable cursor-companion
+sudo systemctl start cursor-companion
+sudo systemctl status cursor-companion
 ```
 
 ### Environment Variables for Production
 
 ```bash
+# Server configuration
 PORT=43917
-HOST=0.0.0.0
+HOST=0.0.0.0  # Allow external connections
 NODE_ENV=production
-OPENROUTER_API_KEY=your_api_key
+
+# AI features (optional)
+OPENROUTER_API_KEY=your_api_key_here
+OPENROUTER_EMBEDDING_MODEL=openai/text-embedding-3-small
+OPENROUTER_CHAT_MODEL=microsoft/phi-3-mini-128k-instruct:free
+
+# Mining configuration
+AUTO_MINING_ENABLED=true
+MINING_GIT_HISTORY_DAYS=365
+MINING_WEEKLY_BACKFILL=true
+MINING_BACKFILL_DAY=0  # 0=Sunday
+MINING_BACKFILL_HOUR=2  # 2 AM
+
+# Logging
+LOG_LEVEL=info
 ```
+
+---
+
+## Privacy & Rungs System
+
+### 5 Levels of Privacy-Preserving Abstraction
+
+1. **Clio (Motifs)** - Highest Privacy
+   - Workflow patterns only
+   - No code, no file names
+   - Use case: Share with anyone, public
+
+2. **Module Graph** - High Privacy
+   - File-level dependencies
+   - No code content
+   - Use case: Architecture overview
+
+3. **Rung 3 (Functions)** - Medium Privacy
+   - Function signatures and changes
+   - No implementation details
+   - Use case: Technical reviews
+
+4. **Rung 2 (Edit Scripts)** - Low Privacy
+   - Semantic edit operations
+   - AST-based transformations
+   - Use case: Code review without full code
+
+5. **Rung 1 (Tokens)** - Lowest Privacy
+   - Token-level changes
+   - PII redacted
+   - Use case: AI training datasets
+
+**Export with Rungs:**
+```bash
+curl "http://localhost:43917/api/export/data?rung=clio" > export.json
+```
+
+**Share with Rungs:**
+```bash
+curl -X POST http://localhost:43917/api/share/create \
+  -H "Content-Type: application/json" \
+  -d '{"abstractionLevel": 1, "workspaces": ["/path"]}'
+```
+
+---
+
+## Data Storage
+
+### Database Location
+```
+companion/data/companion.db
+```
+
+### Tables
+
+**Real-Time Data:**
+- `entries` - File changes
+- `prompts` - AI prompts
+- `events` - Activity timeline
+- `terminal_commands` - Shell commands
+- `context_snapshots` - Context at prompt time
+- `conversations` - Conversation threads
+
+**Historical Data:**
+- `historical_commits` - Git commits
+- `historical_branches` - Git branches
+- `historical_diffs` - Commit diffs
+- `historical_commands` - Shell history
+- `historical_prompts` - Recovered prompts
+- `file_timestamps` - File timeline
+- `mining_runs` - Mining operation history
+
+**Sharing:**
+- `share_links` - Shareable link metadata
+
+**AI & States:**
+- `annotations` - AI-generated annotations
+- `states` - Development states
+- `embeddings` - Semantic embeddings
+
+---
 
 ## Architecture
 
 ```
-Companion Service
-├── Data Capture
-│   ├── File Watcher (Chokidar)
-│   ├── Cursor DB Parser
-│   ├── Terminal Monitor
-│   └── System Metrics
-├── AI Services
-│   ├── Event Annotation Service
-│   ├── Natural Language Parser
-│   └── Embedding Service (OpenRouter)
-├── State Management
-│   ├── State Manager
-│   ├── State Recommender
-│   └── State Graph Generator
-├── Database
-│   ├── SQLite (persistent-db.js)
-│   └── Schema Migrations
-└── API Routes
-    ├── Core Data Routes
-    ├── AI Routes
-    ├── Annotation Routes
-    └── State Routes
+Companion Service (Port 43917)
+├── HTTP REST API (Express)
+├── WebSocket Server (Socket.IO)
+└── Services
+    ├── Data Capture
+    │   ├── File Watcher (Chokidar)
+    │   ├── Cursor DB Miner
+    │   ├── Terminal Monitor
+    │   ├── System Metrics
+    │   └── IDE State (AppleScript)
+    ├── Historical Mining
+    │   ├── Git History Miner
+    │   ├── Shell History Parser
+    │   ├── Cursor Log Parser
+    │   └── File Timeline Scanner
+    ├── Analytics Engine
+    │   ├── Productivity Metrics
+    │   ├── Context Usage
+    │   └── Error Tracking
+    ├── Abstraction Engine
+    │   ├── Rung 1-5 Processors
+    │   ├── Module Graph Generator
+    │   └── Clio Pattern Extractor
+    └── AI Services (Optional)
+        ├── Event Annotation
+        ├── Intent Classification
+        ├── State Management
+        └── Semantic Search
 ```
 
-## Privacy & Security
+---
 
-- All data stays local by default (127.0.0.1)
-- SQLite database stored locally
-- OpenRouter API calls made from server (API key required)
-- No cloud communication unless explicitly configured
-- Optional authentication for production deployments
+## Integrating with the Dashboard
+
+**Want the full visualization experience?** See the [main README](../../../README.md) for setting up the complete dashboard.
+
+The companion service **automatically serves the dashboard** at:
+```
+http://localhost:43917/dashboard.html
+```
+
+But if you only want the API, you can ignore the dashboard entirely.
+
+---
 
 ## Troubleshooting
 
+### Service Won't Start
+
+```bash
+# Check if port is in use
+lsof -i :43917
+
+# Kill existing process
+kill -9 $(lsof -t -i:43917)
+
+# Check logs
+tail -f companion.log
+tail -f companion.error.log
+```
+
+### No Data Being Captured
+
+```bash
+# Verify workspace configuration
+cat config.json
+
+# Check file watcher is working
+# Add debug logging to config.json
+{
+  "log_level": "debug"
+}
+
+# Verify Cursor database access
+ls -la ~/Library/Application\ Support/Cursor/User/globalStorage/state.vscdb
+```
+
+### Historical Mining Fails
+
+```bash
+# Check git is installed
+git --version
+
+# Verify workspace is a git repo
+cd /path/to/workspace && git status
+
+# Check mining status
+curl http://localhost:43917/api/mining/status
+
+# View mining history
+curl http://localhost:43917/api/historical/mining-runs
+```
+
 ### AI Features Not Working
 
-1. Check OpenRouter API key is set:
-   ```bash
-   echo $OPENROUTER_API_KEY
-   ```
+```bash
+# Verify API key is set
+echo $OPENROUTER_API_KEY
 
-2. Verify API status:
-   ```bash
-   curl http://localhost:43917/api/ai/status
-   ```
+# Check AI status
+curl http://localhost:43917/api/ai/status
 
-3. Check logs for API errors
+# Expected response:
+# {"success": true, "available": true}
+```
 
-### States Not Appearing
+### Database Errors
 
-1. Verify database schema is initialized
-2. Check `data/companion.db` exists
-3. Review logs for state creation errors
+```bash
+# Check database file permissions
+ls -la data/companion.db
 
-### Database Issues
+# Verify SQLite is working
+sqlite3 data/companion.db "SELECT COUNT(*) FROM entries;"
 
-1. Check database file permissions
-2. Verify SQLite is installed
-3. Review migration logs in console
+# Reset database (WARNING: deletes all data)
+rm data/companion.db
+# Restart service to recreate
+```
+
+---
+
+## Performance
+
+### Resource Usage
+- **CPU:** 1-5% idle, 10-20% during mining
+- **Memory:** 100-300 MB
+- **Disk:** Minimal writes (SQLite)
+- **Network:** Only for AI features (if enabled)
+
+### Optimization Tips
+- Disable AI features if not needed
+- Increase `cursor_db_poll_interval` for less frequent polling
+- Use `.ignore` patterns to skip large directories
+- Schedule mining during off-hours
+- Use `includeDiffs: false` for faster git mining
+
+---
 
 ## Related Documentation
 
-- Main README: `../../README.md`
-- Dashboard README: `../README.md`
-- API Documentation: Available at `http://localhost:43917/dashboard.html#api-docs`
+- [Main README](../../../README.md) - Choose between companion-only or full dashboard
+- [Dashboard README](../README.md) - Full dashboard features
+- [Database Schema](../../../docs/DATABASE_SCHEMA.json) - Complete schema
+- [Data Types](../../../docs/DATA_TYPES.json) - Privacy levels & rungs
+
+---
+
+## Support
+
+- Issues: https://github.com/hamidahoderinwale/cursor-telemetry/issues
+- API Docs: http://localhost:43917/dashboard.html#api-docs (if dashboard is enabled)

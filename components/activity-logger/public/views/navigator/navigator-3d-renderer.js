@@ -330,7 +330,11 @@ function renderNavigator3D(container, nodes, links) {
   
   // Animation loop
   let animationId = null;
+  let isPaused = false;
+  
   function animate() {
+    if (isPaused) return;
+    
     animationId = requestAnimationFrame(animate);
     
     if (controls && controls.update) {
@@ -349,6 +353,22 @@ function renderNavigator3D(container, nodes, links) {
   
   // Store animation ID for cleanup
   navigatorState.animationId3D = animationId;
+  
+  // Pause/resume functions
+  navigatorState.pause3D = function() {
+    isPaused = true;
+    if (animationId) {
+      cancelAnimationFrame(animationId);
+      animationId = null;
+    }
+  };
+  
+  navigatorState.resume3D = function() {
+    if (isPaused) {
+      isPaused = false;
+      animate();
+    }
+  };
   
   // Handle resize
   function onWindowResize() {

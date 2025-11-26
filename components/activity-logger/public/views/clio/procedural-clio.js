@@ -14,6 +14,7 @@ function renderProceduralClioView(container) {
     initializeMotifMap();
     initializeMotifDetailsPanel();
     initializeMotifFilters();
+    initializeTimeline();
     
     // Load data
     loadProceduralClioData();
@@ -21,39 +22,9 @@ function renderProceduralClioView(container) {
 }
 
 /**
- * Initialize Summary Bar (Top Row)
+ * Update Summary Bar with data (Rung 6)
  */
-function initializeSummaryBar() {
-  // Will be populated with API data
-  const summaryBar = document.getElementById('clio-summary-bar');
-  if (!summaryBar) return;
-  
-  // Placeholder - will fetch from API
-  updateSummaryBar({
-    intentDistribution: {
-      FIX_BUG: 29,
-      ADD_FEATURE: 22,
-      REFACTOR: 17,
-      TEST: 15,
-      DOCUMENT: 10,
-      OTHER: 7
-    },
-    modelHumanMix: {
-      model: 61,
-      human: 39
-    },
-    avgWorkflowLength: 8.2,
-    clusterCoverage: {
-      motifs: 12,
-      coverage: 87
-    }
-  });
-}
-
-  /**
-   * Update Summary Bar with data (Rung 6)
-   */
-  function updateSummaryBar(data) {
+function updateSummaryBar(data) {
     const summaryBar = document.getElementById('clio-summary-bar');
     if (!summaryBar) return;
     
@@ -107,6 +78,36 @@ function initializeSummaryBar() {
       </div>
     `;
   }
+
+/**
+ * Initialize Summary Bar (Top Row)
+ */
+function initializeSummaryBar() {
+  // Will be populated with API data
+  const summaryBar = document.getElementById('clio-summary-bar');
+  if (!summaryBar) return;
+  
+  // Placeholder - will fetch from API
+  updateSummaryBar({
+    intentDistribution: {
+      FIX_BUG: 29,
+      ADD_FEATURE: 22,
+      REFACTOR: 17,
+      TEST: 15,
+      DOCUMENT: 10,
+      OTHER: 7
+    },
+    modelHumanMix: {
+      model: 61,
+      human: 39
+    },
+    avgWorkflowLength: 8.2,
+    clusterCoverage: {
+      motifs: 12,
+      coverage: 87
+    }
+  });
+}
 
 /**
  * Initialize Motif Map (Central Visual)
@@ -178,10 +179,10 @@ function initializeMotifMap() {
   checkDimensions();
 }
 
-  /**
-   * Load and render motif map data (Rung 6 only)
-   */
-  async function loadMotifMapData() {
+/**
+ * Load and render motif map data (Rung 6 only)
+ */
+async function loadMotifMapData() {
     const { contentGroup } = window.clioMotifMap || {};
     if (!contentGroup) {
       console.error('[CLIO] Cannot load motif data: map not initialized');
@@ -211,8 +212,10 @@ function initializeMotifMap() {
       
       if (motifs.length === 0) {
         renderMotifMapPlaceholder('No motifs found. Motifs will appear as patterns are detected in your code changes.');
+        renderClioTimeline([]);
       } else {
         renderMotifMap(motifs);
+        renderClioTimeline(motifs);
       }
     } catch (error) {
       console.error('[CLIO] Failed to load motif data:', error);
@@ -229,7 +232,7 @@ function initializeMotifMap() {
       
       renderMotifMapPlaceholder(errorMessage);
     }
-  }
+}
 
 /**
  * Render motif bubbles on map
@@ -465,10 +468,10 @@ function selectMotif(motif) {
   updateMotifDetailsPanel(motif);
 }
 
-  /**
-   * Initialize Motif Filters (Rung 6 only - no rung selector)
-   */
-  function initializeMotifFilters() {
+/**
+ * Initialize Motif Filters (Rung 6 only - no rung selector)
+ */
+function initializeMotifFilters() {
     const filtersContainer = document.getElementById('clio-motif-filters');
     if (!filtersContainer) return;
     
@@ -515,12 +518,12 @@ function selectMotif(motif) {
         </select>
       </div>
     `;
-  }
+}
 
-  /**
-   * Apply motif filters
-   */
-  window.applyMotifFilters = async function() {
+/**
+ * Apply motif filters
+ */
+window.applyMotifFilters = async function() {
     const intentClass = document.getElementById('filter-intent')?.value || '';
     const shape = document.getElementById('filter-shape')?.value || '';
     const complexity = document.getElementById('filter-complexity')?.value || '';
@@ -545,7 +548,7 @@ function selectMotif(motif) {
     } catch (error) {
       console.warn('[MOTIF] Failed to apply filters:', error.message);
     }
-  };
+};
 
 /**
  * Initialize Motif Details Panel
@@ -562,10 +565,10 @@ function initializeMotifDetailsPanel() {
   `;
 }
 
-  /**
-   * Update Motif Details Panel (Rung 6 only)
-   */
-  async function updateMotifDetailsPanel(motif) {
+/**
+ * Update Motif Details Panel (Rung 6 only)
+ */
+async function updateMotifDetailsPanel(motif) {
     const panel = document.getElementById('clio-motif-details');
     if (!panel) return;
     
@@ -584,12 +587,12 @@ function initializeMotifDetailsPanel() {
       console.warn('[MOTIF] Failed to load motif details:', error.message);
       renderMotifDetails(motif); // Use basic data
     }
-  }
+}
 
-  /**
-   * Render motif details (Rung 6 - motif structure only, no code/DAG details)
-   */
-  function renderMotifDetails(motif) {
+/**
+ * Render motif details (Rung 6 - motif structure only, no code/DAG details)
+ */
+function renderMotifDetails(motif) {
     const panel = document.getElementById('clio-motif-details');
     if (!panel) return;
     
@@ -673,11 +676,11 @@ function initializeMotifDetailsPanel() {
         <h4 class="section-title">Privacy Indicator</h4>
         <div class="privacy-indicator">
           <div class="privacy-item ${privacyStatus.meetsThreshold ? 'privacy-ok' : 'privacy-warning'}">
-            <span class="privacy-icon">${privacyStatus.meetsThreshold ? '✓' : '⚠'}</span>
+            <span class="privacy-icon">${privacyStatus.meetsThreshold ? '' : ''}</span>
             <span class="privacy-text">Cluster size meets threshold (n=${privacyStatus.clusterSize || 0} workflows)</span>
           </div>
           <div class="privacy-item ${privacyStatus.rungLevelSafe ? 'privacy-ok' : 'privacy-warning'}">
-            <span class="privacy-icon">${privacyStatus.rungLevelSafe ? '✓' : '⚠'}</span>
+            <span class="privacy-icon">${privacyStatus.rungLevelSafe ? '' : ''}</span>
             <span class="privacy-text">Rung level safe for public viewing</span>
           </div>
         </div>
@@ -686,29 +689,110 @@ function initializeMotifDetailsPanel() {
   `;
 }
 
-  /**
-   * Render symbolic motif representation (no code, no DAG details)
-   */
-  function renderMotifSymbolic(motif) {
+/**
+ * Render symbolic motif representation (no code, no DAG details)
+ */
+function renderMotifSymbolic(motif) {
     const shape = motif.shape || 'linear';
     const sequence = motif.sequence || [];
     
     // Generate symbolic sketch based on shape
     if (shape === 'loop') {
-      return '<div class="motif-symbol">○—○↺○—○</div><div class="motif-symbol-desc">Cycle, then linear resolution</div>';
+      return '<div class="motif-symbol">—↺—</div><div class="motif-symbol-desc">Cycle, then linear resolution</div>';
     } else if (shape === 'branch') {
-      return '<div class="motif-symbol">○—○<br>├─○<br>└─○</div><div class="motif-symbol-desc">Branching pattern</div>';
+      return '<div class="motif-symbol">—<br><br></div><div class="motif-symbol-desc">Branching pattern</div>';
     } else if (shape === 'fork-join') {
-      return '<div class="motif-symbol">○—○—○<br>│&nbsp;&nbsp;│<br>○—○—○</div><div class="motif-symbol-desc">Fork-join pattern</div>';
+      return '<div class="motif-symbol">——<br>&nbsp;&nbsp;<br>——</div><div class="motif-symbol-desc">Fork-join pattern</div>';
     } else {
-      return '<div class="motif-symbol">○—○—○—○</div><div class="motif-symbol-desc">Linear sequence</div>';
+      return '<div class="motif-symbol">———</div><div class="motif-symbol-desc">Linear sequence</div>';
     }
+}
+
+/**
+ * Initialize timeline visualization (GitHub contribution graph style)
+ */
+function initializeTimeline() {
+  const timelineContainer = document.getElementById('clio-timeline');
+  if (!timelineContainer) return;
+
+  // Timeline will be rendered when motif data is loaded
+  window.clioTimelineContainer = timelineContainer;
+}
+
+/**
+ * Render timeline visualization (GitHub contribution graph style)
+ */
+async function renderClioTimeline(motifs) {
+  const container = window.clioTimelineContainer || document.getElementById('clio-timeline');
+  if (!container) return;
+
+  if (!motifs || motifs.length === 0) {
+    container.innerHTML = '<div style="text-align: center; color: var(--color-text-muted);">No pattern data available for timeline</div>';
+    return;
   }
 
-  /**
-   * Generate motif description
-   */
-  function generateMotifDescription(motif) {
+  try {
+    // Group motifs by date
+    const dateMap = new Map();
+    motifs.forEach(motif => {
+      const date = new Date(motif.firstSeen || motif.timestamp || Date.now());
+      const dateKey = date.toISOString().split('T')[0];
+      if (!dateMap.has(dateKey)) {
+        dateMap.set(dateKey, []);
+      }
+      dateMap.get(dateKey).push(motif);
+    });
+
+    // Get date range (last 52 weeks)
+    const today = new Date();
+    const weeks = [];
+    for (let i = 51; i >= 0; i--) {
+      const date = new Date(today);
+      date.setDate(date.getDate() - (i * 7));
+      const weekStart = new Date(date);
+      weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+      weeks.push(weekStart);
+    }
+
+    // Create simple grid visualization
+    const gridHtml = weeks.map(week => {
+      const weekKey = week.toISOString().split('T')[0];
+      const weekMotifs = dateMap.get(weekKey) || [];
+      const count = weekMotifs.length;
+      const intensity = Math.min(count / 5, 1); // Normalize to 0-1
+      const color = intensity > 0.5 ? '#10b981' : intensity > 0.2 ? '#3b82f6' : '#e5e7eb';
+      
+      return `
+        <div class="timeline-week" 
+             style="background: ${color}; width: 12px; height: 12px; border-radius: 2px;"
+             title="${week.toLocaleDateString()}: ${count} pattern${count !== 1 ? 's' : ''}">
+        </div>
+      `;
+    }).join('');
+
+    container.innerHTML = `
+      <div style="display: flex; flex-wrap: wrap; gap: 2px; justify-content: center; align-items: center;">
+        ${gridHtml}
+      </div>
+      <div style="margin-top: var(--space-md); text-align: center; font-size: var(--text-xs); color: var(--color-text-muted);">
+        <span style="display: inline-block; width: 12px; height: 12px; background: #e5e7eb; border-radius: 2px; margin-right: 4px;"></span>
+        Less
+        <span style="display: inline-block; width: 12px; height: 12px; background: #3b82f6; border-radius: 2px; margin: 0 8px 0 16px;"></span>
+        More
+        <span style="display: inline-block; width: 12px; height: 12px; background: #10b981; border-radius: 2px; margin: 0 8px 0 16px;"></span>
+        Most
+      </div>
+    `;
+  } catch (error) {
+    console.error('[CLIO] Error rendering timeline:', error);
+    container.innerHTML = '<div style="text-align: center; color: var(--color-text-muted);">Error rendering timeline</div>';
+  }
+}
+
+/**
+ * Generate motif description
+ */
+function generateMotifDescription(motif) {
     const intent = motif.dominantIntent || 'UNKNOWN';
     const shape = motif.shape || 'linear';
     
@@ -721,12 +805,12 @@ function initializeMotifDetailsPanel() {
     }
     
     return `A ${shape} pattern with ${intent.replace(/_/g, ' ').toLowerCase()} intent.`;
-  }
+}
 
-  /**
-   * Load all Procedural Clio data (Rung 6)
-   */
-  async function loadProceduralClioData() {
+/**
+ * Load all Procedural Clio data (Rung 6)
+ */
+async function loadProceduralClioData() {
     try {
       const apiBase = window.CONFIG?.API_BASE || 'http://localhost:43917';
       
@@ -740,7 +824,7 @@ function initializeMotifDetailsPanel() {
         const errorData = await summaryResponse.json().catch(() => ({}));
         console.log('[MOTIF] Motif service not available:', errorData.error || 'Service not initialized');
         // Show a user-friendly message in the summary bar if it exists
-        const summaryBar = document.getElementById('procedural-clio-summary-bar');
+        const summaryBar = document.getElementById('clio-summary-bar');
         if (summaryBar) {
           summaryBar.innerHTML = `
             <div style="padding: var(--space-md); text-align: center; color: var(--color-text-muted);">
@@ -757,7 +841,7 @@ function initializeMotifDetailsPanel() {
         console.warn('[MOTIF] Failed to load Procedural Clio data:', error.message);
       }
     }
-  }
+}
 
 // Export to window for global access
 window.renderProceduralClioView = renderProceduralClioView;

@@ -125,7 +125,7 @@ class AccountModal {
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-sm);">
                 <span style="font-weight: 600; color: var(--color-text);">Cloud Sync</span>
                 <span style="font-size: var(--text-sm); color: ${sync.enabled ? 'var(--color-success)' : 'var(--color-text-muted)'};">
-                  ${sync.enabled ? '✓ Enabled' : 'Disabled'}
+                  ${sync.enabled ? ' Enabled' : 'Disabled'}
                 </span>
               </div>
               ${sync.last_sync ? `
@@ -145,7 +145,7 @@ class AccountModal {
             </div>
           ` : `
             <div style="text-align: center; padding: var(--space-xl) 0;">
-              <div style="font-size: 48px; margin-bottom: var(--space-md);">🔐</div>
+              <div style="font-size: 48px; margin-bottom: var(--space-md);"></div>
               <h3 style="margin-bottom: var(--space-sm);">No Account Connected</h3>
               <p style="color: var(--color-text-muted); margin-bottom: var(--space-lg); line-height: 1.6;">
                 Connect your account to port your Cursor code easily across devices.<br>
@@ -309,7 +309,7 @@ class AccountModal {
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-sm);">
                 <span style="color: var(--color-text);">Sync Status</span>
                 <span style="font-size: var(--text-sm); color: ${sync.enabled ? 'var(--color-success)' : 'var(--color-text-muted)'};">
-                  ${sync.enabled ? '✓ Enabled' : 'Disabled'}
+                  ${sync.enabled ? ' Enabled' : 'Disabled'}
                 </span>
               </div>
               ${sync.last_sync ? `

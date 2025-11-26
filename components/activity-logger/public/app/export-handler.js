@@ -26,7 +26,8 @@ async function exportDatabase(limit = 1000, includeAllFields = false) {
       }
       
       // Fetch data from API with limit
-      const url = new URL(`${window.CONFIG.API_BASE}/api/export/database`);
+      const apiBase = window.CONFIG?.API_BASE || 'http://localhost:43917';
+      const url = new URL(`${apiBase}/api/export/database`);
       url.searchParams.set('limit', limit.toString());
       if (includeAllFields) {
         url.searchParams.set('full', 'true');
@@ -99,25 +100,22 @@ async function exportDatabase(limit = 1000, includeAllFields = false) {
         exportBtn.disabled = false;
         exportBtn.style.color = '';
       }, 2000);
-    } else {
-      // No button found, just log
-      console.log('[EXPORT] Button not found, export completed');
     }
     
   } catch (error) {
-    console.error('Export error:', error);
     const exportBtn = document.querySelector('.export-btn');
     if (exportBtn) {
-      const originalHTML = exportBtn.innerHTML;
+      const originalHTML = exportBtn.innerHTML || '<span>Export</span>';
       exportBtn.innerHTML = '<span> Failed</span>';
       exportBtn.style.color = '#ef4444';
+      exportBtn.disabled = false;
       setTimeout(() => {
         exportBtn.innerHTML = originalHTML;
-        exportBtn.disabled = false;
         exportBtn.style.color = '';
       }, 3000);
     }
-    alert(`Export failed: ${error.message}\n\nTry exporting with a smaller limit (e.g., exportDatabase(500))`);
+    const errorMessage = error?.message || error?.toString() || 'Unknown error occurred';
+    alert(`Export failed: ${errorMessage}\n\nTry exporting with a smaller limit (e.g., exportDatabase(500))`);
   }
 }
 
@@ -163,7 +161,8 @@ async function exportDatabaseWithFilters({ dateFrom, dateTo, limit = 1000, types
     }
     
     // Build URL with all parameters
-    const url = new URL(`${window.CONFIG.API_BASE}/api/export/database`);
+    const apiBase = window.CONFIG?.API_BASE || 'http://localhost:43917';
+    const url = new URL(`${apiBase}/api/export/database`);
     url.searchParams.set('limit', limit.toString());
     
     // Enable streaming for large exports (>5000 items) or if explicitly requested
@@ -210,6 +209,7 @@ async function exportDatabaseWithFilters({ dateFrom, dateTo, limit = 1000, types
         if (pii.redactUrls !== undefined) url.searchParams.set('rung1_redact_urls', pii.redactUrls.toString());
         if (pii.redactIpAddresses !== undefined) url.searchParams.set('rung1_redact_ip_addresses', pii.redactIpAddresses.toString());
         if (pii.redactFilePaths !== undefined) url.searchParams.set('rung1_redact_file_paths', pii.redactFilePaths.toString());
+        if (pii.redactJwtSecrets !== undefined) url.searchParams.set('rung1_redact_jwt_secrets', pii.redactJwtSecrets.toString());
         if (pii.redactNumbers !== undefined) url.searchParams.set('rung1_redact_numbers', pii.redactNumbers.toString());
         if (pii.redactAllStrings !== undefined) url.searchParams.set('rung1_redact_all_strings', pii.redactAllStrings.toString());
         if (pii.redactAllNumbers !== undefined) url.searchParams.set('rung1_redact_all_numbers', pii.redactAllNumbers.toString());
@@ -270,19 +270,19 @@ async function exportDatabaseWithFilters({ dateFrom, dateTo, limit = 1000, types
     }
     
   } catch (error) {
-    console.error('Export error:', error);
     const exportBtn = document.querySelector('.export-btn');
     if (exportBtn) {
-      const originalHTML = exportBtn.innerHTML;
+      const originalHTML = exportBtn.innerHTML || '<span>Export</span>';
       exportBtn.innerHTML = '<span> Failed</span>';
       exportBtn.style.color = '#ef4444';
+      exportBtn.disabled = false;
       setTimeout(() => {
         exportBtn.innerHTML = originalHTML;
-        exportBtn.disabled = false;
         exportBtn.style.color = '';
       }, 3000);
     }
-    alert(`Export failed: ${error.message}\n\nTry exporting with a smaller limit or different date range.`);
+    const errorMessage = error?.message || error?.toString() || 'Unknown error occurred';
+    alert(`Export failed: ${errorMessage}\n\nTry exporting with a smaller limit or different date range.`);
   }
 }
 
@@ -370,13 +370,13 @@ async function handleStreamingExport(url, exportBtn, originalHTML, { dateFrom, l
     }
     
   } catch (error) {
-    console.error('Streaming export error:', error);
     if (exportBtn) {
+      const originalHTML = exportBtn.innerHTML || '<span>Export</span>';
       exportBtn.innerHTML = '<span> Failed</span>';
       exportBtn.style.color = '#ef4444';
+      exportBtn.disabled = false;
       setTimeout(() => {
         exportBtn.innerHTML = originalHTML;
-        exportBtn.disabled = false;
         exportBtn.style.color = '';
       }, 3000);
     }
@@ -444,14 +444,15 @@ async function handleBatchExport(url, exportBtn, originalHTML, { dateFrom, limit
     URL.revokeObjectURL(url_obj);
   }, 100);
   
-  console.log(`[SUCCESS] Exported ${result.data.metadata.totalEntries || 0} entries, ${result.data.metadata.totalPrompts || 0} prompts, ${result.data.metadata.totalEvents || 0} events`);
+  console.log(`[SUCCESS] Exported ${result.data?.metadata?.totalEntries || 0} entries, ${result.data?.metadata?.totalPrompts || 0} prompts, ${result.data?.metadata?.totalEvents || 0} events`);
   
   // Show success feedback
   if (exportBtn) {
-    exportBtn.innerHTML = '<span>✓ Exported!</span>';
+    const fallbackHTML = originalHTML || exportBtn.innerHTML || '<span>Export</span>';
+    exportBtn.innerHTML = '<span> Exported!</span>';
     exportBtn.style.color = '#10b981';
     setTimeout(() => {
-      exportBtn.innerHTML = originalHTML;
+      exportBtn.innerHTML = fallbackHTML;
       exportBtn.disabled = false;
       exportBtn.style.color = '';
     }, 2000);

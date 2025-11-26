@@ -90,7 +90,7 @@ async function autoGenerateStates(silent = false) {
   } finally {
     if (btn) {
       btn.disabled = false;
-      btn.innerHTML = '<span>✨</span> Auto-Generate States';
+      btn.innerHTML = '<span></span> Auto-Generate States';
     }
   }
 }
@@ -102,7 +102,7 @@ async function renderStatesView(container) {
         <h2>State Management</h2>
         <div class="states-view-actions">
           <button class="btn btn-primary" onclick="autoGenerateStates()" id="autoGenerateBtn">
-            <span>✨</span> Auto-Generate States
+            <span></span> Auto-Generate States
           </button>
           <button class="btn btn-secondary" onclick="createNewState()">
             <span>+</span> Create State

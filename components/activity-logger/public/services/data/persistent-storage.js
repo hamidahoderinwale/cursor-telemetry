@@ -710,15 +710,32 @@ class PersistentStorage {
    * Get snapshot metadata
    */
   async getMetadata(key) {
-    if (!this.db) await this.init();
+    if (!this.db) {
+      try {
+        await this.init();
+      } catch (error) {
+        console.warn('[PersistentStorage] Failed to initialize database:', error);
+        return null;
+      }
+    }
+    
+    if (!this.db) {
+      console.warn('[PersistentStorage] Database not available after initialization');
+      return null;
+    }
     
     return new Promise((resolve, reject) => {
-      const transaction = this.db.transaction([this.stores.metadata], 'readonly');
-      const store = transaction.objectStore(this.stores.metadata);
-      const request = store.get(key);
-      
-      request.onsuccess = () => resolve(request.result ? request.result.value : null);
-      request.onerror = () => reject(request.error);
+      try {
+        const transaction = this.db.transaction([this.stores.metadata], 'readonly');
+        const store = transaction.objectStore(this.stores.metadata);
+        const request = store.get(key);
+        
+        request.onsuccess = () => resolve(request.result ? request.result.value : null);
+        request.onerror = () => reject(request.error);
+      } catch (error) {
+        console.warn('[PersistentStorage] Error accessing metadata:', error);
+        resolve(null);
+      }
     });
   }
 
@@ -726,18 +743,38 @@ class PersistentStorage {
    * Get events since a specific timestamp (for diff fetching)
    */
   async getEventsSince(timestamp) {
-    if (!this.db) await this.init();
+    if (!this.db) {
+      try {
+        await this.init();
+      } catch (error) {
+        console.warn('[PersistentStorage] Failed to initialize database:', error);
+        return [];
+      }
+    }
+    
+    if (!this.db) {
+      console.warn('[PersistentStorage] Database not available after initialization');
+      return [];
+    }
     
     return new Promise((resolve, reject) => {
-      const transaction = this.db.transaction([this.stores.events], 'readonly');
-      const store = transaction.objectStore(this.stores.events);
-      const index = store.index('timestamp');
-      
-      const range = IDBKeyRange.lowerBound(timestamp, false);
-      const request = index.getAll(range);
-      
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
+      try {
+        const transaction = this.db.transaction([this.stores.events], 'readonly');
+        const store = transaction.objectStore(this.stores.events);
+        const index = store.index('timestamp');
+        
+        const range = IDBKeyRange.lowerBound(timestamp, false);
+        const request = index.getAll(range);
+        
+        request.onsuccess = () => resolve(request.result || []);
+        request.onerror = () => {
+          console.warn('[PersistentStorage] Error accessing events:', request.error);
+          resolve([]);
+        };
+      } catch (error) {
+        console.warn('[PersistentStorage] Error accessing events:', error);
+        resolve([]);
+      }
     });
   }
 

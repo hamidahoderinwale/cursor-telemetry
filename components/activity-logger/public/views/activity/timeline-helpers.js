@@ -823,7 +823,7 @@ function renderIntegratedChunk(chunk, timelineItems = null) {
             ${events.length > 0 ? `
               <div style="display: flex; align-items: center; gap: var(--space-sm, 0.75rem); padding: var(--space-sm, 0.75rem); background: var(--color-bg-alt, #f5f5f5); border-radius: var(--radius-sm, 4px); border-left: 2px solid var(--color-success, #10b981);">
                 <div style="flex-shrink: 0; width: 24px; height: 24px; border-radius: 50%; background: var(--color-success, #10b981); color: white; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600;">
-                  📝
+                  [Note]
                 </div>
                 <div style="flex: 1; min-width: 0;">
                   <div style="font-weight: 600; color: var(--color-text, #333); margin-bottom: 2px; font-size: var(--text-sm, 0.875rem);">
@@ -844,7 +844,7 @@ function renderIntegratedChunk(chunk, timelineItems = null) {
             <button class="timeline-card-toggle" id="${expandId}" onclick="event.stopPropagation(); toggleEventDetails('${expandId}', '${detailsId}')" 
                     style="background: none; border: none; color: var(--color-text-muted); cursor: pointer; padding: 4px; font-size: 12px; transition: transform 0.2s;"
                     title="Toggle details">
-              ▼
+              
             </button>
           </div>
         </div>
@@ -975,7 +975,7 @@ function renderFileChangeGroup(group, side = 'left', timelineItems = null) {
   // Prompt count badge
   const promptCountBadge = groupPromptCount > 0 ? `
     <span class="timeline-badge" style="background: var(--color-accent-alpha-10, rgba(168, 85, 247, 0.1)); color: var(--color-accent, #a855f7); font-size: 10px; padding: 2px 6px; border-radius: 4px;" title="${groupPromptCount} related prompt${groupPromptCount !== 1 ? 's' : ''}">
-      💬 ${groupPromptCount}
+      [Chat] ${groupPromptCount}
     </span>
   ` : '';
   
@@ -987,7 +987,7 @@ function renderFileChangeGroup(group, side = 'left', timelineItems = null) {
             <div style="display: flex; align-items: center; gap: var(--space-sm, 0.75rem); flex-wrap: wrap;">
               <div style="flex: 1; min-width: 0;">
                 <div style="font-weight: 600; color: var(--color-text, #333); display: flex; align-items: center; gap: var(--space-xs, 0.5rem);">
-                  <span style="font-size: 0.875rem; opacity: 0.7; margin-right: 4px;">📝</span>
+                  <span style="font-size: 0.875rem; opacity: 0.7; margin-right: 4px;">[Note]</span>
                   <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${window.escapeHtml ? window.escapeHtml(fileName) : fileName}</span>
                   <span class="timeline-badge" style="background: var(--color-primary, #3b82f6); color: white; font-size: 0.75rem; padding: 2px 6px; border-radius: 4px;">
                     ${group.items.length} save${group.items.length !== 1 ? 's' : ''}
@@ -1004,7 +1004,7 @@ function renderFileChangeGroup(group, side = 'left', timelineItems = null) {
             <button class="timeline-card-toggle" id="${expandId}" onclick="event.stopPropagation(); toggleEventDetails('${expandId}', '${detailsId}')" 
                     style="background: none; border: none; color: var(--color-text-muted); cursor: pointer; padding: 4px; font-size: 12px; transition: transform 0.2s;"
                     title="Toggle details">
-              ▼
+              
             </button>
           </div>
         </div>
@@ -1476,7 +1476,7 @@ function renderConversationThread(conversation, side = 'right') {
           <div class="timeline-card-title-section">
             <div class="timeline-card-title">
               <span class="timeline-file-name" style="cursor: pointer;" onclick="toggleConversationMessages('${threadId}')" title="Click to expand/collapse">
-                <span id="conv-icon-${threadId}" class="timeline-title-icon" style="transform: rotate(90deg); display: inline-block; transition: transform 0.2s; margin-right: 4px; font-size: 0.75rem;">▶</span>
+                <span id="conv-icon-${threadId}" class="timeline-title-icon" style="transform: rotate(90deg); display: inline-block; transition: transform 0.2s; margin-right: 4px; font-size: 0.75rem;"></span>
                 ${window.escapeHtml(title)}
               </span>
               ${messageCount > 1 ? `<span class="timeline-file-stats" style="margin-left: var(--space-xs); color: var(--color-text-muted);">${messageCount} messages</span>` : ''}
@@ -1508,7 +1508,7 @@ function renderConversationThread(conversation, side = 'right') {
             });
             if (filePaths.size > 0) {
               const files = Array.from(filePaths).slice(0, 2);
-              return `<span class="badge" style="background: var(--color-accent); color: var(--badge-text-on-accent);">📄 ${window.escapeHtml(files.join(', '))}${filePaths.size > 2 ? '...' : ''}</span>`;
+              return `<span class="badge" style="background: var(--color-accent); color: var(--badge-text-on-accent);"> ${window.escapeHtml(files.join(', '))}${filePaths.size > 2 ? '...' : ''}</span>`;
             }
             return '';
           })() : ''}
@@ -1525,9 +1525,9 @@ function renderConversationThread(conversation, side = 'right') {
                 .reduce((sum, t, _, arr) => sum + (t.thinking_time_seconds || t.thinkingTimeSeconds) / arr.length, 0);
               
               const stats = [];
-              if (totalTokens > 0) stats.push(`🔢 ${totalTokens} tokens`);
+              if (totalTokens > 0) stats.push(` ${totalTokens} tokens`);
               if (avgDuration > 0) stats.push(`⏱ ${(avgDuration / 1000).toFixed(1)}s avg`);
-              if (avgThinking > 0) stats.push(`💭 ${avgThinking.toFixed(1)}s thinking`);
+              if (avgThinking > 0) stats.push(` ${avgThinking.toFixed(1)}s thinking`);
               
               if (stats.length > 0) {
                     return `<span class="badge" style="background: var(--color-primary-alpha-10); color: var(--color-primary); border: 1px solid var(--color-primary);">${stats.join(' • ')}</span>`;
@@ -1579,7 +1579,7 @@ function renderConversationThread(conversation, side = 'right') {
                      onmouseout="this.style.background='var(--color-bg)'">
                   <div style="display: flex; justify-content: space-between; align-items: center;">
                     <span style="font-size: var(--text-xs); color: var(--color-text);">
-                      <span id="tab-icon-${threadId}-tab-${tab.id}" style="display: inline-block; margin-right: 4px; transform: rotate(0deg);">▶</span>
+                      <span id="tab-icon-${threadId}-tab-${tab.id}" style="display: inline-block; margin-right: 4px; transform: rotate(0deg);"></span>
                       ${window.escapeHtml(tabTitle)} 
                       <span style="color: var(--color-text-muted);">(${tabPrompts.length} messages)</span>
                     </span>
@@ -1675,7 +1675,7 @@ function renderConversationTurnTimelineItem(turn, side = 'left', timelineItems =
     thinkingTimeIndicator = `
       <div class="thinking-time-gap" style="margin-bottom: var(--space-sm); padding: var(--space-xs) var(--space-sm); background: linear-gradient(90deg, transparent, var(--color-warning), transparent); opacity: 0.3; border-radius: var(--radius-sm); position: relative;">
         <div class="thinking-time-indicator" style="position: absolute; left: 50%; transform: translateX(-50%); padding: 0.25rem 0.5rem; background: var(--color-warning); color: var(--color-text); border-radius: var(--radius-sm); font-size: var(--text-xs); display: inline-flex; align-items: center; gap: var(--space-xs); white-space: nowrap; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-          <span>💭</span>
+          <span></span>
           <span>Thinking: ${thinkingTimeDisplay}</span>
         </div>
       </div>
@@ -1697,11 +1697,11 @@ function renderConversationTurnTimelineItem(turn, side = 'left', timelineItems =
           </span>
           ${ttfSeconds ? `
             <span style="display: inline-flex; align-items: center; gap: 0.25rem;">
-              <span>⚡</span>
+              <span>[Fast]</span>
               <span>TTF: ${ttfSeconds}s</span>
             </span>
           ` : ''}
-          ${streaming ? `<span style="display: inline-flex; align-items: center; gap: 0.25rem;"><span>📡</span><span>Streaming</span></span>` : ''}
+          ${streaming ? `<span style="display: inline-flex; align-items: center; gap: 0.25rem;"><span></span><span>Streaming</span></span>` : ''}
         </div>
         ${requestDuration ? `
           <div style="margin-top: var(--space-xs); height: 4px; background: var(--color-border); border-radius: 2px; overflow: hidden; position: relative;">
@@ -1731,22 +1731,22 @@ function renderConversationTurnTimelineItem(turn, side = 'left', timelineItems =
       <div class="context-snapshot-indicator" style="margin-top: var(--space-sm); padding: var(--space-sm); background: var(--color-bg-alt); border-radius: var(--radius-sm); border-left: 2px solid var(--color-primary);">
         <div style="display: flex; align-items: center; gap: var(--space-sm); flex-wrap: wrap; margin-bottom: var(--space-xs);">
           <span style="font-size: var(--text-xs); font-weight: 600; color: var(--color-text);">Context Snapshot</span>
-          ${contextCount > 0 ? `<span class="badge" style="background: var(--color-primary-alpha-10); color: var(--color-primary); font-size: var(--text-xs);">📄 ${contextCount} file${contextCount !== 1 ? 's' : ''}</span>` : ''}
-          ${referencedCount > 0 ? `<span class="badge" style="background: var(--color-accent); color: var(--badge-text-on-accent); font-size: var(--text-xs);">🔗 ${referencedCount} referenced</span>` : ''}
+          ${contextCount > 0 ? `<span class="badge" style="background: var(--color-primary-alpha-10); color: var(--color-primary); font-size: var(--text-xs);"> ${contextCount} file${contextCount !== 1 ? 's' : ''}</span>` : ''}
+          ${referencedCount > 0 ? `<span class="badge" style="background: var(--color-accent); color: var(--badge-text-on-accent); font-size: var(--text-xs);">[Link] ${referencedCount} referenced</span>` : ''}
           ${totalContextTokens > 0 ? `<span class="badge" style="background: ${utilizationColor}; color: var(--badge-text-on-primary); font-size: var(--text-xs);">${totalContextTokens.toLocaleString()} tokens (${contextUtilization.toFixed(0)}%)</span>` : ''}
         </div>
         ${contextFiles.length > 0 ? `
           <div style="margin-top: var(--space-xs);">
             <span style="font-size: var(--text-xs); color: var(--color-text-muted); font-weight: 500; cursor: pointer;" 
                   onclick="event.stopPropagation(); toggleContextFiles('${turn.id}')">
-              ${contextFiles.length > 3 ? `Show ${contextFiles.length} context files ▼` : 'Context files:'}
+              ${contextFiles.length > 3 ? `Show ${contextFiles.length} context files ` : 'Context files:'}
             </span>
             <div id="context-files-${turn.id}" style="${contextFiles.length > 3 ? 'display: none;' : 'display: block;'} margin-top: var(--space-xs); padding: var(--space-xs); background: var(--color-surface); border-radius: var(--radius-sm); font-size: var(--text-xs); max-height: 200px; overflow-y: auto;">
               ${contextFiles.map(file => {
                 const fileName = file.split('/').pop();
                 return `
                   <div style="padding: 0.25rem 0; color: var(--color-text-muted); display: flex; align-items: center; gap: var(--space-xs);">
-                    <span>📄</span>
+                    <span></span>
                     <span style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${window.escapeHtml ? window.escapeHtml(file) : file}">${window.escapeHtml ? window.escapeHtml(fileName) : fileName}</span>
                   </div>
                 `;
@@ -1762,7 +1762,7 @@ function renderConversationTurnTimelineItem(turn, side = 'left', timelineItems =
                 const fileName = file.split('/').pop();
                 return `
                   <div style="padding: 0.25rem 0; color: var(--color-text-muted); display: flex; align-items: center; gap: var(--space-xs);">
-                    <span>🔗</span>
+                    <span>[Link]</span>
                     <span style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${window.escapeHtml ? window.escapeHtml(file) : file}">${window.escapeHtml ? window.escapeHtml(fileName) : fileName}</span>
                   </div>
                 `;
@@ -1790,7 +1790,7 @@ function renderConversationTurnTimelineItem(turn, side = 'left', timelineItems =
               return `
                 <div style="margin-top: var(--space-xs); padding: var(--space-xs); background: var(--color-bg-alt); border-radius: var(--radius-sm); cursor: pointer;"
                      onclick="event.stopPropagation(); showEventModal('${change.id}')">
-                  <span style="font-size: var(--text-xs); color: var(--color-text);">📝 ${window.escapeHtml ? window.escapeHtml(fileName) : fileName}</span>
+                  <span style="font-size: var(--text-xs); color: var(--color-text);">[Note] ${window.escapeHtml ? window.escapeHtml(fileName) : fileName}</span>
                 </div>
               `;
             }).join('')}
@@ -1805,7 +1805,7 @@ function renderConversationTurnTimelineItem(turn, side = 'left', timelineItems =
               return `
                 <div style="margin-top: var(--space-xs); padding: var(--space-xs); background: var(--color-bg-alt); border-radius: var(--radius-sm); cursor: pointer;"
                      onclick="event.stopPropagation(); showEventModal('${cmd.id}')">
-                  <span style="font-size: var(--text-xs); color: var(--color-text); font-family: monospace;">💻 ${window.escapeHtml ? window.escapeHtml(shortCommand) : shortCommand}</span>
+                  <span style="font-size: var(--text-xs); color: var(--color-text); font-family: monospace;">[Code] ${window.escapeHtml ? window.escapeHtml(shortCommand) : shortCommand}</span>
                 </div>
               `;
             }).join('')}
@@ -1838,7 +1838,7 @@ function renderConversationTurnTimelineItem(turn, side = 'left', timelineItems =
             <button class="timeline-card-toggle" id="${turnExpandId}" onclick="event.stopPropagation(); toggleEventDetails('${turnExpandId}', '${turnDetailsId}')" 
                     style="background: none; border: none; color: var(--color-text-muted); cursor: pointer; padding: 4px; font-size: 12px; transition: transform 0.2s;"
                     title="Toggle details">
-              ▼
+              
             </button>
           </div>
         </div>
@@ -1910,7 +1910,7 @@ function renderConversationMessage(message) {
         <span class="conversation-message-author" style="font-weight: 600; color: var(--color-text);">${isUser ? 'You' : 'AI Assistant'}</span>
         <span class="conversation-message-time" style="font-size: 0.75rem; color: var(--color-text-muted);">${time}</span>
         ${modelName ? `<span class="badge" style="background: var(--color-primary); color: var(--badge-text-on-primary); font-size: 0.7rem; padding: 0.2rem 0.5rem; border-radius: 4px; font-weight: 500;">${window.escapeHtml ? window.escapeHtml(modelName) : modelName}</span>` : ''}
-        ${thinkingTime && thinkingTime > 0 ? `<span class="badge" style="background: var(--color-warning); color: var(--color-text); font-size: 0.7rem; padding: 0.2rem 0.5rem; border-radius: 4px; font-weight: 500;">💭 ${thinkingTime.toFixed(2)}s</span>` : ''}
+        ${thinkingTime && thinkingTime > 0 ? `<span class="badge" style="background: var(--color-warning); color: var(--color-text); font-size: 0.7rem; padding: 0.2rem 0.5rem; border-radius: 4px; font-weight: 500;"> ${thinkingTime.toFixed(2)}s</span>` : ''}
       </div>
       <div class="conversation-message-content" style="line-height: 1.6; color: var(--color-text); white-space: pre-wrap; word-wrap: break-word;">${window.escapeHtml ? window.escapeHtml(displayText) : displayText}</div>
       ${codeBlocks.length > 0 ? `
@@ -1926,8 +1926,8 @@ function renderConversationMessage(message) {
       ${!isUser && (requestDuration || timeToFirstToken || tokens) ? `
         <div class="conversation-message-metadata" style="margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid var(--color-text-alpha-10); font-size: 0.75rem; color: var(--color-text-muted); display: flex; gap: 1rem; flex-wrap: wrap; align-items: center;">
           ${requestDuration ? `<span style="display: inline-flex; align-items: center; gap: 0.25rem;"><span>⏱</span> <span>${(requestDuration / 1000).toFixed(2)}s</span></span>` : ''}
-          ${timeToFirstToken ? `<span style="display: inline-flex; align-items: center; gap: 0.25rem;"><span>⚡</span> <span>TTF: ${(timeToFirstToken / 1000).toFixed(2)}s</span></span>` : ''}
-          ${tokens ? `<span style="display: inline-flex; align-items: center; gap: 0.25rem;"><span>🔢</span> <span>${tokens} tokens${promptTokens || completionTokens ? ` (${promptTokens}p + ${completionTokens}c)` : ''}</span></span>` : ''}
+          ${timeToFirstToken ? `<span style="display: inline-flex; align-items: center; gap: 0.25rem;"><span>[Fast]</span> <span>TTF: ${(timeToFirstToken / 1000).toFixed(2)}s</span></span>` : ''}
+          ${tokens ? `<span style="display: inline-flex; align-items: center; gap: 0.25rem;"><span></span> <span>${tokens} tokens${promptTokens || completionTokens ? ` (${promptTokens}p + ${completionTokens}c)` : ''}</span></span>` : ''}
         </div>
       ` : ''}
       ${text.length > 300 ? `<button class="conversation-message-read-more" onclick="showEventModal('${message.id}')" style="margin-top: 0.5rem; padding: 0.25rem 0.5rem; background: transparent; border: 1px solid var(--color-border); border-radius: 4px; cursor: pointer; font-size: 0.75rem; color: var(--color-primary);">Read more</button>` : ''}
@@ -1989,11 +1989,11 @@ function toggleTemporalThread(threadId) {
     if (isHidden) {
       itemsDiv.style.display = 'block';
       itemsDiv.classList.add('visible');
-      icon.textContent = '▼';
+      icon.textContent = '';
     } else {
       itemsDiv.style.display = 'none';
       itemsDiv.classList.remove('visible');
-      icon.textContent = '▶';
+      icon.textContent = '';
     }
   }
 }
@@ -2175,7 +2175,7 @@ function renderPromptTimelineItem(prompt, side = 'right', timelineItems = null, 
               return `
                 <div style="margin-top: var(--space-xs); padding: var(--space-xs); background: var(--color-bg-alt); border-radius: var(--radius-sm); cursor: pointer;"
                      onclick="event.stopPropagation(); showEventModal('${change.id}')">
-                  <span style="font-size: var(--text-xs); color: var(--color-text);">📝 ${window.escapeHtml ? window.escapeHtml(fileName) : fileName}</span>
+                  <span style="font-size: var(--text-xs); color: var(--color-text);">[Note] ${window.escapeHtml ? window.escapeHtml(fileName) : fileName}</span>
                 </div>
               `;
             }).join('')}
@@ -2190,7 +2190,7 @@ function renderPromptTimelineItem(prompt, side = 'right', timelineItems = null, 
               return `
                 <div style="margin-top: var(--space-xs); padding: var(--space-xs); background: var(--color-bg-alt); border-radius: var(--radius-sm); cursor: pointer;"
                      onclick="event.stopPropagation(); showEventModal('${cmd.id}')">
-                  <span style="font-size: var(--text-xs); color: var(--color-text); font-family: monospace;">💻 ${window.escapeHtml ? window.escapeHtml(shortCommand) : shortCommand}</span>
+                  <span style="font-size: var(--text-xs); color: var(--color-text); font-family: monospace;">[Code] ${window.escapeHtml ? window.escapeHtml(shortCommand) : shortCommand}</span>
                 </div>
               `;
             }).join('')}
@@ -2219,7 +2219,7 @@ function renderPromptTimelineItem(prompt, side = 'right', timelineItems = null, 
             <button class="timeline-card-toggle" id="${promptExpandId}" onclick="event.stopPropagation(); toggleEventDetails('${promptExpandId}', '${promptDetailsId}')" 
                     style="background: none; border: none; color: var(--color-text-muted); cursor: pointer; padding: 4px; font-size: 12px; transition: transform 0.2s;"
                     title="Toggle details">
-              ▼
+              
             </button>
           </div>
         </div>
@@ -2547,7 +2547,7 @@ function renderTemporalThread(thread, timelineItems = null) {
       <div class="timeline-content">
         <div class="timeline-header clickable" onclick="toggleTemporalThread('${threadId}')">
           <div class="timeline-title">
-            <span id="thread-icon-${threadId}" class="timeline-title-icon">▼</span>
+            <span id="thread-icon-${threadId}" class="timeline-title-icon"></span>
             <span class="timeline-title-text">Activity Session</span>
             <span class="timeline-title-meta">${itemSummary} • ${durationText}</span>
           </div>
@@ -2699,10 +2699,10 @@ function toggleTemporalThread(threadId) {
     const isHidden = !itemsDiv.classList.contains('visible');
     if (isHidden) {
       itemsDiv.classList.add('visible');
-      icon.textContent = '▼';
+      icon.textContent = '';
     } else {
       itemsDiv.classList.remove('visible');
-      icon.textContent = '▶';
+      icon.textContent = '';
     }
   }
 }
@@ -2765,7 +2765,7 @@ function renderTerminalTimelineItem(cmd, side = 'left', timelineItems = null) {
             <button class="timeline-card-toggle" id="${terminalExpandId}" onclick="event.stopPropagation(); toggleEventDetails('${terminalExpandId}', '${terminalDetailsId}')" 
                     style="background: none; border: none; color: var(--color-text-muted); cursor: pointer; padding: 4px; font-size: 12px; transition: transform 0.2s;"
                     title="Toggle details">
-              ▼
+              
             </button>
           </div>
         </div>
@@ -2854,6 +2854,27 @@ function renderTimelineItem(event, side = 'left', timelineItems = null) {
   let tagsHtml = '';
   if (eventTags && eventTags.length > 0 && window.renderTags) {
     tagsHtml = window.renderTags(eventTags, true, event);
+  }
+  
+  // Check for linked patterns (edit scripts, motifs)
+  let patternBadges = '';
+  try {
+    const eventId = event.id || event.timestamp;
+    // Check if this event is linked to an edit script (via diff_id)
+    if (window.state?.data?.rung2EditScripts) {
+      const linkedScript = window.state.data.rung2EditScripts.find(s => s.diffId === eventId);
+      if (linkedScript) {
+        patternBadges += `
+          <span class="pattern-badge edit-script" 
+                onclick="event.stopPropagation(); window.switchView('patterns-history'); setTimeout(() => { if(window.viewPatternDetails) window.viewPatternDetails('edit-script', '${linkedScript.id}'); }, 300);"
+                title="Linked to Edit Script: ${linkedScript.operationCount || 0} operations">
+            [Note] Edit Script
+          </span>
+        `;
+      }
+    }
+  } catch (e) {
+    // Ignore pattern linking errors
   }
   
   // Find related prompts using improved algorithm
@@ -3088,7 +3109,7 @@ function renderTimelineItem(event, side = 'left', timelineItems = null) {
     const provider = details?.provider || event.provider;
     
     if (model && model !== 'Unknown' && model !== 'unknown') {
-      modelInfo = `<span class="timeline-badge" style="background: var(--color-primary-alpha-10); color: var(--color-primary); font-size: 10px; padding: 2px 6px; border-radius: 4px;" title="Model: ${window.escapeHtml ? window.escapeHtml(model) : model}${mode ? ` (${mode})` : ''}">🤖 ${window.escapeHtml ? window.escapeHtml(model.split('/').pop() || model) : (model.split('/').pop() || model)}</span>`;
+      modelInfo = `<span class="timeline-badge" style="background: var(--color-primary-alpha-10); color: var(--color-primary); font-size: 10px; padding: 2px 6px; border-radius: 4px;" title="Model: ${window.escapeHtml ? window.escapeHtml(model) : model}${mode ? ` (${mode})` : ''}">[AI] ${window.escapeHtml ? window.escapeHtml(model.split('/').pop() || model) : (model.split('/').pop() || model)}</span>`;
     }
   } catch (e) {
     // Ignore
@@ -3116,7 +3137,7 @@ function renderTimelineItem(event, side = 'left', timelineItems = null) {
   const promptCount = (relatedPrompts && relatedPrompts.length > 0) ? relatedPrompts.length : 0;
   const promptCountBadge = promptCount > 0 ? `
     <span class="timeline-badge" style="background: var(--color-accent-alpha-10, rgba(168, 85, 247, 0.1)); color: var(--color-accent, #a855f7); font-size: 10px; padding: 2px 6px; border-radius: 4px; margin-left: var(--space-xs);" title="${promptCount} related prompt${promptCount !== 1 ? 's' : ''}">
-      💬 ${promptCount}
+      [Chat] ${promptCount}
     </span>
   ` : '';
   
@@ -3131,7 +3152,7 @@ function renderTimelineItem(event, side = 'left', timelineItems = null) {
             <button class="timeline-card-toggle" id="${expandId}" onclick="event.stopPropagation(); toggleEventDetails('${expandId}', '${detailsId}')" 
                     style="background: none; border: none; color: var(--color-text-muted); cursor: pointer; padding: 4px; font-size: 12px; transition: transform 0.2s;"
                     title="Toggle details">
-              ▼
+              
             </button>
           </div>
         </div>
@@ -3141,13 +3162,14 @@ function renderTimelineItem(event, side = 'left', timelineItems = null) {
           ${event.intent ? `<span class="timeline-badge timeline-badge-primary">${window.escapeHtml(event.intent)}</span>` : ''}
           
           <!-- Badges and indicators - consolidated to avoid redundancy -->
-          ${workspaceBadge || modelInfo || tagsHtml || linkedPromptIndicator || contextIndicators ? `
+          ${workspaceBadge || modelInfo || tagsHtml || linkedPromptIndicator || contextIndicators || patternBadges ? `
             <div class="timeline-card-indicators" style="display: flex; flex-wrap: wrap; gap: var(--space-xs); align-items: center; margin-top: var(--space-xs);">
               ${workspaceBadge}
               ${modelInfo}
               ${tagsHtml && !isInThread && !isInCommitGroup ? tagsHtml : ''}
               ${linkedPromptIndicator}
               ${contextIndicators}
+              ${patternBadges}
             </div>
           ` : ''}
         </div>
@@ -3453,7 +3475,7 @@ function getEventDescription(event) {
     if (!text || typeof text !== 'string') return text;
     return text
       // Remove common emojis
-      .replace(/🔄|✨|↗|⇄|→|📦|📄|🎯|📝|💬|⚡|🔧|📊|🎨|🐛|📦|🔍|⚙️|🚀|💡|🔒|📈|📉|🎭|🎪|🎬|📌|📍|🔖|🏷️|⭐|🌟|💫|🔥|💯|✅|❌|⚠️|ℹ️|🔔|📢|📣|🔴|🟢|🟡|🔵|🟣|🟠|⚫|⚪|🟤/g, '')
+      .replace(/[Reload]||↗|⇄|→|||[Target]|[Note]|[Chat]|[Fast]|[Tool]|[Chart]|[Art]|||[Search]|[Settings]|[Launch]|[Idea]|[Locked]|[Up]|[Down]|[Mask]|[Circus]|[Film]|[Pin]|||||[Star]||[Fire]||[OK]|[X]|[Warning]|[Info]|[Bell]||||🟢|🟡||🟣|🟠|||🟤/g, '')
       // Remove emoji ranges
       .replace(/[\u{1F300}-\u{1F9FF}]/gu, '') // Miscellaneous Symbols and Pictographs
       .replace(/[\u{2600}-\u{26FF}]/gu, '') // Miscellaneous Symbols
@@ -3599,7 +3621,7 @@ function renderActivityTimeline(events) {
                     <button class="timeline-card-toggle" id="${simpleExpandId}" onclick="event.stopPropagation(); toggleEventDetails('${simpleExpandId}', '${simpleDetailsId}')" 
                             style="background: none; border: none; color: var(--color-text-muted); cursor: pointer; padding: 4px; font-size: 12px; transition: transform 0.2s;"
                             title="Toggle details">
-                      ▼
+                      
                     </button>
                   </div>
                 </div>
@@ -3686,14 +3708,14 @@ function renderCommitGroup(commitGroup, timelineItems = null) {
           <div class="commit-subgroup-header" onclick="toggleCommitSubgroup('${promptSubgroupId}')" style="cursor: pointer; margin-bottom: var(--space-sm);">
             <span class="commit-subgroup-label">AI Prompts</span>
             <span class="commit-subgroup-count">${prompts.length}</span>
-            <span class="commit-subgroup-toggle" id="toggle-${promptSubgroupId}">▼</span>
+            <span class="commit-subgroup-toggle" id="toggle-${promptSubgroupId}"></span>
           </div>
           <div class="commit-subgroup-items" id="items-${promptSubgroupId}" style="display: block;">
             ${promptsHtmlContent}
             ${hiddenCount > 0 ? `
               <div class="prompt-group-more" onclick="event.stopPropagation(); toggleCommitSubgroup('${promptSubgroupId}-more')" 
                    style="padding: var(--space-xs); text-align: center; color: var(--color-primary); cursor: pointer; font-size: var(--text-xs); font-weight: 500; border-top: 1px dashed var(--color-border); margin-top: var(--space-xs);">
-                Show ${hiddenCount} more prompt${hiddenCount !== 1 ? 's' : ''} ▼
+                Show ${hiddenCount} more prompt${hiddenCount !== 1 ? 's' : ''} 
               </div>
               <div id="items-${promptSubgroupId}-more" style="display: none;">
                 ${prompts.slice(5).map(prompt => {
@@ -3770,7 +3792,7 @@ function renderCommitGroup(commitGroup, timelineItems = null) {
             </div>
           </div>
         </div>
-        <span class="commit-group-toggle" id="toggle-${commitId}">${startCollapsed ? '▶' : '▼'}</span>
+        <span class="commit-group-toggle" id="toggle-${commitId}">${startCollapsed ? '' : ''}</span>
       </div>
       <div class="commit-group-items" id="items-${commitId}" style="display: ${startCollapsed ? 'none' : 'block'};">
         ${itemsHtml}
@@ -3786,7 +3808,7 @@ window.toggleCommitGroup = function(commitId) {
   if (itemsContainer && toggle) {
     const isExpanded = itemsContainer.style.display !== 'none';
     itemsContainer.style.display = isExpanded ? 'none' : 'block';
-    toggle.textContent = isExpanded ? '▶' : '▼';
+    toggle.textContent = isExpanded ? '' : '';
   }
 };
 
@@ -3797,7 +3819,7 @@ window.toggleCommitSubgroup = function(subgroupId) {
   if (itemsContainer && toggle) {
     const isExpanded = itemsContainer.style.display !== 'none';
     itemsContainer.style.display = isExpanded ? 'none' : 'block';
-    toggle.textContent = isExpanded ? '▶' : '▼';
+    toggle.textContent = isExpanded ? '' : '';
   }
 };
 
@@ -3813,8 +3835,8 @@ window.togglePromptGroup = function(groupId) {
   hiddenContainer.style.display = isExpanded ? 'none' : 'block';
   const hiddenCount = hiddenContainer.querySelectorAll('.commit-prompt-item').length;
   moreButton.textContent = isExpanded 
-    ? `Show ${hiddenCount} more prompt${hiddenCount !== 1 ? 's' : ''} ▼`
-    : `Hide ${hiddenCount} prompt${hiddenCount !== 1 ? 's' : ''} ▲`;
+    ? `Show ${hiddenCount} more prompt${hiddenCount !== 1 ? 's' : ''} `
+    : `Hide ${hiddenCount} prompt${hiddenCount !== 1 ? 's' : ''} `;
 };
 
 // Toggle function for event details (inline expansion)
@@ -3829,12 +3851,12 @@ window.toggleEventDetails = async function(toggleId, detailsId) {
   if (isExpanded) {
     // Collapse
     detailsContainer.style.display = 'none';
-    toggle.textContent = '▼';
+    toggle.textContent = '';
     toggle.style.transform = 'rotate(0deg)';
   } else {
     // Expand - load details if not already loaded
     detailsContainer.style.display = 'block';
-    toggle.textContent = '▲';
+    toggle.textContent = '';
     toggle.style.transform = 'rotate(180deg)';
     
     // Check if details are already loaded
@@ -4312,7 +4334,7 @@ function renderPromptGroup(group, side = 'left', timelineItems = null) {
                     onclick="event.stopPropagation(); togglePromptGroup('${groupId}')" 
                     style="background: none; border: none; color: var(--color-text-muted); cursor: pointer; padding: 4px; font-size: 12px; transition: transform 0.2s;"
                     title="Toggle group">
-              ▼
+              
             </button>
           </div>
         </div>
@@ -4355,7 +4377,7 @@ function togglePromptGroup(groupId) {
     const isExpanded = itemsContainer.style.display !== 'none';
     itemsContainer.style.display = isExpanded ? 'none' : 'block';
     previewContainer.style.display = isExpanded ? 'block' : 'none';
-    toggleButton.textContent = isExpanded ? '▼' : '▲';
+    toggleButton.textContent = isExpanded ? '' : '';
   }
 }
 

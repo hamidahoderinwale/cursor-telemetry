@@ -184,16 +184,11 @@ async function fetchStatusMessages(startTime, endTime) {
     // Mark service as offline on ANY network-related error
     if (isNetworkError) {
       serviceOffline = true;
-      // ABSOLUTELY NEVER log network errors - they're expected when service is offline
-      // Return empty array silently - NO console.error, NO console.warn, NOTHING
+      // Return empty array silently
       return [];
     }
     
-    // Only log non-network errors, and only first 2, with a clear prefix
-    if (failureCount <= MAX_FAILURES_BEFORE_SILENCE) {
-      console.warn('[Status Messages] Non-network error:', errorMessage.substring(0, 100));
-    }
-    
+    // Return empty array for non-network errors as well
     return [];
   }
 }

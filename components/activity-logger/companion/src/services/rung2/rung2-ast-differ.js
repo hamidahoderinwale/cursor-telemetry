@@ -70,6 +70,36 @@ class Rung2ASTDiffer {
       }
     }
 
+    // Fallback: If no operations detected but ASTs differ, create generic MODIFY operation
+    if (operations.length === 0 && (beforeNodes.length > 0 || afterNodes.length > 0)) {
+      const beforeCount = beforeNodes.length;
+      const afterCount = afterNodes.length;
+      
+      if (beforeCount !== afterCount) {
+        operations.push({
+          type: afterCount > beforeCount ? 'ADD_STATEMENT' : 'REMOVE_STATEMENT',
+          nodeType: 'Generic',
+          line: 1,
+          change: afterCount > beforeCount ? 'add' : 'remove',
+          metadata: {
+            beforeNodeCount: beforeCount,
+            afterNodeCount: afterCount
+          }
+        });
+      } else if (beforeCount > 0 && afterCount > 0) {
+        // Same number of nodes but different content
+        operations.push({
+          type: 'MODIFY_STATEMENT',
+          nodeType: 'Generic',
+          line: 1,
+          change: 'modify',
+          metadata: {
+            nodeCount: beforeCount
+          }
+        });
+      }
+    }
+
     // Determine change style
     const changeStyle = this.determineChangeStyle(operations);
 

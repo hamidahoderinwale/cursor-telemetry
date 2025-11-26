@@ -1027,6 +1027,15 @@ function renderPromptEffectiveness() {
 
   // Calculate metrics
   const totalPrompts = prompts.length;
+  
+  // Debug info for troubleshooting
+  console.log('[ANALYTICS] Prompt Effectiveness:', {
+    totalPrompts,
+    linkedPrompts: linkedPrompts.length,
+    unlinkedPrompts: unlinkedPrompts.length,
+    totalEvents: events.length,
+    codeChangeEvents: events.filter(e => e.type === 'file-change' || e.type === 'code-change' || e.type === 'file-edit').length
+  });
   const successCount = linkedPrompts.length;
   const successRate = totalPrompts > 0 ? (successCount / totalPrompts * 100).toFixed(1) : 0;
   const avgTimeToChange = linkedPrompts.length > 0 
@@ -1104,7 +1113,10 @@ function renderPromptEffectiveness() {
         <div style="padding: var(--space-md); background: var(--color-surface); border-radius: var(--radius-md); border: 1px solid var(--color-border);">
           <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-bottom: var(--space-xs);">Success Rate</div>
           <div style="font-size: var(--text-2xl); font-weight: 600; color: ${successRate >= 50 ? colors.success : colors.warning};">${successRate}%</div>
-          <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">${successCount} of ${totalPrompts} prompts</div>
+          <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">
+            ${successCount} of ${totalPrompts} prompts
+            ${successRate == 0 && events.filter(e => e.type === 'file-change' || e.type === 'code-change' || e.type === 'file-edit').length === 0 ? '<br><span style="color: var(--color-info);">No code change events detected yet</span>' : ''}
+          </div>
         </div>
         <div style="padding: var(--space-md); background: var(--color-surface); border-radius: var(--radius-md); border: 1px solid var(--color-border);">
           <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-bottom: var(--space-xs);">Avg Time to Change</div>

@@ -5,7 +5,7 @@
 
 const state = {
   connected: false,
-  currentView: 'activity',
+  currentView: 'overview',
   currentWorkspace: 'all',
   data: {
     events: [],

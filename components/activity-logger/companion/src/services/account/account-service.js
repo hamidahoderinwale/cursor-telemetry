@@ -168,6 +168,7 @@ class AccountService {
     }
   }
 
+
   /**
    * Create local account (for offline/local mode)
    */
@@ -394,9 +395,145 @@ class AccountService {
     }
     return null;
   }
+
+  /**
+   * Register or login with OAuth provider
+   */
+  async authenticateWithOAuth(provider, userInfo, oauthTokens) {
+    if (this.options.localMode) {
+      return this.createLocalAccountFromOAuth(provider, userInfo, oauthTokens);
+    }
+
+    try {
+      // Check if account exists with this email
+      const existingAccount = await this.db.get(
+        'SELECT account_id FROM accounts WHERE email = ?',
+        [userInfo.email]
+      );
+
+      let accountId;
+      let isNewAccount = false;
+
+      if (existingAccount) {
+        // Existing account - login
+        accountId = existingAccount.account_id;
+      } else {
+        // New account - register
+        accountId = crypto.randomBytes(16).toString('hex');
+        isNewAccount = true;
+      }
+
+      // Create or update account with OAuth info
+      const accessToken = crypto.randomBytes(32).toString('hex');
+      const expiresAt = Date.now() + (24 * 60 * 60 * 1000); // 24 hours
+
+      await this.db.run(
+        `INSERT OR REPLACE INTO accounts 
+         (account_id, email, access_token, token_expires_at, device_id, device_name, created_at, sync_enabled)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          accountId,
+          userInfo.email,
+          accessToken,
+          expiresAt,
+          this.deviceId,
+          this.getDeviceName(),
+          isNewAccount ? Date.now() : (await this.db.get('SELECT created_at FROM accounts WHERE account_id = ?', [accountId]))?.created_at || Date.now(),
+          1 // Sync enabled for OAuth accounts
+        ]
+      );
+
+      // Save OAuth tokens if oauthService is available
+      if (this.oauthService) {
+        await this.oauthService.saveOAuthTokens(accountId, provider, oauthTokens, userInfo);
+      }
+
+      // Assign default role to new accounts
+      if (isNewAccount && this.authorizationService) {
+        await this.authorizationService.assignRole(accountId, 'user');
+      }
+
+      this.accountCache = {
+        account_id: accountId,
+        email: userInfo.email,
+        access_token: accessToken,
+        expires_at: expiresAt,
+        sync_enabled: true,
+        oauth_provider: provider
+      };
+
+      return {
+        success: true,
+        account_id: accountId,
+        email: userInfo.email,
+        access_token: accessToken,
+        is_new_account: isNewAccount
+      };
+    } catch (error) {
+      console.error('[ACCOUNT] OAuth authentication error:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Create local account from OAuth (for local mode)
+   */
+  async createLocalAccountFromOAuth(provider, userInfo, oauthTokens) {
+    const accountId = crypto.randomBytes(16).toString('hex');
+    const accessToken = crypto.randomBytes(32).toString('hex');
+
+    await this.db.run(
+      `INSERT OR REPLACE INTO accounts 
+       (account_id, email, access_token, device_id, device_name, created_at, sync_enabled)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        accountId,
+        userInfo.email,
+        accessToken,
+        this.deviceId,
+        this.getDeviceName(),
+        Date.now(),
+        0 // Local mode: sync disabled
+      ]
+    );
+
+    // Save OAuth tokens if oauthService is available
+    if (this.oauthService) {
+      await this.oauthService.saveOAuthTokens(accountId, provider, oauthTokens, userInfo);
+    }
+
+    // Assign default role
+    if (this.authorizationService) {
+      await this.authorizationService.assignRole(accountId, 'user');
+    }
+
+    return {
+      success: true,
+      account_id: accountId,
+      email: userInfo.email,
+      access_token: accessToken,
+      local_mode: true
+    };
+  }
+
+  /**
+   * Set OAuth service reference
+   */
+  setOAuthService(oauthService) {
+    this.oauthService = oauthService;
+  }
+
+  /**
+   * Set authorization service reference
+   */
+  setAuthorizationService(authorizationService) {
+    this.authorizationService = authorizationService;
+  }
 }
 
 module.exports = AccountService;
+
+
 
 
 

@@ -184,8 +184,80 @@ function renderOverviewView(container) {
     .sort((a, b) => b.percentage - a.percentage) // Sort by percentage (descending)
     .slice(0, 10); // Top 10 languages
   
+  // Check if welcome banner should be shown
+  const WELCOME_BANNER_KEY = 'cursor-telemetry-welcome-banner-dismissed';
+  const welcomeBannerDismissed = localStorage.getItem(WELCOME_BANNER_KEY) === 'true';
+  
   container.innerHTML = `
     <div class="overview-view">
+      
+      ${!welcomeBannerDismissed ? `
+      <!-- Welcome Banner -->
+      <div class="welcome-banner" id="welcomeBanner">
+        <div class="welcome-banner-content">
+          <div class="welcome-banner-icon">[Dashboard]</div>
+          <div class="welcome-banner-text">
+            <div class="welcome-banner-title">Welcome to Cursor Telemetry</div>
+            <div class="welcome-banner-description">
+              Your complete development workflow is automatically tracked and transformed into procedural knowledge. 
+              This dashboard captures everything you do while coding and extracts patterns from your work.
+            </div>
+          </div>
+          <button class="welcome-banner-close" onclick="dismissWelcomeBanner()" aria-label="Close welcome banner">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+      ` : ''}
+      
+      <!-- Data Capture Showcase Section -->
+      <div class="data-capture-showcase">
+        <div class="showcase-header">
+          <h2 class="showcase-title">Everything is Captured</h2>
+          <p class="showcase-subtitle">Your complete development workflow is automatically tracked and transformed into procedural knowledge</p>
+        </div>
+        <div class="capture-grid">
+          <div class="capture-card">
+            <div class="capture-icon">[Text]</div>
+            <div class="capture-title">File Changes</div>
+            <div class="capture-count">${totalEvents.toLocaleString()}</div>
+            <div class="capture-desc">Every edit, save, and modification tracked with full diffs</div>
+          </div>
+          <div class="capture-card">
+            <div class="capture-icon">[AI]</div>
+            <div class="capture-title">AI Interactions</div>
+            <div class="capture-count">${totalPrompts.toLocaleString()}</div>
+            <div class="capture-desc">Prompts, responses, context usage, and model metadata</div>
+          </div>
+          <div class="capture-card">
+            <div class="capture-icon">[Code]</div>
+            <div class="capture-title">Terminal Commands</div>
+            <div class="capture-count">${terminalCommands.length.toLocaleString()}</div>
+            <div class="capture-desc">Command history and execution patterns</div>
+          </div>
+          <div class="capture-card">
+            <div class="capture-icon">[Links]</div>
+            <div class="capture-title">Context Snapshots</div>
+            <div class="capture-count">-</div>
+            <div class="capture-desc">Files in context, context window evolution</div>
+          </div>
+          <div class="capture-card">
+            <div class="capture-icon">[Data]</div>
+            <div class="capture-title">System Metrics</div>
+            <div class="capture-count">-</div>
+            <div class="capture-desc">CPU, memory, load averages, resource usage</div>
+          </div>
+          <div class="capture-card highlight">
+            <div class="capture-icon">[Pattern]</div>
+            <div class="capture-title">Procedural Patterns</div>
+            <div class="capture-count">Extracted</div>
+            <div class="capture-desc">Motifs, edit scripts, and function-level patterns automatically identified</div>
+            <a href="#patterns-history" class="capture-link" onclick="window.switchView('patterns-history')">Explore Patterns →</a>
+          </div>
+        </div>
+      </div>
       
       <!-- Hero Section -->
       <div class="overview-hero">
@@ -205,8 +277,8 @@ function renderOverviewView(container) {
           </div>
         </div>
         <div class="hero-actions">
-          <a href="#activity" class="btn btn-primary" onclick="window.switchView('activity')">View Activity</a>
-          <a href="#analytics" class="btn" onclick="window.switchView('analytics')">View Analytics</a>
+          <a href="#patterns-history" class="btn btn-primary" onclick="window.switchView('patterns-history')">View Patterns History</a>
+          <a href="#activity" class="btn btn-secondary" onclick="window.switchView('activity')">View Activity</a>
         </div>
       </div>
       
@@ -279,6 +351,17 @@ function renderOverviewView(container) {
         
       </div>
       
+      <!-- Procedural Knowledge Preview -->
+      <div class="card" style="margin-bottom: var(--space-xl);">
+        <div class="card-header">
+          <h3 class="card-title">Recent Patterns</h3>
+          <p class="card-subtitle">Procedural knowledge extracted from your workflow</p>
+        </div>
+        <div class="card-body" id="patterns-preview-container">
+          <div class="loading-state">Loading patterns...</div>
+        </div>
+      </div>
+      
       <!-- Two Column Layout -->
       <div class="overview-grid-2col">
         
@@ -322,8 +405,143 @@ function renderOverviewView(container) {
       }
     }
   })();
+
+  // Load patterns preview
+  loadPatternsPreview();
+}
+
+async function loadPatternsPreview() {
+  const container = document.getElementById('patterns-preview-container');
+  if (!container) return;
+
+  try {
+    const apiBase = window.CONFIG?.API_BASE || 'http://localhost:43917';
+    const patterns = [];
+
+    // Load recent motifs
+    try {
+      const motifsResponse = await fetch(`${apiBase}/api/motifs`);
+      if (motifsResponse.ok) {
+        const motifsData = await motifsResponse.json();
+        if (motifsData.success && motifsData.motifs) {
+          motifsData.motifs.slice(0, 3).forEach(motif => {
+            patterns.push({
+              type: 'motif',
+              id: motif.id,
+              name: motif.name || `Motif ${motif.id}`,
+              frequency: motif.frequency || 0,
+              intent: motif.dominantIntent || 'OTHER',
+              timestamp: motif.firstSeen || motif.timestamp || Date.now()
+            });
+          });
+        }
+      }
+    } catch (error) {
+      console.debug('[OVERVIEW] Could not load motifs:', error);
+    }
+
+    // Load recent edit scripts
+    try {
+      const scriptsResponse = await fetch(`${apiBase}/api/rung2/edit-scripts?limit=3`);
+      if (scriptsResponse.ok) {
+        const scriptsData = await scriptsResponse.json();
+        if (scriptsData.success && scriptsData.scripts) {
+          scriptsData.scripts.slice(0, 3).forEach(script => {
+            patterns.push({
+              type: 'edit-script',
+              id: script.id,
+              name: script.filePath ? script.filePath.split('/').pop() : `Edit Script ${script.id}`,
+              frequency: 1,
+              intent: script.intentCategory || 'OTHER',
+              timestamp: script.timestamp || Date.now()
+            });
+          });
+        }
+      }
+    } catch (error) {
+      console.debug('[OVERVIEW] Could not load edit scripts:', error);
+    }
+
+    // Sort by timestamp and take top 5
+    patterns.sort((a, b) => b.timestamp - a.timestamp);
+    const recentPatterns = patterns.slice(0, 5);
+
+    if (recentPatterns.length === 0) {
+      container.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-state-text">No patterns yet</div>
+          <div class="empty-state-hint">Patterns will appear here as procedural knowledge is extracted from your code changes.</div>
+        </div>
+      `;
+      return;
+    }
+
+    const intentColors = {
+      'FIX_BUG': '#ef4444',
+      'ADD_FEATURE': '#3b82f6',
+      'REFACTOR': '#8b5cf6',
+      'TEST': '#10b981',
+      'DOCUMENT': '#f59e0b',
+      'OTHER': '#6b7280'
+    };
+
+    container.innerHTML = `
+      <div class="patterns-preview-list">
+        ${recentPatterns.map(pattern => {
+          const timeAgo = window.formatTimeAgo ? window.formatTimeAgo(pattern.timestamp) : new Date(pattern.timestamp).toLocaleDateString();
+          const intentColor = intentColors[pattern.intent] || intentColors.OTHER;
+          const typeIcon = pattern.type === 'motif' ? '[M]' : '[E]';
+          const typeLabel = pattern.type === 'motif' ? 'Motif' : 'Edit Script';
+          
+          return `
+            <div class="pattern-preview-item" onclick="window.switchView('patterns-history')">
+              <div class="pattern-preview-icon" style="background: ${intentColor}20; color: ${intentColor}">
+                ${typeIcon}
+              </div>
+              <div class="pattern-preview-info">
+                <div class="pattern-preview-name">${window.escapeHtml ? window.escapeHtml(pattern.name) : pattern.name}</div>
+                <div class="pattern-preview-meta">
+                  <span class="pattern-preview-type">${typeLabel}</span>
+                  ${pattern.frequency > 1 ? `<span class="pattern-preview-frequency">${pattern.frequency}x</span>` : ''}
+                  <span class="pattern-preview-time">${timeAgo}</span>
+                </div>
+              </div>
+            </div>
+          `;
+        }).join('')}
+        <div class="patterns-preview-footer">
+          <a href="#patterns-history" class="patterns-preview-link" onclick="window.switchView('patterns-history')">
+            View All Patterns →
+          </a>
+        </div>
+      </div>
+    `;
+  } catch (error) {
+    console.debug('[OVERVIEW] Error loading patterns preview:', error);
+    container.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-state-text">Could not load patterns</div>
+      </div>
+    `;
+  }
+}
+
+/**
+ * Dismiss welcome banner
+ */
+function dismissWelcomeBanner() {
+  const banner = document.getElementById('welcomeBanner');
+  if (banner) {
+    banner.style.opacity = '0';
+    banner.style.transform = 'translateY(-10px)';
+    setTimeout(() => {
+      banner.remove();
+    }, 300);
+  }
+  localStorage.setItem('cursor-telemetry-welcome-banner-dismissed', 'true');
 }
 
 // Export to window for global access
 window.renderOverviewView = renderOverviewView;
+window.dismissWelcomeBanner = dismissWelcomeBanner;
 

@@ -58,11 +58,11 @@ function getItemIntent(item) {
  */
 function groupItemsByIntent(items) {
   const columns = {
-    explore: { items: [], label: 'Explore', icon: '🔍', color: '#3b82f6' },
-    implement: { items: [], label: 'Implement', icon: '⚡', color: '#10b981' },
-    debug: { items: [], label: 'Debug', icon: '🐛', color: '#ef4444' },
-    refactor: { items: [], label: 'Refactor', icon: '♻️', color: '#f59e0b' },
-    other: { items: [], label: 'Other', icon: '📝', color: '#6b7280' }
+    explore: { items: [], label: 'Explore', icon: '[Search]', color: '#3b82f6' },
+    implement: { items: [], label: 'Implement', icon: '[Fast]', color: '#10b981' },
+    debug: { items: [], label: 'Debug', icon: '', color: '#ef4444' },
+    refactor: { items: [], label: 'Refactor', icon: '', color: '#f59e0b' },
+    other: { items: [], label: 'Other', icon: '[Note]', color: '#6b7280' }
   };
   
   items.forEach(item => {
@@ -95,9 +95,9 @@ function groupItemsByTime(items) {
   const oneWeek = 7 * oneDay;
   
   const columns = {
-    today: { items: [], label: 'Today', icon: '📅', color: '#3b82f6' },
-    thisWeek: { items: [], label: 'This Week', icon: '📆', color: '#10b981' },
-    older: { items: [], label: 'Older', icon: '📚', color: '#6b7280' }
+    today: { items: [], label: 'Today', icon: '', color: '#3b82f6' },
+    thisWeek: { items: [], label: 'This Week', icon: '', color: '#10b981' },
+    older: { items: [], label: 'Older', icon: '', color: '#6b7280' }
   };
   
   items.forEach(item => {
@@ -130,10 +130,10 @@ function groupItemsByTime(items) {
  */
 function groupItemsByType(items) {
   const columns = {
-    events: { items: [], label: 'File Changes', icon: '📄', color: '#3b82f6' },
-    prompts: { items: [], label: 'Prompts', icon: '💬', color: '#8b5cf6' },
-    terminal: { items: [], label: 'Terminal', icon: '💻', color: '#10b981' },
-    conversations: { items: [], label: 'Conversations', icon: '💭', color: '#f59e0b' }
+    events: { items: [], label: 'File Changes', icon: '', color: '#3b82f6' },
+    prompts: { items: [], label: 'Prompts', icon: '[Chat]', color: '#8b5cf6' },
+    terminal: { items: [], label: 'Terminal', icon: '[Code]', color: '#10b981' },
+    conversations: { items: [], label: 'Conversations', icon: '', color: '#f59e0b' }
   };
   
   items.forEach(item => {
@@ -173,18 +173,18 @@ function renderKanbanCard(item, allItems, index) {
   // Get item preview text
   let previewText = '';
   let itemType = item.itemType || 'event';
-  let icon = '📄';
+  let icon = '';
   let color = 'var(--color-primary)';
   
   if (itemType === 'prompt') {
     previewText = (item.text || item.prompt || item.content || 'No prompt text').substring(0, 120);
-    icon = '💬';
+    icon = '[Chat]';
     color = 'var(--color-accent)';
   } else if (itemType === 'event') {
     const details = typeof item.details === 'string' ? JSON.parse(item.details) : item.details;
     const filePath = details?.file_path || item.file_path || 'Unknown file';
     previewText = filePath.split('/').pop();
-    icon = '📝';
+    icon = '[Note]';
     color = 'var(--color-success)';
     const linesAdded = details?.lines_added || details?.diff_stats?.lines_added || 0;
     const linesRemoved = details?.lines_removed || details?.diff_stats?.lines_removed || 0;
@@ -193,15 +193,15 @@ function renderKanbanCard(item, allItems, index) {
     }
   } else if (itemType === 'terminal') {
     previewText = (item.command || 'Terminal command').substring(0, 80);
-    icon = '💻';
+    icon = '[Code]';
     color = 'var(--color-success)';
   } else if (itemType === 'conversation-turn') {
     previewText = (item.content || item.text || 'Conversation message').substring(0, 120);
-    icon = item.isUser || item.role === 'user' ? '👤' : '🤖';
+    icon = item.isUser || item.role === 'user' ? '' : '[AI]';
     color = item.isUser || item.role === 'user' ? 'var(--color-primary)' : 'var(--color-accent)';
   } else if (itemType === 'conversation') {
     previewText = (item.title || item.conversationTitle || 'Conversation').substring(0, 100);
-    icon = '💭';
+    icon = '';
     color = 'var(--color-warning)';
   }
   

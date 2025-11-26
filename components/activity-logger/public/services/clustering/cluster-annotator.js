@@ -33,7 +33,7 @@ class ClusterAnnotator {
         if (status.available && status.hasApiKey) {
           this.useOpenRouter = true;
           this.isInitialized = true;
-          console.log('[CLUSTER-ANNOTATOR] ✓ Using OpenRouter API for cluster insights');
+          console.log('[CLUSTER-ANNOTATOR]  Using OpenRouter API for cluster insights');
           console.log(`[CLUSTER-ANNOTATOR]   Chat Model: ${status.chatModel || 'google/gemini-flash-1.5:free'}`);
           console.log(`[CLUSTER-ANNOTATOR]   Embedding Model: ${status.embeddingModel || 'openai/text-embedding-3-small'}`);
           return;
@@ -50,7 +50,7 @@ class ClusterAnnotator {
         const transformers = window.transformers || await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2');
         this.transformers = transformers;
         this.isInitialized = true;
-        console.log('[CLUSTER-ANNOTATOR] ✓ Using Transformers.js (free, local)');
+        console.log('[CLUSTER-ANNOTATOR]  Using Transformers.js (free, local)');
         return;
       }
 
@@ -59,7 +59,7 @@ class ClusterAnnotator {
       const transformers = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2');
       this.transformers = transformers;
       this.isInitialized = true;
-      console.log('[CLUSTER-ANNOTATOR] ✓ Transformers.js loaded successfully');
+      console.log('[CLUSTER-ANNOTATOR]  Transformers.js loaded successfully');
       console.log('[CLUSTER-ANNOTATOR]   Using local models - no API key required');
     } catch (error) {
       console.warn('[CLUSTER-ANNOTATOR] Failed to load Transformers.js:', error.message);

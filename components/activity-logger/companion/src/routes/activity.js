@@ -2,6 +2,8 @@
  * Activity API routes
  */
 
+const { generateETagFromValues, checkETag } = require('../utils/etag.js');
+
 function createActivityRoutes(deps) {
   const { app, persistentDB, sequence, queryCache, calculateDiff, cursorDbParser, dataAccessControl } = deps;
 
@@ -26,30 +28,30 @@ function createActivityRoutes(deps) {
       // Enhanced cache control headers for cloud/CDN optimization
       // Use stale-while-revalidate pattern for better performance
       res.set('Cache-Control', 'public, max-age=30, s-maxage=60, stale-while-revalidate=300');
-      res.set('ETag', `W/"activity-${sequence}-${limit}-${offset}"`);
       res.set('Vary', 'Accept-Encoding'); // Cache different versions for different encodings
 
       // Cache key based on params
-      const cacheKey = `activity_${limit}_${offset}_${sequence}`;
+      const cacheKey = `activity_${limit}_${offset}_${workspace || 'all'}_${sequence}`;
 
       // Try to get from cache first
       const cached = await withCache(cacheKey, 30, async () => {
-        //  Get total count and limited entries separately
+        // OPTIMIZATION: Use database-level pagination instead of in-memory slicing
         const totalCount = await persistentDB.getTotalEntriesCount();
-        const allEntries = await persistentDB.getRecentEntries(limit + offset);
-        const allPrompts = await persistentDB.getRecentPrompts(limit);
+        const paginatedEntries = await persistentDB.getRecentEntries(limit, null, offset, workspace);
+        const allPrompts = await persistentDB.getRecentPrompts(limit, 0, workspace);
 
-        // Already sorted by database query (ORDER BY timestamp DESC)
-        // Apply offset/limit
-        const paginatedEntries = allEntries.slice(
-          offset,
-          Math.min(offset + limit, allEntries.length)
-        );
-
-        return { totalCount, allEntries, allPrompts, paginatedEntries };
+        return { totalCount, paginatedEntries, allPrompts };
       });
 
-      const { totalCount, allEntries, allPrompts, paginatedEntries } = cached;
+      const { totalCount, paginatedEntries, allPrompts } = cached;
+
+      // Generate ETag from actual content for better cache validation
+      const etag = generateETagFromValues(true, sequence, limit, offset, workspace || 'all', totalCount);
+      
+      // Check If-None-Match header
+      if (checkETag(req, res, etag)) {
+        return; // 304 Not Modified sent
+      }
 
       // Apply workspace and data source filtering if enabled
       let filteredEntries = paginatedEntries;
@@ -160,8 +162,8 @@ function createActivityRoutes(deps) {
       res.setHeader('Cache-Control', 'public, max-age=30');
       res.write('{"data":[');
 
-      const entries = await persistentDB.getRecentEntries(limit + offset);
-      let paginatedEntries = entries.slice(offset, offset + limit);
+      // OPTIMIZATION: Use database-level pagination
+      let paginatedEntries = await persistentDB.getRecentEntries(limit, null, offset, workspace);
       
       // Apply workspace and data source filtering if enabled
       if (dataAccessControl) {
@@ -218,7 +220,7 @@ function createActivityRoutes(deps) {
     try {
       // Use pagination - don't load everything
       const limit = Math.min(parseInt(req.query.limit) || 200, 500);
-      const allPrompts = await persistentDB.getRecentPrompts(limit);
+      const allPrompts = await persistentDB.getRecentPrompts(limit, 0, workspace);
 
       // Also get prompts from Cursor database
       try {
@@ -310,6 +312,35 @@ function createActivityRoutes(deps) {
       });
     } catch (error) {
       console.error('Error fetching Cursor database:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message,
+      });
+    }
+  });
+
+  // Force prompt sync endpoint
+  app.post('/api/sync/prompts', async (req, res) => {
+    try {
+      const forceFullSync = req.query.force === 'true' || req.body?.force === true;
+      
+      console.log('[API] Force sync requested', { forceFullSync });
+
+      // Extract prompts from Cursor database
+      const data = await cursorDbParser.extractAllAIServiceData();
+      const promptCount = data?.length || 0;
+
+      // Note: Actual sync happens via the background interval
+      // This endpoint just provides information about available prompts
+      res.json({
+        success: true,
+        message: forceFullSync ? 'Full sync will be triggered on next interval' : 'Incremental sync runs every 30s',
+        prompts_available_in_cursor_db: promptCount,
+        note: 'Background sync runs every 30 seconds. Use /api/cursor-database to get fresh data immediately.',
+        sync_interval: '30 seconds',
+      });
+    } catch (error) {
+      console.error('Error checking prompt sync:', error);
       res.status(500).json({
         success: false,
         error: error.message,

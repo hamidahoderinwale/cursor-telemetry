@@ -29,6 +29,7 @@ class Rung1Canonicalizer {
       redactUrls: options.redactUrls !== false,     // Default: true
       redactIpAddresses: options.redactIpAddresses !== false, // Default: true
       redactFilePaths: options.redactFilePaths !== false,     // Default: true
+      redactJwtSecrets: options.redactJwtSecrets !== false,    // Default: true
       redactAllStrings: options.redactAllStrings !== false,   // Default: true (legacy behavior)
       redactAllNumbers: options.redactAllNumbers !== false,   // Default: true (legacy behavior)
     };
@@ -43,6 +44,12 @@ class Rung1Canonicalizer {
       phoneNumber: /\b(?:\+?1[-.\s]?)?\(?[0-9]{3}\)?[-.\s]?[0-9]{3}[-.\s]?[0-9]{4}\b/g,
       ssn: /\b\d{3}-\d{2}-\d{4}\b/g,
       creditCard: /\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b/g,
+      // JWT tokens: three base64url-encoded parts separated by dots (header.payload.signature)
+      jwtToken: /\beyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{20,}\b/g,
+      // JWT/JWST secrets in environment variables or code assignments
+      jwtSecret: /(?:jwt|jwst)[_-]?(?:secret|key|token|signing[_-]?key)[=:]\s*['"`]([^'"`]{20,})['"`]/gi,
+      // High entropy strings that could be JWT secrets (32+ base64url characters)
+      jwtSecretHighEntropy: /\b[A-Za-z0-9+/]{32,}={0,2}\b/g,
     };
   }
 
@@ -155,6 +162,19 @@ class Rung1Canonicalizer {
     if (this.piiOptions.redactFilePaths && this.piiPatterns.filePath.test(value)) {
       return 'FILEPATH';
     }
+    if (this.piiOptions.redactJwtSecrets) {
+      if (this.piiPatterns.jwtToken.test(value)) {
+        return 'JWT_TOKEN';
+      }
+      if (this.piiPatterns.jwtSecret.test(value)) {
+        return 'JWT_SECRET';
+      }
+      // Check for high entropy strings that could be JWT secrets
+      // Only flag if it's a standalone string (not part of a larger structure)
+      if (this.piiPatterns.jwtSecretHighEntropy.test(value) && value.length >= 32 && value.length <= 512) {
+        return 'JWT_SECRET';
+      }
+    }
     if (this.piiPatterns.phoneNumber.test(value)) {
       return 'PHONE';
     }
@@ -194,7 +214,9 @@ class Rung1Canonicalizer {
                    this.piiOptions.redactNames && this.piiPatterns.name.test(originalCode) ||
                    this.piiOptions.redactUrls && this.piiPatterns.url.test(originalCode) ||
                    this.piiOptions.redactIpAddresses && this.piiPatterns.ipAddress.test(originalCode) ||
-                   this.piiOptions.redactFilePaths && this.piiPatterns.filePath.test(originalCode);
+                   this.piiOptions.redactFilePaths && this.piiPatterns.filePath.test(originalCode) ||
+                   this.piiOptions.redactJwtSecrets && (this.piiPatterns.jwtToken.test(originalCode) ||
+                                                         this.piiPatterns.jwtSecret.test(originalCode));
     
     if (hasPII) {
       // If PII detected in code, redact all strings (conservative approach)

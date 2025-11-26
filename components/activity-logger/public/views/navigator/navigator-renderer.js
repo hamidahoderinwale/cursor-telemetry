@@ -554,7 +554,7 @@ function updateNavigatorStats() {
           ${hasChildren ? `
             <button class="cluster-expand-btn" onclick="toggleClusterExpand('${cluster.id}')" 
                     style="background: none; border: none; cursor: pointer; padding: 2px 4px; color: var(--color-text-muted); font-size: 10px; width: 16px; height: 16px; display: flex; align-items: center; justify-content: center;">
-              ${isExpanded ? '▼' : '▶'}
+              ${isExpanded ? '' : ''}
             </button>
           ` : '<span style="width: 16px;"></span>'}
           <div class="cluster-legend-color" style="background: ${cluster.color}; width: 12px; height: 12px; border-radius: 2px; flex-shrink: 0;"></div>
@@ -629,7 +629,7 @@ if (typeof window !== 'undefined') {
               ${hasChildren ? `
                 <button class="cluster-expand-btn" onclick="toggleClusterExpand('${cluster.id}')" 
                         style="background: none; border: none; cursor: pointer; padding: 2px 4px; color: var(--color-text-muted); font-size: 10px; width: 16px; height: 16px; display: flex; align-items: center; justify-content: center;">
-                  ${isExpanded ? '▼' : '▶'}
+                  ${isExpanded ? '' : ''}
                 </button>
               ` : '<span style="width: 16px;"></span>'}
               <div class="cluster-legend-color" style="background: ${cluster.color}; width: 12px; height: 12px; border-radius: 2px; flex-shrink: 0;"></div>

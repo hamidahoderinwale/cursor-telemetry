@@ -19,16 +19,68 @@ function updateStatsDisplay() {
   const statActivitiesToday = document.getElementById('statActivitiesToday');
   const statActivitiesTodayBreakdown = document.getElementById('statActivitiesTodayBreakdown');
   
-  // Update workspace count
-  const workspaceCount = window.state.stats.workspaces || 
-                        (window.state.data?.workspaces?.length || 0);
-  if (statWorkspaces) statWorkspaces.textContent = workspaceCount;
+  /**
+   * Format large numbers with K/M suffixes for better readability
+   */
+  function formatNumber(num) {
+    if (num >= 1000000) {
+      return (num / 1000000).toFixed(1) + 'M';
+    } else if (num >= 1000) {
+      return (num / 1000).toFixed(1) + 'K';
+    }
+    return num.toLocaleString();
+  }
+
+  /**
+   * Format file size with appropriate units
+   */
+  function formatFileSize(kb) {
+    const value = typeof kb === 'string' ? parseFloat(kb) : kb;
+    if (value >= 1024 * 1024) {
+      return `${(value / (1024 * 1024)).toFixed(2)} GB`;
+    } else if (value >= 1024) {
+      return `${(value / 1024).toFixed(2)} MB`;
+    }
+    return `${value.toFixed(1)} KB`;
+  }
+
+  // Update workspace count - try multiple sources
+  let workspaceCount = 0;
+  if (window.state.stats?.workspaces !== undefined) {
+    workspaceCount = window.state.stats.workspaces;
+  } else if (window.state.data?.workspaces && Array.isArray(window.state.data.workspaces)) {
+    workspaceCount = window.state.data.workspaces.length;
+  }
+  if (statWorkspaces) statWorkspaces.textContent = workspaceCount.toLocaleString();
   
-  if (statSessions) statSessions.textContent = window.state.stats.sessions || 0;
-  if (statFileChanges) statFileChanges.textContent = window.state.stats.fileChanges || 0;
-  if (statAIInteractions) statAIInteractions.textContent = window.state.stats.aiInteractions || 0;
-  if (statCodeChanged) statCodeChanged.textContent = `${window.state.stats.codeChanged || 0} KB`;
-  if (statAvgContext) statAvgContext.textContent = `${window.state.stats.avgContext || 0}%`;
+  // Update sessions
+  const sessions = window.state.stats?.sessions || 0;
+  if (statSessions) statSessions.textContent = sessions.toLocaleString();
+  
+  // Update file changes - use compact format for large numbers
+  const fileChanges = window.state.stats?.fileChanges || 0;
+  if (statFileChanges) {
+    statFileChanges.textContent = fileChanges >= 1000 ? formatNumber(fileChanges) : fileChanges.toLocaleString();
+  }
+  
+  // Update AI interactions - use compact format for large numbers
+  const aiInteractions = window.state.stats?.aiInteractions || 0;
+  if (statAIInteractions) {
+    statAIInteractions.textContent = aiInteractions >= 1000 ? formatNumber(aiInteractions) : aiInteractions.toLocaleString();
+  }
+  
+  // Update code changed - use appropriate units (KB/MB/GB)
+  const codeChanged = window.state.stats?.codeChanged || 0;
+  if (statCodeChanged) {
+    statCodeChanged.textContent = formatFileSize(codeChanged);
+  }
+  
+  // Update average context - show 1 decimal place, or 0.0% if zero
+  const avgContext = window.state.stats?.avgContext || 0;
+  if (statAvgContext) {
+    const avgContextValue = typeof avgContext === 'string' ? parseFloat(avgContext) : avgContext;
+    statAvgContext.textContent = avgContextValue > 0 ? `${avgContextValue.toFixed(1)}%` : '0.0%';
+  }
   
   // Get events and prompts from state
   const events = window.state.data?.events || [];
@@ -78,14 +130,16 @@ function updateStatsDisplay() {
   if (statLanguages) {
     if (topLanguages.length > 0) {
       // Display with percentages, ordered by percentage
+      // Format: "JavaScript 75%, HTML 10%, Shell 5%"
       statLanguages.textContent = topLanguages.map(({ language, percentage }) => 
-        `${language} ${percentage.toFixed(0)}%`
+        `${language} ${Math.round(percentage)}%`
       ).join(', ');
       statLanguages.title = topLanguages.map(({ language, count, percentage }) => 
-        `${language}: ${count} changes (${percentage.toFixed(1)}%)`
+        `${language}: ${count.toLocaleString()} changes (${percentage.toFixed(1)}%)`
       ).join('\n');
     } else {
       statLanguages.textContent = '-';
+      statLanguages.title = 'No language data available';
     }
   }
   
@@ -105,9 +159,11 @@ function updateStatsDisplay() {
     if (mostActiveWorkspace) {
       const workspaceName = mostActiveWorkspace[0].split('/').pop() || mostActiveWorkspace[0];
       statActiveWorkspace.textContent = workspaceName;
-      statActiveWorkspace.title = `${mostActiveWorkspace[0]}\n${mostActiveWorkspace[1]} activities`;
+      const activityCount = mostActiveWorkspace[1];
+      statActiveWorkspace.title = `${mostActiveWorkspace[0]}\n${activityCount.toLocaleString()} ${activityCount === 1 ? 'activity' : 'activities'}`;
     } else {
       statActiveWorkspace.textContent = '-';
+      statActiveWorkspace.title = 'No workspace data available';
     }
   }
   
@@ -117,7 +173,7 @@ function updateStatsDisplay() {
   
   const todayEvents = events.filter(e => {
     const eventDate = e.timestamp ? new Date(e.timestamp) : null;
-    return eventDate && eventDate >= today && (e.type === 'file_change' || e.type === 'code_change');
+    return eventDate && eventDate >= today && (e.type === 'file_change' || e.type === 'code_change' || e.type === 'file_save' || !e.type);
   }).length;
   
   const todayPrompts = prompts.filter(p => {
@@ -127,13 +183,25 @@ function updateStatsDisplay() {
   
   const currentActivity = todayEvents + todayPrompts;
   
-  // Update Activities Today
+  // Update Activities Today - use compact format for large numbers
   if (statActivitiesToday) {
-    statActivitiesToday.textContent = currentActivity;
+    statActivitiesToday.textContent = currentActivity >= 1000 ? formatNumber(currentActivity) : currentActivity.toLocaleString();
   }
   
+  // Format breakdown with proper pluralization
   if (statActivitiesTodayBreakdown) {
-    statActivitiesTodayBreakdown.textContent = `${todayEvents} file changes, ${todayPrompts} AI prompts`;
+    const eventsText = todayEvents === 1 ? 'file change' : 'file changes';
+    const promptsText = todayPrompts === 1 ? 'AI prompt' : 'AI prompts';
+    
+    if (todayEvents > 0 && todayPrompts > 0) {
+      statActivitiesTodayBreakdown.textContent = `${todayEvents.toLocaleString()} ${eventsText}, ${todayPrompts.toLocaleString()} ${promptsText}`;
+    } else if (todayEvents > 0) {
+      statActivitiesTodayBreakdown.textContent = `${todayEvents.toLocaleString()} ${eventsText}`;
+    } else if (todayPrompts > 0) {
+      statActivitiesTodayBreakdown.textContent = `${todayPrompts.toLocaleString()} ${promptsText}`;
+    } else {
+      statActivitiesTodayBreakdown.textContent = 'No activity today';
+    }
   }
   
   console.log('[STATS] Updated display:', window.state.stats);

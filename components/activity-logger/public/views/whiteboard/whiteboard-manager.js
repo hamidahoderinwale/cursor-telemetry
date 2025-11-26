@@ -165,7 +165,7 @@ class WhiteboardManager {
         block.classList.toggle('expanded');
         block.classList.toggle('collapsed');
         const isExpanded = block.classList.contains('expanded');
-        expandBtn.textContent = isExpanded ? '⊟' : '⛶';
+        expandBtn.textContent = isExpanded ? '⊟' : '';
         expandBtn.title = isExpanded ? 'Collapse' : 'Expand';
       });
     }
@@ -492,7 +492,7 @@ class WhiteboardManager {
         widget.classList.toggle('expanded');
         widget.classList.toggle('collapsed');
         const isExpanded = widget.classList.contains('expanded');
-        expandBtn.textContent = isExpanded ? '⊟' : '⛶';
+        expandBtn.textContent = isExpanded ? '⊟' : '';
         expandBtn.title = isExpanded ? 'Collapse' : 'Expand';
       });
     }
@@ -697,12 +697,12 @@ class WhiteboardManager {
     
     // Update status text/icon and tooltip
     const statusConfig = {
-      'idle': { icon: '○', text: 'Idle', color: '#6b7280' },
-      'generating': { icon: '⟳', text: 'Generating...', color: '#f59e0b' },
-      'ready': { icon: '✓', text: 'Ready', color: '#6b7280' },
-      'running': { icon: '⟳', text: 'Running...', color: '#8b5cf6' },
-      'success': { icon: '✓', text: message || 'Success', color: '#10b981' },
-      'error': { icon: '✗', text: message || 'Error', color: '#ef4444' }
+      'idle': { icon: '', text: 'Idle', color: '#6b7280' },
+      'generating': { icon: '', text: 'Generating...', color: '#f59e0b' },
+      'ready': { icon: '', text: 'Ready', color: '#6b7280' },
+      'running': { icon: '', text: 'Running...', color: '#8b5cf6' },
+      'success': { icon: '', text: message || 'Success', color: '#10b981' },
+      'error': { icon: '', text: message || 'Error', color: '#ef4444' }
     };
     
     const config = statusConfig[status] || statusConfig['idle'];

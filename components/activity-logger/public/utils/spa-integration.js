@@ -11,7 +11,7 @@ class CompanionIntegration {
   }
 
   async start() {
-    console.log('🔌 Starting companion service integration...');
+    console.log(' Starting companion service integration...');
     
     // Check if companion is available
     const isAvailable = await this.checkCompanionHealth();

@@ -171,6 +171,7 @@ function renderSystemResourcesChart() {
 
 /**
  * Render system resource statistics
+ * Note: These stats show the Companion Service process resources, not system-wide stats
  */
 function renderSystemResourceStats() {
   const container = document.getElementById('systemResourceStats');
@@ -182,34 +183,45 @@ function renderSystemResourceStats() {
     container.innerHTML = `
       <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 200px; text-align: center;">
         <div style="font-size: var(--text-md); font-weight: 500; color: var(--color-text); margin-bottom: var(--space-xs);">No Data Available</div>
-        <div style="font-size: var(--text-sm); color: var(--color-text-muted);">System statistics will appear as data is collected</div>
+        <div style="font-size: var(--text-sm); color: var(--color-text-muted);">Companion service statistics will appear as data is collected</div>
       </div>
     `;
     return;
   }
 
+  // Extract memory data - use heapUsed for Node.js process memory (more accurate)
   const memoryData = data.map(d => {
-    const memBytes = d.memory?.rss || d.memory?.heapUsed || d.memory || 0;
+    const memBytes = d.memory?.heapUsed || d.memory?.rss || d.memory || 0;
     return parseFloat((memBytes / 1024 / 1024).toFixed(1));
   });
   
+  // Extract CPU load average data
   const cpuData = data.map(d => {
     const loadAvg = d.system?.loadAverage || d.loadAverage || [0];
     return loadAvg[0] || 0;
   });
 
-  const avgMemory = memoryData.reduce((a, b) => a + b, 0) / memoryData.length;
-  const maxMemory = Math.max(...memoryData);
-  const minMemory = Math.min(...memoryData);
+  const avgMemory = memoryData.length > 0 ? memoryData.reduce((a, b) => a + b, 0) / memoryData.length : 0;
+  const maxMemory = memoryData.length > 0 ? Math.max(...memoryData) : 0;
+  const minMemory = memoryData.length > 0 ? Math.min(...memoryData) : 0;
   
   const avgCpu = cpuData.reduce((a, b) => a + b, 0) / cpuData.length;
   const maxCpu = Math.max(...cpuData);
   const minCpu = Math.min(...cpuData);
 
+  // Calculate companion service uptime if available
+  const timestamps = data.map(d => d.timestamp).filter(Boolean);
+  const dataAge = timestamps.length > 0 ? ((Date.now() - Math.min(...timestamps)) / 1000 / 60).toFixed(0) : 0;
+  
   container.innerHTML = `
+    <div style="padding: var(--space-md); background: var(--color-info-bg); border: 1px solid var(--color-info); border-radius: var(--radius-md); margin-bottom: var(--space-lg);">
+      <div style="font-size: var(--text-xs); color: var(--color-info-text);">
+        <strong>About These Stats:</strong> These metrics track the Companion Service process (Node.js), not system-wide resources. Data collected over ${dataAge} minutes (${data.length} samples).
+      </div>
+    </div>
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: var(--space-lg);">
       <div class="stat-card" style="padding: var(--space-xl); background: var(--color-bg); border: 1px solid var(--color-border); border-radius: var(--radius-lg);">
-        <div class="stat-label" style="font-size: var(--text-xs); font-weight: 600; color: var(--color-text-muted); margin-bottom: var(--space-md); text-transform: uppercase; letter-spacing: 0.8px;">Avg Memory</div>
+        <div class="stat-label" style="font-size: var(--text-xs); font-weight: 600; color: var(--color-text-muted); margin-bottom: var(--space-md); text-transform: uppercase; letter-spacing: 0.8px;">Avg Memory (Heap)</div>
         <div class="stat-value" style="font-size: 2.5rem; font-weight: 700; color: var(--color-text); margin-bottom: var(--space-lg); line-height: 1.1;">
           ${avgMemory.toFixed(1)} <span style="font-size: 1.25rem; font-weight: 500; color: var(--color-text-secondary);">MB</span>
         </div>
@@ -218,19 +230,25 @@ function renderSystemResourceStats() {
             <span style="color: var(--color-text-muted); font-weight: 500;">Range:</span>
             <span style="margin-left: var(--space-xs); font-weight: 600; color: var(--color-text);">${minMemory.toFixed(1)} - ${maxMemory.toFixed(1)} MB</span>
           </div>
+          <div style="font-size: var(--text-xs); color: var(--color-text-subtle); margin-top: var(--space-xs);">
+            Companion service heap
+          </div>
         </div>
       </div>
       <div class="stat-card" style="padding: var(--space-xl); background: var(--color-bg); border: 1px solid var(--color-border); border-radius: var(--radius-lg);">
-        <div class="stat-label" style="font-size: var(--text-xs); font-weight: 600; color: var(--color-text-muted); margin-bottom: var(--space-md); text-transform: uppercase; letter-spacing: 0.8px;">Peak Memory</div>
+        <div class="stat-label" style="font-size: var(--text-xs); font-weight: 600; color: var(--color-text-muted); margin-bottom: var(--space-md); text-transform: uppercase; letter-spacing: 0.8px;">Peak Memory (Heap)</div>
         <div class="stat-value" style="font-size: 2.5rem; font-weight: 700; color: var(--color-text); margin-bottom: var(--space-lg); line-height: 1.1;">
           ${maxMemory.toFixed(1)} <span style="font-size: 1.25rem; font-weight: 500; color: var(--color-text-secondary);">MB</span>
         </div>
         <div style="font-size: var(--text-sm); color: var(--color-text-secondary); padding-top: var(--space-md); border-top: 1px solid var(--color-border); line-height: 1.6;">
           <div style="color: var(--color-text-muted); font-weight: 500;">Maximum observed</div>
+          <div style="font-size: var(--text-xs); color: var(--color-text-subtle); margin-top: var(--space-xs);">
+            Peak heap usage
+          </div>
         </div>
       </div>
       <div class="stat-card" style="padding: var(--space-xl); background: var(--color-bg); border: 1px solid var(--color-border); border-radius: var(--radius-lg);">
-        <div class="stat-label" style="font-size: var(--text-xs); font-weight: 600; color: var(--color-text-muted); margin-bottom: var(--space-md); text-transform: uppercase; letter-spacing: 0.8px;">Avg CPU Load</div>
+        <div class="stat-label" style="font-size: var(--text-xs); font-weight: 600; color: var(--color-text-muted); margin-bottom: var(--space-md); text-transform: uppercase; letter-spacing: 0.8px;">System CPU Load (1-min)</div>
         <div class="stat-value" style="font-size: 2.5rem; font-weight: 700; color: var(--color-text); margin-bottom: var(--space-lg); line-height: 1.1;">
           ${avgCpu.toFixed(2)}
         </div>
@@ -239,12 +257,15 @@ function renderSystemResourceStats() {
           const cpuCores = latestSystem?.system?.cpuCores || null;
           if (cpuCores) {
             const loadPercent = ((avgCpu / cpuCores) * 100).toFixed(1);
-            return `<div style="font-size: var(--text-xs); color: var(--color-text-subtle); margin-bottom: var(--space-sm);" title="Load average is relative to CPU cores. ${avgCpu.toFixed(2)} / ${cpuCores} cores = ${loadPercent}% utilization">
-              ~${loadPercent}% of ${cpuCores} cores
+            return `<div style="font-size: var(--text-xs); color: var(--color-text-subtle); margin-bottom: var(--space-sm);" title="System load average divided by CPU cores. This represents overall system load from all processes.">
+              System has ${cpuCores} cores
+            </div>
+            <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-bottom: var(--space-sm);">
+              Avg utilization: ${loadPercent}% per core
             </div>`;
           }
-          return `<div style="font-size: var(--text-xs); color: var(--color-text-subtle); margin-bottom: var(--space-sm);" title="Load average: 1.0 = 100% utilization on a single-core system. On multi-core systems, compare to number of CPU cores.">
-            Load avg (1-min)
+          return `<div style="font-size: var(--text-xs); color: var(--color-text-subtle); margin-bottom: var(--space-sm);" title="Load average: 1.0 = 1 CPU fully utilized. Higher values indicate more processes waiting.">
+            System load average
           </div>`;
         })()}
         <div style="font-size: var(--text-sm); color: var(--color-text-secondary); padding-top: var(--space-md); border-top: 1px solid var(--color-border); line-height: 1.6;">
@@ -255,7 +276,7 @@ function renderSystemResourceStats() {
         </div>
       </div>
       <div class="stat-card" style="padding: var(--space-xl); background: var(--color-bg); border: 1px solid var(--color-border); border-radius: var(--radius-lg);">
-        <div class="stat-label" style="font-size: var(--text-xs); font-weight: 600; color: var(--color-text-muted); margin-bottom: var(--space-md); text-transform: uppercase; letter-spacing: 0.8px;">Peak CPU Load</div>
+        <div class="stat-label" style="font-size: var(--text-xs); font-weight: 600; color: var(--color-text-muted); margin-bottom: var(--space-md); text-transform: uppercase; letter-spacing: 0.8px;">Peak CPU Load (1-min)</div>
         <div class="stat-value" style="font-size: 2.5rem; font-weight: 700; color: var(--color-text); margin-bottom: var(--space-lg); line-height: 1.1;">
           ${maxCpu.toFixed(2)}
         </div>
@@ -264,12 +285,15 @@ function renderSystemResourceStats() {
           const cpuCores = latestSystem?.system?.cpuCores || null;
           if (cpuCores) {
             const loadPercent = ((maxCpu / cpuCores) * 100).toFixed(1);
-            return `<div style="font-size: var(--text-xs); color: var(--color-text-subtle); margin-bottom: var(--space-sm);" title="Load average is relative to CPU cores. ${maxCpu.toFixed(2)} / ${cpuCores} cores = ${loadPercent}% utilization">
-              ~${loadPercent}% of ${cpuCores} cores
+            return `<div style="font-size: var(--text-xs); color: var(--color-text-subtle); margin-bottom: var(--space-sm);" title="Peak system load average divided by CPU cores.">
+              System has ${cpuCores} cores
+            </div>
+            <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-bottom: var(--space-sm);">
+              Peak utilization: ${loadPercent}% per core
             </div>`;
           }
-          return `<div style="font-size: var(--text-xs); color: var(--color-text-subtle); margin-bottom: var(--space-sm);" title="Load average: 1.0 = 100% utilization on a single-core system. On multi-core systems, compare to number of CPU cores.">
-            Load avg (1-min)
+          return `<div style="font-size: var(--text-xs); color: var(--color-text-subtle); margin-bottom: var(--space-sm);" title="Load average: 1.0 = 1 CPU fully utilized. Higher values indicate more processes waiting.">
+            System load average
           </div>`;
         })()}
         <div style="font-size: var(--text-sm); color: var(--color-text-secondary); padding-top: var(--space-md); border-top: 1px solid var(--color-border); line-height: 1.6;">

@@ -116,6 +116,7 @@ class ModuleGraphExtractor {
                         diffs: [],
                         editCount: 0,
                         originalLines: diff.originalTextLines || [],
+                        modifiedLines: diff.modifiedTextLines || [],
                         lastModified: null,
                         firstSeen: null
                       });
@@ -125,12 +126,17 @@ class ModuleGraphExtractor {
                     meta.diffs.push({
                       diffId: diff.diffId,
                       timestamp: diff.timestamp || Date.now(),
-                      originalLines: diff.originalTextLines || []
+                      originalTextLines: diff.originalTextLines || [],
+                      modifiedTextLines: diff.modifiedTextLines || [],
+                      promptId: diff.promptId || null
                     });
                     meta.editCount++;
                     
                     if (diff.originalTextLines && diff.originalTextLines.length > meta.originalLines.length) {
                       meta.originalLines = diff.originalTextLines;
+                    }
+                    if (diff.modifiedTextLines && diff.modifiedTextLines.length > meta.modifiedLines.length) {
+                      meta.modifiedLines = diff.modifiedTextLines;
                     }
                   }
                 }

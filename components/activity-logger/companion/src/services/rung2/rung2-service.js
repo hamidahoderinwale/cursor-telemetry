@@ -62,12 +62,39 @@ class Rung2Service {
 
     // Process all diffs
     const allScripts = [];
+    let totalDiffs = 0;
+    let validDiffs = 0;
+    let invalidDiffs = 0;
+    
     for (const [filePath, metadata] of Object.entries(fileMetadata)) {
       if (metadata.diffs && metadata.diffs.length > 0) {
-        const scripts = this.semanticExtractor.extractEditScripts(metadata.diffs, filePath, workspacePath);
-        allScripts.push(...scripts);
+        totalDiffs += metadata.diffs.length;
+        
+        // Filter diffs that have both originalTextLines and modifiedTextLines
+        const validDiffsForFile = metadata.diffs.filter(diff => {
+          const hasOriginal = diff.originalTextLines && diff.originalTextLines.length > 0;
+          const hasModified = diff.modifiedTextLines && diff.modifiedTextLines.length > 0;
+          if (!hasOriginal || !hasModified) {
+            invalidDiffs++;
+            console.warn(`[RUNG2] Skipping diff for ${filePath}: missing ${!hasOriginal ? 'original' : 'modified'} text lines`);
+            return false;
+          }
+          validDiffs++;
+          return true;
+        });
+        
+        if (validDiffsForFile.length > 0) {
+          try {
+            const scripts = this.semanticExtractor.extractEditScripts(validDiffsForFile, filePath, workspacePath);
+            allScripts.push(...scripts);
+          } catch (error) {
+            console.error(`[RUNG2] Error extracting edit scripts from ${filePath}:`, error.message);
+          }
+        }
       }
     }
+
+    console.log(`[RUNG2] Extraction summary: ${totalDiffs} total diffs, ${validDiffs} valid, ${invalidDiffs} invalid, ${allScripts.length} scripts generated`);
 
     // Persist to database
     if (this.persistentDB && allScripts.length > 0) {

@@ -328,6 +328,9 @@ function renderD3FileGraph(container, nodes, links) {
     .attr('class', 'node-badge')
     .style('pointer-events', 'none');
   
+  // Store simulation globally for cleanup and pause/resume
+  window.fileGraphSimulation = simulation;
+  
   // Store for toggle function
   window.graphLabels = labels;
   window.labelsVisible = true;
@@ -589,7 +592,7 @@ function showFileTooltip(event, file) {
   
   // Build tooltip content
   const parts = [
-    `<strong style="color: var(--color-primary);">${file.path || file.name}</strong>`,
+    `<strong class="file-graph-tooltip__title">${file.path || file.name}</strong>`,
     file.ext ? `Type: <code>${file.ext}</code>` : '',
     file.changes ? `Changes: ${file.changes}` : '',
     file.size ? `Size: ${(file.size / 1024).toFixed(1)} KB` : '',
@@ -600,7 +603,7 @@ function showFileTooltip(event, file) {
     if (cluster) {
       parts.push(`Cluster: <strong>${cluster.name}</strong>`);
       if (cluster.description) {
-        parts.push(`<div style="margin-top: 4px; color: var(--color-text-muted); font-size: 11px;">${cluster.description.substring(0, 100)}${cluster.description.length > 100 ? '...' : ''}</div>`);
+        parts.push(`<div class="file-graph-tooltip__cluster">${cluster.description.substring(0, 100)}${cluster.description.length > 100 ? '...' : ''}</div>`);
       }
     }
   }
@@ -877,7 +880,7 @@ function filterGraphNodes(searchTerm) {
   );
   
   if (matches.length === 0) {
-    resultsDiv.innerHTML = '<div style="color: var(--color-text-muted); font-size: 12px; padding: var(--space-sm);">No matches found</div>';
+    resultsDiv.innerHTML = '<div class="file-graph-search-results">No matches found</div>';
     return;
   }
   
@@ -891,12 +894,11 @@ function filterGraphNodes(searchTerm) {
   // Show results
   const escapeHtml = window.escapeHtml || ((s) => s);
   resultsDiv.innerHTML = matches.slice(0, 10).map(match => `
-    <div onclick="focusOnNode('${match.id}')" 
-         style="padding: var(--space-xs); background: var(--color-bg); border-radius: var(--radius-sm); margin-bottom: var(--space-xs); cursor: pointer; font-size: 12px; display: flex; justify-content: space-between; align-items: center;">
-      <span style="font-family: var(--font-mono); color: var(--color-text);">${escapeHtml(match.name)}</span>
-      <span style="color: var(--color-text-muted); font-size: 11px;">${match.changes} changes</span>
+    <div onclick="focusOnNode('${match.id}')" class="file-graph-search-item">
+      <span class="file-graph-search-item__name">${escapeHtml(match.name)}</span>
+      <span class="file-graph-search-item__changes">${match.changes} changes</span>
     </div>
-  `).join('') + (matches.length > 10 ? `<div style="color: var(--color-text-muted); font-size: 11px; padding: var(--space-xs);">+${matches.length - 10} more</div>` : '');
+  `).join('') + (matches.length > 10 ? `<div class="file-graph-search-more">+${matches.length - 10} more</div>` : '');
 }
 
 function focusOnNode(nodeId) {
@@ -969,6 +971,16 @@ function renderSimilarFilePairs(links, files) {
     // Show shared prompts count from link data (if available)
     const sharedPrompts = link.sharedPrompts || 0;
     
+    // Get workspace and directory information
+    const sourceWorkspace = source.workspace || source.path?.split('/')[0] || 'Unknown';
+    const targetWorkspace = target.workspace || target.path?.split('/')[0] || 'Unknown';
+    const sourceDirectory = source.directory || source.path?.split('/').slice(0, -1).join('/') || sourceWorkspace;
+    const targetDirectory = target.directory || target.path?.split('/').slice(0, -1).join('/') || targetWorkspace;
+    
+    // Check if files are in the same directory
+    const sameDirectory = sourceDirectory === targetDirectory;
+    const sameWorkspace = sourceWorkspace === targetWorkspace;
+    
     // Get file type colors
     const sourceColor = getFileTypeColor(source.ext);
     const targetColor = getFileTypeColor(target.ext);
@@ -998,6 +1010,12 @@ function renderSimilarFilePairs(links, files) {
           </div>
           
           <div class="similar-pair-meta">
+            ${sameDirectory ? `<span class="similar-pair-badge similar-pair-badge--same-directory" title="Both files are in the same directory: ${escapeHtml(sourceDirectory)}">Same directory</span>` : ''}
+            ${sameDirectory ? '<span>•</span>' : ''}
+            ${sameWorkspace && !sameDirectory ? `<span class="similar-pair-badge similar-pair-badge--same-workspace" title="Both files are in the same workspace: ${escapeHtml(sourceWorkspace)}">Same workspace</span>` : ''}
+            ${sameWorkspace && !sameDirectory ? '<span>•</span>' : ''}
+            ${!sameWorkspace ? `<span class="similar-pair-badge similar-pair-badge--workspace" title="Workspaces: ${escapeHtml(sourceWorkspace)} ↔ ${escapeHtml(targetWorkspace)}">${escapeHtml(sourceWorkspace)} ↔ ${escapeHtml(targetWorkspace)}</span>` : ''}
+            ${!sameWorkspace ? '<span>•</span>' : ''}
             ${sharedPrompts > 0 ? `<span title="Number of AI prompts that referenced both files">${sharedPrompts} shared prompts</span>` : ''}
             ${sharedPrompts > 0 && sharedSessions > 0 ? '<span>•</span>' : ''}
             ${sharedSessions > 0 ? `<span title="Number of coding sessions where both files were modified">${sharedSessions} shared sessions</span>` : ''}

@@ -114,7 +114,7 @@ function renderContextChangeIndicator(contextChange, compact = false) {
       ${removedFiles.length > 0 ? `
         <div class="context-change-section context-removed">
           <div class="context-change-label">
-            <span class="context-change-icon">➖</span>
+            <span class="context-change-icon"></span>
             <strong>Removed (${removedFiles.length})</strong>
           </div>
           <div class="context-file-list">

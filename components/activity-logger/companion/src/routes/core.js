@@ -110,6 +110,71 @@ function createCoreRoutes(deps) {
       });
     }
   });
+
+  // Diagnostic endpoint to check capture mechanisms
+  // Note: This endpoint needs to be enhanced with proper dependency injection
+  // For now, it provides basic diagnostics
+  app.get('/api/diagnostic/capture-status', async (req, res) => {
+    try {
+      const diagnostics = {
+        timestamp: new Date().toISOString(),
+        capture_mechanisms: {
+          file_watcher: {
+            status: 'checking',
+            note: 'Check file watcher service status via /health endpoint',
+          },
+          prompt_sync: {
+            status: 'checking',
+            note: 'Prompt sync runs every 30s. Check logs for sync status.',
+          },
+          terminal_monitor: {
+            status: 'checking',
+            note: 'Check terminal monitor status via /health endpoint',
+          },
+          clipboard_monitor: {
+            status: clipboardMonitor ? (clipboardMonitor.isMonitoring ? 'active' : 'inactive') : 'not_initialized',
+            enabled_in_config: clipboardMonitor?.isMonitoring || false,
+          },
+        },
+        data_counts: {
+          entries: db.entries.length,
+          prompts: db.prompts.length,
+          events: queue.filter(item => item.kind === 'event').length,
+          queue_length: queue.length,
+          sequence: sequence,
+        },
+        recommendations: [],
+      };
+
+      // Add recommendations based on data counts
+      if (diagnostics.data_counts.prompts === 0) {
+        diagnostics.recommendations.push({
+          type: 'warning',
+          message: 'No prompts found. Ensure Cursor database is accessible and prompt sync is running.',
+          action: 'Check /api/cursor-database endpoint to verify Cursor DB access',
+        });
+      }
+
+      if (diagnostics.data_counts.entries === 0) {
+        diagnostics.recommendations.push({
+          type: 'warning',
+          message: 'No file changes captured. Ensure file watcher is running.',
+          action: 'Check file watcher service status',
+        });
+      }
+
+      res.json({
+        success: true,
+        diagnostics,
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error.message,
+        stack: error.stack,
+      });
+    }
+  });
 }
 
 module.exports = createCoreRoutes;

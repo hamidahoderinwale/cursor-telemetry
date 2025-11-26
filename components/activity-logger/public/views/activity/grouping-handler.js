@@ -250,7 +250,7 @@ function renderGroupedTimeline(groups) {
         <div class="timeline-group" data-group-key="${group.key}">
           <div class="timeline-group-header" onclick="toggleGroup('${group.key}')">
             <div class="timeline-group-title">
-              <span class="group-icon">${isExpanded ? '▼' : '▶'}</span>
+              <span class="group-icon">${isExpanded ? '' : ''}</span>
               <span class="group-label">${window.escapeHtml ? window.escapeHtml(group.label) : group.label}</span>
               <span class="group-badge">${group.metadata.count} items</span>
             </div>
@@ -290,7 +290,7 @@ function toggleGroup(groupKey) {
     itemsContainer.style.display = groupExpanded.has(groupKey) ? 'block' : 'none';
   }
   if (icon) {
-    icon.textContent = groupExpanded.has(groupKey) ? '▼' : '▶';
+    icon.textContent = groupExpanded.has(groupKey) ? '' : '';
   }
 }
 

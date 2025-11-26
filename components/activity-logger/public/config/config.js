@@ -1,14 +1,19 @@
 // Configuration for Cursor Telemetry Dashboard
-// When deployed to Netlify, connects to Render backend by default
+// When deployed to Netlify, connects to Railway/Render backend by default
 // Users can override with localStorage to use local companion service
 
-// Render backend URL (default for deployed dashboard)
+// Railway backend URL (default for deployed dashboard)
 // Store on window to avoid any redeclaration issues
+if (!window._RAILWAY_BACKEND_URL) {
+  window._RAILWAY_BACKEND_URL = null; // Set via environment variable or localStorage
+}
+// Render backend URL (fallback)
 if (!window._RENDER_BACKEND_URL) {
   window._RENDER_BACKEND_URL = 'https://cursor-telemetry.onrender.com';
 }
-// core/config.js loads first and declares RENDER_BACKEND_URL as const
+// core/config.js loads first and declares backend URLs as const
 // Use window property to avoid redeclaration - reference it via window
+const getRailwayBackendUrl = () => window._RAILWAY_BACKEND_URL;
 const getRenderBackendUrl = () => window._RENDER_BACKEND_URL;
 
 // Determine API base URL
@@ -39,6 +44,9 @@ if (customApiUrl) {
 } else if (isNetlify && accountToken && accountServiceUrl) {
   // Netlify deployment with account - use account service
   defaultApiUrl = accountServiceUrl;
+} else if (getRailwayBackendUrl()) {
+  // Railway backend (if configured)
+  defaultApiUrl = getRailwayBackendUrl();
 } else {
   // Fallback to Render backend
   defaultApiUrl = getRenderBackendUrl();
@@ -49,7 +57,7 @@ const apiBaseUrl = defaultApiUrl;
 window.CONFIG = {
   // API Configuration
   // When running locally, uses localhost
-  // When deployed, uses Render backend by default (can be overridden via localStorage)
+  // When deployed, uses Railway backend (if configured), otherwise Render backend (can be overridden via localStorage)
   API_BASE: apiBaseUrl,
   
   // Legacy alias for backward compatibility
@@ -60,8 +68,15 @@ window.CONFIG = {
     const customWsUrl = (window.LocalStorageHelper?.get('COMPANION_WS_URL', null, false)) || localStorage.getItem('COMPANION_WS_URL');
     if (customWsUrl) return customWsUrl;
     if (isLocal) return 'ws://localhost:43917';
-    // Convert HTTPS URL to WSS (account service or Render backend)
-    const baseUrl = isNetlify && accountServiceUrl ? accountServiceUrl : getRenderBackendUrl();
+    // Convert HTTPS URL to WSS (account service, Railway backend, or Render backend)
+    let baseUrl;
+    if (isNetlify && accountServiceUrl) {
+      baseUrl = accountServiceUrl;
+    } else if (getRailwayBackendUrl()) {
+      baseUrl = getRailwayBackendUrl();
+    } else {
+      baseUrl = getRenderBackendUrl();
+    }
     return baseUrl.replace('https://', 'wss://').replace('http://', 'ws://');
   })(),
   

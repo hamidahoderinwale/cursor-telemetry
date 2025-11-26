@@ -25,6 +25,71 @@ function renderRung1TokensTemplate() {
         </div>
       </div>
 
+      <!-- Methodology Section -->
+      <div class="rung-methodology-section">
+        <button class="rung-methodology-toggle" onclick="toggleRung1Methodology()">
+          <span class="rung-methodology-icon"></span>
+          <span class="rung-methodology-title">Methodology</span>
+          <span class="rung-methodology-arrow" id="rung1-methodology-arrow"></span>
+        </button>
+        <div class="rung-methodology-content" id="rung1-methodology-content" style="display: none;">
+          <div class="rung-methodology-body">
+            <h3>Overview</h3>
+            <p>Rung 1 provides the most granular abstraction level by converting source code into token sequences with canonicalized identifiers. This preserves the structural patterns of code while removing all semantic meaning and sensitive information.</p>
+            
+            <h3>Processing Pipeline</h3>
+            <ol>
+              <li><strong>Code Extraction</strong>: Extracts code diffs from Cursor database file metadata</li>
+              <li><strong>Language Detection</strong>: Identifies programming language from file extension (JavaScript, TypeScript, Python, Java, Go, Rust, etc.)</li>
+              <li><strong>Tokenization</strong>: Converts source code into token sequences using language-specific parsers
+                <ul>
+                  <li>Preserves keywords, operators, and structural elements</li>
+                  <li>Identifies identifiers, string literals, numeric literals</li>
+                </ul>
+              </li>
+              <li><strong>Canonicalization</strong>: Replaces identifiers with stable canonical IDs
+                <ul>
+                  <li>Functions → FUNC_001, FUNC_002, ...</li>
+                  <li>Classes → CLASS_001, CLASS_002, ...</li>
+                  <li>Variables → VAR_001, VAR_002, ...</li>
+                  <li>Generic identifiers → ID_001, ID_002, ...</li>
+                </ul>
+              </li>
+              <li><strong>PII Redaction</strong>: Applies privacy-preserving transformations
+                <ul>
+                  <li>String literals → &lt;STR&gt; (or selective redaction based on PII detection)</li>
+                  <li>Numeric literals → &lt;NUM&gt; (or selective redaction for PII-like numbers)</li>
+                  <li>Detects and redacts: emails, names, URLs, IP addresses, file paths, JWT secrets</li>
+                </ul>
+              </li>
+              <li><strong>Semantic Expressiveness Fuzzing</strong> (optional): Preserves type distinctions (FUNC, CLASS, VAR) while anonymizing names</li>
+            </ol>
+
+            <h3>Privacy Features</h3>
+            <ul>
+              <li><strong>Granular PII Detection</strong>: Pattern-based detection for emails, names, URLs, IPs, file paths, JWT secrets</li>
+              <li><strong>Configurable Redaction</strong>: Enable/disable specific PII types per export</li>
+              <li><strong>Selective vs. Aggressive</strong>: Choose between selective PII redaction or redacting all strings/numbers</li>
+              <li><strong>No Code Content</strong>: Only token sequences are stored, original code is never persisted</li>
+            </ul>
+
+            <h3>Use Cases</h3>
+            <ul>
+              <li>Pattern mining across codebases without exposing sensitive data</li>
+              <li>Code style and structure analysis</li>
+              <li>Token-level similarity detection</li>
+              <li>Privacy-preserving code sharing and research</li>
+            </ul>
+
+            <h3>Output Format</h3>
+            <p>Token sequences are represented as arrays of canonical tokens, for example:</p>
+            <pre><code>["FUNCTION", "FUNC_001", "(", "VAR_001", ",", "VAR_002", ")", "{", 
+ "IF", "(", "VAR_001", ">", "&lt;NUM&gt;", ")", "{", 
+ "RETURN", "&lt;STR&gt;", ";", "}", "}"]</code></pre>
+          </div>
+        </div>
+      </div>
+
       <!-- Controls Bar -->
       <div class="rung1-tokens-controls-bar">
         <!-- Search -->

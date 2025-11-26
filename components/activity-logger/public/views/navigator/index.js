@@ -12,6 +12,44 @@ function renderNavigatorView(container) {
     window.navigatorState.isInitializing = false;
   }
 
+  // Register cleanup and pause/resume hooks
+  if (window.registerViewCleanup) {
+    window.registerViewCleanup('navigator', () => {
+      // Cleanup 3D renderer if active
+      if (window.navigatorState?.cleanup3D) {
+        window.navigatorState.cleanup3D();
+      }
+      // Cleanup 2D renderer if active
+      if (window.navigatorState?.svg) {
+        window.navigatorState.svg = null;
+        window.navigatorState.zoom = null;
+        window.navigatorState.g = null;
+      }
+    });
+  }
+  
+  if (window.registerViewPauseResume) {
+    window.registerViewPauseResume('navigator', 
+      () => {
+        // Pause animations
+        if (window.navigatorState?.pause3D) {
+          window.navigatorState.pause3D();
+        }
+        // Pause 2D animations if any
+        if (window.navigatorState?.animationId) {
+          cancelAnimationFrame(window.navigatorState.animationId);
+          window.navigatorState.animationId = null;
+        }
+      },
+      () => {
+        // Resume animations
+        if (window.navigatorState?.resume3D) {
+          window.navigatorState.resume3D();
+        }
+      }
+    );
+  }
+
   // Initialize navigator after DOM is ready
   setTimeout(() => {
     if (window.initializeNavigator) window.initializeNavigator();

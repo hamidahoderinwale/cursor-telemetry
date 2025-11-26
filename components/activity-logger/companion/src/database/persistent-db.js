@@ -1,16 +1,30 @@
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const fs = require('fs');
+const PostgresAdapter = require('./postgres-adapter');
 
 /**
  * Persistent Database for Companion Service
- * Stores entries, events, and prompts to SQLite
+ * Supports both SQLite (local) and PostgreSQL (cloud)
  */
 class PersistentDB {
   constructor(dbPath = null) {
+    // Determine database type from environment
+    const dbType = process.env.DATABASE_TYPE || (process.env.DATABASE_URL ? 'postgres' : 'sqlite');
+    
+    this.dbType = dbType;
     this.dbPath = dbPath || path.join(__dirname, '../data/companion.db');
     this.db = null;
+    this.postgresAdapter = null;
     this._initPromise = null;
+
+    // Initialize appropriate database adapter
+    if (this.dbType === 'postgres' || process.env.DATABASE_URL) {
+      console.log('[DB] Using PostgreSQL database');
+      this.postgresAdapter = new PostgresAdapter(process.env.DATABASE_URL);
+    } else {
+      console.log('[DB] Using SQLite database');
+    }
   }
 
   /**
@@ -19,6 +33,13 @@ class PersistentDB {
   async init() {
     if (this._initPromise) return this._initPromise;
 
+    // Use PostgreSQL if configured
+    if (this.postgresAdapter) {
+      this._initPromise = this.postgresAdapter.init();
+      return this._initPromise;
+    }
+
+    // Otherwise use SQLite
     this._initPromise = new Promise((resolve, reject) => {
       // Ensure data directory exists
       const dataDir = path.dirname(this.dbPath);
@@ -37,6 +58,14 @@ class PersistentDB {
 
         // Enable foreign key constraints
         this.db.run('PRAGMA foreign_keys = ON');
+
+        // Performance optimizations for SQLite
+        this.db.run('PRAGMA journal_mode=WAL;'); // Write-Ahead Logging for better concurrency
+        this.db.run('PRAGMA synchronous=NORMAL;'); // Faster than FULL, still safe
+        this.db.run('PRAGMA cache_size=-64000;'); // 64MB cache (negative = KB)
+        this.db.run('PRAGMA temp_store=MEMORY;'); // Store temp tables in memory
+        this.db.run('PRAGMA mmap_size=268435456;'); // 256MB memory-mapped I/O
+        console.log('[DB] SQLite performance optimizations enabled');
 
         // Create tables - wait for all to complete before resolving
         this.db.serialize(() => {
@@ -1114,6 +1143,27 @@ class PersistentDB {
             `CREATE INDEX IF NOT EXISTS idx_terminal_session ON terminal_commands(session_id)`
           );
 
+          // Composite indexes for common query patterns (better performance)
+          this.db.run(
+            `CREATE INDEX IF NOT EXISTS idx_entries_workspace_timestamp ON entries(workspace_path, timestamp DESC)`
+          );
+          this.db.run(
+            `CREATE INDEX IF NOT EXISTS idx_prompts_workspace_timestamp ON prompts(workspace_path, timestamp DESC)`
+          );
+          this.db.run(
+            `CREATE INDEX IF NOT EXISTS idx_events_workspace_timestamp ON events(workspace_path, timestamp DESC)`
+          );
+          this.db.run(
+            `CREATE INDEX IF NOT EXISTS idx_prompts_conversation_timestamp ON prompts(parent_conversation_id, timestamp DESC)`
+          );
+          this.db.run(
+            `CREATE INDEX IF NOT EXISTS idx_entries_file_timestamp ON entries(file_path, timestamp DESC)`
+          );
+          this.db.run(
+            `CREATE INDEX IF NOT EXISTS idx_events_type_timestamp ON events(type, timestamp DESC)`
+          );
+          console.log('[DB] Composite indexes created for optimized queries');
+
           // Wait for all tables to be created
           Promise.all(tables)
             .then(() => {
@@ -1133,6 +1183,17 @@ class PersistentDB {
    */
   async saveEntry(entry) {
     await this.init();
+
+    // Use PostgreSQL adapter if available
+    if (this.postgresAdapter) {
+      try {
+        const saved = await this.postgresAdapter.saveEntry(entry);
+        return saved; // Returns { ...entry, id }
+      } catch (error) {
+        console.error('[DB] Error saving entry to PostgreSQL:', error);
+        throw error;
+      }
+    }
 
     return new Promise((resolve, reject) => {
       const stmt = this.db.prepare(`
@@ -1173,6 +1234,17 @@ class PersistentDB {
    */
   async savePrompt(prompt) {
     await this.init();
+
+    // Use PostgreSQL adapter if available
+    if (this.postgresAdapter) {
+      try {
+        const id = await this.postgresAdapter.savePrompt(prompt);
+        return { ...prompt, id };
+      } catch (error) {
+        console.error('[DB] Error saving prompt to PostgreSQL:', error);
+        throw error;
+      }
+    }
 
     return new Promise((resolve, reject) => {
       // Extract context files data
@@ -1276,6 +1348,17 @@ class PersistentDB {
   async saveEvent(event) {
     await this.init();
 
+    // Use PostgreSQL adapter if available
+    if (this.postgresAdapter) {
+      try {
+        const id = await this.postgresAdapter.saveEvent(event);
+        return { ...event, id };
+      } catch (error) {
+        console.error('[DB] Error saving event to PostgreSQL:', error);
+        throw error;
+      }
+    }
+
     return new Promise((resolve, reject) => {
       const stmt = this.db.prepare(`
         INSERT OR REPLACE INTO events 
@@ -1366,6 +1449,16 @@ class PersistentDB {
    */
   async getRecentEvents(limit = 50) {
     await this.init();
+
+    // Use PostgreSQL adapter if available
+    if (this.postgresAdapter) {
+      try {
+        return await this.postgresAdapter.getRecentEvents(limit);
+      } catch (error) {
+        console.error('[DB] Error getting recent events from PostgreSQL:', error);
+        throw error;
+      }
+    }
 
     return new Promise((resolve, reject) => {
       this.db.all(`SELECT * FROM events ORDER BY timestamp DESC LIMIT ?`, [limit], (err, rows) => {
@@ -1536,10 +1629,21 @@ class PersistentDB {
   }
 
   /**
-   * Load recent entries from the database (with limit for performance)
+   * Load recent entries from the database (with limit and offset for pagination)
+   * OPTIMIZED: Uses database-level LIMIT/OFFSET instead of in-memory slicing
    */
-  async getRecentEntries(limit = 500, entryId = null) {
+  async getRecentEntries(limit = 500, entryId = null, offset = 0, workspace = null) {
     await this.init();
+
+    // Use PostgreSQL adapter if available
+    if (this.postgresAdapter) {
+      try {
+        return await this.postgresAdapter.getRecentEntries(limit, entryId, offset, workspace);
+      } catch (error) {
+        console.error('[DB] Error getting recent entries from PostgreSQL:', error);
+        throw error;
+      }
+    }
 
     return new Promise((resolve, reject) => {
       let query, params;
@@ -1557,15 +1661,23 @@ class PersistentDB {
       } else {
         // Exclude large fields (before_code, after_code) for performance
         // Only include metadata needed for activity list view
+        // OPTIMIZATION: Use database-level LIMIT/OFFSET
         query = `
           SELECT 
             id, session_id, workspace_path, file_path, source, 
             notes, timestamp, tags, prompt_id, modelInfo, type
           FROM entries 
-          ORDER BY timestamp DESC 
-          LIMIT ?
         `;
-        params = [limit];
+        params = [];
+        
+        // Add workspace filter if provided
+        if (workspace) {
+          query += ` WHERE workspace_path = ?`;
+          params.push(workspace);
+        }
+        
+        query += ` ORDER BY timestamp DESC LIMIT ? OFFSET ?`;
+        params.push(limit, offset);
       }
 
       this.db.all(query, params, (err, rows) => {
@@ -1705,13 +1817,36 @@ class PersistentDB {
   }
 
   /**
-   * Load recent prompts from the database (with limit for performance)
+   * Load recent prompts from the database (with limit and offset for pagination)
+   * OPTIMIZED: Uses database-level LIMIT/OFFSET instead of in-memory slicing
    */
-  async getRecentPrompts(limit = 200) {
+  async getRecentPrompts(limit = 200, offset = 0, workspace = null) {
     await this.init();
 
+    // Use PostgreSQL adapter if available
+    if (this.postgresAdapter) {
+      try {
+        return await this.postgresAdapter.getRecentPrompts(limit, offset, workspace);
+      } catch (error) {
+        console.error('[DB] Error getting recent prompts from PostgreSQL:', error);
+        throw error;
+      }
+    }
+
     return new Promise((resolve, reject) => {
-      this.db.all(`SELECT * FROM prompts ORDER BY timestamp DESC LIMIT ?`, [limit], (err, rows) => {
+      let query = `SELECT * FROM prompts`;
+      const params = [];
+      
+      // Add workspace filter if provided
+      if (workspace) {
+        query += ` WHERE workspace_path = ?`;
+        params.push(workspace);
+      }
+      
+      query += ` ORDER BY timestamp DESC LIMIT ? OFFSET ?`;
+      params.push(limit, offset);
+      
+      this.db.all(query, params, (err, rows) => {
         if (err) {
           console.error('Error loading recent prompts:', err);
           reject(err);
@@ -1932,6 +2067,16 @@ class PersistentDB {
    */
   async getStats() {
     await this.init();
+
+    // Use PostgreSQL adapter if available
+    if (this.postgresAdapter) {
+      try {
+        return await this.postgresAdapter.getStats();
+      } catch (error) {
+        console.error('[DB] Error getting stats from PostgreSQL:', error);
+        throw error;
+      }
+    }
 
     return new Promise((resolve, reject) => {
       this.db.get(
@@ -3776,6 +3921,450 @@ class PersistentDB {
             });
           });
         });
+      });
+    });
+  }
+
+  // ==================== Historical Data Mining Methods ====================
+
+  /**
+   * Initialize historical data tables
+   */
+  async initHistoricalTables() {
+    await this.init();
+    const { HISTORICAL_TABLES, HISTORICAL_INDEXES } = require('./historical-schema');
+
+    return new Promise((resolve, reject) => {
+      this.db.serialize(() => {
+        const promises = [];
+
+        // Create all historical tables
+        for (const [tableName, createSQL] of Object.entries(HISTORICAL_TABLES)) {
+          promises.push(
+            new Promise((res, rej) => {
+              this.db.run(createSQL, (err) => {
+                if (err) {
+                  console.error(`Error creating ${tableName}:`, err);
+                  rej(err);
+                } else {
+                  console.log(`[DB] Created historical table: ${tableName}`);
+                  res();
+                }
+              });
+            })
+          );
+        }
+
+        // Create indexes
+        for (const indexSQL of HISTORICAL_INDEXES) {
+          promises.push(
+            new Promise((res, rej) => {
+              this.db.run(indexSQL, (err) => {
+                if (err) {
+                  console.warn('Error creating historical index:', err);
+                  // Don't fail on index errors
+                  res();
+                } else {
+                  res();
+                }
+              });
+            })
+          );
+        }
+
+        Promise.all(promises).then(resolve).catch(reject);
+      });
+    });
+  }
+
+  /**
+   * Save historical commit
+   */
+  async saveHistoricalCommit(commit) {
+    await this.init();
+
+    return new Promise((resolve, reject) => {
+      const sql = `
+        INSERT OR REPLACE INTO historical_commits (
+          workspace_path, commit_hash, author, author_email, date, message,
+          files_changed, insertions, deletions, file_changes, mined_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `;
+
+      this.db.run(
+        sql,
+        [
+          commit.workspace_path,
+          commit.commit_hash,
+          commit.author,
+          commit.author_email,
+          commit.date,
+          commit.message,
+          commit.files_changed,
+          commit.insertions,
+          commit.deletions,
+          JSON.stringify(commit.file_changes || []),
+          commit.mined_at || Date.now()
+        ],
+        (err) => {
+          if (err) reject(err);
+          else resolve();
+        }
+      );
+    });
+  }
+
+  /**
+   * Save historical branch
+   */
+  async saveHistoricalBranch(branch) {
+    await this.init();
+
+    return new Promise((resolve, reject) => {
+      const sql = `
+        INSERT OR REPLACE INTO historical_branches (
+          workspace_path, branch_name, last_commit_date, last_author, mined_at
+        ) VALUES (?, ?, ?, ?, ?)
+      `;
+
+      this.db.run(
+        sql,
+        [
+          branch.workspace_path,
+          branch.branch_name,
+          branch.last_commit_date,
+          branch.last_author,
+          branch.mined_at || Date.now()
+        ],
+        (err) => {
+          if (err) reject(err);
+          else resolve();
+        }
+      );
+    });
+  }
+
+  /**
+   * Save historical diff
+   */
+  async saveHistoricalDiff(diff) {
+    await this.init();
+
+    return new Promise((resolve, reject) => {
+      const sql = `
+        INSERT OR REPLACE INTO historical_diffs (
+          commit_hash, workspace_path, diff_content, mined_at
+        ) VALUES (?, ?, ?, ?)
+      `;
+
+      this.db.run(
+        sql,
+        [
+          diff.commit_hash,
+          diff.workspace_path,
+          diff.diff_content,
+          diff.mined_at || Date.now()
+        ],
+        (err) => {
+          if (err) reject(err);
+          else resolve();
+        }
+      );
+    });
+  }
+
+  /**
+   * Save historical command
+   */
+  async saveHistoricalCommand(cmd) {
+    await this.init();
+
+    return new Promise((resolve, reject) => {
+      const sql = `
+        INSERT INTO historical_commands (
+          command, timestamp, source_file, shell, line_number, mined_at
+        ) VALUES (?, ?, ?, ?, ?, ?)
+      `;
+
+      this.db.run(
+        sql,
+        [
+          cmd.command,
+          cmd.timestamp,
+          cmd.source_file,
+          cmd.shell,
+          cmd.line_number,
+          cmd.mined_at || Date.now()
+        ],
+        (err) => {
+          if (err) reject(err);
+          else resolve();
+        }
+      );
+    });
+  }
+
+  /**
+   * Save historical prompt
+   */
+  async saveHistoricalPrompt(prompt) {
+    await this.init();
+
+    return new Promise((resolve, reject) => {
+      const sql = `
+        INSERT INTO historical_prompts (
+          prompt_text, timestamp, source, confidence, context, log_file, line_number, mined_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `;
+
+      this.db.run(
+        sql,
+        [
+          prompt.prompt_text,
+          prompt.timestamp,
+          prompt.source,
+          prompt.confidence,
+          prompt.context,
+          prompt.log_file,
+          prompt.line_number,
+          prompt.mined_at || Date.now()
+        ],
+        (err) => {
+          if (err) reject(err);
+          else resolve();
+        }
+      );
+    });
+  }
+
+  /**
+   * Save file timestamp
+   */
+  async saveFileTimestamp(file) {
+    await this.init();
+
+    return new Promise((resolve, reject) => {
+      const sql = `
+        INSERT OR REPLACE INTO file_timestamps (
+          file_path, size, created_at, modified_at, accessed_at, is_directory, mined_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      `;
+
+      this.db.run(
+        sql,
+        [
+          file.file_path,
+          file.size,
+          file.created_at,
+          file.modified_at,
+          file.accessed_at,
+          file.is_directory ? 1 : 0,
+          file.mined_at || Date.now()
+        ],
+        (err) => {
+          if (err) reject(err);
+          else resolve();
+        }
+      );
+    });
+  }
+
+  /**
+   * Save mining run record
+   */
+  async saveMiningRun(run) {
+    await this.init();
+
+    return new Promise((resolve, reject) => {
+      const sql = `
+        INSERT INTO mining_runs (
+          workspace_path, started_at, completed_at, duration_ms,
+          git_commits, shell_commands, cursor_prompts, file_timestamps, errors, status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `;
+
+      this.db.run(
+        sql,
+        [
+          run.workspace_path,
+          run.started_at,
+          run.completed_at,
+          run.duration_ms,
+          run.git_commits || 0,
+          run.shell_commands || 0,
+          run.cursor_prompts || 0,
+          run.file_timestamps || 0,
+          JSON.stringify(run.errors || []),
+          run.status || 'completed'
+        ],
+        (err) => {
+          if (err) reject(err);
+          else resolve(this.lastID);
+        }
+      );
+    });
+  }
+
+  /**
+   * Get historical commits
+   */
+  async getHistoricalCommits(filters = {}) {
+    await this.init();
+
+    return new Promise((resolve, reject) => {
+      let sql = 'SELECT * FROM historical_commits WHERE 1=1';
+      const params = [];
+
+      if (filters.workspace) {
+        sql += ' AND workspace_path = ?';
+        params.push(filters.workspace);
+      }
+
+      if (filters.since) {
+        sql += ' AND date >= ?';
+        params.push(new Date(filters.since).getTime());
+      }
+
+      if (filters.until) {
+        sql += ' AND date <= ?';
+        params.push(new Date(filters.until).getTime());
+      }
+
+      if (filters.author) {
+        sql += ' AND author LIKE ?';
+        params.push(`%${filters.author}%`);
+      }
+
+      sql += ' ORDER BY date DESC';
+
+      if (filters.limit) {
+        sql += ' LIMIT ?';
+        params.push(filters.limit);
+      }
+
+      this.db.all(sql, params, (err, rows) => {
+        if (err) reject(err);
+        else {
+          // Parse JSON fields
+          const commits = rows.map(row => ({
+            ...row,
+            file_changes: JSON.parse(row.file_changes || '[]')
+          }));
+          resolve(commits);
+        }
+      });
+    });
+  }
+
+  /**
+   * Get historical commands
+   */
+  async getHistoricalCommands(filters = {}) {
+    await this.init();
+
+    return new Promise((resolve, reject) => {
+      let sql = 'SELECT * FROM historical_commands WHERE 1=1';
+      const params = [];
+
+      if (filters.since) {
+        sql += ' AND timestamp >= ?';
+        params.push(new Date(filters.since).getTime());
+      }
+
+      if (filters.until) {
+        sql += ' AND timestamp <= ?';
+        params.push(new Date(filters.until).getTime());
+      }
+
+      if (filters.shell) {
+        sql += ' AND shell = ?';
+        params.push(filters.shell);
+      }
+
+      sql += ' ORDER BY timestamp DESC';
+
+      if (filters.limit) {
+        sql += ' LIMIT ?';
+        params.push(filters.limit);
+      }
+
+      this.db.all(sql, params, (err, rows) => {
+        if (err) reject(err);
+        else resolve(rows);
+      });
+    });
+  }
+
+  /**
+   * Get historical prompts
+   */
+  async getHistoricalPrompts(filters = {}) {
+    await this.init();
+
+    return new Promise((resolve, reject) => {
+      let sql = 'SELECT * FROM historical_prompts WHERE 1=1';
+      const params = [];
+
+      if (filters.since) {
+        sql += ' AND timestamp >= ?';
+        params.push(new Date(filters.since).getTime());
+      }
+
+      if (filters.until) {
+        sql += ' AND timestamp <= ?';
+        params.push(new Date(filters.until).getTime());
+      }
+
+      if (filters.minConfidence) {
+        sql += ' AND confidence >= ?';
+        params.push(filters.minConfidence);
+      }
+
+      sql += ' ORDER BY timestamp DESC';
+
+      if (filters.limit) {
+        sql += ' LIMIT ?';
+        params.push(filters.limit);
+      }
+
+      this.db.all(sql, params, (err, rows) => {
+        if (err) reject(err);
+        else resolve(rows);
+      });
+    });
+  }
+
+  /**
+   * Get mining runs history
+   */
+  async getMiningRuns(filters = {}) {
+    await this.init();
+
+    return new Promise((resolve, reject) => {
+      let sql = 'SELECT * FROM mining_runs WHERE 1=1';
+      const params = [];
+
+      if (filters.workspace) {
+        sql += ' AND workspace_path = ?';
+        params.push(filters.workspace);
+      }
+
+      sql += ' ORDER BY started_at DESC';
+
+      if (filters.limit) {
+        sql += ' LIMIT ?';
+        params.push(filters.limit);
+      }
+
+      this.db.all(sql, params, (err, rows) => {
+        if (err) reject(err);
+        else {
+          const runs = rows.map(row => ({
+            ...row,
+            errors: JSON.parse(row.errors || '[]')
+          }));
+          resolve(runs);
+        }
       });
     });
   }

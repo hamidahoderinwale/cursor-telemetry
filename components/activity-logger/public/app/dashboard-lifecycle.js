@@ -179,14 +179,48 @@ function setupAutoRefresh() {
  * Initialize persistent storage and data synchronization
  */
 async function initializePersistence() {
-  const PersistentStorage = window.PersistentStorage;
-  const AnalyticsAggregator = window.AnalyticsAggregator;
-  const DataSynchronizer = window.DataSynchronizer;
+  // Wait for persistence classes to be loaded (they're loaded with defer)
+  let attempts = 0;
+  const maxAttempts = 50; // Wait up to 5 seconds (50 * 100ms)
   
-  if (!PersistentStorage || !AnalyticsAggregator || !DataSynchronizer) {
-    console.warn('Persistence system not available - required classes not found');
-    return null;
+  while (attempts < maxAttempts) {
+    const PersistentStorage = window.PersistentStorage;
+    const AnalyticsAggregator = window.AnalyticsAggregator;
+    const DataSynchronizer = window.DataSynchronizer;
+    
+    if (PersistentStorage && AnalyticsAggregator && DataSynchronizer) {
+      // Classes are available, proceed with initialization
+      try {
+        const storage = new PersistentStorage();
+        const aggregator = new AnalyticsAggregator(storage);
+        const synchronizer = new DataSynchronizer(storage, aggregator);
+        
+        console.log('Persistence system enabled');
+        
+        // Initialize persistent storage
+        const stats = await synchronizer.initialize();
+        console.log('[DATA] Persistent storage ready:', stats);
+        
+        // Store globally for access
+        window.persistentStorage = storage;
+        window.analyticsAggregator = aggregator;
+        window.dataSynchronizer = synchronizer;
+        
+        return { storage, aggregator, synchronizer };
+      } catch (error) {
+        console.warn('Persistence system initialization failed:', error);
+        return null;
+      }
+    }
+    
+    // Wait 100ms before checking again
+    await new Promise(resolve => setTimeout(resolve, 100));
+    attempts++;
   }
+  
+  // Classes not available after waiting
+  console.warn('Persistence system not available - required classes not found after waiting');
+  return null;
   
   try {
     const storage = new PersistentStorage();

@@ -123,6 +123,9 @@ async function initializeDashboard() {
     // Step 5: Heavy analytics will be loaded on-demand via analyticsManager
     console.log('Heavy analytics deferred until idle/tab focus');
     
+    // Step 6: Initialize background services
+    await initializeBackgroundServices();
+    
   } catch (error) {
     console.error('Initialization error:', error);
     if (window.updateConnectionStatus) {
@@ -138,6 +141,51 @@ async function initializeDashboard() {
   }
 }
 
+/**
+ * Initialize background services (sync, state management, cross-tab coordination)
+ */
+async function initializeBackgroundServices() {
+  try {
+    // Initialize view state manager
+    if (window.viewStateManager) {
+      // Already initialized via script load
+    }
+    
+    // Initialize background sync manager
+    if (window.backgroundSyncManager) {
+      await window.backgroundSyncManager.initialize();
+    }
+    
+    // Initialize cross-tab coordinator
+    if (window.crossTabCoordinator) {
+      await window.crossTabCoordinator.initialize();
+      
+      // Listen for cross-tab sync events
+      window.addEventListener('cross-tab-sync-complete', (event) => {
+        // Refresh data when another tab completes sync
+        if (window.refreshManager && window.refreshManager.isActive) {
+          window.refreshManager.scheduleFastRefresh();
+        }
+      });
+    }
+    
+    // Listen for background sync completion
+    window.addEventListener('background-sync-complete', (event) => {
+      // Handle synced data from service worker
+      if (event.detail && event.detail.data) {
+        // Process synced data
+        if (window.processSyncedData) {
+          window.processSyncedData(event.detail.data);
+        }
+      }
+    });
+    
+  } catch (error) {
+    // Background services are optional - continue without them
+  }
+}
+
 // Export to window
 window.initializeDashboard = initializeDashboard;
+window.initializeBackgroundServices = initializeBackgroundServices;
 

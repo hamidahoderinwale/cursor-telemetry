@@ -183,8 +183,8 @@ function renderFileGraphViewTemplate(data) {
                 <div class="embeddings-control-group">
                   <label class="embeddings-control-label" title="Number of dimensions to reduce to (2D for flat visualization, 3D for spatial view)">Dimensions:</label>
                   <select id="embeddingsDimensions" class="embeddings-control-select" onchange="renderEmbeddingsVisualization()">
-                    <option value="2" selected>2D</option>
-                    <option value="3">3D</option>
+                    <option value="2">2D</option>
+                    <option value="3" selected>3D</option>
                   </select>
                 </div>
                 <div class="embeddings-control-group">

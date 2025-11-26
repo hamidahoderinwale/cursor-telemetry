@@ -159,16 +159,12 @@ async function logEvent(type, details = {}) {
                     try {
                         searchIndex.replace(searchableEvent);
                     } catch (replaceError) {
-                        console.warn('Could not add event to search index:', replaceError.message);
+                        // Search index replace failed, continue silently
                     }
-                } else {
-                    console.warn('Search index error:', error.message);
                 }
             }
         }
     } catch (error) {
-        console.error('Error logging event:', error);
-        console.error('Event data:', { type, details, sessionId: currentSession?.id });
         // Don't throw - event logging failure shouldn't break the main flow
     }
 }
@@ -1142,7 +1138,7 @@ function renderEvent(event) {
     const description = getEventDescription(event.type, details);
     
     const eventIcons = {
-        'session_start': '🕒',
+        'session_start': '',
         'session_end': '',
         'entry_created': '',
         'entry_manual': '',
@@ -1455,8 +1451,12 @@ function startCompanionPolling() {
     lastCompanionCursor = 0;
     companionConnected = false;
     
-    // Poll every 2 seconds
-    companionPollingInterval = setInterval(async () => {
+    // Dynamic polling interval based on tab visibility
+    let pollingInterval = 2000; // 2 seconds when visible
+    let isTabVisible = !document.hidden;
+    
+    // Polling function
+    const performPoll = async () => {
         try {
             const since = lastCompanionCursor || 0;
             addEventToStream('polling', `Polling companion with since=${since}`);
@@ -1479,9 +1479,8 @@ function startCompanionPolling() {
             } catch (error) {
               clearTimeout(timeoutId);
               if (error.name === 'AbortError') {
-                console.warn('[POLL] Queue fetch timed out');
-              } else {
-                console.warn('[POLL] Failed to fetch queue:', error.message);
+                // Timeout - expected when tab is hidden
+                return;
               }
               return; // Skip this poll cycle
             }
@@ -1588,9 +1587,11 @@ function startCompanionPolling() {
                     
                     addEventToStream('companion', `Acknowledged data up to cursor ${data.cursor}`);
                     
-                    // Update UI
-                    await renderFeed();
-                    await updateStatusDashboard();
+                    // Update UI only if tab is visible
+                    if (isTabVisible) {
+                        await renderFeed();
+                        await updateStatusDashboard();
+                    }
                 }
             }
         } catch (error) {
@@ -1599,21 +1600,48 @@ function startCompanionPolling() {
                 // Timeout error - don't log as it's expected
                 return;
             } else if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
-                // Network error - only log if we were previously connected
+                // Network error - only handle if we were previously connected
                 if (companionConnected) {
-                    console.warn('Companion network error:', error.message);
                     companionConnected = false;
                     addEventToStream('companion', 'Companion service disconnected');
                     updateHealthStatus();
                     updateCompanionStatus(false, 0);
                 }
             } else {
-                // Other errors - log them
-                console.warn('Companion polling error:', error.message);
+                // Other errors - add to event stream
                 addEventToStream('error', `Companion polling error: ${error.message}`);
             }
         }
-    }, 2000);
+    };
+    
+    // Start polling with current interval
+    function startPolling() {
+        if (companionPollingInterval) {
+            clearInterval(companionPollingInterval);
+        }
+        companionPollingInterval = setInterval(performPoll, pollingInterval);
+    }
+    
+    // Update polling interval based on visibility
+    const updatePollingInterval = () => {
+        const wasVisible = isTabVisible;
+        isTabVisible = !document.hidden;
+        
+        if (isTabVisible && !wasVisible) {
+            // Tab became visible - resume fast polling
+            pollingInterval = 2000;
+            startPolling();
+        } else if (!isTabVisible && wasVisible) {
+            // Tab hidden - reduce polling frequency
+            pollingInterval = 30000; // 30 seconds when hidden
+            startPolling();
+        }
+    };
+    
+    document.addEventListener('visibilitychange', updatePollingInterval);
+    
+    // Start initial polling
+    startPolling();
 }
 
 // Fallback detection when companion service is not available
@@ -3085,11 +3113,11 @@ function renderActivityItem(entry) {
             activityType = 'Cursor Conversation';
             description = `Cursor: Full conversation logged`;
         } else if (entry.prompt) {
-            activityIcon = '❓';
+            activityIcon = '';
             activityType = 'Cursor Prompt';
             description = `Cursor: Prompt logged`;
         } else if (entry.response) {
-            activityIcon = '🤖';
+            activityIcon = '[AI]';
             activityType = 'Cursor Response';
             description = `Cursor: Response logged`;
         } else {
@@ -3122,7 +3150,7 @@ function renderActivityItem(entry) {
     // Create code/diff preview section
     const codePreviewSection = (entry.before_code && entry.after_code) ? `
         <div class="content-block">
-            <div class="content-label">▸ Code Changes:</div>
+            <div class="content-label"> Code Changes:</div>
             <div class="code-preview">
                 <div class="code-preview-before">
                     <div class="code-preview-label">Before (${beforeLines} lines):</div>
@@ -3151,7 +3179,7 @@ function renderActivityItem(entry) {
 
     const responseSection = entry.response && entry.response.length > 0 ? `
         <div class="content-block">
-            <div class="content-label">🤖 Response:</div>
+            <div class="content-label">[AI] Response:</div>
             <div class="content-text response-text">${entry.response}</div>
         </div>
     ` : '';

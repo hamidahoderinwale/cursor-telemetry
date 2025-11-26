@@ -33,7 +33,7 @@ class OpenRouterEmbeddingService {
           const status = await response.json();
           this.isAvailable = status.available && status.hasApiKey;
           if (this.isAvailable) {
-            console.log('[OPENROUTER-EMBEDDINGS] ✓ OpenRouter API available for embeddings');
+            console.log('[OPENROUTER-EMBEDDINGS]  OpenRouter API available for embeddings');
             console.log(`[OPENROUTER-EMBEDDINGS]   Model: ${status.embeddingModel || 'openai/text-embedding-3-small'}`);
           }
           return this.isAvailable;

@@ -3,19 +3,28 @@
  */
 
 function calculateStats() {
-  const events = window.state.data.events;
-  const entries = window.state.data.entries;
+  // Ensure state.data exists
+  if (!window.state.data) {
+    window.state.data = {};
+  }
+  if (!window.state.stats) {
+    window.state.stats = {};
+  }
+
+  const events = window.state.data.events || [];
+  const entries = window.state.data.entries || [];
+  const prompts = window.state.data.prompts || [];
   const terminalCommands = window.state.data.terminalCommands || [];
 
   // Count sessions
   const sessions = new Set();
-  [...events, ...entries].forEach(item => {
+  [...events, ...entries, ...prompts].forEach(item => {
     if (item.session_id) sessions.add(item.session_id);
   });
 
-  // Count file changes
+  // Count file changes - all events that represent file modifications
   const fileChanges = window.state.stats?.totalEventCount || events.filter(e => 
-    e.type === 'file_change' || e.type === 'code_change'
+    e.type === 'file_change' || e.type === 'code_change' || e.type === 'file_save' || !e.type
   ).length;
   
   // Count terminal commands
@@ -23,23 +32,23 @@ function calculateStats() {
 
   // Count AI interactions - prompts with meaningful content
   // Uses helper function to check all possible text field names
-  const aiInteractions = (window.state.data.prompts || []).filter(p => {
+  const aiInteractions = prompts.filter(p => {
     return window.hasPromptContent ? window.hasPromptContent(p, 5) : 
            (() => {
-             const text = p.text || p.prompt || p.preview || p.content || '';
+             const text = p.text || p.prompt || p.preview || p.content || p.message || '';
              return text && text.length > 5;
            })();
   }).length;
 
-  console.log(`AI Interactions: ${aiInteractions} of ${window.state.data.prompts?.length || 0} prompts`);
+  console.log(`[STATS] AI Interactions: ${aiInteractions} of ${prompts.length} prompts`);
 
   // Calculate code changed
   let totalChars = 0;
   events.forEach(e => {
     try {
       const details = typeof e.details === 'string' ? JSON.parse(e.details) : e.details;
-      const added = details?.chars_added || 0;
-      const deleted = details?.chars_deleted || 0;
+      const added = details?.chars_added || details?.added || 0;
+      const deleted = details?.chars_deleted || details?.deleted || 0;
       totalChars += added + deleted;
     } catch (err) {
       // Silently skip parsing errors
@@ -52,7 +61,7 @@ function calculateStats() {
   // Check multiple possible field names and handle both percentage and token values
   let totalContextUsage = 0;
   let contextUsageCount = 0;
-  (window.state.data.prompts || []).forEach(p => {
+  prompts.forEach(p => {
     // Try multiple field name variations
     const contextUsage = p.contextUsage || 
                         p.context_usage || 
@@ -76,12 +85,32 @@ function calculateStats() {
   });
   const avgContextUsage = contextUsageCount > 0 ? (totalContextUsage / contextUsageCount) : 0;
 
+  // Calculate workspace count
+  // First try to get from state.data.workspaces (most accurate)
+  let workspaceCount = 0;
+  if (window.state.data.workspaces && Array.isArray(window.state.data.workspaces)) {
+    workspaceCount = window.state.data.workspaces.length;
+  } else {
+    // Fallback: extract unique workspaces from events, prompts, and entries
+    const workspaceSet = new Set();
+    [...events, ...prompts, ...entries].forEach(item => {
+      const wsPath = item.workspace_path || item.workspacePath || item.workspace || item.workspaceName || item.workspaceId;
+      if (wsPath) {
+        workspaceSet.add(wsPath);
+      }
+    });
+    workspaceCount = workspaceSet.size;
+  }
+
+  // Update stats object, preserving any existing values that might be set elsewhere
   window.state.stats = {
+    ...window.state.stats, // Preserve existing stats
     sessions: sessions.size,
     fileChanges: fileChanges,
     aiInteractions: aiInteractions,
     codeChanged: (totalChars / 1024).toFixed(1), // KB
-    avgContext: avgContextUsage.toFixed(1)
+    avgContext: avgContextUsage.toFixed(1),
+    workspaces: workspaceCount // Ensure workspace count is set
   };
   
   console.log('[STATS] Final stats:', window.state.stats);

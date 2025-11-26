@@ -88,7 +88,7 @@ function renderNavigatorViewTemplate(data) {
                    onkeyup="handleNavigatorSearch(event)"
                    style="flex: 1; min-width: 0;">
             <button class="btn btn-secondary" onclick="clearNavigatorSearch()" title="Clear search">
-              ✕
+              
             </button>
           </div>
         </div>

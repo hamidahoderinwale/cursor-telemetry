@@ -69,22 +69,45 @@ async function initializeNavigator() {
     
     // Check companion service status before attempting to load
     const apiBase = window.CONFIG?.API_BASE || window.CONFIG?.API_BASE_URL || 'http://localhost:43917';
-    if (window.state && window.state.companionServiceOnline === false) {
-      // Try to verify service is actually offline by doing a quick health check
-      try {
-        const healthController = new AbortController();
-        const healthTimeoutId = setTimeout(() => healthController.abort(), 2000);
-        const healthResponse = await fetch(`${apiBase}/health`, { signal: healthController.signal });
-        clearTimeout(healthTimeoutId);
-        
-        if (healthResponse.ok) {
-          // Service is actually online, update state
+    
+    // Always do a fresh health check, don't rely on cached state
+    let serviceOnline = false;
+    try {
+      const healthController = new AbortController();
+      const healthTimeoutId = setTimeout(() => healthController.abort(), 3000); // Increased timeout
+      const healthResponse = await fetch(`${apiBase}/health`, { 
+        signal: healthController.signal,
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json'
+        }
+      });
+      clearTimeout(healthTimeoutId);
+      
+      if (healthResponse.ok) {
+        const healthData = await healthResponse.json();
+        serviceOnline = healthData.status === 'running' || healthData.sequence !== undefined;
+        if (serviceOnline && window.state) {
           window.state.companionServiceOnline = true;
           console.log('[NAVIGATOR] Companion service is online, proceeding with data fetch');
         }
-      } catch (e) {
-        // Service is indeed offline, continue with fallback
-        console.log('[NAVIGATOR] Companion service health check failed, will use fallback');
+      }
+    } catch (e) {
+      // Health check failed - check if it's a network error or actual offline
+      const isNetworkError = e.name === 'AbortError' || 
+                            e.message?.includes('Failed to fetch') ||
+                            e.message?.includes('NetworkError') ||
+                            e.message?.includes('CORS');
+      
+      if (!isNetworkError) {
+        console.warn('[NAVIGATOR] Health check error:', e.message);
+      }
+      
+      // If state says offline but we haven't confirmed it, try to verify
+      if (window.state && window.state.companionServiceOnline === false) {
+        // State says offline, but let's try the actual API call anyway
+        // The fetch below will handle the error gracefully
+        console.log('[NAVIGATOR] State indicates offline, but will attempt API call');
       }
     }
     
@@ -290,13 +313,26 @@ async function initializeNavigator() {
       // If still no data, show offline message
       if (!data) {
         console.warn('[NAVIGATOR] Failed to fetch file contents and no event data available:', error.message);
+        const apiBase = window.CONFIG?.API_BASE || window.CONFIG?.API_BASE_URL || 'http://localhost:43917';
         container.innerHTML = `
           <div class="empty-wrapper" style="padding: 2rem; text-align: center;">
             <div style="font-size: 1.1rem; font-weight: 500; margin-bottom: 0.5rem; color: var(--color-text);">Companion service offline</div>
             <div style="font-size: 0.9rem; margin-bottom: 1rem; color: var(--color-text-muted);">The navigator requires the companion service to load file contents. Please start the companion service to use this view.</div>
             <div style="font-size: 0.85rem; opacity: 0.8; color: var(--color-text-muted); margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--color-border);">
-              <div>Service URL: ${window.CONFIG?.API_BASE || 'http://localhost:43917'}</div>
-              <div style="margin-top: 0.5rem;">Error: ${error.message}</div>
+              <div>Service URL: ${apiBase}</div>
+              <div style="margin-top: 0.5rem;">Error: ${error.message || 'Connection failed'}</div>
+            </div>
+            <div style="margin-top: 1.5rem;">
+              <button onclick="window.initializeNavigator && window.initializeNavigator(); window.state && (window.state.companionServiceOnline = null);" 
+                      style="padding: 0.5rem 1rem; background: var(--color-accent); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.9rem; font-weight: 500;">
+                Retry Connection
+              </button>
+            </div>
+            <div style="margin-top: 1rem; font-size: 0.8rem; color: var(--color-text-muted);">
+              To start the service, run:<br/>
+              <code style="background: var(--color-bg); padding: 0.25rem 0.5rem; border-radius: 4px; margin-top: 0.5rem; display: inline-block;">
+                cd cursor-telemetry/components/activity-logger/companion && npm start
+              </code>
             </div>
           </div>
         `;
@@ -813,6 +849,16 @@ async function initializeNavigator() {
         <div class="empty-wrapper" style="padding: 2rem; text-align: center;">
           <div style="font-size: 1.1rem; font-weight: 500; margin-bottom: 0.5rem; color: var(--color-text);">Companion service offline</div>
           <div style="font-size: 0.9rem; margin-bottom: 1rem; color: var(--color-text-muted);">The navigator requires the companion service to load file contents. Please start the companion service to use this view.</div>
+          <div style="margin-top: 1.5rem;">
+            <button onclick="window.initializeNavigator && window.initializeNavigator(); window.state && (window.state.companionServiceOnline = null);" 
+                    style="padding: 0.5rem 1rem; background: var(--color-accent); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.9rem; font-weight: 500;">
+              Retry Connection
+            </button>
+          </div>
+          <div style="margin-top: 1rem; font-size: 0.8rem; color: var(--color-text-muted);">
+            Service URL: ${window.CONFIG?.API_BASE || window.CONFIG?.API_BASE_URL || 'http://localhost:43917'}<br/>
+            To start: <code style="background: var(--color-bg); padding: 0.25rem 0.5rem; border-radius: 4px;">cd cursor-telemetry/components/activity-logger/companion && npm start</code>
+          </div>
           <div style="font-size: 0.85rem; opacity: 0.8; color: var(--color-text-muted); margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--color-border);">
             Service URL: ${window.CONFIG?.API_BASE || 'http://localhost:43917'}
           </div>

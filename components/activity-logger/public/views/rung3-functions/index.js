@@ -14,6 +14,29 @@ const rung3Cache = {
 const RUNG3_ITEMS_PER_PAGE = 50;
 let rung3CurrentPage = 0;
 
+// Helper function to wait for template to load
+function waitForTemplate(templateName, maxWait = 5000) {
+  return new Promise((resolve) => {
+    if (window[templateName]) {
+      resolve();
+      return;
+    }
+    
+    const startTime = Date.now();
+    const checkInterval = 50;
+    
+    const checkTemplate = setInterval(() => {
+      if (window[templateName]) {
+        clearInterval(checkTemplate);
+        resolve();
+      } else if (Date.now() - startTime > maxWait) {
+        clearInterval(checkTemplate);
+        resolve(); // Resolve anyway to prevent hanging
+      }
+    }, checkInterval);
+  });
+}
+
 if (!window.renderRung3FunctionsTemplate) {
   const templatesScript = document.createElement('script');
   templatesScript.src = 'views/rung3-functions/templates.js';
@@ -21,7 +44,17 @@ if (!window.renderRung3FunctionsTemplate) {
   document.head.appendChild(templatesScript);
 }
 
-function renderRung3FunctionsView(container) {
+async function renderRung3FunctionsView(container) {
+  // Wait for template to be available
+  if (!window.renderRung3FunctionsTemplate) {
+    container.innerHTML = '<div class="loading-state">Loading templates...</div>';
+    await waitForTemplate('renderRung3FunctionsTemplate', 5000);
+  }
+  
+  if (!window.renderRung3FunctionsTemplate) {
+    return;
+  }
+  
   container.innerHTML = window.renderRung3FunctionsTemplate();
   
   // Setup debounced filter handler
@@ -471,7 +504,7 @@ function selectRung3Change(id) {
       <div class="rung3-functions-detail-label">File Path</div>
       <div class="rung3-functions-detail-value">
         <code style="background: var(--color-bg-secondary, #f5f5f5); padding: 2px 6px; border-radius: 4px;">${change.filePath || 'Unknown'}</code>
-        <button class="btn-copy" onclick="copyToClipboard('${(change.filePath || '').replace(/'/g, "\\'")}', event)" title="Copy file path">📋</button>
+        <button class="btn-copy" onclick="copyToClipboard('${(change.filePath || '').replace(/'/g, "\\'")}', event)" title="Copy file path"></button>
       </div>
     </div>
     <div class="rung3-functions-detail-section">
@@ -484,7 +517,7 @@ function selectRung3Change(id) {
     <div class="rung3-functions-detail-section">
       <div class="rung3-functions-detail-label">
         Signature Before
-        <button class="btn-copy" onclick="copyToClipboard('${signatureBeforeJson.replace(/'/g, "\\'")}', event)" title="Copy signature">📋</button>
+        <button class="btn-copy" onclick="copyToClipboard('${signatureBeforeJson.replace(/'/g, "\\'")}', event)" title="Copy signature"></button>
       </div>
       <div class="rung3-functions-detail-value">
         <pre style="font-size: var(--text-xs, 0.75rem); background: var(--color-bg-secondary, #f5f5f5); padding: var(--space-md, 1rem); border-radius: var(--radius-sm, 0.125rem); overflow-x: auto;">${window.escapeHtml ? window.escapeHtml(signatureBeforeJson) : signatureBeforeJson}</pre>
@@ -495,7 +528,7 @@ function selectRung3Change(id) {
     <div class="rung3-functions-detail-section">
       <div class="rung3-functions-detail-label">
         Signature After
-        <button class="btn-copy" onclick="copyToClipboard('${signatureAfterJson.replace(/'/g, "\\'")}', event)" title="Copy signature">📋</button>
+        <button class="btn-copy" onclick="copyToClipboard('${signatureAfterJson.replace(/'/g, "\\'")}', event)" title="Copy signature"></button>
       </div>
       <div class="rung3-functions-detail-value">
         <pre style="font-size: var(--text-xs, 0.75rem); background: var(--color-bg-secondary, #f5f5f5); padding: var(--space-md, 1rem); border-radius: var(--radius-sm, 0.125rem); overflow-x: auto;">${window.escapeHtml ? window.escapeHtml(signatureAfterJson) : signatureAfterJson}</pre>
@@ -506,7 +539,7 @@ function selectRung3Change(id) {
     <div class="rung3-functions-detail-section">
       <div class="rung3-functions-detail-label">
         Parameter Changes
-        <button class="btn-copy" onclick="copyToClipboard('${parameterChangesJson.replace(/'/g, "\\'")}', event)" title="Copy changes">📋</button>
+        <button class="btn-copy" onclick="copyToClipboard('${parameterChangesJson.replace(/'/g, "\\'")}', event)" title="Copy changes"></button>
       </div>
       <div class="rung3-functions-detail-value">
         <pre style="font-size: var(--text-xs, 0.75rem); background: var(--color-bg-secondary, #f5f5f5); padding: var(--space-md, 1rem); border-radius: var(--radius-sm, 0.125rem); overflow-x: auto;">${window.escapeHtml ? window.escapeHtml(parameterChangesJson) : parameterChangesJson}</pre>
@@ -838,7 +871,7 @@ if (!window.copyToClipboard) {
         if (event && event.target) {
           const btn = event.target;
           const originalText = btn.textContent;
-          btn.textContent = '✓';
+          btn.textContent = '';
           setTimeout(() => {
             btn.textContent = originalText;
           }, 1000);
@@ -857,6 +890,18 @@ if (!window.copyToClipboard) {
   };
 }
 
+function toggleRung3Methodology() {
+  const content = document.getElementById('rung3-methodology-content');
+  const arrow = document.getElementById('rung3-methodology-arrow');
+  if (content.style.display === 'none') {
+    content.style.display = 'block';
+    arrow.textContent = '';
+  } else {
+    content.style.display = 'none';
+    arrow.textContent = '';
+  }
+}
+
 window.renderRung3FunctionsView = renderRung3FunctionsView;
 window.selectRung3Change = selectRung3Change;
 window.selectRung3Function = selectRung3Function;
@@ -868,4 +913,5 @@ window.refreshRung3Functions = refreshRung3Functions;
 window.exportRung3Functions = exportRung3Functions;
 window.rung3NextPage = rung3NextPage;
 window.rung3PreviousPage = rung3PreviousPage;
+window.toggleRung3Methodology = toggleRung3Methodology;
 

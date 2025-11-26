@@ -1,790 +1,599 @@
-# Cursor Activity Dashboard
+# Cursor Telemetry Dashboard
 
-A modern, intelligent dashboard for monitoring and visualizing all your Cursor IDE activity data with AI-powered annotations, natural language state management, and comprehensive analytics.
+> **APPLICATION 2: Full Visualization & Analytics Interface**
+> 
+> This is the **complete dashboard** - a web-based interface for visualizing and analyzing your development data. **Requires the companion service to function.**
 
-## Features
+---
 
-### AI-Powered Features
-- **Event Annotations** - Automatic AI-generated descriptions (e.g., "Added authentication middleware" instead of "file changed")
-- **Intent Classification** - Automatically tags events as `feature`, `bug-fix`, `refactor`, `experiment`, etc.
-- **State Summarization** - Generates summaries when creating development states
-- **Natural Language Interface** - Control states with commands like "Fork a state for trying authentication"
-- **Semantic Search** - Embedding-based search using OpenRouter API
-- **State Recommendations** - Intelligent suggestions for unfinished experiments and similar states
+## What You Get
 
-### Visual State Management
-- **State Graph Visualization** - D3.js graph showing state relationships (like Git graph)
-- **Interactive State Operations** - Click to switch, drag to merge states
-- **Timeline Integration** - State transitions shown in timeline with visual markers
-- **State Boundaries** - Visual markers group events by state
+**Everything from Companion Service**
+- All backend features and APIs
+- Real-time data capture
+- Historical mining
+- Export capabilities
 
-### Core Features
-- **Real-time Statistics** - Live counts of sessions, entries, events, and code changes
-- **AI-Annotated Timeline** - Events displayed with Lucide icons and AI descriptions
-- **Smart Filtering** - Filter by source, type, intent, or workspace
-- **Code Change Visualization** - Side-by-side before/after code diffs
-- **Content Display** - Full prompts, responses, and notes with syntax highlighting
-- **Auto-refresh** - Automatically polls companion service for new data
-- **Modular Architecture** - Clean separation of HTML templates, view logic, and utilities
-- **Advanced Data Export** - Export with date ranges, type filters, and customizable options
-- **Data Linking** - Automatic linking of prompts to resulting code changes
-- **Image Proxy** - Secure local image serving for screenshots and images in prompts
-- **Temporal Analysis** - Time-based grouping of related activities
-- **Event Tagging** - Automatic tagging with visual badges
-- **Activity Sessions** - Grouped temporal threads showing related activities
+**Plus: Beautiful Web Interface**
+- 20+ visualization views
+- Real-time updates
+- Interactive charts and graphs
+- D3.js network visualizations
 
-### Visualizations
+**Plus: AI-Powered Features**
+- Event annotations with descriptions
+- Natural language interface
+- Semantic search
+- State management with visual graph
 
-#### Overview Page
-- **Activity Heatmap** - Year-long activity calendar showing daily coding intensity
-- **Activity Rhythm** - D3.js visualization of coding patterns by hour of day (6am, 12pm, 6pm labels)
-- **Productivity Pulse** - Circular gauge comparing today's activity to weekly average
+**Plus: Advanced Analytics**
+- Productivity metrics
+- Context usage tracking
+- Error analysis
+- File dependency graphs
 
-#### Analytics Page
-- **AI Activity & Code Output** - Correlation between prompts and code changes over time (hourly/daily/weekly/monthly)
-- **Context Usage Over Time** - AI context window utilization with color-coded thresholds
-- **Model Usage Analytics** - Distribution of AI models used across prompts and modes
-- **File Changes by Type** - Breakdown of modifications by file extension
-- **Recent Activity** - 15-minute interval timeline of development events
-- **Context File Analytics** - Analysis of @ referenced files and context patterns
-- **Enhanced Context Window Analytics** - Real metrics: file references, token counts, adoption rate
-- **Productivity Insights** - Active coding time, prompt iteration patterns, line changes, code churn
-- **Prompt Effectiveness** - Time from prompt to code change, success rate, iteration patterns
-- **Context Evolution Timeline** - Tracks context window changes, file additions/removals over time
-- **Prompt-to-Code Correlation** - Success rate, time to first change, code change patterns
-- **Git Commit Timeline** - Commit history with messages, timestamps, and branch information
-- **File Hotspots** - Most frequently edited files with edit counts, lines changed, and activity scores
-
-#### File Graph Page
-- **Semantic File Network** - Interactive network graph showing file relationships
-- **File Dependency Strength** - File relationships based on co-occurrence and temporal patterns
-- **File Complexity Trends** - Edit frequency, code churn, and complexity scores over time
-- **Prompt Embeddings Analysis** - Semantic similarity visualization using PCA/t-SNE/MDS
-- **Term Frequency Analysis** - TF-IDF analysis of important terms across files
-- **AI-Generated Cluster Labels** - Cluster names and descriptions using OpenRouter
-
-#### States Page
-- **State Graph Visualization** - D3.js force-directed graph of state relationships
-- **State List** - All states with actions (switch, fork, view details)
-- **State Recommendations** - Unfinished experiments and similar states
-- **Natural Language Commands** - Create, fork, merge states via search palette
-
-#### Navigator Page
-- **Semantic Navigator** - UMAP-based codebase visualization in latent space
-- **Physical/Latent/Hybrid Views** - Different perspectives on file relationships
-- **Semantic Insights** - Automatically discovered patterns and clusters
-
-#### Workspace Comparison
-- **Multi-Workspace Analysis** - Compare activity across multiple workspaces
-- **Add/Remove Workspaces** - Dynamic workspace selection for comparison
+---
 
 ## Quick Start
 
-### Option 1: Using the rebuild-run-open script (Recommended)
+### Prerequisites
+- Everything from [Companion Service](companion/README.md)
+- Modern web browser (Chrome, Firefox, Safari, Edge)
+
+### Installation
+
 ```bash
-cd cursor-telemetry/components/activity-logger
-./rebuild-run-open.sh
+# 1. Navigate to companion directory
+cd cursor-telemetry/components/activity-logger/companion
+
+# 2. Install dependencies (if not already done)
+npm install
+
+# 3. Start the service
+node src/index.js
 ```
 
-### Option 2: Manual Start
+### Access Dashboard
 
-1. **Start the Companion Service** (if not already running):
-   ```bash
-   cd companion
-   npm start
-   ```
+Open your browser to:
+```
+http://localhost:43917/dashboard.html
+```
 
-2. **Start the Dashboard**:
-   ```bash
-   cd public
-   python3 -m http.server 8080
-   ```
+The dashboard is automatically served by the companion service.
 
-3. **Open the Dashboard**:
-   - Go to `http://localhost:8080/dashboard.html`
-   - The dashboard will automatically open in your browser
+---
 
-## Architecture Overview
+## Dashboard Views
 
-The dashboard uses a **modular, refactored architecture** with clear separation of concerns:
+### Overview
+- Real-time activity statistics
+- Recent file changes
+- Latest AI prompts
+- Quick workspace selector
+- System health status
 
-### Project Structure
+### Activity
+- Complete timeline of all events
+- AI-generated annotations
+- Intent badges (feature, bug-fix, refactor)
+- Filter by type, workspace, date
+- Search across all events
+- Conversation threading
+
+### Analytics
+- **Productivity Metrics:**
+  - Events per hour/day
+  - Active coding time
+  - Peak productivity hours
+- **Context Window Usage:**
+  - Token usage over time
+  - Context window fills
+  - Average tokens per prompt
+- **Error Tracking:**
+  - Error frequency
+  - Error types distribution
+  - Time-to-resolution
+
+### File Graph
+- Interactive D3.js visualization
+- File dependency network
+- Color-coded by file type
+- Similarity-based clustering
+- Zoom and pan controls
+- Click to explore relationships
+
+### Module Graph
+- High-level architecture view
+- Module dependencies
+- Import/export relationships
+- Privacy-preserving abstraction
+
+### States
+- Visual state management
+- Fork/merge workflows
+- State graph visualization
+- Natural language commands
+- State recommendations
+
+### Navigator
+- Workspace file explorer
+- File type distribution
+- Size analysis
+- Quick file access
+
+### System
+- CPU usage monitoring
+- Memory tracking
+- Load average
+- IDE state information
+
+### Historical Mining
+- Mine git commit history
+- Extract shell commands
+- Parse Cursor logs
+- Reconstruct file timeline
+- View mining statistics
+
+### Rungs (Privacy Levels)
+- **Clio (Motifs):** Workflow patterns
+- **Module Graph:** File dependencies
+- **Rung 3:** Function-level changes
+- **Rung 2:** Semantic edit scripts
+- **Rung 1:** Token-level with PII redaction
+
+### Threads
+- Conversation visualization
+- Prompt-response chains
+- Context tracking
+
+### Todos
+- Task tracking
+- Development workflow
+
+### Whiteboard
+- Visual workspace
+- Note-taking
+- Diagrams
+
+### API Docs
+- Complete API reference
+- Interactive examples
+- Request/response formats
+
+---
+
+## Key Features
+
+### AI-Powered Annotations
+
+Events are automatically annotated with AI-generated descriptions:
+
+**Example:**
+- **Raw event:** `file_change: auth.js`
+- **AI annotation:** "Added JWT token validation middleware with expiration checking"
+- **Intent:** `feature`
+
+**How it works:**
+1. File change detected
+2. Sent to OpenRouter API with context
+3. AI generates semantic description
+4. Intent automatically classified
+5. Displayed with icon in timeline
+
+### Natural Language Interface
+
+Control your workflow with plain English:
+
+**Command Palette (Cmd+K):**
+```
+Fork a state for trying authentication
+Show me states where I was fixing the login bug
+Find states where I was working on API endpoints
+Merge the performance optimization into main
+```
+
+**How it works:**
+1. Parse command with AI + rules
+2. Extract action, intent, topic
+3. Execute appropriate API call
+4. Show results in UI
+
+### Multi-Layer Search
+
+Three search modes:
+
+1. **Full-text Search (Lunr.js)**
+   - Fast exact matches
+   - Keyword-based
+
+2. **Semantic Search (Embeddings)**
+   - Find by meaning
+   - "Authentication implementation" matches "JWT token handling"
+
+3. **Fuzzy Search**
+   - Typo-tolerant
+   - Partial matches
+
+### Visual State Management
+
+**State Graph:**
+- D3.js force-directed layout
+- Color-coded by intent
+- Interactive (click, drag, zoom)
+- Shows fork/merge relationships
+
+**State Timeline:**
+- State transitions in activity feed
+- Visual boundary markers
+- Color-coded borders
+
+**State Operations:**
+- **Fork:** Create experimental branches
+- **Merge:** Combine work into main state
+- **Diff:** Compare two states
+- **Recommendations:** AI suggests related states
+
+### Workspace Sharing
+
+Create secure, shareable links:
+
+**Features:**
+- Privacy level controls (4 levels)
+- Automatic expiration (1 day to 1 year)
+- Date range filtering
+- Custom names
+- Real-time preview
+- Link management
+
+**How to Use:**
+1. Click "Share Workspace" in sidebar
+2. Select workspaces
+3. Choose privacy level
+4. Set expiration
+5. Review preview
+6. Create link
+7. Share URL with others
+
+**Privacy Levels:**
+- **Level 0:** Full code traces (trusted only)
+- **Level 1:** Code abstracts (recommended)
+- **Level 2:** Statement-level (high privacy)
+- **Level 3:** Workflow patterns (maximum privacy)
+
+---
+
+## Performance Optimizations
+
+### Background Preloading
+Heavy data (file graph, similarities) precomputed in background while UI renders.
+
+### Smart Caching
+- `sessionStorage` for precomputed data (10-minute expiry)
+- Instant re-renders on view changes
+- No re-computation needed
+
+### Progressive Rendering
+- Basic UI loads immediately
+- Analytics load progressively
+- No blocking operations
+
+### Web Workers
+- Heavy computations offloaded
+- UI remains responsive
+- Background processing
+
+### Optimized Algorithms
+- Barnes-Hut for force-directed layouts
+- kNN sampling for large datasets
+- Debounced search inputs
+- Virtualized lists for large datasets
+
+---
+
+## Customization
+
+### Theme
+The dashboard respects system preferences:
+- Light mode
+- Dark mode (auto-detected)
+
+### Layout
+- Resizable panels
+- Collapsible sidebars
+- Customizable view order
+
+### Filters
+Save filter preferences:
+- Workspace filters
+- Date ranges
+- Event types
+- Intent filters
+
+---
+
+## Keyboard Shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| `Cmd+K` / `Ctrl+K` | Open command palette |
+| `Cmd+/` / `Ctrl+/` | Open search |
+| `Esc` | Close modal/palette |
+| Arrow keys | Navigate timeline |
+| `Space` | Pause/resume real-time updates |
+
+---
+
+## Architecture
 
 ```
-public/
-├── dashboard.html              # Main HTML entry point
-├── dashboard.js                # Main dashboard logic
-├── dashboard.css               # Main stylesheet
-│
-├── core/                       # Core application modules
-│   ├── config.js              # Configuration management
-│   ├── state.js               # Application state management
-│   ├── api-client.js          # API communication
-│   ├── view-router.js         # View routing and navigation
-│   └── websocket-manager.js   # WebSocket connections
-│
-├── views/                      # View modules (one per dashboard view)
+Dashboard (Frontend)
+├── Entry Point
+│   └── dashboard.html
+├── Core
+│   ├── view-router.js (SPA routing)
+│   ├── api-client.js (HTTP + WebSocket)
+│   ├── state.js (global state)
+│   └── websocket-manager.js (real-time)
+├── Views (20+ pages)
 │   ├── overview/
-│   │   ├── index.js           # View rendering logic
-│   │   ├── helpers.js         # HTML template helpers
-│   │   └── styles.css         # View-specific styles
-│   │
 │   ├── activity/
-│   │   ├── index.js           # Activity view logic
-│   │   ├── timeline-helpers.js # Timeline rendering templates
-│   │   └── styles.css
-│   │
-│   ├── threads/
-│   │   ├── index.js           # Threads view logic
-│   │   ├── helpers.js         # Thread/prompt templates
-│   │   └── styles.css
-│   │
 │   ├── analytics/
-│   │   ├── index.js           # Analytics view logic
-│   │   ├── chart-helpers.js   # Chart rendering helpers
-│   │   └── styles.css
-│   │
 │   ├── file-graph/
-│   │   ├── index.js           # File graph view logic
-│   │   ├── templates.js       # HTML templates
-│   │   └── styles.css
-│   │
+│   ├── module-graph/
+│   ├── states/
 │   ├── navigator/
-│   │   ├── index.js           # Navigator view logic
-│   │   ├── templates.js       # HTML templates
-│   │   └── styles.css
-│   │
 │   ├── system/
-│   │   ├── index.js           # System view logic
-│   │   ├── templates.js       # HTML templates
-│   │   └── styles.css
-│   │
-│   └── api-docs/
-│       ├── index.js           # API docs view logic
-│       └── templates.js       # HTML templates
-│
-├── utils/                      # Shared utility modules
-│   ├── helpers.js             # General utilities (escapeHtml, truncate, etc.)
-│   ├── file-helpers.js        # File path utilities
-│   ├── math-helpers.js        # Mathematical utilities
-│   ├── data-helpers.js        # Data processing utilities
-│   ├── time-formatting.js     # Time formatting (formatTimeAgo)
-│   ├── event-helpers.js       # Event processing (getEventTitle, getEventDescription)
-│   ├── temporal-threading.js  # Temporal grouping logic
-│   └── templates.js           # Reusable HTML template utilities
-│
-├── services/                   # Service modules
-│   ├── data/
-│   │   ├── persistent-storage.js  # IndexedDB storage
-│   │   └── data-synchronizer.js   # Data sync logic
-│   ├── analytics/
-│   │   ├── analytics-manager.js
-│   │   ├── analytics-aggregator.js
-│   │   └── prompt-analytics-engine.js
-│   └── search/
-│       ├── search-engine.js
-│       └── semantic-analysis-engine.js
-│
-├── components/                 # Reusable UI components
-│   ├── charts/                # Chart components
-│   ├── modals/                # Modal dialogs
-│   └── ...
-│
-└── visualizations/            # Complex visualizations
-    ├── file-graph-visualizer.js
-    └── time-series-visualizer.js
+│   ├── historical-mining/
+│   ├── rung1-tokens/
+│   ├── rung2-edit-scripts/
+│   ├── rung3-functions/
+│   └── clio/
+├── Components
+│   ├── charts/ (Chart.js wrappers)
+│   ├── modals/ (modal system)
+│   └── shared/ (reusable components)
+├── Services
+│   ├── annotation-service.js
+│   ├── state-service.js
+│   ├── analytics/ (metrics)
+│   └── search/ (multi-layer search)
+├── Utils
+│   ├── formatting/
+│   ├── performance/
+│   ├── timeline/
+│   └── workers/
+└── Visualizations
+    ├── D3.js (file graph, state graph)
+    ├── Chart.js (analytics)
+    └── Custom SVG (timelines)
 ```
 
-## Architecture Principles
+---
 
-### Separation of Concerns
+## Tech Stack
 
-1. **HTML Templates** → Separate template files (`templates.js`, `helpers.js`)
-   - All HTML markup is in dedicated template modules
-   - Templates export functions that return HTML strings
-   - No HTML embedded directly in view logic files
+### Core Technologies
+- **Vanilla JavaScript** - No framework, fast and lightweight
+- **HTML5 + CSS3** - Modern web standards
+- **WebSocket** - Real-time updates via Socket.IO
 
-2. **View Logic** → View `index.js` files
-   - Contains only rendering orchestration
-   - Calls template functions to generate HTML
-   - Handles initialization and lifecycle
+### Visualization Libraries
+- **D3.js v6** - Network graphs, force layouts
+- **Chart.js** - Analytics charts
+- **Lucide Icons** - Modern icon set
 
-3. **Business Logic** → Utility modules
-   - Pure functions for data processing
-   - Reusable across multiple views
-   - No HTML or DOM manipulation
+### Search & AI
+- **Lunr.js** - Full-text search
+- **OpenRouter API** - Embeddings and chat
+- **Web Workers** - Background processing
 
-### Module Loading Order
+### Performance
+- **sessionStorage** - Client-side caching
+- **Web Workers** - CPU-intensive tasks
+- **Service Worker** - Offline support (optional)
 
-The `dashboard.html` loads modules in a specific order:
+---
 
-1. **Core utilities** (no dependencies)
-   - `utils/helpers.js`
-   - `utils/time-formatting.js`
-   - `utils/event-helpers.js`
-   - `utils/temporal-threading.js`
+## Data Flow
 
-2. **View helpers** (may depend on utilities)
-   - `views/activity/timeline-helpers.js`
-   - `views/overview/helpers.js`
-   - `views/threads/helpers.js`
-
-3. **View templates** (may depend on helpers)
-   - `views/*/templates.js` files
-
-4. **View logic** (depends on templates/helpers)
-   - `views/*/index.js` files
-
-5. **View router** (depends on all views)
-   - `core/view-router.js`
-
-### Function Exports
-
-All functions are exported to `window` for global access:
-
-```javascript
-// Template functions
-window.renderFileGraphViewTemplate = renderFileGraphViewTemplate;
-window.renderSystemStatus = renderSystemStatus;
-
-// View functions
-window.renderOverviewView = renderOverviewView;
-window.renderActivityView = renderActivityView;
-
-// Utility functions
-window.formatTimeAgo = formatTimeAgo;
-window.getEventTitle = getEventTitle;
+```
+User Action
+    ↓
+Dashboard UI
+    ↓
+API Client (fetch/WebSocket)
+    ↓
+Companion Service (Express API)
+    ↓
+SQLite Database
+    ↓
+Response
+    ↓
+UI Update (real-time via WebSocket)
 ```
 
-## Dashboard Interface
-
-### View Navigation
-
-The dashboard includes multiple specialized views:
-
-- **Overview** - Summary statistics, activity heatmap, activity rhythm, productivity pulse
-- **Activity** - Unified timeline with AI annotations, state transitions, and temporal threading
-- **States** - Visual state management with graph visualization and natural language commands
-- **Threads** - Conversation threads and captured prompts
-- **Analytics** - Comprehensive charts and statistics for productivity insights (13+ visualizations)
-- **File Graph** - Semantic file relationship visualization with AI-generated cluster labels
-- **Navigator** - UMAP-based codebase navigation in latent space
-- **Workspace Comparison** - Compare activity metrics across multiple workspaces
-- **System** - System resource monitoring
-- **API Docs** - Complete API documentation
-
-### Key Features
-
-- **AI-Annotated Timeline** - Events show AI-generated descriptions with Lucide icons
-- **State Transitions** - Visual markers for state forks, merges, and switches
-- **Natural Language Commands** - Control states via search palette (⌘K)
-- **Alternating Timeline Layout** - Events on left, prompts on right
-- **Temporal Threading** - Groups related activities by time windows
-- **Conversation Threading** - Groups AI prompts by conversation ID
-- **Real-time Updates** - WebSocket connections for live data
-- **Persistent Storage** - IndexedDB caching for fast startup
-- **Data Linking** - Prompts automatically linked to resulting code changes
-- **Temporal Chunks** - Time-based grouping with all metadata
-- **Linked Data** - Explicit prompt-code relationships in exports
-- **Intent Badges** - Color-coded badges showing event intent
+---
 
 ## Development
 
-### Adding a New View
+### Adding New Views
 
-1. Create view directory: `public/views/my-view/`
-2. Create template file: `templates.js` (or `helpers.js` for smaller views)
-3. Create view logic: `index.js`
-4. Export functions to `window`
-5. Add script tags to `dashboard.html` (in correct order)
-6. Register view in `core/view-router.js`
-
-### Modifying Templates
-
-Templates are in dedicated files:
-- Large views: `views/{view-name}/templates.js`
-- Helper components: `views/{view-name}/helpers.js`
-
-### Adding Utilities
-
-1. Add utility function to appropriate `utils/*.js` file
-2. Export to `window` for global access
-3. Load script in `dashboard.html` before dependent modules
-
-## Data Sources
-
-The dashboard connects to the companion service (port 43917) and displays data collected from multiple sources. Here's how each data point is sourced:
-
-### 1. File Changes
-**Source**: File system monitoring via Chokidar file watcher
-
-**Collection Method**:
-- Monitors workspace directories for file changes (create, modify, delete)
-- Uses Chokidar library for efficient file system watching
-- Calculates diffs between file versions using `diff` library
-- Captures complete before/after code content
-- Extracts file paths, line counts, and change statistics
-
-**Data Captured**:
-- File path and workspace
-- Before/after code content
-- Lines added/removed
-- Change type (create, modify, delete)
-- Timestamp of change
-- Session ID for correlation
-
-**Location**: `companion/src/services/file-watcher-service.js`, `companion/src/monitors/fileWatcher.js`
-
----
-
-### 2. AI Prompts
-**Source**: Cursor's internal SQLite databases
-
-**Collection Method**:
-- Parses Cursor's workspace storage databases (`state.vscdb` files)
-- Extracts from `aiService.prompts` and `aiService.generations` tables
-- Syncs every 30 seconds via `syncPromptsFromCursorDB()`
-- Links prompts to generations by UUID
-- Threads conversations by conversation ID
-
-**Database Locations** (macOS):
-- `~/Library/Application Support/Cursor/User/workspaceStorage/{workspaceId}/state.vscdb`
-- `~/Library/Application Support/Cursor/User/globalStorage/`
-
-**Data Captured**:
-- Prompt text and AI responses
-- Model name and type
-- Context files (`context_files`, `at_files`)
-- Context file count
-- Lines added/removed (from linked code changes)
-- Thinking time (response latency)
-- Conversation ID and metadata
-- Message role (user/assistant)
-- Finish reason
-- Timestamp
-
-**Location**: `companion/src/database/cursor-db-parser.js`, `companion/src/index.js` (syncPromptsFromCursorDB)
-
----
-
-### 3. Terminal Commands
-**Source**: Terminal process monitoring and shell history
-
-**Collection Method**:
-- Monitors terminal processes via process inspection
-- Captures command execution with exit codes
-- Tracks command duration
-- Links commands to workspace directories
-- Monitors Cursor's integrated terminal
-
-**Data Captured**:
-- Command text
-- Exit code
-- Execution duration
-- Working directory (workspace)
-- Timestamp
-- Process ID
-
-**Location**: `companion/src/monitors/terminal-monitor.js`
-
----
-
-### 4. System Events & Metrics
-**Source**: Multiple system monitoring services
-
-**Collection Methods**:
-
-**a) System Resources** (every 5 seconds):
-- CPU usage and load average
-- Memory usage (total, used, free)
-- System uptime
-- Process count
-
-**b) Git Status** (every 30 seconds):
-- Current branch
-- Commit hash
-- Uncommitted changes
-- Repository status
-
-**c) IDE State** (every 2 seconds via AppleScript):
-- Active file in editor
-- Cursor position
-- Open tabs
-- Editor state
-
-**d) Status Messages** (every 2 seconds):
-- Cursor status bar messages
-- File read notifications
-- Context change indicators
-
-**e) Log Data** (every 60 seconds):
-- Cursor application logs
-- Error logs
-- System logs
-
-**Location**: `companion/src/services/data-capture.js`, `companion/src/monitors/ide-state-capture.js`, `companion/src/monitors/status-message-tracker.js`
-
----
-
-### 5. Context Snapshots
-**Source**: IDE state capture and prompt context extraction
-
-**Collection Method**:
-- Captures context window state from IDE
-- Extracts context files from prompts (`context_files`, `at_files`)
-- Tracks context changes over time
-- Links context to file reads and prompts
-
-**Data Captured**:
-- Context file lists
-- @ referenced files
-- Context file count
-- Context window size
-- Context change timestamps
-- File read events
-
-**Location**: `companion/src/monitors/ide-state-capture.js`, `companion/src/analytics/context-analyzer.js`
-
----
-
-### 6. Additional Data Sources
-
-**Screenshots** (optional):
-- Captures screenshots near events
-- Stored locally, served via image proxy
-- Location: `companion/src/monitors/screenshot-monitor.js`
-
-**Clipboard** (optional):
-- Monitors clipboard for prompt text
-- Captures when clipboard contains code/prompts
-- Location: `companion/src/monitors/clipboardMonitor.js`
-
-**MCP (Model Context Protocol)** (optional):
-- External data collection via JSON-RPC
-- Custom event logging
-- Location: `companion/src/routes/mcp.js`
-
----
-
-### Data Flow
-
-```
-┌─────────────────────────────────────────────────────────┐
-│                    Data Sources                         │
-├─────────────────────────────────────────────────────────┤
-│                                                         │
-│  File System → Chokidar Watcher → File Changes         │
-│  Cursor DB → SQLite Parser → AI Prompts                │
-│  Terminal → Process Monitor → Commands                  │
-│  System → OS APIs → Resources/Metrics                   │
-│  IDE → AppleScript/Status → Context/State              │
-│                                                         │
-└─────────────────────────────────────────────────────────┘
-                          ↓
-┌─────────────────────────────────────────────────────────┐
-│              Companion Service (Port 43917)              │
-├─────────────────────────────────────────────────────────┤
-│                                                         │
-│  • Data Capture Services                                │
-│  • SQLite Database (companion.db)                       │
-│  • API Routes                                           │
-│  • WebSocket Server                                     │
-│                                                         │
-└─────────────────────────────────────────────────────────┘
-                          ↓
-┌─────────────────────────────────────────────────────────┐
-│                  Dashboard (Browser)                    │
-├─────────────────────────────────────────────────────────┤
-│                                                         │
-│  • REST API Calls                                       │
-│  • WebSocket Updates                                    │
-│  • IndexedDB Caching                                    │
-│  • Real-time Visualizations                             │
-│                                                         │
-└─────────────────────────────────────────────────────────┘
-```
-
-### Data Storage
-
-All data is stored locally in:
-- **SQLite Database**: `companion/data/companion.db`
-- **IndexedDB** (browser): `CursorTelemetryDB` (for caching)
-- **File System**: Screenshots and exports
-
-### Privacy & Security
-
-- **All data stays local** - No cloud communication by default
-- **Read-only access** - Companion service only reads Cursor's databases, never modifies them
-- **User home directory only** - File watcher respects workspace boundaries
-- **Optional authentication** - Can be enabled for production deployments
-
-## Data Export Features
-
-The dashboard provides comprehensive export functionality with fine-grained control over what data is exported.
-
-### Export Options Modal
-
-Access the export options via the "Export Data" button in the dashboard. The modal allows you to configure:
-
-- **Date Range** - Filter data by `From` and `To` dates
-  - Quick presets: Today, Last Week, Last Month, All Time
-- **Data Types** - Select which types of data to include:
-  - File Changes (code edits, file modifications)
-  - AI Prompts (captured prompts and conversations)
-  - Terminal Commands (command line activity)
-  - Context Snapshots (workspace context data)
-- **Export Options** - Toggle specific data inclusions:
-  - Include Code Diffs (before/after code content)
-  - Include Linked Data (prompt-code relationships)
-  - Include Temporal Chunks (time-based groups)
-  - Full Metadata (all available fields)
-- **Item Limit** - Control maximum number of items exported
-
-### Export API Endpoint
-
-The export functionality is available via the API:
-
-```
-GET /api/export/database
-```
-
-**Query Parameters:**
-- `limit` - Maximum items to export (default: 1000)
-- `since` - Start date (ISO format: `YYYY-MM-DD`)
-- `until` - End date (ISO format: `YYYY-MM-DD`)
-- `exclude_events` - Exclude events if `true`
-- `exclude_prompts` - Exclude prompts if `true`
-- `exclude_terminal` - Exclude terminal commands if `true`
-- `exclude_context` - Exclude context snapshots if `true`
-- `no_code_diffs` - Exclude code diffs if `true`
-- `no_linked_data` - Exclude linked data if `true`
-- `no_temporal_chunks` - Exclude temporal chunks if `true`
-- `full` - Include all metadata fields if `true`
-
-**Example:**
+1. Create view directory:
 ```bash
-curl "http://localhost:43917/api/export/database?limit=5000&since=2025-01-01&until=2025-01-31&exclude_terminal=true"
+mkdir public/views/my-view
 ```
 
-### Export Structure
-
-The exported JSON file contains:
-
-- **Metadata** - Export information, counts, date ranges, filters applied
-- **Temporal Chunks** - Time-based groups of related activities with all metadata
-- **Linked Data** - Explicit prompt-code relationships (prompt → code change)
-- **Entries** - All file changes with code diffs
-- **Prompts** - All captured prompts with context
-- **Events** - Activity events
-- **Terminal Commands** - Command history
-- **Context Snapshots** - Context usage over time
-- **Context Analytics** - Aggregated context statistics
-- **Workspaces** - Workspace information
-- **Unlinked** - Items without explicit links
-- **Stats** - Summary statistics
-
-See [`EXPORT_CONTENTS.md`](./EXPORT_CONTENTS.md) for detailed export structure documentation.
-
-## Data Import & Redeploy
-
-The dashboard supports importing previously exported data to restore or merge telemetry data.
-
-### Import Functionality
-
-Access the import feature via the "Import Data" button in the dashboard. The import system:
-
-- **Schema Validation** - Validates imported data structure against expected schema
-- **Merge Strategy** - Options to merge with existing data or replace it
-- **Data Deduplication** - Automatically handles duplicate entries based on timestamps and IDs
-- **Workspace Preservation** - Maintains workspace associations from imported data
-- **Progress Tracking** - Shows import progress and statistics
-
-### Import API Endpoint
-
+2. Create files:
 ```
-POST /api/import/database
+my-view/
+├── index.js          # View logic
+├── templates.js      # HTML templates
+└── styles.css        # View-specific styles
 ```
 
-**Request Body:**
-- JSON file matching the export structure (see [Export Structure](#export-structure))
-
-**Query Parameters:**
-- `merge` - If `true`, merges with existing data; if `false`, replaces existing data (default: `true`)
-- `validate` - If `true`, validates schema before importing (default: `true`)
-
-**Example:**
-```bash
-curl -X POST "http://localhost:43917/api/import/database?merge=true" \
-  -H "Content-Type: application/json" \
-  -d @exported-data.json
+3. Register in `core/view-router.js`:
+```javascript
+const viewFunctionNames = {
+  'my-view': 'renderMyView',
+  // ...
+};
 ```
 
-### Use Cases
-
-- **Backup & Restore** - Export data before major changes, restore if needed
-- **Data Migration** - Move telemetry data between systems
-- **Workspace Consolidation** - Merge data from multiple sources
-- **Development/Testing** - Import sample data for testing visualizations
-
-## Data Linking
-
-The system automatically links related data to provide context and relationships:
-
-### Prompt-Code Linking
-
-- **Automatic Linking** - When a prompt results in code changes, they are automatically linked
-- **Linked Data Array** - Exports include a `linked_data` array with explicit relationships
-- **Bidirectional Navigation** - View prompts from code changes, and code changes from prompts
-- **Event Modals** - Show linked prompts when viewing code changes
-- **Prompt Modals** - Show resulting code changes when viewing prompts
-- **Database Links Over Time Correlation** - Prompt effectiveness metrics use explicit database links (`linked_entry_id`/`prompt_id`) rather than time-based correlation. This ensures accuracy by only counting confirmed relationships, avoiding false positives from coincidental temporal proximity.
-
-### Temporal Chunks
-
-- **Time-Based Grouping** - Activities are grouped by time proximity (5-minute windows)
-- **Complete Context** - Each chunk includes all related prompts, events, and code changes
-- **Metadata Preservation** - All original metadata is preserved in chunks
-- **Workflow Analysis** - Enables analysis of multi-step development workflows
-
-### Using Linked Data
-
-Linked data is useful for:
-- Understanding which prompts led to which code changes
-- Analyzing workflow patterns
-- Tracking development sessions
-- Exporting training data (prompt-code pairs)
-
-## Image Proxy Support
-
-The dashboard can display local images (screenshots, images referenced in prompts) through a secure proxy endpoint.
-
-### How It Works
-
-- Images referenced in prompts/events are automatically proxied through `/api/image`
-- The companion service securely serves local files from your home directory
-- Supports common image formats: PNG, JPG, JPEG, GIF, WEBP, SVG, BMP
-
-### Image API Endpoint
-
-```
-GET /api/image?path=<image_path>
-```
-
-**Parameters:**
-- `path` - Relative or absolute path to image file
-  - Relative paths: Resolved from user's home directory
-  - Example: `Desktop/screenshot.png` → `~/Desktop/screenshot.png`
-
-**Security:**
-- Only files within user's home directory are accessible
-- Path validation prevents directory traversal
-- File type validation (only image files)
-
-**Example Usage:**
+4. Add navigation link in `dashboard.html`:
 ```html
-<img src="http://localhost:43917/api/image?path=Desktop/screenshot.png" />
+<a href="#my-view" class="nav-link" data-view="my-view">
+  <svg>...</svg>
+  My View
+</a>
 ```
 
-**In Modals:**
-Screenshots captured near events are automatically displayed using the image proxy. Images that cannot be accessed will show a fallback message.
+5. Load scripts in `dashboard.html`:
+```html
+<script src="views/my-view/templates.js" defer></script>
+<script src="views/my-view/index.js" defer></script>
+<link rel="stylesheet" href="views/my-view/styles.css">
+```
 
-## API Endpoints
+### Adding New API Integrations
 
-### Companion Service API (port 43917)
+1. Add to `services/`:
+```javascript
+// services/my-service.js
+class MyService {
+  constructor(apiBase) {
+    this.apiBase = apiBase;
+  }
+  
+  async fetchData() {
+    const response = await fetch(`${this.apiBase}/api/my-endpoint`);
+    return response.json();
+  }
+}
+```
 
-#### Data Export
-- `GET /api/export/database` - Export database with filters (see [Data Export Features](#data-export-features))
+2. Initialize in view:
+```javascript
+const myService = new MyService(window.CONFIG.API_BASE);
+const data = await myService.fetchData();
+```
 
-#### Image Serving
-- `GET /api/image?path=<path>` - Serve local images securely (see [Image Proxy Support](#image-proxy-support))
-
-#### Health & Status
-- `GET /health` - Service health check
-- `GET /api/stats` - Dashboard statistics
-
-#### Data Retrieval
-- `GET /api/entries` - Get file changes
-- `GET /api/prompts` - Get prompts
-- `GET /api/events` - Get events
-- `GET /api/terminal` - Get terminal commands
-- `GET /api/context` - Get context snapshots
-- `GET /api/activity` - Get activity data with filters
-
-#### Context Analytics
-- `GET /api/context/analytics` - Get context usage analytics
-
-All endpoints support CORS and are accessible from the dashboard running on any port.
-
-## Auto-refresh
-
-The dashboard automatically:
-- Polls the companion service every 2 seconds
-- Updates statistics in real-time
-- Refreshes views when new data arrives
-- Maintains connection status indicators
-- Uses IndexedDB for persistent caching
+---
 
 ## Troubleshooting
 
-### No Data Showing
-1. Check companion service is running on port 43917
-2. Click "Test Connection" to verify connectivity
-3. Check browser console for errors
-4. Verify module loading order in Network tab
+### Dashboard Not Loading
 
-### Template Functions Not Found
-1. Check `dashboard.html` loads all required template files
-2. Verify function exports with `window.{functionName}` in console
-3. Check script loading order (templates before views)
+```bash
+# 1. Verify companion service is running
+curl http://localhost:43917/health
 
-### View Not Rendering
-1. Check `core/view-router.js` registers the view
-2. Verify view function exported to `window`
-3. Check browser console for JavaScript errors
+# 2. Check if dashboard.html exists
+ls -la public/dashboard.html
 
-## Dependencies
+# 3. Check browser console (F12)
+# Look for JavaScript errors
+```
 
-### Core Libraries
-- **Chart.js** - Chart rendering
-- **D3.js** - Graph visualizations
-- **UMAP.js** - Dimensionality reduction
-- **Lunr.js** - Full-text search
+### Real-Time Updates Not Working
 
-### Browser APIs
-- **IndexedDB** - Persistent storage
-- **WebSocket** - Real-time updates
-- **Service Worker** - Caching and offline support
+```bash
+# 1. Check WebSocket connection
+# Open browser console (F12), look for:
+# "WebSocket connected" message
 
-## Additional Documentation
+# 2. Verify Socket.IO is working
+curl http://localhost:43917/socket.io/
 
-- **[Export Contents](./EXPORT_CONTENTS.md)** - Detailed documentation of export JSON structure
-- **[Dashboard Status](./DASHBOARD_STATUS.md)** - Feature completeness and recommendations
+# 3. Check CORS settings
+# If accessing from different domain
+```
 
-## Next Steps
+### Visualizations Not Rendering
 
-The dashboard is now ready to use! It will automatically display all your Cursor activity data in a beautiful, modern interface. The modular architecture makes it easy to extend and maintain.
+```bash
+# 1. Check if D3.js loaded
+# Browser console: typeof d3
+# Should return: "object"
 
-### Refactoring Status
+# 2. Check if Chart.js loaded
+# Browser console: typeof Chart
+# Should return: "function"
 
-**Completed:**
-- All HTML templates extracted to separate modules
-- View logic separated from templates
-- Utility functions organized into dedicated modules
-- Proper module loading order established
-- All functions exported and accessible
-- Advanced export system with filters and options
-- Data import/redeploy functionality with schema validation
-- Data linking (prompt-code relationships)
-- Image proxy support
-- Temporal chunks and analytics
-- Event tagging system with visual badges
-- Activity Session display with improved layout
-- 13+ analytics visualizations (Context Evolution, Prompt-to-Code Correlation, Git Timeline, File Hotspots, etc.)
-- Overview page redesign with Activity Rhythm (D3.js) and Productivity Pulse
-- Workspace comparison with multi-workspace support
-- File Dependency Strength and Complexity Trends visualizations
-- Responsive design improvements
-- Accessibility enhancements (ARIA labels, keyboard navigation, focus states)
-- Performance optimizations (chunked processing, conditional loading)
+# 3. Clear browser cache
+# Ctrl+Shift+R (hard reload)
+```
 
-Enjoy monitoring your Cursor activity!
+### AI Features Not Working
+
+```bash
+# 1. Verify OpenRouter API key in companion
+curl http://localhost:43917/api/ai/status
+
+# 2. Check browser console for errors
+# Look for API key errors
+
+# 3. Verify AI service is enabled
+cat companion/config.json
+```
+
+---
+
+## Browser Compatibility
+
+| Browser | Version | Support |
+|---------|---------|---------|
+| Chrome | 90+ | ✅ Full |
+| Firefox | 88+ | ✅ Full |
+| Safari | 14+ | ✅ Full |
+| Edge | 90+ | ✅ Full |
+| Opera | 76+ | ✅ Full |
+
+**Requirements:**
+- ES6+ support
+- WebSocket support
+- CSS Grid support
+- SVG support
+
+---
+
+## Deployment Options
+
+### Local Development
+```bash
+# Already included with companion service
+node src/index.js
+# Access at http://localhost:43917/dashboard.html
+```
+
+### Static Hosting (Netlify/Vercel)
+```bash
+# Deploy public/ directory separately
+# Point API_BASE to your deployed companion service
+
+# netlify.toml included
+# vercel.json included
+```
+
+### Docker
+```bash
+# Dashboard is included in companion Docker image
+docker run -d -p 43917:43917 cursor-companion
+```
+
+---
+
+## Related Documentation
+
+- [Main README](../../README.md) - Project overview and deployment options
+- [Companion Service README](companion/README.md) - Backend API reference
+- [Database Schema](../../docs/DATABASE_SCHEMA.json) - Complete schema
+- [Data Types](../../docs/DATA_TYPES.json) - Privacy levels & rungs
+
+---
+
+## Support
+
+- Issues: https://github.com/hamidahoderinwale/cursor-telemetry/issues
+- API Docs: http://localhost:43917/dashboard.html#api-docs
+- Discussions: https://github.com/hamidahoderinwale/cursor-telemetry/discussions

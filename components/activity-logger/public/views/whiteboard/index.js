@@ -97,9 +97,9 @@ function renderWhiteboardView(container) {
               <span class="query-status" title="Query status"></span>
             </div>
             <div class="query-block-actions">
-              <button class="btn-icon expand-btn" title="Expand/Collapse" data-action="toggle-expand">⛶</button>
-              <button class="btn-icon" title="Run query" data-action="run">▶</button>
-              <button class="btn-icon" title="Add chart to panel" data-action="add-chart">📊</button>
+              <button class="btn-icon expand-btn" title="Expand/Collapse" data-action="toggle-expand"></button>
+              <button class="btn-icon" title="Run query" data-action="run"></button>
+              <button class="btn-icon" title="Add chart to panel" data-action="add-chart">[Chart]</button>
               <button class="btn-icon" title="Export results" data-action="export">↓</button>
               <button class="btn-icon" title="Delete query" data-action="delete">×</button>
             </div>

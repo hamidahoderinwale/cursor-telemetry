@@ -26,6 +26,9 @@ function createStartupService(deps) {
     productivityTracker,
     todosRoutes,
     activeSession,
+    proceduralKnowledgeBuilder,
+    historicalMiningService,
+    automaticMiningScheduler,
   } = deps;
 
   async function loadPersistedData() {
@@ -51,6 +54,14 @@ function createStartupService(deps) {
 
       db._entries = [];
       db._prompts = [];
+
+      // Initialize historical data tables
+      try {
+        await persistentDB.initHistoricalTables();
+        console.log('[SAVE] Historical data tables initialized');
+      } catch (histErr) {
+        console.warn('[SAVE] Historical tables warning:', histErr.message);
+      }
 
       console.log(
         `[SUCCESS] Database ready with ${stats.entries} entries and ${stats.prompts} prompts (lazy loading)`
@@ -142,6 +153,20 @@ function createStartupService(deps) {
 
             startRawDataCapture();
             buildLunrIndex();
+
+            // Start procedural knowledge builder if available
+            if (typeof proceduralKnowledgeBuilder !== 'undefined' && proceduralKnowledgeBuilder) {
+              proceduralKnowledgeBuilder.start();
+              console.log('[PROCEDURAL-KNOWLEDGE] Automatic procedural knowledge building started');
+            }
+
+            // Initialize automatic mining scheduler if available
+            if (automaticMiningScheduler) {
+              automaticMiningScheduler.initialize().catch(err => {
+                console.error('[MINING] Failed to initialize automatic mining:', err.message);
+              });
+              console.log('[MINING] Automatic mining scheduler initialized');
+            }
 
             setInterval(
               () => {

@@ -224,8 +224,6 @@ async function initializeDashboard() {
     // Step 6: Heavy analytics will be loaded on-demand via analyticsManager
     
   } catch (error) {
-    console.error('[ERROR] Initialization error:', error);
-    
     const isNetworkError = window.APIClient?.isOfflineError(error) || 
                            error.message?.includes('CORS') || 
                            error.message?.includes('NetworkError') || 
@@ -254,7 +252,7 @@ async function initializeDashboard() {
       try {
         await window.fetchAllData();
       } catch (fallbackError) {
-        console.error('[ERROR] Fallback data fetch also failed:', fallbackError);
+        // Fallback failed, continue silently
       }
     }
   }

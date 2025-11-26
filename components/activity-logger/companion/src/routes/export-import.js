@@ -399,7 +399,55 @@ function createExportImportRoutes(deps) {
         writeChunk('    "moduleGraph": { "note": "Module graph excluded from export" },\n');
       }
 
-      // Rung 1: Token-level abstraction
+      // Rung 3: Function-level representation (Medium Privacy)
+      if (!excludeRung3 && rung3Service) {
+        writeChunk('    "rung3": {\n');
+        writeChunk('      "version": "1.0",\n');
+        writeChunk('      "rung": 3,\n');
+        writeChunk('      "description": "Function-level changes and callgraph updates",\n');
+        try {
+          const workspace = req.query.workspace || req.query.workspace_path || null;
+          const changes = await rung3Service.getFunctionChanges(workspace, {});
+          const functions = await rung3Service.getFunctions(workspace, {});
+          const callgraph = await rung3Service.getCallGraph(workspace);
+          const stats = await rung3Service.getFunctionStats(workspace);
+          
+          writeChunk('      "functionChanges": ' + JSON.stringify(changes || []).split('\n').join('\n      ') + ',\n');
+          writeChunk('      "functions": ' + JSON.stringify(functions || []).split('\n').join('\n      ') + ',\n');
+          writeChunk('      "callgraph": ' + JSON.stringify(callgraph || {}).split('\n').join('\n      ') + ',\n');
+          writeChunk('      "stats": ' + JSON.stringify(stats || {}).split('\n').join('\n      ') + '\n');
+        } catch (error) {
+          console.warn('[EXPORT] Failed to export Rung 3:', error.message);
+          writeChunk('      "error": "' + error.message.replace(/"/g, '\\"') + '"\n');
+        }
+        writeChunk('    },\n');
+      } else {
+        writeChunk('    "rung3": { "note": "Rung 3 excluded from export" },\n');
+      }
+
+      // Rung 2: Statement-level (semantic edit scripts) (Low Privacy)
+      if (!excludeRung2 && rung2Service) {
+        writeChunk('    "rung2": {\n');
+        writeChunk('      "version": "1.0",\n');
+        writeChunk('      "rung": 2,\n');
+        writeChunk('      "description": "Semantic edit scripts from AST differencing",\n');
+        try {
+          const workspace = req.query.workspace || req.query.workspace_path || null;
+          const scripts = await rung2Service.getEditScripts(workspace, {});
+          const operations = await rung2Service.getOperationTypes(workspace);
+          
+          writeChunk('      "editScripts": ' + JSON.stringify(scripts || []).split('\n').join('\n      ') + ',\n');
+          writeChunk('      "operations": ' + JSON.stringify(operations || {}).split('\n').join('\n      ') + '\n');
+        } catch (error) {
+          console.warn('[EXPORT] Failed to export Rung 2:', error.message);
+          writeChunk('      "error": "' + error.message.replace(/"/g, '\\"') + '"\n');
+        }
+        writeChunk('    },\n');
+      } else {
+        writeChunk('    "rung2": { "note": "Rung 2 excluded from export" },\n');
+      }
+
+      // Rung 1: Token-level abstraction (Lowest Privacy)
       if (!excludeRung1 && rung1Service) {
         writeChunk('    "rung1": {\n');
         writeChunk('      "version": "1.0",\n');
@@ -416,6 +464,7 @@ function createExportImportRoutes(deps) {
             redactUrls: req.query.rung1_redact_urls !== 'false',
             redactIpAddresses: req.query.rung1_redact_ip_addresses !== 'false',
             redactFilePaths: req.query.rung1_redact_file_paths !== 'false',
+            redactJwtSecrets: req.query.rung1_redact_jwt_secrets !== 'false',
             redactAllStrings: req.query.rung1_redact_all_strings !== 'false',
             redactAllNumbers: req.query.rung1_redact_all_numbers !== 'false',
           };
@@ -450,54 +499,6 @@ function createExportImportRoutes(deps) {
         writeChunk('    },\n');
       } else {
         writeChunk('    "rung1": { "note": "Rung 1 excluded from export" },\n');
-      }
-
-      // Rung 2: Statement-level (semantic edit scripts)
-      if (!excludeRung2 && rung2Service) {
-        writeChunk('    "rung2": {\n');
-        writeChunk('      "version": "1.0",\n');
-        writeChunk('      "rung": 2,\n');
-        writeChunk('      "description": "Semantic edit scripts from AST differencing",\n');
-        try {
-          const workspace = req.query.workspace || req.query.workspace_path || null;
-          const scripts = await rung2Service.getEditScripts(workspace, {});
-          const operations = await rung2Service.getOperationTypes(workspace);
-          
-          writeChunk('      "editScripts": ' + JSON.stringify(scripts || []).split('\n').join('\n      ') + ',\n');
-          writeChunk('      "operations": ' + JSON.stringify(operations || {}).split('\n').join('\n      ') + '\n');
-        } catch (error) {
-          console.warn('[EXPORT] Failed to export Rung 2:', error.message);
-          writeChunk('      "error": "' + error.message.replace(/"/g, '\\"') + '"\n');
-        }
-        writeChunk('    },\n');
-      } else {
-        writeChunk('    "rung2": { "note": "Rung 2 excluded from export" },\n');
-      }
-
-      // Rung 3: Function-level representation
-      if (!excludeRung3 && rung3Service) {
-        writeChunk('    "rung3": {\n');
-        writeChunk('      "version": "1.0",\n');
-        writeChunk('      "rung": 3,\n');
-        writeChunk('      "description": "Function-level changes and callgraph updates",\n');
-        try {
-          const workspace = req.query.workspace || req.query.workspace_path || null;
-          const changes = await rung3Service.getFunctionChanges(workspace, {});
-          const functions = await rung3Service.getFunctions(workspace, {});
-          const callgraph = await rung3Service.getCallGraph(workspace);
-          const stats = await rung3Service.getFunctionStats(workspace);
-          
-          writeChunk('      "functionChanges": ' + JSON.stringify(changes || []).split('\n').join('\n      ') + ',\n');
-          writeChunk('      "functions": ' + JSON.stringify(functions || []).split('\n').join('\n      ') + ',\n');
-          writeChunk('      "callgraph": ' + JSON.stringify(callgraph || {}).split('\n').join('\n      ') + ',\n');
-          writeChunk('      "stats": ' + JSON.stringify(stats || {}).split('\n').join('\n      ') + '\n');
-        } catch (error) {
-          console.warn('[EXPORT] Failed to export Rung 3:', error.message);
-          writeChunk('      "error": "' + error.message.replace(/"/g, '\\"') + '"\n');
-        }
-        writeChunk('    },\n');
-      } else {
-        writeChunk('    "rung3": { "note": "Rung 3 excluded from export" },\n');
       }
 
       // Workspaces (small)
@@ -654,6 +655,7 @@ function createExportImportRoutes(deps) {
         redactUrls: req.query.rung1_redact_urls !== 'false',
         redactIpAddresses: req.query.rung1_redact_ip_addresses !== 'false',
         redactFilePaths: req.query.rung1_redact_file_paths !== 'false',
+        redactJwtSecrets: req.query.rung1_redact_jwt_secrets !== 'false',
         redactAllStrings: req.query.rung1_redact_all_strings !== 'false',
         redactAllNumbers: req.query.rung1_redact_all_numbers !== 'false',
       };
@@ -1170,7 +1172,59 @@ function createExportImportRoutes(deps) {
         moduleGraphData = { note: 'Module graph service not available' };
       }
 
-      // Get Rung 1 data (Token-level abstraction)
+      // Get Rung 3 data (Function-level representation) - Medium Privacy
+      let rung3Data = null;
+      if (!excludeRung3 && rung3Service) {
+        try {
+          const workspace = req.query.workspace || req.query.workspace_path || null;
+          const changes = await rung3Service.getFunctionChanges(workspace, {});
+          const functions = await rung3Service.getFunctions(workspace, {});
+          const callgraph = await rung3Service.getCallGraph(workspace);
+          const stats = await rung3Service.getFunctionStats(workspace);
+          rung3Data = {
+            version: '1.0',
+            rung: 3,
+            description: 'Function-level changes and callgraph updates',
+            functionChanges: changes || [],
+            functions: functions || [],
+            callgraph: callgraph || {},
+            stats: stats || {}
+          };
+        } catch (error) {
+          console.warn('[EXPORT] Failed to export Rung 3:', error.message);
+          rung3Data = { error: error.message };
+        }
+      } else if (excludeRung3) {
+        rung3Data = { note: 'Rung 3 excluded from export' };
+      } else {
+        rung3Data = { note: 'Rung 3 service not available' };
+      }
+
+      // Get Rung 2 data (Statement-level semantic edit scripts) - Low Privacy
+      let rung2Data = null;
+      if (!excludeRung2 && rung2Service) {
+        try {
+          const workspace = req.query.workspace || req.query.workspace_path || null;
+          const scripts = await rung2Service.getEditScripts(workspace, {});
+          const operations = await rung2Service.getOperationTypes(workspace);
+          rung2Data = {
+            version: '1.0',
+            rung: 2,
+            description: 'Semantic edit scripts from AST differencing',
+            editScripts: scripts || [],
+            operations: operations || {}
+          };
+        } catch (error) {
+          console.warn('[EXPORT] Failed to export Rung 2:', error.message);
+          rung2Data = { error: error.message };
+        }
+      } else if (excludeRung2) {
+        rung2Data = { note: 'Rung 2 excluded from export' };
+      } else {
+        rung2Data = { note: 'Rung 2 service not available' };
+      }
+
+      // Get Rung 1 data (Token-level abstraction) - Lowest Privacy
       let rung1Data = null;
       if (!excludeRung1 && rung1Service) {
         try {
@@ -1184,6 +1238,7 @@ function createExportImportRoutes(deps) {
             redactUrls: req.query.rung1_redact_urls !== 'false',
             redactIpAddresses: req.query.rung1_redact_ip_addresses !== 'false',
             redactFilePaths: req.query.rung1_redact_file_paths !== 'false',
+            redactJwtSecrets: req.query.rung1_redact_jwt_secrets !== 'false',
             redactAllStrings: req.query.rung1_redact_all_strings !== 'false',
             redactAllNumbers: req.query.rung1_redact_all_numbers !== 'false',
           };
@@ -1224,58 +1279,6 @@ function createExportImportRoutes(deps) {
         rung1Data = { note: 'Rung 1 excluded from export' };
       } else {
         rung1Data = { note: 'Rung 1 service not available' };
-      }
-
-      // Get Rung 2 data (Statement-level semantic edit scripts)
-      let rung2Data = null;
-      if (!excludeRung2 && rung2Service) {
-        try {
-          const workspace = req.query.workspace || req.query.workspace_path || null;
-          const scripts = await rung2Service.getEditScripts(workspace, {});
-          const operations = await rung2Service.getOperationTypes(workspace);
-          rung2Data = {
-            version: '1.0',
-            rung: 2,
-            description: 'Semantic edit scripts from AST differencing',
-            editScripts: scripts || [],
-            operations: operations || {}
-          };
-        } catch (error) {
-          console.warn('[EXPORT] Failed to export Rung 2:', error.message);
-          rung2Data = { error: error.message };
-        }
-      } else if (excludeRung2) {
-        rung2Data = { note: 'Rung 2 excluded from export' };
-      } else {
-        rung2Data = { note: 'Rung 2 service not available' };
-      }
-
-      // Get Rung 3 data (Function-level representation)
-      let rung3Data = null;
-      if (!excludeRung3 && rung3Service) {
-        try {
-          const workspace = req.query.workspace || req.query.workspace_path || null;
-          const changes = await rung3Service.getFunctionChanges(workspace, {});
-          const functions = await rung3Service.getFunctions(workspace, {});
-          const callgraph = await rung3Service.getCallGraph(workspace);
-          const stats = await rung3Service.getFunctionStats(workspace);
-          rung3Data = {
-            version: '1.0',
-            rung: 3,
-            description: 'Function-level changes and callgraph updates',
-            functionChanges: changes || [],
-            functions: functions || [],
-            callgraph: callgraph || {},
-            stats: stats || {}
-          };
-        } catch (error) {
-          console.warn('[EXPORT] Failed to export Rung 3:', error.message);
-          rung3Data = { error: error.message };
-        }
-      } else if (excludeRung3) {
-        rung3Data = { note: 'Rung 3 excluded from export' };
-      } else {
-        rung3Data = { note: 'Rung 3 service not available' };
       }
 
       // Get in-memory data with improved, organized structure
@@ -1459,14 +1462,14 @@ function createExportImportRoutes(deps) {
           // Module Graph (Rung 4 - File-level abstraction)
           moduleGraph: moduleGraphData,
 
-          // Rung 1: Token-level abstraction
-          rung1: rung1Data,
+          // Rung 3: Function-level representation (Medium Privacy)
+          rung3: rung3Data,
 
-          // Rung 2: Statement-level (semantic edit scripts)
+          // Rung 2: Statement-level (semantic edit scripts) (Low Privacy)
           rung2: rung2Data,
 
-          // Rung 3: Function-level representation
-          rung3: rung3Data,
+          // Rung 1: Token-level abstraction (Lowest Privacy)
+          rung1: rung1Data,
         },
 
         // ============================================

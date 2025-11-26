@@ -382,6 +382,14 @@ class DataSynchronizer {
         // System resources are optional, silently ignore errors
       }
       
+      // Notify cross-tab coordinator of successful sync
+      const syncData = {
+        entries: entriesData?.entries || [],
+        events: eventsData?.events || [],
+        cursor: eventsData?.cursor || entriesData?.cursor || 0
+      };
+      this.notifySyncComplete(syncData);
+      
     } catch (error) {
       const errorMessage = error.message || error.toString();
       const isNetworkError = errorMessage.includes('CORS') || 
@@ -442,6 +450,19 @@ class DataSynchronizer {
       clearInterval(this.syncInterval);
       this.syncInterval = null;
       console.log('Periodic sync stopped');
+    }
+  }
+
+  /**
+   * Notify cross-tab coordinator of sync completion
+   */
+  notifySyncComplete(data) {
+    if (window.crossTabCoordinator) {
+      window.crossTabCoordinator.notifySyncComplete({
+        entriesCount: data?.entries?.length || 0,
+        eventsCount: data?.events?.length || 0,
+        cursor: data?.cursor || 0
+      });
     }
   }
 

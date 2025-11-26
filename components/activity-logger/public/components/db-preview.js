@@ -161,7 +161,7 @@ class DatabasePreview {
     if (!data || data.length === 0) {
       container.innerHTML = `
         <div class="empty-state">
-          <div class="empty-state-icon">📋</div>
+          <div class="empty-state-icon"></div>
           <div class="empty-state-title">No Data Available</div>
           <div class="empty-state-description">The ${tableName} table is currently empty</div>
           <div class="empty-state-hint">Data will appear here as you use Cursor features</div>

@@ -353,11 +353,11 @@ class SchemaConfigView {
     
     try {
       const parsed = JSON.parse(jsonString);
-      statusEl.innerHTML = `<span style="color: var(--color-success);">✓ Valid JSON (${type})</span>`;
+      statusEl.innerHTML = `<span style="color: var(--color-success);"> Valid JSON (${type})</span>`;
       statusEl.style.color = 'var(--color-success)';
       return true;
     } catch (error) {
-      statusEl.innerHTML = `<span style="color: var(--color-error);">✗ Invalid JSON (${type}): ${error.message}</span>`;
+      statusEl.innerHTML = `<span style="color: var(--color-error);"> Invalid JSON (${type}): ${error.message}</span>`;
       statusEl.style.color = 'var(--color-error)';
       return false;
     }

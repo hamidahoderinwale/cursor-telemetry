@@ -150,6 +150,67 @@
   font-size: var(--text-sm);
 }
 
+/* File Graph Tooltip */
+.file-graph-tooltip {
+  position: absolute;
+  pointer-events: none;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-sm);
+  box-shadow: var(--shadow-lg);
+  z-index: 1000;
+  max-width: 300px;
+  font-size: 12px;
+}
+
+.file-graph-tooltip__title {
+  font-weight: 600;
+  color: var(--color-primary);
+  margin-bottom: var(--space-xs);
+}
+
+.file-graph-tooltip__cluster {
+  margin-top: 4px;
+  color: var(--color-text-muted);
+  font-size: 11px;
+}
+
+/* File Graph Search Results */
+.file-graph-search-results {
+  color: var(--color-text-muted);
+  font-size: 12px;
+  padding: var(--space-sm);
+}
+
+.file-graph-search-item {
+  padding: var(--space-xs);
+  background: var(--color-bg);
+  border-radius: var(--radius-sm);
+  margin-bottom: var(--space-xs);
+  cursor: pointer;
+  font-size: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.file-graph-search-item__name {
+  font-family: var(--font-mono);
+  color: var(--color-text);
+}
+
+.file-graph-search-item__changes {
+  color: var(--color-text-muted);
+  font-size: 11px;
+}
+
+.file-graph-search-more {
+  color: var(--color-text-muted);
+  font-size: 11px;
+  padding: var(--space-xs);
+}
+
 /* Similar Pairs Section */
 .similar-pairs-section {
   margin-top: var(--space-lg);
@@ -285,6 +346,20 @@
   color: var(--color-success);
   margin-top: 2px;
   font-weight: 600;
+}
+
+.similar-pair-badge--same-directory {
+  color: var(--color-accent);
+  font-weight: 500;
+}
+
+.similar-pair-badge--same-workspace {
+  color: var(--color-text-muted);
+}
+
+.similar-pair-badge--workspace {
+  color: var(--color-text-muted);
+  font-size: 11px;
 }
 
 .similar-pair-score {

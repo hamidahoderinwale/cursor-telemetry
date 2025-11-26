@@ -15,7 +15,8 @@ class PrivacyService {
       abstractionLevel: 3,             // Procedural abstraction level (1-5)
       redactNames: true,
       redactNumbers: true,
-      redactEmails: true
+      redactEmails: true,
+      redactJwtSecrets: true
     };
     
     this.sensitivePatterns = {
@@ -24,7 +25,10 @@ class PrivacyService {
       numbers: /\b\d+(?:\.\d+)?\b/g,
       ipAddresses: /\b(?:\d{1,3}\.){3}\d{1,3}\b/g,
       urls: /https?:\/\/[^\s]+/g,
-      filePaths: /(?:[a-zA-Z]:)?[\\\/](?:[^\\\/\n]+[\\\/])*[^\\\/\n]*/g
+      filePaths: /(?:[a-zA-Z]:)?[\\\/](?:[^\\\/\n]+[\\\/])*[^\\\/\n]*/g,
+      jwtTokens: /\beyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{20,}\b/g,
+      jwtSecrets: /(?:jwt|jwst)[_-]?(?:secret|key|token|signing[_-]?key)[=:]\s*['"`]([^'"`]{20,})['"`]/gi,
+      jwtSecretHighEntropy: /\b[A-Za-z0-9+/]{32,512}={0,2}\b/g
     };
     
     this.abstractionLevels = {
@@ -203,6 +207,34 @@ class PrivacyService {
     redactedContent = redactedContent.replace(this.sensitivePatterns.ipAddresses, '[IP]');
     redactedContent = redactedContent.replace(this.sensitivePatterns.urls, '[URL]');
     redactedContent = redactedContent.replace(this.sensitivePatterns.filePaths, '[PATH]');
+    
+    // Redact JWT tokens and secrets
+    if (this.privacyConfig.redactJwtSecrets) {
+      // Redact full JWT tokens
+      redactedContent = redactedContent.replace(this.sensitivePatterns.jwtTokens, '[JWT_TOKEN]');
+      
+      // Redact JWT/JWST secrets in environment variables or assignments
+      redactedContent = redactedContent.replace(
+        this.sensitivePatterns.jwtSecrets,
+        (match, secret) => {
+          const prefix = match.substring(0, match.indexOf(secret));
+          return prefix + '[JWT_SECRET]' + match.substring(match.indexOf(secret) + secret.length);
+        }
+      );
+      
+      // Redact high entropy strings that could be JWT secrets
+      redactedContent = redactedContent.replace(
+        this.sensitivePatterns.jwtSecretHighEntropy,
+        (match) => {
+          // Only redact if it looks like a secret (not part of URL, email, etc.)
+          if (!match.includes('@') && !match.includes('://') && 
+              match.length >= 32 && match.length <= 512) {
+            return '[JWT_SECRET]';
+          }
+          return match;
+        }
+      );
+    }
     
     return redactedContent;
   }

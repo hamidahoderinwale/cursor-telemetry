@@ -627,7 +627,7 @@
 }
 
 .error-message::before {
-  content: '⚠';
+  content: '';
   font-size: 1.2em;
   flex-shrink: 0;
   color: var(--color-error, #EF4444);
@@ -1125,7 +1125,7 @@
 }
 
 .chart-card.filtered::before {
-  content: '🔗';
+  content: '[Link]';
   position: absolute;
   top: 8px;
   right: 8px;

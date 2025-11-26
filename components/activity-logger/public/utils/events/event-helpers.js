@@ -51,7 +51,7 @@ function removeEmojis(text) {
   if (!text || typeof text !== 'string') return text;
   // Remove common emojis and emoji-like characters
   return text
-    .replace(/🔄|✨|↗|⇄|→|📦|📄|🎯|📝|💬|⚡|🔧|📊|🎨|🐛|🔍|⚙️|🚀|💡|🔒|📈|📉|🎭|🎪|🎬|📌|📍|🔖|🏷️|⭐|🌟|💫|🔥|💯|✅|❌|⚠️|ℹ️|🔔|📢|📣|🔴|🟢|🟡|🔵|🟣|🟠|⚫|⚪|🟤/g, '')
+    .replace(/[Reload]||↗|⇄|→|||[Target]|[Note]|[Chat]|[Fast]|[Tool]|[Chart]|[Art]||[Search]|[Settings]|[Launch]|[Idea]|[Locked]|[Up]|[Down]|[Mask]|[Circus]|[Film]|[Pin]|||||[Star]||[Fire]||[OK]|[X]|[Warning]|[Info]|[Bell]||||🟢|🟡||🟣|🟠|||🟤/g, '')
     .replace(/[\u{1F300}-\u{1F9FF}]/gu, '') // Emoji range
     .replace(/[\u{2600}-\u{26FF}]/gu, '') // Miscellaneous symbols
     .replace(/[\u{2700}-\u{27BF}]/gu, '') // Dingbats

@@ -3,12 +3,13 @@
 const path = require('path');
 
 // Load environment variables from .env file (if available)
-// In production (Render, Docker, etc.), environment variables are set directly
+// In production (Render, Railway, Docker, etc.), environment variables are set directly
 // and .env files are not needed
 const isProduction = process.env.NODE_ENV === 'production';
 const isRender = process.env.RENDER === 'true' || process.env.RENDER_SERVICE_NAME;
+const isRailway = process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_PROJECT_ID;
 
-if (!isProduction && !isRender) {
+if (!isProduction && !isRender && !isRailway) {
   // Only try to load .env in development
   const primaryEnvPath = process.env.HOME
     ? path.join(process.env.HOME, 'new_cursor', '.env')
@@ -120,6 +121,8 @@ const createStartupService = require('./services/startup.js');
 
 // Import utility modules
 const { extractModelInfo } = require('./utils/model-detector.js');
+const { getPerformanceMonitor } = require('./utils/performance-monitor.js');
+const CacheInvalidationManager = require('./utils/cache-invalidation.js');
 
 // Import route modules
 // NOTE: New route registry available at ./routes/index.js for organized route registration
@@ -142,6 +145,8 @@ const createFileContentsRoutes = require('./routes/file-contents.js');
 const createMCPRoutes = require('./routes/mcp.js');
 const createExportImportRoutes = require('./routes/export-import.js');
 const createSharingRoutes = require('./routes/sharing.js');
+const createHistoricalMiningRoutes = require('./routes/historical-mining.js');
+const createCombinedTimelineRoutes = require('./routes/combined-timeline.js');
 const setupAccountRoutes = require('./routes/account.js');
 const createWhiteboardRoutes = require('./routes/whiteboard.js');
 const createAIRoutes = require('./routes/ai.js');
@@ -151,6 +156,9 @@ const createStateRoutes = require('./routes/states.js');
 const createPlotRoutes = require('./routes/plots.js');
 const initializeMotifService = require('./services/motif-service-init.js');
 const SharingService = require('./services/sharing-service.js');
+const HistoricalMiningService = require('./services/historical-mining-service.js');
+const AutomaticMiningScheduler = require('./services/automatic-mining-scheduler.js');
+const CombinedTimelineService = require('./services/combined-timeline-service.js');
 const ConversationManager = require('./services/conversation-manager.js');
 const ConversationCapture = require('./services/conversation-capture.js');
 const ConversationContext = require('./services/conversation-context.js');
@@ -168,6 +176,30 @@ const schemaMigrations = new SchemaMigrations(persistentDB);
 
 // Initialize sharing service (will be updated with account service after routes setup)
 let sharingService = new SharingService(persistentDB);
+
+// Initialize historical mining service
+const historicalMiningService = new HistoricalMiningService(persistentDB, {
+  gitHistoryDays: 365,
+  includeDiffs: false,
+  maxCommits: 10000,
+  verbose: true
+});
+
+// Initialize automatic mining scheduler
+const automaticMiningScheduler = new AutomaticMiningScheduler(
+  historicalMiningService,
+  persistentDB,
+  {
+    enableAutoMining: process.env.AUTO_MINING_ENABLED !== 'false',
+    mineOnWorkspaceDetection: true,
+    scheduleWeeklyBackfill: true,
+    weeklyBackfillDay: 0, // Sunday
+    weeklyBackfillHour: 2  // 2 AM
+  }
+);
+
+// Initialize combined timeline service
+const combinedTimelineService = new CombinedTimelineService(persistentDB);
 
 // Initialize analytics trackers
 const contextAnalyzer = new ContextAnalyzer(persistentDB);
@@ -213,8 +245,16 @@ const db = {
     try {
       if (table === 'entries') {
         await persistentDB.saveEntry(item);
+        // Notify procedural knowledge builder
+        if (proceduralKnowledgeBuilder) {
+          proceduralKnowledgeBuilder.notifyDataCaptured('entries', 1);
+        }
       } else if (table === 'prompts') {
         await persistentDB.savePrompt(item);
+        // Notify procedural knowledge builder
+        if (proceduralKnowledgeBuilder) {
+          proceduralKnowledgeBuilder.notifyDataCaptured('prompts', 1);
+        }
       }
     } catch (error) {
       console.error(`Error persisting ${table} item:`, error);
@@ -246,7 +286,8 @@ const db = {
 };
 
 const PORT = process.env.PORT || 43917;
-const HOST = process.env.HOST || 'localhost';
+// Railway and other cloud platforms need 0.0.0.0 to accept external connections
+const HOST = process.env.HOST || (isRailway || isRender || isProduction ? '0.0.0.0' : 'localhost');
 const app = express();
 const { Server } = require('socket.io');
 
@@ -266,13 +307,13 @@ const conversationStreams = new Map();
 function broadcastUpdate(type, data) {
   io.emit('activityUpdate', { type, data });
 
-  // Invalidate relevant caches when data changes
+  // Invalidate relevant caches when data changes (using tag-based invalidation)
   if (type === 'file-change' || type === 'new-entry') {
-    invalidateCache('activity_');
+    invalidateCacheByTag('activity', 'entries', 'events');
     invalidateCache('context_');
     invalidateCache('productivity_');
   } else if (type === 'prompt' || type === 'ai-interaction') {
-    invalidateCache('activity_');
+    invalidateCacheByTag('activity', 'prompts');
     invalidateCache('context_');
   } else if (type === 'error') {
     invalidateCache('error_');
@@ -326,6 +367,18 @@ app.use(
 
 // Handle preflight requests
 app.options('*', cors());
+
+// Performance monitoring middleware
+const performanceMonitor = getPerformanceMonitor({
+  enabled: process.env.PERFORMANCE_MONITORING !== 'false', // Enabled by default
+  logSlowRequests: true,
+  slowRequestThreshold: parseInt(process.env.SLOW_REQUEST_THRESHOLD) || 1000, // 1 second
+  logSlowQueries: true,
+  slowQueryThreshold: parseInt(process.env.SLOW_QUERY_THRESHOLD) || 100, // 100ms
+  monitorMemory: true,
+  memoryInterval: parseInt(process.env.MEMORY_MONITOR_INTERVAL) || 60000, // 1 minute
+});
+app.use(performanceMonitor.requestMiddleware());
 
 app.use(express.json({ limit: '10mb' })); // Increase JSON payload limit
 
@@ -575,6 +628,38 @@ function applyPrivacyRedaction(content) {
     );
   }
 
+  // Redact JWT tokens and secrets
+  if (privacyConfig.redactJwtSecrets) {
+    // Redact full JWT tokens (header.payload.signature)
+    redactedContent = redactedContent.replace(
+      /\beyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{20,}\b/g,
+      '[JWT_TOKEN]'
+    );
+    
+    // Redact JWT/JWST secrets in environment variables or assignments
+    redactedContent = redactedContent.replace(
+      /(?:jwt|jwst)[_-]?(?:secret|key|token|signing[_-]?key)[=:]\s*['"`]([^'"`]{20,})['"`]/gi,
+      (match, secret) => {
+        const prefix = match.substring(0, match.indexOf(secret));
+        return prefix + '[JWT_SECRET]' + match.substring(match.indexOf(secret) + secret.length);
+      }
+    );
+    
+    // Redact high entropy strings that could be JWT secrets (32-512 chars, base64url-like)
+    redactedContent = redactedContent.replace(
+      /\b([A-Za-z0-9+/]{32,512})={0,2}\b/g,
+      (match) => {
+        // Only redact if it looks like a secret (high entropy, not part of a larger structure)
+        // Skip if it's part of a URL, email, or other known pattern
+        if (!match.includes('@') && !match.includes('://') && !match.includes('/') && 
+            match.length >= 32 && match.length <= 512) {
+          return '[JWT_SECRET]';
+        }
+        return match;
+      }
+    );
+  }
+
   return redactedContent;
 }
 
@@ -605,6 +690,12 @@ function enqueue(kind, payload) {
     // Persist events to disk
     persistentDB
       .saveEvent(payload)
+      .then(() => {
+        // Notify procedural knowledge builder
+        if (proceduralKnowledgeBuilder) {
+          proceduralKnowledgeBuilder.notifyDataCaptured('events', 1);
+        }
+      })
       .catch((err) => console.error('Error persisting event:', err.message));
 
     // Annotate event asynchronously (non-blocking)
@@ -917,19 +1008,19 @@ const syncedPromptIds = new Set(); // Track which prompts we've already saved
 let syncInProgress = false; // Prevent concurrent sync operations
 let initialSyncComplete = false; // Only do full sync once on startup
 
-async function syncPromptsFromCursorDB() {
+async function syncPromptsFromCursorDB(forceFullSync = false) {
   // Prevent concurrent syncs
   if (syncInProgress) {
     console.log('[SYNC] Skipping - sync already in progress');
     return;
   }
 
-  // After initial sync, only sync new prompts (not full rescan)
-  if (initialSyncComplete && syncedPromptIds.size > 0) {
-    console.log(
-      '[SYNC] Initial sync complete - skipping periodic full rescan (use API for real-time data)'
-    );
-    return;
+  // After initial sync, use incremental sync (only check for new prompts)
+  // unless forceFullSync is true
+  if (initialSyncComplete && syncedPromptIds.size > 0 && !forceFullSync) {
+    // For incremental sync, we'll still check but only process new prompts
+    // This allows continuous capture of new prompts
+    console.log('[SYNC] Using incremental sync mode (checking for new prompts only)');
   }
 
   syncInProgress = true;
@@ -963,7 +1054,7 @@ async function syncPromptsFromCursorDB() {
         prompt.id ||
         `${prompt.composerId || ''}_${prompt.timestamp || Date.now()}_${prompt.messageRole || 'user'}`;
 
-      // Skip if already synced
+      // Skip if already synced (this is the incremental check)
       if (syncedPromptIds.has(promptId)) {
         skippedPrompts++;
         continue;
@@ -1028,6 +1119,11 @@ async function syncPromptsFromCursorDB() {
           await persistentDB.savePrompt(dbPrompt);
           newPrompts++;
 
+          // Notify procedural knowledge builder
+          if (proceduralKnowledgeBuilder) {
+            proceduralKnowledgeBuilder.notifyDataCaptured('prompts', 1);
+          }
+
           // Link to active TODO if one exists (skip for performance)
           // if (currentActiveTodo) {
           //   await persistentDB.addPromptToTodo(currentActiveTodo, dbPrompt.id);
@@ -1044,11 +1140,11 @@ async function syncPromptsFromCursorDB() {
       `[SYNC] Sync complete: ${newPrompts} new, ${skippedPrompts} skipped, ${syncedPromptIds.size} total tracked (${prompts.length} available in Cursor DB)`
     );
 
-    // Mark initial sync as complete
+    // Mark initial sync as complete (but continue incremental syncs)
     if (!initialSyncComplete && syncedPromptIds.size > 0) {
       initialSyncComplete = true;
       console.log(
-        '[SYNC] Initial sync complete - future syncs disabled (prompts available via API)'
+        '[SYNC] Initial sync complete - continuing with incremental syncs every 30s'
       );
     }
   } catch (error) {
@@ -1199,6 +1295,7 @@ let privacyConfig = {
   redactNumbers: true,
   redactEmails: true,
   redactFilePaths: false,
+  redactJwtSecrets: true,
   consentGiven: false,
 };
 
@@ -1273,13 +1370,22 @@ let dataCaptureService;
 // Performance: Cache Utilities
 // ===================================
 
-// Cache invalidation helper
+// Initialize cache invalidation manager
+const cacheInvalidationManager = new CacheInvalidationManager(queryCache);
+
+// Cache invalidation helper (backward compatible)
 function invalidateCache(pattern) {
-  const keys = queryCache.keys();
-  const matching = keys.filter((k) => k.includes(pattern));
-  matching.forEach((k) => queryCache.del(k));
-  if (matching.length > 0) {
-    console.log(`[CACHE] Invalidated ${matching.length} entries matching: ${pattern}`);
+  const count = cacheInvalidationManager.invalidateByPattern(pattern);
+  if (count > 0) {
+    console.log(`[CACHE] Invalidated ${count} entries matching: ${pattern}`);
+  }
+}
+
+// Enhanced cache invalidation by tag
+function invalidateCacheByTag(...tags) {
+  const count = cacheInvalidationManager.invalidateTags(...tags);
+  if (count > 0) {
+    console.log(`[CACHE] Invalidated ${count} entries by tags: ${tags.join(', ')}`);
   }
 }
 
@@ -1410,6 +1516,9 @@ const startupService = createStartupService({
   productivityTracker,
   todosRoutes,
   activeSession,
+  proceduralKnowledgeBuilder: null, // Will be initialized later
+  historicalMiningService,
+  automaticMiningScheduler,
 });
 
 createStatusRoutes({
@@ -1525,7 +1634,18 @@ try {
     app,
     rung2Service
   });
-  console.log('[RUNG2] Rung 2 service initialized');
+  console.log('[RUNG2] Rung 2 service initialized successfully');
+  
+  // Perform initial extraction after a delay to allow database to be ready
+  setTimeout(async () => {
+    try {
+      console.log('[RUNG2] Performing initial data extraction...');
+      const initialScripts = await rung2Service.extractEditScripts(null, { forceRefresh: false });
+      console.log(`[RUNG2] Initial extraction complete: ${initialScripts.length} edit scripts loaded`);
+    } catch (extractError) {
+      console.warn('[RUNG2] Initial extraction warning:', extractError.message);
+    }
+  }, 5000); // 5 second delay to ensure DB is ready
 } catch (error) {
   console.warn('[RUNG2] Failed to initialize Rung 2 service:', error.message);
 }
@@ -1579,6 +1699,19 @@ createSharingRoutes({
   accountService: accountServiceInstance,
 });
 
+// Historical mining routes
+createHistoricalMiningRoutes({
+  app,
+  historicalMiningService,
+  persistentDB
+});
+
+// Combined timeline routes
+createCombinedTimelineRoutes({
+  app,
+  combinedTimelineService
+});
+
 // Initialize conversation services
 const conversationManager = new ConversationManager(persistentDB);
 const conversationCapture = new ConversationCapture(persistentDB, conversationManager);
@@ -1629,6 +1762,7 @@ app.get('/health', (req, res) => {
   const queueStats = queueSystem.getStats();
   const clipboardStats = clipboardMonitor.getStats();
   const cacheStats = queryCache.getStats();
+  const perfMetrics = performanceMonitor.getMetrics();
 
   // No caching for health check
   res.set('Cache-Control', 'no-cache');
@@ -1655,7 +1789,23 @@ app.get('/health', (req, res) => {
       misses: cacheStats.misses,
       hitRate: cacheStats.hits / (cacheStats.hits + cacheStats.misses) || 0,
     },
+    performance: {
+      requests: perfMetrics.requests,
+      queries: perfMetrics.queries,
+      memory: {
+        heapUsed: Math.round(perfMetrics.memory.current.heapUsed / 1024 / 1024) + 'MB',
+        heapTotal: Math.round(perfMetrics.memory.current.heapTotal / 1024 / 1024) + 'MB',
+        rss: Math.round(perfMetrics.memory.current.rss / 1024 / 1024) + 'MB',
+      },
+      uptime: Math.round(perfMetrics.uptime) + 's',
+    },
   });
+});
+
+// Performance metrics endpoint
+app.get('/api/performance', (req, res) => {
+  const metrics = performanceMonitor.getMetrics();
+  res.json(metrics);
 });
 
 // Get queue
@@ -2113,6 +2263,12 @@ io.on('connection', (socket) => {
 // Graceful shutdown
 process.on('SIGINT', () => {
   console.log('\n Shutting down companion service...');
+
+  // Stop automatic mining scheduler
+  if (automaticMiningScheduler && typeof automaticMiningScheduler.stop === 'function') {
+    automaticMiningScheduler.stop();
+    console.log(' Automatic mining scheduler stopped');
+  }
 
   // Stop file watcher service
   if (fileWatcherService && typeof fileWatcherService.stop === 'function') {

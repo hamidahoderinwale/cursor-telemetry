@@ -27,6 +27,29 @@ const rung1Cache = {
 const RUNG1_ITEMS_PER_PAGE = 50;
 let rung1CurrentPage = 0;
 
+// Helper function to wait for template to load
+function waitForTemplate(templateName, maxWait = 5000) {
+  return new Promise((resolve) => {
+    if (window[templateName]) {
+      resolve();
+      return;
+    }
+    
+    const startTime = Date.now();
+    const checkInterval = 50;
+    
+    const checkTemplate = setInterval(() => {
+      if (window[templateName]) {
+        clearInterval(checkTemplate);
+        resolve();
+      } else if (Date.now() - startTime > maxWait) {
+        clearInterval(checkTemplate);
+        resolve(); // Resolve anyway to prevent hanging
+      }
+    }, checkInterval);
+  });
+}
+
 // Load templates first
 if (!window.renderRung1TokensTemplate) {
   const templatesScript = document.createElement('script');
@@ -35,16 +58,29 @@ if (!window.renderRung1TokensTemplate) {
   document.head.appendChild(templatesScript);
 }
 
-function renderRung1TokensView(container) {
-  initializeRung1TokensView(container);
+async function renderRung1TokensView(container) {
+  await initializeRung1TokensView(container);
 }
 
-function initializeRung1TokensView(container) {
+async function initializeRung1TokensView(container) {
+  // Wait for template to be available
+  if (!window.renderRung1TokensTemplate) {
+    container.innerHTML = '<div class="loading-state">Loading templates...</div>';
+    await waitForTemplate('renderRung1TokensTemplate', 5000);
+  }
+  
+  if (!window.renderRung1TokensTemplate) {
+    return;
+  }
+  
   renderRung1TokensViewContent(container);
 }
 
 function renderRung1TokensViewContent(container) {
   // Render template
+  if (!window.renderRung1TokensTemplate) {
+    return;
+  }
   container.innerHTML = window.renderRung1TokensTemplate();
 
   // Setup debounced filter handler
@@ -307,7 +343,7 @@ function selectRung1TokensSequence(id) {
       <div class="rung1-tokens-detail-label">File Path</div>
       <div class="rung1-tokens-detail-value">
         <code style="background: var(--color-bg-secondary, #f5f5f5); padding: 2px 6px; border-radius: 4px;">${token.filePath || 'Unknown'}</code>
-        <button class="btn-copy" onclick="copyToClipboard('${(token.filePath || '').replace(/'/g, "\\'")}', event)" title="Copy file path">📋</button>
+        <button class="btn-copy" onclick="copyToClipboard('${(token.filePath || '').replace(/'/g, "\\'")}', event)" title="Copy file path"></button>
       </div>
     </div>
     <div class="rung1-tokens-detail-section">
@@ -339,7 +375,7 @@ function selectRung1TokensSequence(id) {
     <div class="rung1-tokens-detail-section">
       <div class="rung1-tokens-detail-label">
         Canonical Token Sequence
-        <button class="btn-copy" onclick="copyToClipboard('${canonicalSequence.replace(/'/g, "\\'")}', event)" title="Copy sequence">📋</button>
+        <button class="btn-copy" onclick="copyToClipboard('${canonicalSequence.replace(/'/g, "\\'")}', event)" title="Copy sequence"></button>
       </div>
       <div class="rung1-tokens-token-sequence">${escapedSequence}</div>
     </div>
@@ -596,7 +632,7 @@ function copyToClipboard(text, event) {
       if (event && event.target) {
         const btn = event.target;
         const originalText = btn.textContent;
-        btn.textContent = '✓';
+        btn.textContent = '';
         setTimeout(() => {
           btn.textContent = originalText;
         }, 1000);
@@ -615,6 +651,18 @@ function copyToClipboard(text, event) {
   }
 }
 
+function toggleRung1Methodology() {
+  const content = document.getElementById('rung1-methodology-content');
+  const arrow = document.getElementById('rung1-methodology-arrow');
+  if (content.style.display === 'none') {
+    content.style.display = 'block';
+    arrow.textContent = '';
+  } else {
+    content.style.display = 'none';
+    arrow.textContent = '';
+  }
+}
+
 window.renderRung1TokensView = renderRung1TokensView;
 window.selectRung1TokensSequence = selectRung1TokensSequence;
 window.closeRung1TokensDetails = closeRung1TokensDetails;
@@ -626,4 +674,5 @@ window.exportRung1Tokens = exportRung1Tokens;
 window.copyToClipboard = copyToClipboard;
 window.rung1NextPage = rung1NextPage;
 window.rung1PreviousPage = rung1PreviousPage;
+window.toggleRung1Methodology = toggleRung1Methodology;
 

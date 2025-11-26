@@ -110,20 +110,20 @@
   },
   
   "rungLevels": {
-    "description": "Abstraction rungs for privacy-preserving data representation",
+    "description": "Abstraction rungs for privacy-preserving data representation, ordered by privacy tier (highest to lowest)",
     "values": [
-      "rung1",
-      "rung2",
-      "rung3",
+      "clio",
       "module_graph",
-      "clio"
+      "rung3",
+      "rung2",
+      "rung1"
     ],
     "descriptions": {
-      "rung1": "Token-Level Abstraction - Token sequences with canonicalized identifiers",
-      "rung2": "Statement-Level Abstraction - Semantic edit scripts from AST differencing",
-      "rung3": "Function-Level Abstraction - Function-level changes and callgraph updates",
-      "module_graph": "File-Level Abstraction - File relationships and dependencies",
-      "clio": "Motifs - High-level workflow patterns (highest abstraction)"
+      "clio": "Motifs - High-level workflow patterns (highest privacy, highest abstraction)",
+      "module_graph": "File-Level Abstraction - File relationships and dependencies (high privacy)",
+      "rung3": "Function-Level Abstraction - Function-level changes and callgraph updates (medium privacy)",
+      "rung2": "Statement-Level Abstraction - Semantic edit scripts from AST differencing (low privacy)",
+      "rung1": "Token-Level Abstraction - Token sequences with canonicalized identifiers (lowest privacy)"
     }
   },
   
@@ -135,6 +135,7 @@
       "redactUrls": "Redact URLs",
       "redactIpAddresses": "Redact IP addresses",
       "redactFilePaths": "Redact file paths",
+      "redactJwtSecrets": "Redact JWT/JWST tokens and secrets",
       "redactNumbers": "Redact numbers",
       "redactAllStrings": "Redact all string literals",
       "redactAllNumbers": "Redact all numeric literals"

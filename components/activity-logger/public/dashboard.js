@@ -13,16 +13,41 @@
  */
 
 // Ensure modules are loaded (they export to window)
-if (!window.CONFIG || !window.state || !window.APIClient) {
-  console.error('[ERROR] Core modules not loaded. Ensure core/config.js, core/state.js, and core/api-client.js are loaded before dashboard.js');
-  // Create fallbacks to prevent crashes
-  if (!window.CONFIG) window.CONFIG = { API_BASE: 'http://localhost:43917' };
-  if (!window.state) window.state = { data: {}, stats: {} };
-  if (!window.APIClient) {
-    console.error('[ERROR] APIClient not available! API calls will fail.');
-    window.APIClient = { get: () => Promise.reject(new Error('APIClient not loaded')), post: () => Promise.reject(new Error('APIClient not loaded')) };
+// Wait for DOMContentLoaded to ensure all scripts are loaded
+(function() {
+  function checkModules() {
+    if (!window.CONFIG || !window.state || !window.APIClient) {
+      // Create fallbacks to prevent crashes (modules may load asynchronously)
+      if (!window.CONFIG) {
+        window.CONFIG = { API_BASE: 'http://localhost:43917' };
+      }
+      if (!window.state) {
+        window.state = { data: {}, stats: {} };
+      }
+      if (!window.APIClient) {
+        window.APIClient = { 
+          get: () => Promise.reject(new Error('APIClient not loaded')), 
+          post: () => Promise.reject(new Error('APIClient not loaded')) 
+        };
+      }
+      // Only log error if modules still aren't available after DOMContentLoaded
+      if (document.readyState === 'complete') {
+        console.warn('[WARN] Some core modules not loaded. Dashboard may have limited functionality.');
+      }
+    }
   }
-}
+  
+  // Check immediately (for synchronous loading)
+  checkModules();
+  
+  // Also check after DOMContentLoaded (for async loading)
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', checkModules);
+  } else {
+    // DOM already loaded, check again
+    setTimeout(checkModules, 100);
+  }
+})();
 
 // Use globals from modules (available via window exports)
 // CONFIG, state, and APIClient are now loaded from core modules
@@ -464,7 +489,7 @@ function _old_renderTemporalThread(thread) {
       <div class="timeline-content">
         <div class="timeline-header clickable" onclick="toggleTemporalThread('${threadId}')">
           <div class="timeline-title">
-            <span id="thread-icon-${threadId}" class="timeline-title-icon">▶</span>
+            <span id="thread-icon-${threadId}" class="timeline-title-icon"></span>
             <span class="timeline-title-text">Activity Session</span>
             <span class="timeline-title-meta">(${totalItems} items • ${durationMinutes} min)</span>
           </div>
@@ -503,10 +528,10 @@ function toggleTemporalThread(threadId) {
     const isHidden = !itemsDiv.classList.contains('visible');
     if (isHidden) {
       itemsDiv.classList.add('visible');
-      icon.textContent = '▼';
+      icon.textContent = '';
     } else {
       itemsDiv.classList.remove('visible');
-      icon.textContent = '▶';
+      icon.textContent = '';
     }
   }
 }

@@ -12,8 +12,14 @@ if (!window.renderModuleGraphTemplate) {
 }
 
 function renderModuleGraphView(container) {
+  if (!container) {
+    console.error('[MODULE-GRAPH] Container not provided');
+    return;
+  }
+  
   // Ensure D3.js is loaded
   if (typeof d3 === 'undefined') {
+    container.innerHTML = '<div class="loading-state">Loading D3.js...</div>';
     const d3Script = document.createElement('script');
     d3Script.src = 'https://d3js.org/d3.v7.min.js';
     d3Script.onload = () => {
@@ -26,10 +32,16 @@ function renderModuleGraphView(container) {
 }
 
 function initializeModuleGraphView(container) {
+  if (!container) {
+    console.error('[MODULE-GRAPH] Container not provided for initialization');
+    return;
+  }
+  
   // Load visualization script if not already loaded
   if (!window.initializeModuleGraphVisualization) {
-      const vizScript = document.createElement('script');
-      vizScript.src = 'views/module-graph/module-graph-visualization.js';
+    container.innerHTML = '<div class="loading-state">Loading module graph visualization...</div>';
+    const vizScript = document.createElement('script');
+    vizScript.src = 'views/module-graph/module-graph-visualization.js';
     vizScript.onload = () => {
       renderModuleGraphViewContent(container);
     };
@@ -40,6 +52,23 @@ function initializeModuleGraphView(container) {
 }
 
 function renderModuleGraphViewContent(container) {
+  if (!container) {
+    console.error('[MODULE-GRAPH] Container not provided for content rendering');
+    return;
+  }
+  
+  // Wait for template to be available
+  if (!window.renderModuleGraphTemplate) {
+    container.innerHTML = '<div class="loading-state">Loading templates...</div>';
+    // Wait a bit for template to load
+    setTimeout(() => {
+      if (window.renderModuleGraphTemplate) {
+        renderModuleGraphViewContent(container);
+      }
+    }, 500);
+    return;
+  }
+  
   // Render template
   container.innerHTML = window.renderModuleGraphTemplate();
 

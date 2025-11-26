@@ -39,7 +39,7 @@ function renderWelcome(schema, customFields, connectionError, apiBase) {
     return `
       <div class="welcome-message" style="max-width: 600px; margin: 0 auto; padding: var(--space-xl);">
         <div style="text-align: center; margin-bottom: var(--space-lg);">
-          <div style="font-size: 48px; margin-bottom: var(--space-md); opacity: 0.5;">⚠️</div>
+          <div style="font-size: 48px; margin-bottom: var(--space-md); opacity: 0.5;">[Warning]</div>
           <h3 style="color: var(--color-error); margin-bottom: var(--space-sm);">Cannot connect to companion service</h3>
           <p style="color: var(--color-text-muted); margin-bottom: var(--space-md);">
             ${isNetworkError 
@@ -160,7 +160,7 @@ function renderWelcome(schema, customFields, connectionError, apiBase) {
                   <span class="column-preview-name">${col.name}</span>
                   <span class="column-preview-type">${col.type}</span>
                   ${col.primaryKey ? '<span class="badge badge-primary badge-small">PK</span>' : ''}
-                  ${fieldConfig ? (fieldConfig.enabled ? '<span class="badge badge-success badge-small">✓</span>' : '<span class="badge badge-muted badge-small">✗</span>') : ''}
+                  ${fieldConfig ? (fieldConfig.enabled ? '<span class="badge badge-success badge-small"></span>' : '<span class="badge badge-muted badge-small"></span>') : ''}
                 </div>
               `;
               }).join('')}
@@ -333,7 +333,7 @@ function renderCustomFields(fields) {
                   <span class="slider"></span>
                 </label>
                 <span style="font-size: var(--text-xs); color: ${field.enabled ? 'var(--color-success)' : 'var(--color-text-muted)'}; margin-left: var(--space-xs);">
-                  ${field.enabled ? '✓' : '✗'}
+                  ${field.enabled ? '' : ''}
                 </span>
               </td>
               <td style="padding: var(--space-sm); text-align: center;">

@@ -97,22 +97,27 @@ function showExportOptionsModal() {
               <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: var(--text-sm);">
                 <input type="checkbox" id="exportTypeMotifs" checked>
                 <span>Clio (Motifs)</span>
+                <span style="font-size: 10px; color: var(--color-text-muted);">(Highest Privacy)</span>
               </label>
               <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: var(--text-sm);">
                 <input type="checkbox" id="exportTypeModuleGraph" checked>
                 <span>Module Graph</span>
-              </label>
-              <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: var(--text-sm);">
-                <input type="checkbox" id="exportTypeRung1" checked>
-                <span>Rung 1: Tokens</span>
-              </label>
-              <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: var(--text-sm);">
-                <input type="checkbox" id="exportTypeRung2" checked>
-                <span>Rung 2: Edit Scripts</span>
+                <span style="font-size: 10px; color: var(--color-text-muted);">(High Privacy)</span>
               </label>
               <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: var(--text-sm);">
                 <input type="checkbox" id="exportTypeRung3" checked>
                 <span>Rung 3: Functions</span>
+                <span style="font-size: 10px; color: var(--color-text-muted);">(Medium Privacy)</span>
+              </label>
+              <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: var(--text-sm);">
+                <input type="checkbox" id="exportTypeRung2" checked>
+                <span>Rung 2: Edit Scripts</span>
+                <span style="font-size: 10px; color: var(--color-text-muted);">(Low Privacy)</span>
+              </label>
+              <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: var(--text-sm);">
+                <input type="checkbox" id="exportTypeRung1" checked>
+                <span>Rung 1: Tokens</span>
+                <span style="font-size: 10px; color: var(--color-text-muted);">(Lowest Privacy)</span>
               </label>
             </div>
           </div>
@@ -145,7 +150,7 @@ function showExportOptionsModal() {
           <div>
             <button type="button" class="btn btn-sm" onclick="toggleAdvancedOptions()" id="advancedOptionsToggle" 
                     style="font-size: var(--text-xs); padding: 4px 8px; color: var(--color-text-muted);">
-              <span id="advancedOptionsToggleText">▼</span> Advanced Options
+              <span id="advancedOptionsToggleText"></span> Advanced Options
             </button>
             <div id="advancedOptionsSection" style="display: none; margin-top: var(--space-sm); padding-top: var(--space-sm); border-top: 1px solid var(--color-border);">
               <div style="display: grid; gap: var(--space-xs);">
@@ -201,6 +206,10 @@ function showExportOptionsModal() {
                   <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: var(--text-sm);">
                     <input type="checkbox" id="rung1RedactFilePaths" checked>
                     <span>File Paths</span>
+                  </label>
+                  <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: var(--text-sm);">
+                    <input type="checkbox" id="rung1RedactJwtSecrets" checked>
+                    <span>JWT/JWST Secrets</span>
                   </label>
                   <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: var(--text-sm);">
                     <input type="checkbox" id="rung1RedactNumbers" checked>
@@ -280,7 +289,7 @@ function toggleAdvancedOptions() {
     const isVisible = section.style.display !== 'none';
     section.style.display = isVisible ? 'none' : 'block';
     if (toggle) {
-      toggle.textContent = isVisible ? '▼' : '▲';
+      toggle.textContent = isVisible ? '' : '';
     }
   }
 }
@@ -497,6 +506,7 @@ async function executeExportWithOptions() {
     redactUrls: document.getElementById('rung1RedactUrls')?.checked !== false,
     redactIpAddresses: document.getElementById('rung1RedactIpAddresses')?.checked !== false,
     redactFilePaths: document.getElementById('rung1RedactFilePaths')?.checked !== false,
+    redactJwtSecrets: document.getElementById('rung1RedactJwtSecrets')?.checked !== false,
     redactNumbers: document.getElementById('rung1RedactNumbers')?.checked !== false,
     redactAllStrings: document.getElementById('rung1RedactAllStrings')?.checked !== false,
     redactAllNumbers: document.getElementById('rung1RedactAllNumbers')?.checked !== false,

@@ -5,8 +5,7 @@
 // Store current filters in module scope
 let currentWorkspaceFilter = 'all';
 let currentTimeRangeFilter = window.state?.activityTimeRangeFilter || 'week'; // Default to "This Week" for better UX
-let currentViewMode = window.state?.activityViewMode || 'timeline'; // 'timeline', 'kanban', or 'storyboard'
-let currentKanbanGrouping = window.state?.kanbanGrouping || 'intent'; // 'intent', 'time', or 'type'
+let currentViewMode = window.state?.activityViewMode || 'timeline'; // 'timeline' or 'storyboard'
 
 async function renderActivityView(container) {
   let events = window.state?.data?.events || [];
@@ -14,24 +13,32 @@ async function renderActivityView(container) {
   let terminalCommands = window.state?.data?.terminalCommands || [];
   let conversations = [];
   
-  // Fetch conversations with turns from API (optimized with batching)
+  // OPTIMIZATION: Use ActivityOptimizer for better conversation fetching
   try {
     if (window.APIClient) {
       // Only add workspaceId if filtering by a specific workspace
       const workspaceParam = currentWorkspaceFilter !== 'all' ? `?workspaceId=${encodeURIComponent(currentWorkspaceFilter)}` : '';
       const conversationsResponse = await window.APIClient.get(`/api/conversations${workspaceParam}`, { silent: true, cacheTTL: 2 * 60 * 1000 });
       if (conversationsResponse && conversationsResponse.success && conversationsResponse.data) {
-        // OPTIMIZATION: Limit initial fetch and use batching for details
+        // OPTIMIZATION: Limit initial fetch and use optimized batching
         const conversationsToFetch = conversationsResponse.data.slice(0, 50);
+        const conversationIds = conversationsToFetch.map(c => c.id).filter(Boolean);
         
-        // Use batch request manager if available, otherwise fallback to parallel with limit
-        if (window.batchRequestManager) {
+        // Use ActivityOptimizer if available for better batching and caching
+        if (window.activityOptimizer && conversationIds.length > 0) {
+          const conversationMap = await window.activityOptimizer.fetchConversationsBatch(conversationIds, 10);
+          conversations = conversationsToFetch.map(conv => {
+            const detailed = conversationMap.get(conv.id);
+            return detailed || conv;
+          });
+        } else if (window.batchRequestManager) {
+          // Fallback to batch request manager
           conversations = await Promise.all(
             conversationsToFetch.map((conv, index) => 
               window.batchRequestManager.batchRequest(
                 'conversation-details',
                 () => window.APIClient.get(`/api/conversations/${conv.id}`, { silent: true, cacheTTL: 5 * 60 * 1000 }),
-                conversationsToFetch.length - index // Higher priority for earlier items
+                conversationsToFetch.length - index
               ).then(response => {
                 if (response && response.success && response.data) {
                   return response.data;
@@ -40,7 +47,6 @@ async function renderActivityView(container) {
               }).catch(() => conv)
             )
           );
-          // Flush batch to execute immediately
           await window.batchRequestManager.flush();
         } else {
           // Fallback: Parallel requests with concurrency limit
@@ -80,37 +86,35 @@ async function renderActivityView(container) {
     currentWorkspaceFilter = globalWorkspace;
   }
   
-  // Apply workspace filter with proper normalization
-  if (currentWorkspaceFilter !== 'all') {
-    // Normalize the filter value
-    const normalizeWorkspacePath = window.normalizeWorkspacePath || ((path) => {
-      if (!path) return '';
-      return path.toLowerCase().replace(/\/$/, '').trim();
-    });
+  // OPTIMIZATION: Use ActivityOptimizer for workspace filtering with memoization
+  const normalizeWorkspacePath = window.normalizeWorkspacePath || ((path) => {
+    if (!path) return '';
+    return path.toLowerCase().replace(/\/$/, '').trim();
+  });
+  
+  if (currentWorkspaceFilter !== 'all' && window.activityOptimizer) {
+    events = window.activityOptimizer.filterByWorkspace(events, currentWorkspaceFilter, normalizeWorkspacePath);
+    prompts = window.activityOptimizer.filterByWorkspace(prompts, currentWorkspaceFilter, normalizeWorkspacePath);
+    terminalCommands = window.activityOptimizer.filterByWorkspace(terminalCommands, currentWorkspaceFilter, normalizeWorkspacePath);
+    conversations = window.activityOptimizer.filterByWorkspace(conversations, currentWorkspaceFilter, normalizeWorkspacePath);
+  } else if (currentWorkspaceFilter !== 'all') {
+    // Fallback to original filtering logic
     const normalizedFilter = normalizeWorkspacePath(currentWorkspaceFilter);
     
     events = events.filter(event => {
-      // Try multiple fields for workspace
       const eventWorkspace = event.workspace_path || event.workspacePath || event.workspace || event.workspaceName || '';
       const details = typeof event.details === 'string' ? 
         (() => { try { return JSON.parse(event.details); } catch(e) { return {}; } })() : 
         event.details || {};
       const detailsWorkspace = details.workspace_path || details.workspacePath || details.workspace || details.workspaceName || '';
-      
-      // Also check user field (sometimes workspace is stored as user)
       const userWorkspace = event.user || details.user || '';
-      
-      // Combine all possible workspace sources
       const fullWorkspace = eventWorkspace || detailsWorkspace || userWorkspace;
       const normalizedEventWorkspace = normalizeWorkspacePath(fullWorkspace);
-      
-      // Match if normalized paths are equal or one contains the other
       return normalizedEventWorkspace === normalizedFilter || 
              normalizedEventWorkspace.includes(normalizedFilter) ||
              normalizedFilter.includes(normalizedEventWorkspace);
     });
     
-    // Filter prompts by workspace
     prompts = prompts.filter(prompt => {
       const promptWorkspace = prompt.workspace_path || prompt.workspacePath || prompt.workspaceName || prompt.workspaceId || prompt.workspace || '';
       const normalizedPromptWorkspace = normalizeWorkspacePath(promptWorkspace);
@@ -119,7 +123,6 @@ async function renderActivityView(container) {
              normalizedFilter.includes(normalizedPromptWorkspace);
     });
     
-    // Filter terminal commands by workspace
     terminalCommands = terminalCommands.filter(cmd => {
       const cmdWorkspace = cmd.workspace_path || cmd.workspacePath || cmd.workspace || cmd.cwd || cmd.user || '';
       const normalizedCmdWorkspace = normalizeWorkspacePath(cmdWorkspace);
@@ -128,7 +131,6 @@ async function renderActivityView(container) {
              normalizedFilter.includes(normalizedCmdWorkspace);
     });
     
-    // Filter conversations by workspace
     conversations = conversations.filter(conv => {
       const convWorkspace = conv.workspace_id || conv.workspace_path || '';
       const normalizedConvWorkspace = normalizeWorkspacePath(convWorkspace);
@@ -138,23 +140,35 @@ async function renderActivityView(container) {
     });
   }
   
-  // Enhance prompts with context information
-  prompts = await Promise.all(
-    prompts.map(async (prompt) => {
-      if (window.enhancePromptWithContext) {
-        try {
-          return await window.enhancePromptWithContext(prompt);
-        } catch (error) {
-          console.warn('Error enhancing prompt with context:', error);
-          return prompt;
+  // OPTIMIZATION: Lazy load context only for visible prompts (defer enhancement)
+  // Context will be loaded on-demand when prompts are displayed
+  // This significantly speeds up initial render
+  const enhancePromptsLazy = window.activityOptimizer && prompts.length > 20;
+  if (!enhancePromptsLazy) {
+    // For small datasets, enhance immediately
+    prompts = await Promise.all(
+      prompts.map(async (prompt) => {
+        if (window.enhancePromptWithContext) {
+          try {
+            return await window.enhancePromptWithContext(prompt);
+          } catch (error) {
+            console.warn('Error enhancing prompt with context:', error);
+            return prompt;
+          }
         }
-      }
-      return prompt;
-    })
-  );
+        return prompt;
+      })
+    );
+  }
+  // For large datasets, prompts will be enhanced lazily when rendered
   
-  // Apply time range filter
-  if (currentTimeRangeFilter !== 'all') {
+  // OPTIMIZATION: Use ActivityOptimizer for time range filtering
+  if (currentTimeRangeFilter !== 'all' && window.activityOptimizer) {
+    events = window.activityOptimizer.filterByTimeRange(events, currentTimeRangeFilter);
+    prompts = window.activityOptimizer.filterByTimeRange(prompts, currentTimeRangeFilter);
+    conversations = window.activityOptimizer.filterByTimeRange(conversations, currentTimeRangeFilter);
+  } else if (currentTimeRangeFilter !== 'all') {
+    // Fallback to original filtering logic
     const now = Date.now();
     let cutoffTime = 0;
     
@@ -393,11 +407,7 @@ async function renderActivityView(container) {
   }
   
   // Extract unique workspaces for filter dropdown
-  const normalizeWorkspacePath = window.normalizeWorkspacePath || ((path) => {
-    if (!path) return '';
-    return path.toLowerCase().replace(/\/$/, '').trim();
-  });
-  
+  // Reuse normalizeWorkspacePath from earlier in the function (line 90)
   const workspaceMap = new Map();
   
   // Extract from events
@@ -568,22 +578,12 @@ async function renderActivityView(container) {
                 Timeline
               </button>
               <button class="${currentViewMode === 'storyboard' ? 'active' : ''}" onclick="switchActivityView('storyboard')" title="Storyboard View - Visual narrative of your development history">
-                📖 Storyboard
-              </button>
-              <button class="${currentViewMode === 'kanban' ? 'active' : ''}" onclick="switchActivityView('kanban')" title="Kanban Board View">
-                Kanban
+                Storyboard
               </button>
             </div>
-            ${currentViewMode === 'kanban' ? `
-              <select class="select-input" id="kanbanGroupingFilter" onchange="updateKanbanGrouping(this.value)" style="min-width: 150px;">
-                <option value="intent" ${currentKanbanGrouping === 'intent' ? 'selected' : ''}>Group by Intent</option>
-                <option value="time" ${currentKanbanGrouping === 'time' ? 'selected' : ''}>Group by Time</option>
-                <option value="type" ${currentKanbanGrouping === 'type' ? 'selected' : ''}>Group by Type</option>
-              </select>
-            ` : ''}
             ${currentViewMode === 'storyboard' ? `
               <div style="font-size: var(--text-xs); color: var(--color-text-muted); padding: var(--space-xs) var(--space-sm); background: var(--color-bg-alt); border-radius: var(--radius-sm);">
-                📖 Visual narrative of your development story
+                Visual narrative of your development story
               </div>
             ` : ''}
             ${currentWorkspaceFilter !== 'all' ? `
@@ -597,12 +597,8 @@ async function renderActivityView(container) {
             <select class="select-input" id="workspaceFilter" onchange="filterActivityByWorkspace(this.value)" style="min-width: 180px;">
               <option value="all" ${currentWorkspaceFilter === 'all' ? 'selected' : ''}>All Workspaces</option>
               ${uniqueWorkspaces.map(([normalizedPath, displayName]) => {
-                // Compare normalized paths for selection
-                const normalizeForCompare = window.normalizeWorkspacePath || ((path) => {
-                  if (!path) return '';
-                  return path.toLowerCase().replace(/\/$/, '').trim();
-                });
-                const normalizedCurrent = normalizeForCompare(currentWorkspaceFilter);
+                // Compare normalized paths for selection (reuse normalizeWorkspacePath from outer scope)
+                const normalizedCurrent = normalizeWorkspacePath(currentWorkspaceFilter);
                 const isSelected = normalizedCurrent === normalizedPath;
                 return `
                   <option value="${window.escapeHtml ? window.escapeHtml(normalizedPath) : normalizedPath}" ${isSelected ? 'selected' : ''}>
@@ -655,7 +651,7 @@ async function renderActivityView(container) {
             <div id="activitySearchResults" class="activity-search-results"></div>
           </div>
           
-          <!-- Timeline, Storyboard, or Kanban Content -->
+          <!-- Timeline or Storyboard Content -->
           ${(() => {
             if (timelineItems.length === 0) {
               return '<div class="empty-state"><div class="empty-state-text">No activity recorded</div><div class="empty-state-hint">Activity will appear as you work in Cursor</div></div>';
@@ -669,16 +665,6 @@ async function renderActivityView(container) {
               } catch (error) {
                 console.error('[ACTIVITY] Error rendering storyboard:', error);
                 return '<div class="empty-state"><div class="empty-state-text">Error rendering storyboard</div><div class="empty-state-hint">' + error.message + '</div></div>';
-              }
-            }
-            
-            // Kanban view
-            if (currentViewMode === 'kanban' && window.renderKanbanBoard) {
-              try {
-                return window.renderKanbanBoard(displayItems, currentKanbanGrouping);
-              } catch (error) {
-                console.error('[ACTIVITY] Error rendering kanban board:', error);
-                return '<div class="empty-state"><div class="empty-state-text">Error rendering kanban board</div><div class="empty-state-hint">' + error.message + '</div></div>';
               }
             }
             
@@ -723,7 +709,14 @@ function filterActivityByTimeRange(range) {
   currentTimeRangeFilter = range;
   const container = document.getElementById('viewContainer');
   if (container) {
-    renderActivityView(container);
+    // OPTIMIZATION: Debounce filter changes to prevent excessive re-renders
+    if (window.activityOptimizer) {
+      window.activityOptimizer.debounceFilterChange(() => {
+        renderActivityView(container);
+      }, 300);
+    } else {
+      renderActivityView(container);
+    }
   }
 }
 
@@ -731,7 +724,14 @@ function filterActivityByWorkspace(workspace) {
   currentWorkspaceFilter = workspace;
   const container = document.getElementById('viewContainer');
   if (container) {
-    renderActivityView(container);
+    // OPTIMIZATION: Debounce filter changes to prevent excessive re-renders
+    if (window.activityOptimizer) {
+      window.activityOptimizer.debounceFilterChange(() => {
+        renderActivityView(container);
+      }, 300);
+    } else {
+      renderActivityView(container);
+    }
   }
 }
 
@@ -761,7 +761,7 @@ function updateDensity(density) {
 }
 
 function switchActivityView(mode) {
-  if (mode !== 'timeline' && mode !== 'kanban' && mode !== 'storyboard') {
+  if (mode !== 'timeline' && mode !== 'storyboard') {
     console.warn('[ACTIVITY] Invalid view mode:', mode);
     return;
   }
@@ -777,22 +777,6 @@ function switchActivityView(mode) {
   }
 }
 
-function updateKanbanGrouping(grouping) {
-  if (grouping !== 'intent' && grouping !== 'time' && grouping !== 'type') {
-    console.warn('[ACTIVITY] Invalid kanban grouping:', grouping);
-    return;
-  }
-  currentKanbanGrouping = grouping;
-  // Persist to state if available
-  if (window.state) {
-    window.state.kanbanGrouping = grouping;
-  }
-  // Re-render the view
-  const container = document.getElementById('viewContainer');
-  if (container) {
-    renderActivityView(container);
-  }
-}
 
 /**
  * Group consecutive file changes to the same file
@@ -913,5 +897,4 @@ window.filterActivityByWorkspace = filterActivityByWorkspace;
 window.updateGrouping = updateGrouping;
 window.updateDensity = updateDensity;
 window.switchActivityView = switchActivityView;
-window.updateKanbanGrouping = updateKanbanGrouping;
 

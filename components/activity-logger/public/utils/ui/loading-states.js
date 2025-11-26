@@ -175,7 +175,7 @@ function showErrorState(container, error, onRetry = null) {
   
   const icon = document.createElement('div');
   icon.className = 'error-state-icon';
-  icon.textContent = '⚠️';
+  icon.textContent = '[Warning]';
   
   const message = document.createElement('div');
   message.className = 'error-state-message';

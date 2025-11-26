@@ -2,7 +2,34 @@
  * Analytics View - Main analytics dashboard
  */
 
+// Render guards to prevent excessive re-rendering
+let _isRendering = false;
+let _lastRenderTime = 0;
+let _renderDebounceTimer = null;
+const MIN_RENDER_INTERVAL = 2000; // Minimum 2 seconds between full renders
+
 async function renderAnalyticsView(container) {
+  // Prevent excessive re-rendering
+  const now = Date.now();
+  if (_isRendering) {
+    console.log('[ANALYTICS] Render already in progress, skipping');
+    return;
+  }
+  
+  if (now - _lastRenderTime < MIN_RENDER_INTERVAL) {
+    console.log('[ANALYTICS] Render too soon, debouncing');
+    if (_renderDebounceTimer) {
+      clearTimeout(_renderDebounceTimer);
+    }
+    _renderDebounceTimer = setTimeout(() => {
+      renderAnalyticsView(container);
+    }, MIN_RENDER_INTERVAL - (now - _lastRenderTime));
+    return;
+  }
+  
+  _isRendering = true;
+  _lastRenderTime = now;
+  
   // Lazy load analytics services if not already loaded
   if (window.loadAnalyticsServices && !window._analyticsServicesLoaded) {
     await window.loadAnalyticsServices();
@@ -122,10 +149,10 @@ async function renderAnalyticsView(container) {
                   const issues = [];
                   // Only show warning if we have prompts but none have model info
                   if (prompts.length > 0 && promptsWithModel === 0) {
-                    issues.push('Model information not available (all prompts show "unknown")');
+                    issues.push('Model information not available. The Cursor database may not include model details for older prompts. New prompts should capture model information automatically.');
                   } else if (prompts.length > 0 && promptsWithModel < prompts.length * 0.5) {
                     // Show info if less than 50% have model info
-                    issues.push(`Model information partially available (${promptsWithModel} of ${prompts.length} prompts have model data)`);
+                    issues.push(`Model information partially available (${promptsWithModel} of ${prompts.length} prompts have model data). This is normal for data collected before model tracking was added.`);
                   }
                   
                   // Only show warning if we have file change events but none have diff stats
@@ -287,54 +314,10 @@ async function renderAnalyticsView(container) {
         </div>
       </div>
 
-      <!-- Context Evolution Timeline -->
+      <!-- Development Insights Section -->
       <div class="card">
         <div class="card-header">
-          <h3 class="card-title" title="Tracks how your context window evolves over time - showing when files are added or removed from context, context size changes, and context switching patterns">Context Evolution Timeline</h3>
-          <p class="card-subtitle">Context window changes, file additions/removals, and context switching patterns over time</p>
-        </div>
-        <div class="card-body">
-          <div id="contextEvolutionTimeline"></div>
-        </div>
-      </div>
-
-      <!-- Prompt-to-Code Correlation -->
-      <div class="card">
-        <div class="card-header">
-          <h3 class="card-title" title="Analyzes the correlation between AI prompts and resulting code changes - showing success rate, time from prompt to code change, and how many changes each prompt generates">Prompt-to-Code Correlation</h3>
-          <p class="card-subtitle">Success rate, time to first change, and code change patterns following prompts</p>
-        </div>
-        <div class="card-body">
-          <div id="promptToCodeCorrelation"></div>
-        </div>
-      </div>
-
-      <!-- Git Commit Timeline -->
-      <div class="card">
-        <div class="card-header">
-          <h3 class="card-title" title="Shows your git commit history with commit messages, timestamps, and branch information. Helps track development milestones and commit frequency">Git Commit Timeline</h3>
-          <p class="card-subtitle">Recent commits, commit frequency, and branch activity</p>
-        </div>
-        <div class="card-body">
-          <div id="gitCommitTimeline"></div>
-        </div>
-      </div>
-
-      <!-- File Hotspots -->
-      <div class="card">
-        <div class="card-header">
-          <h3 class="card-title" title="Identifies files that are edited most frequently - showing edit counts, lines changed, and recency to highlight your most active development areas">File Hotspots</h3>
-          <p class="card-subtitle">Most frequently edited files with edit counts, lines changed, and activity scores</p>
-        </div>
-        <div class="card-body">
-          <div id="fileHotspots"></div>
-        </div>
-      </div>
-
-      <!-- Quick Wins Section -->
-      <div class="card">
-        <div class="card-header">
-          <h3 class="card-title" title="Quick insights into your development patterns - fast metrics that help you understand your coding habits and AI usage">Quick Wins</h3>
+          <h3 class="card-title" title="Quick insights into your development patterns - fast metrics that help you understand your coding habits and AI usage">Development Insights</h3>
           <p class="card-subtitle">Fast insights into your development patterns</p>
         </div>
         <div class="card-body">
@@ -556,8 +539,28 @@ async function renderAnalyticsView(container) {
     }
   });
   
+  // Guard to prevent excessive fast charts rendering
+  let _fastChartsRendering = false;
+  let _fastChartsLastRender = 0;
+  const FAST_CHARTS_MIN_INTERVAL = 1500; // Minimum 1.5 seconds between fast charts renders
+  
   // Fast charts that render immediately (with minimal data)
   function renderFastCharts(events, prompts) {
+    // Prevent excessive re-rendering
+    const now = Date.now();
+    if (_fastChartsRendering) {
+      console.log('[ANALYTICS] Fast charts already rendering, skipping');
+      return;
+    }
+    
+    if (now - _fastChartsLastRender < FAST_CHARTS_MIN_INTERVAL) {
+      console.log('[ANALYTICS] Fast charts render too soon, skipping');
+      return;
+    }
+    
+    _fastChartsRendering = true;
+    _fastChartsLastRender = now;
+    
     console.log('[ANALYTICS] Rendering fast charts with', events.length, 'events and', prompts.length, 'prompts');
     
     // Verify containers exist before rendering
@@ -565,6 +568,8 @@ async function renderAnalyticsView(container) {
     const promptTokensCanvas = document.getElementById('promptTokensChart');
     if (!aiActivityCanvas && !promptTokensCanvas) {
       console.warn('[ANALYTICS] Chart containers not found, charts may not render');
+      _fastChartsRendering = false;
+      return;
     }
     
     // OPTIMIZATION: Debounce chart rendering to prevent multiple renders
@@ -662,10 +667,28 @@ async function renderAnalyticsView(container) {
     }
     
     console.log('[ANALYTICS] Fast charts rendered');
+    _fastChartsRendering = false;
   }
+  
+  // Guard to prevent excessive heavy analytics rendering
+  let _heavyAnalyticsRendering = false;
+  let _heavyAnalyticsLastRender = 0;
+  const HEAVY_ANALYTICS_MIN_INTERVAL = 3000; // Minimum 3 seconds between heavy analytics renders
   
   // Heavy analytics that load progressively
   function renderHeavyAnalytics(events, prompts) {
+    // Prevent excessive re-rendering
+    const now = Date.now();
+    if (_heavyAnalyticsRendering) {
+      console.log('[ANALYTICS] Heavy analytics already rendering, skipping');
+      return;
+    }
+    
+    if (now - _heavyAnalyticsLastRender < HEAVY_ANALYTICS_MIN_INTERVAL) {
+      console.log('[ANALYTICS] Heavy analytics render too soon, skipping');
+      return;
+    }
+    
     // Verify view is still active
     const viewContainer = document.getElementById('viewContainer');
     if (!viewContainer) return;
@@ -681,6 +704,9 @@ async function renderAnalyticsView(container) {
       console.log('[ANALYTICS] Skipping heavy analytics - no data');
       return;
     }
+    
+    _heavyAnalyticsRendering = true;
+    _heavyAnalyticsLastRender = now;
     
     console.log('[ANALYTICS] Rendering heavy analytics with', events.length, 'events and', prompts.length, 'prompts');
     
@@ -703,72 +729,58 @@ async function renderAnalyticsView(container) {
     }
   }
   
+  // Reset render flag when view is done
+  _isRendering = false;
+  
   function renderHeavyAnalyticsInternal(events, prompts) {
-    if (window.renderContextFileAnalytics) {
-      window.renderContextFileAnalytics().catch(err => {
-        if (!err.message || !err.message.includes('not found')) {
-          console.warn('[INFO] Context file analytics not available:', err.message);
-        }
-      });
-    }
-    
-    if (window.renderModelUsageAnalytics) {
-      try {
-        window.renderModelUsageAnalytics().catch(err => {
-          console.error('[CHART] Error rendering Model Usage Analytics:', err);
+    try {
+      if (window.renderContextFileAnalytics) {
+        window.renderContextFileAnalytics().catch(err => {
+          if (!err.message || !err.message.includes('not found')) {
+            console.warn('[INFO] Context file analytics not available:', err.message);
+          }
         });
-      } catch (err) {
-        console.error('[CHART] Error rendering Model Usage Analytics:', err);
       }
-    }
-    
-    if (window.renderEnhancedContextAnalytics) {
-      window.renderEnhancedContextAnalytics().catch(err => {
-        if (!err.message || !err.message.includes('not found')) {
-          console.warn('[INFO] Context analytics not available:', err.message);
-        }
-      });
-    }
-    
-    if (window.renderProductivityInsights) {
-      window.renderProductivityInsights().catch(err => {
-        if (!err.message || !err.message.includes('not found')) {
-          console.warn('[INFO] Productivity insights not available:', err.message);
-        }
-      });
-    }
-    
-    if (window.renderPromptEffectiveness) {
-      try {
-        window.renderPromptEffectiveness();
-      } catch (err) {
-        console.error('[CHART] Error rendering Prompt Effectiveness:', err);
-      }
-    }
-    
-    // Advanced visualizations - ensure they render properly
-    const renderAdvancedVisualizations = () => {
-      const containers = [
-        { id: 'contextEvolutionTimeline', render: window.renderContextEvolutionTimeline },
-        { id: 'promptToCodeCorrelation', render: window.renderPromptToCodeCorrelation },
-        { id: 'gitCommitTimeline', render: window.renderGitCommitTimeline },
-        { id: 'fileHotspots', render: window.renderFileHotspots }
-      ];
       
-      // Try to render each visualization
-      containers.forEach(({ id, render }) => {
-        const containerElement = document.getElementById(id);
-        if (!containerElement) {
-          console.warn(`[ANALYTICS] Container #${id} not found`);
-          return;
+      if (window.renderModelUsageAnalytics) {
+        try {
+          window.renderModelUsageAnalytics().catch(err => {
+            console.error('[CHART] Error rendering Model Usage Analytics:', err);
+          });
+        } catch (err) {
+          console.error('[CHART] Error rendering Model Usage Analytics:', err);
         }
-        
-        // Show loading state
-        if (containerElement.innerHTML.trim() === '' || containerElement.innerHTML.includes('Loading...')) {
-          containerElement.innerHTML = '<div style="padding: var(--space-lg); text-align: center; color: var(--color-text-muted);">Loading...</div>';
+      }
+      
+      if (window.renderEnhancedContextAnalytics) {
+        window.renderEnhancedContextAnalytics().catch(err => {
+          if (!err.message || !err.message.includes('not found')) {
+            console.warn('[INFO] Context analytics not available:', err.message);
+          }
+        });
+      }
+      
+      if (window.renderProductivityInsights) {
+        window.renderProductivityInsights().catch(err => {
+          if (!err.message || !err.message.includes('not found')) {
+            console.warn('[INFO] Productivity insights not available:', err.message);
+          }
+        });
+      }
+      
+      if (window.renderPromptEffectiveness) {
+        try {
+          window.renderPromptEffectiveness();
+        } catch (err) {
+          console.error('[CHART] Error rendering Prompt Effectiveness:', err);
         }
-        
-        if (render && typeof render === 'function') {
+      }
+      
+      // Advanced visualizations removed - they were not implemented and showed "Loading..." forever
+      const renderAdvancedVisualizations = () => {
+        // Placeholder for future advanced visualizations
+        // For now, all advanced visualizations have been removed to avoid confusion
+        if (false && render && typeof render === 'function') {
           // Use lazy loading if available, otherwise render immediately
           if (window.performanceOptimizer && window.performanceOptimizer.lazyLoad) {
             window.performanceOptimizer.lazyLoad(`#${id}`, (element) => {
@@ -810,20 +822,35 @@ async function renderAnalyticsView(container) {
       });
     };
     
-    // Render immediately and also retry after a delay
-    renderAdvancedVisualizations();
-    
-    // Retry after delays to catch any initialization issues
-    setTimeout(renderAdvancedVisualizations, 500);
-    setTimeout(renderAdvancedVisualizations, 1000);
-    setTimeout(renderAdvancedVisualizations, 2000);
-    setTimeout(renderAdvancedVisualizations, 3000);
-    
-    // Also listen for data updates to re-render charts
-    window.addEventListener('data-updated', () => {
-      console.log('[ANALYTICS] Data updated, re-rendering charts...');
+      // Render immediately (removed excessive retries)
       renderAdvancedVisualizations();
-    });
+    } finally {
+      _heavyAnalyticsRendering = false;
+    }
+    
+    // Also listen for data updates to re-render charts (debounced)
+    if (!window._analyticsDataUpdateListener) {
+      window._analyticsDataUpdateListener = window.debounce ? 
+        window.debounce(() => {
+          if (window.state?.currentView === 'analytics') {
+            console.log('[ANALYTICS] Data updated, re-rendering charts...');
+            renderAdvancedVisualizations();
+          }
+        }, 2000) : 
+        (() => {
+          let timeout;
+          return () => {
+            clearTimeout(timeout);
+            timeout = setTimeout(() => {
+              if (window.state?.currentView === 'analytics') {
+                console.log('[ANALYTICS] Data updated, re-rendering charts...');
+                renderAdvancedVisualizations();
+              }
+            }, 2000);
+          };
+        })();
+      window.addEventListener('data-updated', window._analyticsDataUpdateListener);
+    }
   }
   
   // Load more data for analytics if needed
@@ -878,35 +905,63 @@ async function renderAnalyticsView(container) {
     }
   }
   
+  // Guard to prevent excessive quick wins rendering
+  let _quickWinsRendering = false;
+  let _quickWinsLastRender = 0;
+  const QUICK_WINS_MIN_INTERVAL = 1000; // Minimum 1 second between quick wins renders
+  
   /**
-   * Render Quick Wins metrics
+   * Render Development Insights metrics
    */
   function renderQuickWins(events, prompts) {
-    console.log('[QUICK-WINS] Rendering quick wins with', events.length, 'events and', prompts.length, 'prompts');
+    // Prevent excessive re-rendering
+    const now = Date.now();
+    if (_quickWinsRendering) {
+      console.log('[DEVELOPMENT-INSIGHTS] Already rendering, skipping');
+      return;
+    }
     
-    // 1. Prompt Success Rate
-    renderPromptSuccessRate(prompts);
+    if (now - _quickWinsLastRender < QUICK_WINS_MIN_INTERVAL) {
+      console.log('[DEVELOPMENT-INSIGHTS] Render too soon, skipping');
+      return;
+    }
     
-    // 2. Context Efficiency Score
-    renderContextEfficiencyScore(prompts);
+    _quickWinsRendering = true;
+    _quickWinsLastRender = now;
     
-    // 3. Model Usage Distribution
-    renderModelUsageDistribution(prompts);
+    console.log('[DEVELOPMENT-INSIGHTS] Rendering development insights with', events.length, 'events and', prompts.length, 'prompts');
     
-    // 4. Context File Frequency
-    renderContextFileFrequency(prompts);
-    
-    // 5. Thinking Time Distribution
-    renderThinkingTimeDistribution(prompts);
-    
-    // 6. Time-of-Day Activity
-    renderTimeOfDayActivity(events, prompts);
-    
-    // 7. Conversation Length Distribution
-    renderConversationLengthDistribution(prompts);
-    
-    // 8. Intent Distribution
-    renderIntentDistribution(events);
+    try {
+      // 1. Prompt Success Rate
+      renderPromptSuccessRate(prompts);
+      
+      // 2. Context Efficiency Score
+      renderContextEfficiencyScore(prompts);
+      
+      // 3. Model Usage Distribution
+      renderModelUsageDistribution(prompts);
+      
+      // 4. Context File Frequency (async)
+      renderContextFileFrequency(prompts).catch(err => {
+        console.warn('[ANALYTICS] Error rendering context file frequency:', err);
+      });
+      
+      // 5. Thinking Time Distribution (async)
+      renderThinkingTimeDistribution(prompts).catch(err => {
+        console.warn('[ANALYTICS] Error rendering thinking time distribution:', err);
+      });
+      
+      // 6. Time-of-Day Activity
+      renderTimeOfDayActivity(events, prompts);
+      
+      // 7. Conversation Length Distribution
+      renderConversationLengthDistribution(prompts);
+      
+      // 8. Intent Distribution
+      renderIntentDistribution(events);
+    } finally {
+      _quickWinsRendering = false;
+    }
   }
 
   /**
@@ -1005,12 +1060,76 @@ async function renderAnalyticsView(container) {
   }
 
   /**
-   * 4. Context File Frequency
+   * 4. Context File Frequency - Fetch from API for better data
    */
-  function renderContextFileFrequency(prompts) {
+  async function renderContextFileFrequency(prompts) {
     const ctx = document.getElementById('contextFileChart');
     if (!ctx || !window.createChart) return;
     
+    // Show loading state
+    ctx.parentElement.innerHTML = '<div style="padding: var(--space-md); text-align: center; color: var(--color-text-muted);">Loading context file data...</div>';
+    
+    // Try to fetch from API first for better data (with timeout)
+    try {
+      const apiBase = window.CONFIG?.API_BASE || 'http://localhost:43917';
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3000); // 3 second timeout
+      
+      const response = await fetch(`${apiBase}/api/analytics/file-usage`, { 
+        signal: controller.signal 
+      });
+      clearTimeout(timeoutId);
+      
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success && result.data && result.data.mostUsedFiles && result.data.mostUsedFiles.length > 0) {
+          const files = result.data.mostUsedFiles.slice(0, 10);
+          const labels = files.map(f => {
+            const fileName = f.name || f.path.split('/').pop() || f.path;
+            return fileName.length > 20 ? fileName.substring(0, 20) + '...' : fileName;
+          });
+          const data = files.map(f => f.count);
+          const colors = getChartColors();
+          
+          window.createChart('contextFileChart', {
+            type: 'bar',
+            data: {
+              labels: labels,
+              datasets: [{
+                label: 'Usage Count',
+                data: data,
+                backgroundColor: colors.primary
+              }]
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: true,
+              indexAxis: 'y',
+              plugins: {
+                legend: { display: false },
+                tooltip: { 
+                  callbacks: { 
+                    label: (ctx) => {
+                      const file = files[ctx.dataIndex];
+                      return `${file.name || file.path}: ${ctx.parsed.x} uses`;
+                    }
+                  } 
+                }
+              },
+              scales: {
+                x: { beginAtZero: true, ticks: { precision: 0 } },
+                y: { ticks: { font: { size: 10 } } }
+              }
+            }
+          });
+          return;
+        }
+      }
+    } catch (error) {
+      console.debug('[ANALYTICS] Could not fetch context files from API, falling back to prompt data:', error);
+    }
+    
+    // Fallback to parsing from prompts
     if (prompts.length === 0) {
       ctx.parentElement.innerHTML = '<div style="padding: var(--space-md); text-align: center; color: var(--color-text-muted);">No prompt data</div>';
       return;
@@ -1019,19 +1138,36 @@ async function renderAnalyticsView(container) {
     const fileCounts = {};
     prompts.forEach(p => {
       try {
-        const contextFiles = p.context_files || p.contextFiles;
+        // Try multiple field names for context files
+        const contextFiles = p.context_files || p.contextFiles || p.context_files_json;
         let files = [];
         
         if (typeof contextFiles === 'string') {
-          files = JSON.parse(contextFiles);
+          try {
+            files = JSON.parse(contextFiles);
+          } catch (e) {
+            // If parsing fails, try splitting by comma
+            files = contextFiles.split(',').map(f => f.trim()).filter(f => f);
+          }
         } else if (Array.isArray(contextFiles)) {
           files = contextFiles;
         }
         
         files.forEach(file => {
-          if (file && typeof file === 'string') {
-            const fileName = file.split('/').pop() || file;
-            fileCounts[fileName] = (fileCounts[fileName] || 0) + 1;
+          if (file) {
+            let filePath = '';
+            if (typeof file === 'string') {
+              filePath = file;
+            } else if (file.path) {
+              filePath = file.path;
+            } else if (file.name) {
+              filePath = file.name;
+            }
+            
+            if (filePath) {
+              const fileName = filePath.split('/').pop() || filePath;
+              fileCounts[fileName] = (fileCounts[fileName] || 0) + 1;
+            }
           }
         });
       } catch (e) {
@@ -1085,15 +1221,59 @@ async function renderAnalyticsView(container) {
   }
 
   /**
-   * 5. Thinking Time Distribution
+   * 5. Thinking Time Distribution - Enhanced data fetching
    */
-  function renderThinkingTimeDistribution(prompts) {
+  async function renderThinkingTimeDistribution(prompts) {
     const ctx = document.getElementById('thinkingTimeHistogram');
     if (!ctx || !window.createChart) return;
     
-    const thinkingTimes = prompts
-      .map(p => p.thinking_time_seconds || p.thinkingTimeSeconds || p.thinking_time || null)
-      .filter(t => t !== null && t > 0 && t < 300); // Filter outliers
+    // Show loading state
+    ctx.parentElement.innerHTML = '<div style="padding: var(--space-md); text-align: center; color: var(--color-text-muted);">Loading thinking time data...</div>';
+    
+    // Try to fetch from conversations API for better data (with timeout)
+    let thinkingTimes = [];
+    try {
+      const apiBase = window.CONFIG?.API_BASE || 'http://localhost:43917';
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3000); // 3 second timeout
+      
+      const response = await fetch(`${apiBase}/api/conversations?limit=1000`, {
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+      
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success && result.conversations) {
+          // Extract thinking time from conversation turns
+          result.conversations.forEach(conv => {
+            if (conv.turns && Array.isArray(conv.turns)) {
+              conv.turns.forEach(turn => {
+                if (turn.role === 'assistant' && turn.thinking_time_seconds) {
+                  const time = parseFloat(turn.thinking_time_seconds);
+                  if (time > 0 && time < 300) {
+                    thinkingTimes.push(time);
+                  }
+                }
+              });
+            }
+          });
+        }
+      }
+    } catch (error) {
+      console.debug('[ANALYTICS] Could not fetch thinking time from API, falling back to prompt data:', error);
+    }
+    
+    // Fallback to prompts if API didn't provide enough data
+    if (thinkingTimes.length === 0) {
+      thinkingTimes = prompts
+        .map(p => {
+          // Try multiple field names
+          return p.thinking_time_seconds || p.thinkingTimeSeconds || p.thinking_time || 
+                 p.time_to_first_token_ms ? (p.time_to_first_token_ms / 1000) : null;
+        })
+        .filter(t => t !== null && t > 0 && t < 300); // Filter outliers
+    }
     
     if (thinkingTimes.length === 0) {
       ctx.parentElement.innerHTML = `

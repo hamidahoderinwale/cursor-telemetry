@@ -8,6 +8,11 @@ let selectedWorkspaces = [];
 let availableWorkspaces = [];
 
 function renderWorkspaceComparisonView(container) {
+  if (!container) {
+    console.error('[WORKSPACE-COMPARE] Container not provided');
+    return;
+  }
+  
   container.innerHTML = `
     <div class="workspace-comparison-view">
       <div class="view-header">
@@ -139,8 +144,12 @@ function renderWorkspaceComparisonView(container) {
  * Load available workspaces from API
  */
 async function loadAvailableWorkspaces() {
-  try {
-    const response = await window.APIClient.get('/api/workspaces', { silent: true });
+  const response = await window.APIClient.get('/api/workspaces', { silent: true }).catch(() => {
+    extractWorkspacesFromData();
+    return null;
+  });
+  
+  if (response) {
     availableWorkspaces = Array.isArray(response) ? response : (response?.data || []);
     // Sort by activity (most active first) for better default selection
     availableWorkspaces.sort((a, b) => {
@@ -149,12 +158,6 @@ async function loadAvailableWorkspaces() {
       return bActivity - aActivity;
     });
     renderAvailableWorkspaces();
-    return Promise.resolve();
-  } catch (error) {
-    console.warn('[WORKSPACE] Could not load workspaces:', error.message);
-    // Extract workspaces from current data
-    extractWorkspacesFromData();
-    return Promise.resolve();
   }
 }
 

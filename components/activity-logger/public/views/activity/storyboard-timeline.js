@@ -11,7 +11,12 @@ function renderStoryboardTimeline(items) {
   if (!items || items.length === 0) {
     return `
       <div class="storyboard-empty">
-        <div class="storyboard-empty-icon">📖</div>
+        <div class="storyboard-empty-icon">
+          <svg width="64" height="64" viewBox="0 0 20 20" fill="currentColor" style="opacity: 0.3;">
+            <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/>
+            <path fill-rule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clip-rule="evenodd"/>
+          </svg>
+        </div>
         <h3>No Activity Yet</h3>
         <p>Your development story will appear here as you work in Cursor</p>
       </div>
@@ -24,7 +29,13 @@ function renderStoryboardTimeline(items) {
   return `
     <div class="storyboard-container">
       <div class="storyboard-header">
-        <h2 class="storyboard-title">Development Story</h2>
+        <h2 class="storyboard-title">
+          <svg width="24" height="24" viewBox="0 0 20 20" fill="currentColor" style="margin-right: var(--space-xs);">
+            <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/>
+            <path fill-rule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clip-rule="evenodd"/>
+          </svg>
+          Development Story
+        </h2>
         <div class="storyboard-stats">
           <div class="stat-item">
             <span class="stat-value">${chapters.length}</span>
@@ -254,13 +265,36 @@ function renderChapter(chapter, index, totalChapters) {
   return `
     <div class="storyboard-chapter" data-chapter-index="${index}">
       <div class="chapter-header">
-        <div class="chapter-number">Session ${index + 1}</div>
+        <div class="chapter-number">
+          <span class="chapter-number-text">${index + 1}</span>
+        </div>
         <div class="chapter-info">
-          <div class="chapter-title">${workspaceName}</div>
+          <div class="chapter-title">
+            <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor" style="margin-right: var(--space-xs); vertical-align: middle;">
+              <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/>
+            </svg>
+            ${workspaceName}
+          </div>
           <div class="chapter-meta">
-            <span class="chapter-date">${dateStr}</span>
-            <span class="chapter-duration">${duration} min</span>
-            <span class="chapter-activities">${chapter.items.length} activities</span>
+            <span class="chapter-date">
+              <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor" style="margin-right: 4px; vertical-align: middle;">
+                <path fill-rule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clip-rule="evenodd"/>
+              </svg>
+              ${dateStr}
+            </span>
+            <span class="chapter-duration">
+              <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor" style="margin-right: 4px; vertical-align: middle;">
+                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"/>
+              </svg>
+              ${duration} min
+            </span>
+            <span class="chapter-activities">
+              <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor" style="margin-right: 4px; vertical-align: middle;">
+                <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/>
+                <path fill-rule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clip-rule="evenodd"/>
+              </svg>
+              ${chapter.items.length} activities
+            </span>
           </div>
         </div>
         <button class="chapter-toggle" onclick="toggleChapter('${chapter.id}')" data-chapter-id="${chapter.id}">
@@ -358,7 +392,12 @@ function getItemConfig(item, itemType) {
     const text = item.text || item.prompt || item.content || '';
     const preview = text.length > 80 ? text.substring(0, 80) + '...' : text;
     return {
-      icon: '💬',
+      icon: `
+        <svg width="18" height="18" viewBox="0 0 20 20" fill="currentColor">
+          <path d="M2 5a2 2 0 012-2h7a2 2 0 012 2v4a2 2 0 01-2 2H9l-3 3v-3H4a2 2 0 01-2-2V5z"/>
+          <path d="M15 7v2a4 4 0 01-4 4H9.828l-1.766 1.767c.28.149.599.233.938.233h2l3 3v-3h2a2 2 0 002-2V9a2 2 0 00-2-2h-1z"/>
+        </svg>
+      `,
       title: 'AI Interaction',
       description: escape(preview),
       badges: `<span class="item-badge badge-ai">AI</span>`
@@ -370,7 +409,11 @@ function getItemConfig(item, itemType) {
     const preview = command.length > 60 ? command.substring(0, 60) + '...' : command;
     const isError = item.exit_code !== 0 && item.exit_code !== null;
     return {
-      icon: isError ? '❌' : '💻',
+      icon: `
+        <svg width="18" height="18" viewBox="0 0 20 20" fill="currentColor">
+          <path fill-rule="evenodd" d="M2 5a2 2 0 012-2h12a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V5zm3.293 1.293a1 1 0 011.414 0l3 3a1 1 0 010 1.414l-3 3a1 1 0 01-1.414-1.414L7.586 10 5.293 7.707a1 1 0 010-1.414zM11 12a1 1 0 100 2h3a1 1 0 100-2h-3z" clip-rule="evenodd"/>
+        </svg>
+      `,
       title: 'Terminal Command',
       description: escape(preview),
       badges: isError ? `<span class="item-badge badge-error">Error</span>` : ''
@@ -390,7 +433,11 @@ function getItemConfig(item, itemType) {
       }
     } catch {}
     return {
-      icon: '📝',
+      icon: `
+        <svg width="18" height="18" viewBox="0 0 20 20" fill="currentColor">
+          <path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clip-rule="evenodd"/>
+        </svg>
+      `,
       title: 'Code Change',
       description: escape(fileName) + stats,
       badges: ''
@@ -401,7 +448,11 @@ function getItemConfig(item, itemType) {
   const title = window.getEventTitle ? window.getEventTitle(item) : 'Activity';
   const desc = window.getEventDescription ? window.getEventDescription(item) : '';
   return {
-    icon: '⚡',
+    icon: `
+      <svg width="18" height="18" viewBox="0 0 20 20" fill="currentColor">
+        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"/>
+      </svg>
+    `,
     title: escape(title),
     description: desc ? escape(desc) : '',
     badges: ''
@@ -409,16 +460,33 @@ function getItemConfig(item, itemType) {
 }
 
 /**
- * Get scene type icon
+ * Get scene type icon (SVG)
  */
 function getSceneTypeIcon(type) {
   const icons = {
-    'ai-interaction': '🤖',
-    'code-editing': '✏️',
-    'terminal-work': '💻',
-    'activity': '⚡'
+    'ai-interaction': `
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+        <path d="M2 5a2 2 0 012-2h7a2 2 0 012 2v4a2 2 0 01-2 2H9l-3 3v-3H4a2 2 0 01-2-2V5z"/>
+        <path d="M15 7v2a4 4 0 01-4 4H9.828l-1.766 1.767c.28.149.599.233.938.233h2l3 3v-3h2a2 2 0 002-2V9a2 2 0 00-2-2h-1z"/>
+      </svg>
+    `,
+    'code-editing': `
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+        <path fill-rule="evenodd" d="M12.316 3.051a1 1 0 01.633 1.265l-4 12a1 1 0 11-1.898-.632l4-12a1 1 0 011.265-.633zM5.707 6.293a1 1 0 010 1.414L3.414 10l2.293 2.293a1 1 0 11-1.414 1.414l-3-3a1 1 0 010-1.414l3-3a1 1 0 011.414 0zm8.586 0a1 1 0 011.414 0l3 3a1 1 0 010 1.414l-3 3a1 1 0 11-1.414-1.414L16.586 10l-2.293-2.293a1 1 0 010-1.414z" clip-rule="evenodd"/>
+      </svg>
+    `,
+    'terminal-work': `
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+        <path fill-rule="evenodd" d="M2 5a2 2 0 012-2h12a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V5zm3.293 1.293a1 1 0 011.414 0l3 3a1 1 0 010 1.414l-3 3a1 1 0 01-1.414-1.414L7.586 10 5.293 7.707a1 1 0 010-1.414zM11 12a1 1 0 100 2h3a1 1 0 100-2h-3z" clip-rule="evenodd"/>
+      </svg>
+    `,
+    'activity': `
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"/>
+      </svg>
+    `
   };
-  return icons[type] || '⚡';
+  return icons[type] || icons['activity'];
 }
 
 /**

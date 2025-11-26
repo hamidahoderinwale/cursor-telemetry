@@ -46,17 +46,23 @@ class RefreshManager {
     if (typeof document === 'undefined') return;
     
     const handleVisibilityChange = () => {
+      const wasVisible = this.isTabVisible;
       this.isTabVisible = !document.hidden;
       
-      if (this.isTabVisible) {
+      if (this.isTabVisible && !wasVisible) {
         // Tab became visible - refresh immediately
-        console.log('[REFRESH] Tab visible - refreshing...');
         this.scheduleFastRefresh();
-      } else {
-        // Tab hidden - pause fast refreshes, but allow background loading
-        console.log('[REFRESH] Tab hidden - pausing fast refreshes (background loading still active)');
+        // Resume normal refresh intervals
+        this.schedulePeriodicRefresh();
+      } else if (!this.isTabVisible && wasVisible) {
+        // Tab hidden - pause fast refreshes, reduce polling frequency
         this.clearFastRefresh();
-        // Note: Slow sync and initial data loading will continue in background
+        // Continue slow background sync
+        this.scheduleSlowRefresh();
+        // Pause current view if any
+        if (window.pauseView && window.state?.currentView) {
+          window.pauseView(window.state.currentView);
+        }
       }
     };
     
@@ -235,17 +241,9 @@ class RefreshManager {
             window.calculateStats();
           }
           
-          // Optionally update UI if on analytics view
-          if (window.state?.currentView === 'analytics' && window.renderCurrentView) {
-            // Defer UI update to avoid blocking
-            if (typeof requestIdleCallback !== 'undefined') {
-              requestIdleCallback(() => {
-                window.renderCurrentView();
-              }, { timeout: 1000 });
-            } else {
-              setTimeout(() => window.renderCurrentView(), 100);
-            }
-          }
+          // Optionally update UI if on analytics view (removed - causes excessive re-renders)
+          // Analytics view will update automatically when data changes via event listeners
+          // Full view re-render is too expensive and causes performance issues
         };
         
         if (typeof requestIdleCallback !== 'undefined' && this.isTabVisible) {
