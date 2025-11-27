@@ -87,7 +87,7 @@ async function showShareModal(workspaces = null) {
       <div class="modal-body export-modal-section">
         
         <!-- Feature Explanation -->
-        <div style="margin-bottom: var(--space-lg); padding: var(--space-md); background: var(--color-bg-alt); border-radius: var(--radius-md); border-left: 3px solid var(--color-primary);">
+        <div style="margin-bottom: var(--space-lg); padding: var(--space-md); background: var(--color-bg-alt); border-radius: 0(--radius-md); border-left: 3px solid var(--color-primary);">
           <h3 style="margin-bottom: var(--space-xs); font-size: var(--text-base); display: flex; align-items: center; gap: var(--space-xs);">
             <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" style="color: var(--color-primary);">
               <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
@@ -109,7 +109,7 @@ async function showShareModal(workspaces = null) {
             <span class="tooltip-icon" title="Select one or more workspaces to include in the share link. Only data from selected workspaces will be shared. You can select all workspaces or choose specific ones. The preview below shows how much data will be included.">i</span>
           </h3>
           ${allWorkspaces.length === 0 ? `
-            <div style="color: var(--color-text-muted); padding: var(--space-sm); text-align: center; border: 1px solid var(--color-border); border-radius: var(--radius-md);">
+            <div style="color: var(--color-text-muted); padding: var(--space-sm); text-align: center; border: 1px solid var(--color-border); border-radius: 0(--radius-md);">
               No workspaces found in telemetry data
             </div>
           ` : `
@@ -119,7 +119,7 @@ async function showShareModal(workspaces = null) {
                 <span><strong>Select All Workspaces</strong></span>
               </label>
             </div>
-            <div id="shareWorkspaceList" class="workspace-list-container" style="max-height: 300px; overflow-y: auto; border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: var(--space-sm);">
+            <div id="shareWorkspaceList" class="workspace-list-container" style="max-height: 300px; overflow-y: auto; border: 1px solid var(--color-border); border-radius: 0(--radius-md); padding: var(--space-sm);">
               ${allWorkspaces.map(ws => {
                 const displayName = ws.split('/').pop() || ws;
                 const escapedWs = window.escapeHtml ? window.escapeHtml(ws) : ws;
@@ -155,7 +155,7 @@ async function showShareModal(workspaces = null) {
               <option value="2" data-desc="Only high-level descriptions of changes and patterns. No code or detailed metrics.">Level 2: Statement-Level (Descriptions only)</option>
               <option value="3" data-desc="Only workflow patterns and trends. Minimal detail, maximum privacy.">Level 3: Workflow-Level (Patterns only)</option>
             </select>
-            <div id="abstractionLevelDesc" class="file-input-hint" style="margin-top: var(--space-xs); padding: var(--space-sm); background: var(--color-bg-alt); border-radius: var(--radius-sm);">
+            <div id="abstractionLevelDesc" class="file-input-hint" style="margin-top: var(--space-xs); padding: var(--space-sm); background: var(--color-bg-alt); border-radius: 0(--radius-sm);">
               Preserves metrics, statistics, and file relationships without exposing actual code content. Recommended for most sharing.
             </div>
           </div>
@@ -221,7 +221,7 @@ async function showShareModal(workspaces = null) {
         </div>
 
         <!-- Share Preview -->
-        <div id="sharePreview" style="display: none; margin-top: var(--space-md); padding: var(--space-md); background: var(--color-bg-alt); border-radius: var(--radius-md); border: 1px solid var(--color-border);">
+        <div id="sharePreview" style="display: none; margin-top: var(--space-md); padding: var(--space-md); background: var(--color-bg-alt); border-radius: 0(--radius-md); border: 1px solid var(--color-border);">
           <h4 style="margin-bottom: var(--space-sm); font-size: var(--text-base);">Share Preview</h4>
           <div id="sharePreviewContent" style="font-size: var(--text-sm); color: var(--color-text-muted);">
             <!-- Preview will be populated by updateSharePreview() -->
@@ -255,7 +255,7 @@ async function showShareModal(workspaces = null) {
                     <div style="margin-top: var(--space-xs);">Anyone with this link can access the workspace data.</div>
                   </div>
                 </div>
-                <div id="shareQRCode" style="flex-shrink: 0; padding: var(--space-sm); background: white; border-radius: var(--radius-sm); border: 1px solid var(--color-border);">
+                <div id="shareQRCode" style="flex-shrink: 0; padding: var(--space-sm); background: white; border-radius: 0(--radius-sm); border: 1px solid var(--color-border);">
                   <!-- QR code will be generated here if library available -->
                 </div>
               </div>
@@ -279,7 +279,7 @@ async function showShareModal(workspaces = null) {
         </div>
 
         <!-- Error Message -->
-        <div id="shareError" style="display: none; margin-top: var(--space-md); padding: var(--space-sm); background: rgba(239, 68, 68, 0.1); border: 1px solid var(--color-error); border-radius: var(--radius-md); color: var(--color-error);">
+        <div id="shareError" style="display: none; margin-top: var(--space-md); padding: var(--space-sm); background: rgba(239, 68, 68, 0.1); border: 1px solid var(--color-error); border-radius: 0(--radius-md); color: var(--color-error);">
         </div>
         
       </div>

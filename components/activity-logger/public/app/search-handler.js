@@ -457,14 +457,14 @@ function renderStateCommandResult(result) {
 
   if (result.result?.state) {
     const state = result.result.state;
-    html += `<div class="state-card" style="background: var(--color-bg-alt); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: var(--space-md); margin-bottom: var(--space-sm);">`;
+    html += `<div class="state-card" style="background: var(--color-bg-alt); border: 1px solid var(--color-border); border-radius: 0(--radius-md); padding: var(--space-md); margin-bottom: var(--space-sm);">`;
     html += `<div class="state-name" style="font-weight: 600; margin-bottom: var(--space-xs);">${escapeHtml(state.name)}</div>`;
     html += `<div class="state-description" style="color: var(--color-text-secondary); font-size: 0.9em; margin-bottom: var(--space-xs);">${escapeHtml(state.description || '')}</div>`;
     html += `<div class="state-meta" style="display: flex; gap: var(--space-xs); flex-wrap: wrap;">`;
-    html += `<span class="state-intent badge" style="background: var(--color-primary); color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.8em;">${escapeHtml(state.metadata?.intent || 'general')}</span>`;
+    html += `<span class="state-intent badge" style="background: var(--color-primary); color: white; padding: 2px 8px; border-radius: 0; font-size: 0.8em;">${escapeHtml(state.metadata?.intent || 'general')}</span>`;
     if (state.metadata?.tags && state.metadata.tags.length > 0) {
       state.metadata.tags.forEach(tag => {
-        html += `<span class="state-tag badge" style="background: var(--color-bg); border: 1px solid var(--color-border); padding: 2px 8px; border-radius: 4px; font-size: 0.8em;">#${escapeHtml(tag)}</span>`;
+        html += `<span class="state-tag badge" style="background: var(--color-bg); border: 1px solid var(--color-border); padding: 2px 8px; border-radius: 0; font-size: 0.8em;">#${escapeHtml(tag)}</span>`;
       });
     }
     html += `</div>`;
@@ -474,11 +474,11 @@ function renderStateCommandResult(result) {
   if (result.result?.states && result.result.states.length > 0) {
     html += `<div class="state-list">`;
     result.result.states.forEach(state => {
-      html += `<div class="state-card" style="background: var(--color-bg-alt); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: var(--space-md); margin-bottom: var(--space-sm); cursor: pointer; transition: all 0.2s;" onclick="window.stateService && window.stateService.executeCommand('switch to ${state.name}', {}).then(r => { if(r.success) window.location.reload(); })" onmouseover="this.style.borderColor='var(--color-primary)'" onmouseout="this.style.borderColor='var(--color-border)'">`;
+      html += `<div class="state-card" style="background: var(--color-bg-alt); border: 1px solid var(--color-border); border-radius: 0(--radius-md); padding: var(--space-md); margin-bottom: var(--space-sm); cursor: pointer; transition: all 0.2s;" onclick="window.stateService && window.stateService.executeCommand('switch to ${state.name}', {}).then(r => { if(r.success) window.location.reload(); })" onmouseover="this.style.borderColor='var(--color-primary)'" onmouseout="this.style.borderColor='var(--color-border)'">`;
       html += `<div class="state-name" style="font-weight: 600; margin-bottom: var(--space-xs);">${escapeHtml(state.name)}</div>`;
       html += `<div class="state-description" style="color: var(--color-text-secondary); font-size: 0.9em; margin-bottom: var(--space-xs);">${escapeHtml(state.description || '')}</div>`;
       html += `<div class="state-meta" style="display: flex; gap: var(--space-xs); flex-wrap: wrap;">`;
-      html += `<span class="state-intent badge" style="background: var(--color-primary); color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.8em;">${escapeHtml(state.metadata?.intent || 'general')}</span>`;
+      html += `<span class="state-intent badge" style="background: var(--color-primary); color: white; padding: 2px 8px; border-radius: 0; font-size: 0.8em;">${escapeHtml(state.metadata?.intent || 'general')}</span>`;
       html += `</div>`;
       html += `</div>`;
     });
@@ -516,9 +516,9 @@ function renderSearchResults(results) {
           Try different keywords or use the quick filters above to narrow your search
         </div>
         <div style="display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; font-size: 12px;">
-          <code style="padding: 6px 12px; background: var(--color-bg-alt); border: 1px solid var(--color-border); border-radius: 6px; font-family: var(--font-mono);">type:prompt</code>
-          <code style="padding: 6px 12px; background: var(--color-bg-alt); border: 1px solid var(--color-border); border-radius: 6px; font-family: var(--font-mono);">workspace:name</code>
-          <code style="padding: 6px 12px; background: var(--color-bg-alt); border: 1px solid var(--color-border); border-radius: 6px; font-family: var(--font-mono);">date:today</code>
+          <code style="padding: 6px 12px; background: var(--color-bg-alt); border: 1px solid var(--color-border); border-radius: 0; font-family: var(--font-mono);">type:prompt</code>
+          <code style="padding: 6px 12px; background: var(--color-bg-alt); border: 1px solid var(--color-border); border-radius: 0; font-family: var(--font-mono);">workspace:name</code>
+          <code style="padding: 6px 12px; background: var(--color-bg-alt); border: 1px solid var(--color-border); border-radius: 0; font-family: var(--font-mono);">date:today</code>
         </div>
       </div>
     `;
@@ -584,11 +584,11 @@ function renderSearchResults(results) {
     };
     
     const types = {
-      event: { label: 'Event', color: '#3b82f6', icon: renderIcon('fileEdit', 14) },
-      prompt: { label: 'Prompt', color: '#10b981', icon: renderIcon('messageSquare', 14) },
-      conversation: { label: 'Conversation', color: '#8b5cf6', icon: renderIcon('messageCircle', 14) },
-      terminal: { label: 'Terminal', color: '#f59e0b', icon: renderIcon('keyboard', 14) },
-      file: { label: 'File', color: '#ef4444', icon: renderIcon('file', 14) },
+      event: { label: 'Event', color: '#2a2a2a', icon: renderIcon('fileEdit', 14) },
+      prompt: { label: 'Prompt', color: '#474747', icon: renderIcon('messageSquare', 14) },
+      conversation: { label: 'Conversation', color: '#666666', icon: renderIcon('messageCircle', 14) },
+      terminal: { label: 'Terminal', color: '#666666', icon: renderIcon('keyboard', 14) },
+      file: { label: 'File', color: '#2a2a2a', icon: renderIcon('file', 14) },
       other: { label: 'Other', color: '#64748b', icon: renderIcon('pin', 14) }
     };
     return types[type] || types.other;
@@ -600,7 +600,7 @@ function renderSearchResults(results) {
     const typeHeader = Object.keys(groupedResults).length > 1 ? `
       <div class="search-result-group-header" style="
         padding: 12px 16px;
-        background: linear-gradient(to right, ${typeInfo.color}15, transparent);
+        background: var(--color-bg-alt);
         border-bottom: 2px solid ${typeInfo.color}30;
         font-size: 12px;
         font-weight: 700;
@@ -615,9 +615,9 @@ function renderSearchResults(results) {
         z-index: 10;
         backdrop-filter: blur(8px);
       ">
-        <span style="display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 6px; background: ${typeInfo.color}20;">${typeInfo.icon}</span>
+        <span style="display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 0; background: ${typeInfo.color}20;">${typeInfo.icon}</span>
         <span>${typeInfo.label}</span>
-        <span style="margin-left: auto; padding: 2px 8px; background: ${typeInfo.color}20; border-radius: 12px; font-size: 11px; font-weight: 600;">${typeResults.length}</span>
+        <span style="margin-left: auto; padding: 2px 8px; background: ${typeInfo.color}20; border-radius: 0; font-size: 11px; font-weight: 600;">${typeResults.length}</span>
       </div>
     ` : '';
     
@@ -655,7 +655,7 @@ function renderSearchResults(results) {
               width: 36px;
               height: 36px;
               min-width: 36px;
-              border-radius: 8px;
+              border-radius: 0;
               background: ${typeInfo.color}15;
               border: 1.5px solid ${typeInfo.color}30;
               flex-shrink: 0;
@@ -674,7 +674,7 @@ function renderSearchResults(results) {
                   background: ${typeInfo.color}12;
                   color: ${typeInfo.color};
                   border: 1px solid ${typeInfo.color}25;
-                  border-radius: 6px;
+                  border-radius: 0;
                   font-size: 11px;
                   font-weight: 600;
                   text-transform: uppercase;
@@ -697,10 +697,10 @@ function renderSearchResults(results) {
                 font-size: 12px;
                 color: var(--color-text-muted);
               ">
-                ${time ? `<span style="display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; background: var(--color-bg-alt); border-radius: 5px;">${window.renderLucideIcon ? window.renderLucideIcon('clock', { size: 13, color: 'currentColor' }) : '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>'} ${time}</span>` : ''}
-                ${workspace ? `<span style="display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; background: var(--color-bg-alt); border-radius: 5px;" title="${escapeHtml(workspace)}">${window.renderLucideIcon ? window.renderLucideIcon('folder', { size: 13, color: 'currentColor' }) : '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/></svg>'} ${escapeHtml(workspace.split('/').pop() || workspace)}</span>` : ''}
-                ${filePath ? `<span style="display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; background: var(--color-bg-alt); border-radius: 5px; font-family: var(--font-mono);" title="${escapeHtml(filePath)}">${window.renderLucideIcon ? window.renderLucideIcon('file', { size: 13, color: 'currentColor' }) : '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>'} ${escapeHtml(filePath.split('/').pop() || filePath)}</span>` : ''}
-                ${mode ? `<span style="display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; background: var(--color-bg-alt); border-radius: 5px;">${window.renderLucideIcon ? window.renderLucideIcon('bot', { size: 13, color: 'currentColor' }) : '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>'} ${escapeHtml(mode)}</span>` : ''}
+                ${time ? `<span style="display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; background: var(--color-bg-alt); border-radius: 0;">${window.renderLucideIcon ? window.renderLucideIcon('clock', { size: 13, color: 'currentColor' }) : '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>'} ${time}</span>` : ''}
+                ${workspace ? `<span style="display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; background: var(--color-bg-alt); border-radius: 0;" title="${escapeHtml(workspace)}">${window.renderLucideIcon ? window.renderLucideIcon('folder', { size: 13, color: 'currentColor' }) : '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/></svg>'} ${escapeHtml(workspace.split('/').pop() || workspace)}</span>` : ''}
+                ${filePath ? `<span style="display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; background: var(--color-bg-alt); border-radius: 0; font-family: var(--font-mono);" title="${escapeHtml(filePath)}">${window.renderLucideIcon ? window.renderLucideIcon('file', { size: 13, color: 'currentColor' }) : '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>'} ${escapeHtml(filePath.split('/').pop() || filePath)}</span>` : ''}
+                ${mode ? `<span style="display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; background: var(--color-bg-alt); border-radius: 0;">${window.renderLucideIcon ? window.renderLucideIcon('bot', { size: 13, color: 'currentColor' }) : '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>'} ${escapeHtml(mode)}</span>` : ''}
               </div>
             </div>
           </div>
@@ -709,7 +709,7 @@ function renderSearchResults(results) {
               margin-top: 10px;
               padding: 12px;
               background: var(--color-bg-alt);
-              border-radius: 8px;
+              border-radius: 0;
               font-size: 13px;
               color: var(--color-text-secondary);
               line-height: 1.6;
@@ -722,16 +722,16 @@ function renderSearchResults(results) {
             <div class="search-result-annotation" style="
               margin-top: 10px;
               padding: 10px 12px;
-              background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(59, 130, 246, 0.05));
+              background: var(--color-bg-alt);
               border-left: 3px solid var(--color-primary);
-              border-radius: 8px;
+              border-radius: 0;
               font-size: 12px;
               color: var(--color-text-secondary);
               display: flex;
               align-items: center;
               gap: 8px;
             ">
-              <span style="font-size: 11px; padding: 2px 6px; background: var(--color-primary); color: white; border-radius: 4px; font-weight: 600;">AI</span>
+              <span style="font-size: 11px; padding: 2px 6px; background: var(--color-primary); color: white; border-radius: 0; font-weight: 600;">AI</span>
               <span style="font-style: italic; line-height: 1.5;">${escapeHtml(annotation)}</span>
             </div>
           ` : ''}

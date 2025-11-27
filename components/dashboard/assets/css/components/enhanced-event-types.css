@@ -29,7 +29,7 @@
     margin: 1px 2px;
     background: var(--background-secondary);
     border: 1px solid var(--border-color);
-    border-radius: 3px;
+    border-radius: 0;
     font-size: 0.7rem;
     color: var(--text-secondary);
     cursor: help;
@@ -50,7 +50,7 @@
     justify-content: center;
     width: 40px;
     height: 40px;
-    border-radius: 50%;
+    border-radius: 0;
     background: var(--background-secondary);
     border: 2px solid var(--border-color);
     transition: all 0.3s ease;
@@ -63,103 +63,103 @@
 
 /* Data Science Event Types */
 .timeline-event-marker.data_exploration {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    border-color: #667eea;
+    background: var(--gray-700);
+    border-color: #666666;
     color: white;
 }
 
 .timeline-event-marker.data_visualization {
-    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-    border-color: #f093fb;
+    background: var(--gray-700);
+    border-color: #8a8a8a;
     color: white;
 }
 
 .timeline-event-marker.machine_learning {
-    background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-    border-color: #4facfe;
+    background: var(--gray-700);
+    border-color: #666666;
     color: white;
 }
 
 /* Software Development Event Types */
 .timeline-event-marker.implementation {
-    background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
-    border-color: #43e97b;
+    background: var(--gray-700);
+    border-color: #666666;
     color: white;
 }
 
 .timeline-event-marker.debugging {
-    background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
-    border-color: #fa709a;
+    background: var(--gray-700);
+    border-color: #8a8a8a;
     color: white;
 }
 
 .timeline-event-marker.testing {
-    background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
-    border-color: #a8edea;
+    background: var(--gray-700);
+    border-color: #d0d0d0;
     color: #333;
 }
 
 /* Research & Documentation Event Types */
 .timeline-event-marker.research {
-    background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);
-    border-color: #ffecd2;
+    background: var(--gray-700);
+    border-color: #e8e8e8;
     color: #333;
 }
 
 .timeline-event-marker.documentation {
-    background: linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%);
-    border-color: #a1c4fd;
+    background: var(--gray-700);
+    border-color: #d0d0d0;
     color: #333;
 }
 
 /* Infrastructure & DevOps Event Types */
 .timeline-event-marker.infrastructure {
-    background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%);
-    border-color: #ff9a9e;
+    background: var(--gray-700);
+    border-color: #8a8a8a;
     color: #333;
 }
 
 .timeline-event-marker.devops {
-    background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);
-    border-color: #ffecd2;
+    background: var(--gray-700);
+    border-color: #e8e8e8;
     color: #333;
 }
 
 /* Communication & Learning Event Types */
 .timeline-event-marker.communication {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    border-color: #667eea;
+    background: var(--gray-700);
+    border-color: #666666;
     color: white;
 }
 
 .timeline-event-marker.learning {
-    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-    border-color: #f093fb;
+    background: var(--gray-700);
+    border-color: #8a8a8a;
     color: white;
 }
 
 /* Legacy Event Types */
 .timeline-event-marker.notebook {
-    background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-    border-color: #4facfe;
+    background: var(--gray-700);
+    border-color: #666666;
     color: white;
 }
 
 .timeline-event-marker.code {
-    background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
-    border-color: #43e97b;
+    background: var(--gray-700);
+    border-color: #666666;
     color: white;
 }
 
 .timeline-event-marker.conversation {
-    background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
-    border-color: #fa709a;
+    background: var(--gray-700);
+    border-color: #8a8a8a;
     color: white;
 }
 
 .timeline-event-marker.session {
-    background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
-    border-color: #a8edea;
+    background: var(--gray-700);
+    border-color: #d0d0d0;
     color: #333;
 }
 
@@ -175,7 +175,7 @@
     right: -8px;
     width: 6px;
     height: 6px;
-    border-radius: 50%;
+    border-radius: 0;
     background: var(--success-color);
     border: 1px solid var(--background-primary);
 }
@@ -198,7 +198,7 @@
     background: var(--background-overlay);
     color: var(--text-primary);
     padding: 8px 12px;
-    border-radius: 6px;
+    border-radius: 0;
     font-size: 0.8rem;
     white-space: nowrap;
     z-index: 1000;
@@ -228,7 +228,7 @@
 .event-type-filter .filter-chip {
     padding: 6px 12px;
     border: 1px solid var(--border-color);
-    border-radius: 20px;
+    border-radius: 0;
     background: var(--background-secondary);
     color: var(--text-primary);
     font-size: 0.8rem;
@@ -253,7 +253,7 @@
     margin-left: 6px;
     padding: 2px 6px;
     background: rgba(255, 255, 255, 0.2);
-    border-radius: 10px;
+    border-radius: 0;
     font-size: 0.7rem;
 }
 
@@ -268,7 +268,7 @@
 .event-type-stat {
     background: var(--background-secondary);
     border: 1px solid var(--border-color);
-    border-radius: 8px;
+    border-radius: 0;
     padding: 16px;
     text-align: center;
 }
@@ -277,7 +277,7 @@
     width: 40px;
     height: 40px;
     margin: 0 auto 8px;
-    border-radius: 50%;
+    border-radius: 0;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -342,7 +342,7 @@
     height: 12px;
     background: var(--success-color);
     color: white;
-    border-radius: 50%;
+    border-radius: 0;
     font-size: 8px;
     display: flex;
     align-items: center;

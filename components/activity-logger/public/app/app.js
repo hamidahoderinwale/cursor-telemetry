@@ -2553,7 +2553,7 @@ function showCaptureIndicator(type = 'content') {
         background: #333333;
         color: white;
         padding: 12px 20px;
-        border-radius: 6px;
+        border-radius: 0;
         font-size: 14px;
         font-weight: 500;
         z-index: 1001;
@@ -2629,7 +2629,7 @@ function showNotification(message, type = 'success') {
         padding: 12px 16px;
         background: ${type === 'error' ? '#666666' : '#000'};
         color: #fff;
-        border-radius: 4px;
+        border-radius: 0;
         font-size: 14px;
         z-index: 1000;
         opacity: 0;

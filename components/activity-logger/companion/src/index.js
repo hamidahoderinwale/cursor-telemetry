@@ -147,6 +147,7 @@ const createExportImportRoutes = require('./routes/export-import.js');
 const createSharingRoutes = require('./routes/sharing.js');
 const createHistoricalMiningRoutes = require('./routes/historical-mining.js');
 const createCombinedTimelineRoutes = require('./routes/combined-timeline.js');
+const createHuggingFaceRoutes = require('./routes/huggingface.js');
 const setupAccountRoutes = require('./routes/account.js');
 const createWhiteboardRoutes = require('./routes/whiteboard.js');
 const createAIRoutes = require('./routes/ai.js');
@@ -246,13 +247,13 @@ const db = {
       if (table === 'entries') {
         await persistentDB.saveEntry(item);
         // Notify procedural knowledge builder
-        if (proceduralKnowledgeBuilder) {
+        if (proceduralKnowledgeBuilder && typeof proceduralKnowledgeBuilder.notifyDataCaptured === 'function') {
           proceduralKnowledgeBuilder.notifyDataCaptured('entries', 1);
         }
       } else if (table === 'prompts') {
         await persistentDB.savePrompt(item);
         // Notify procedural knowledge builder
-        if (proceduralKnowledgeBuilder) {
+        if (proceduralKnowledgeBuilder && typeof proceduralKnowledgeBuilder.notifyDataCaptured === 'function') {
           proceduralKnowledgeBuilder.notifyDataCaptured('prompts', 1);
         }
       }
@@ -380,17 +381,38 @@ const performanceMonitor = getPerformanceMonitor({
 });
 app.use(performanceMonitor.requestMiddleware());
 
+// OPTIMIZATION: Add compression middleware for faster response times
+app.use(compression({
+  filter: (req, res) => {
+    // Don't compress responses with 'no-transform' directive
+    if (req.headers['x-no-compression']) {
+      return false;
+    }
+    // Compress everything else
+    return compression.filter(req, res);
+  },
+  level: 6, // Good balance between speed and compression
+  threshold: 1024, // Only compress responses > 1KB
+}));
+
 app.use(express.json({ limit: '10mb' })); // Increase JSON payload limit
 
-// Serve static files from public directory with explicit MIME types
+// Serve static files from public directory with explicit MIME types and caching
 const publicPath = path.join(__dirname, '../../public');
 app.use(
   express.static(publicPath, {
+    maxAge: '1h', // Cache static assets for 1 hour
+    etag: true, // Enable ETags for cache validation
+    lastModified: true,
     setHeaders: (res, filePath) => {
       if (filePath.endsWith('.css')) {
         res.setHeader('Content-Type', 'text/css');
       } else if (filePath.endsWith('.js')) {
         res.setHeader('Content-Type', 'application/javascript');
+      }
+      // Add cache headers for immutable assets
+      if (filePath.includes('/lib/') || filePath.includes('/dist/')) {
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
       }
     },
   })
@@ -692,7 +714,7 @@ function enqueue(kind, payload) {
       .saveEvent(payload)
       .then(() => {
         // Notify procedural knowledge builder
-        if (proceduralKnowledgeBuilder) {
+        if (proceduralKnowledgeBuilder && typeof proceduralKnowledgeBuilder.notifyDataCaptured === 'function') {
           proceduralKnowledgeBuilder.notifyDataCaptured('events', 1);
         }
       })
@@ -1120,7 +1142,7 @@ async function syncPromptsFromCursorDB(forceFullSync = false) {
           newPrompts++;
 
           // Notify procedural knowledge builder
-          if (proceduralKnowledgeBuilder) {
+          if (proceduralKnowledgeBuilder && typeof proceduralKnowledgeBuilder.notifyDataCaptured === 'function') {
             proceduralKnowledgeBuilder.notifyDataCaptured('prompts', 1);
           }
 
@@ -1717,7 +1739,7 @@ const conversationManager = new ConversationManager(persistentDB);
 const conversationCapture = new ConversationCapture(persistentDB, conversationManager);
 const conversationContext = ConversationContext;
 
-// Initialize ClioService for RAG pipeline (if available)
+// Initialize ClioService for RAG pipeline and privacy-preserving patterns
 let clioService = null;
 try {
   const { ClioService } = require('./services/clio');
@@ -1725,9 +1747,15 @@ try {
     minClusterSize: 5,
     similarityThreshold: 0.7
   });
-  console.log('[CONVERSATIONS] ClioService initialized for RAG pipeline');
+  
+  // Register Clio routes
+  const createClioRoutes = require('./routes/clio.js');
+  const clioRouter = createClioRoutes({ persistentDB, clioService });
+  app.use('/api/clio', clioRouter);
+  
+  console.log('[CLIO] ClioService initialized with API routes at /api/clio');
 } catch (error) {
-  console.warn('[CONVERSATIONS] ClioService not available:', error.message);
+  console.warn('[CLIO] ClioService not available:', error.message);
 }
 
 // Conversation routes

@@ -68,7 +68,7 @@
 .db-select {
   padding: var(--space-sm) var(--space-md);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border-radius: 0;
   background: var(--color-bg);
   color: var(--color-text);
   font-size: var(--text-sm);
@@ -117,7 +117,7 @@
   height: 32px;
   border: 3px solid var(--color-border);
   border-top-color: var(--color-primary);
-  border-radius: 50%;
+  border-radius: 0;
   animation: spin 1s linear infinite;
 }
 
@@ -136,7 +136,7 @@
   align-items: center;
   padding: var(--space-sm) var(--space-md);
   background: var(--color-bg-alt);
-  border-radius: var(--radius-sm);
+  border-radius: 0;
   font-size: var(--text-xs);
   color: var(--color-text-muted);
   margin-bottom: var(--space-sm);
@@ -151,7 +151,7 @@
   overflow: auto;
   overflow-x: auto; /* Allow horizontal scroll if needed */
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border-radius: 0;
   background: var(--color-bg);
   /* Prevent content from breaking out */
   contain: layout style paint;
@@ -213,7 +213,7 @@
 .db-record-detail {
   margin-top: var(--space-md);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border-radius: 0;
   background: var(--color-bg-alt);
   overflow: hidden;
 }
@@ -244,7 +244,7 @@
   margin: 0;
   padding: var(--space-md);
   background: var(--color-bg);
-  border-radius: var(--radius-sm);
+  border-radius: 0;
   font-size: var(--text-xs);
   font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
   color: var(--color-text);
@@ -264,7 +264,7 @@
   background: transparent;
   color: var(--color-text-muted);
   cursor: pointer;
-  border-radius: var(--radius-sm);
+  border-radius: 0;
   transition: all var(--transition-fast);
 }
 

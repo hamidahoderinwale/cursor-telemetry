@@ -94,7 +94,7 @@ async function exportDatabase(limit = 1000, includeAllFields = false) {
       
       // Show success feedback
       exportBtn.innerHTML = '<span>Exported!</span>';
-      exportBtn.style.color = '#10b981';
+      exportBtn.style.color = '#474747';
       setTimeout(() => {
         exportBtn.innerHTML = originalHTML;
         exportBtn.disabled = false;
@@ -107,7 +107,7 @@ async function exportDatabase(limit = 1000, includeAllFields = false) {
     if (exportBtn) {
       const originalHTML = exportBtn.innerHTML || '<span>Export</span>';
       exportBtn.innerHTML = '<span> Failed</span>';
-      exportBtn.style.color = '#ef4444';
+      exportBtn.style.color = '#2a2a2a';
       exportBtn.disabled = false;
       setTimeout(() => {
         exportBtn.innerHTML = originalHTML;
@@ -274,7 +274,7 @@ async function exportDatabaseWithFilters({ dateFrom, dateTo, limit = 1000, types
     if (exportBtn) {
       const originalHTML = exportBtn.innerHTML || '<span>Export</span>';
       exportBtn.innerHTML = '<span> Failed</span>';
-      exportBtn.style.color = '#ef4444';
+      exportBtn.style.color = '#2a2a2a';
       exportBtn.disabled = false;
       setTimeout(() => {
         exportBtn.innerHTML = originalHTML;
@@ -361,7 +361,7 @@ async function handleStreamingExport(url, exportBtn, originalHTML, { dateFrom, l
     
     if (exportBtn) {
       exportBtn.innerHTML = '<span>Exported!</span>';
-      exportBtn.style.color = '#10b981';
+      exportBtn.style.color = '#474747';
       setTimeout(() => {
         exportBtn.innerHTML = originalHTML;
         exportBtn.disabled = false;
@@ -373,7 +373,7 @@ async function handleStreamingExport(url, exportBtn, originalHTML, { dateFrom, l
     if (exportBtn) {
       const originalHTML = exportBtn.innerHTML || '<span>Export</span>';
       exportBtn.innerHTML = '<span> Failed</span>';
-      exportBtn.style.color = '#ef4444';
+      exportBtn.style.color = '#2a2a2a';
       exportBtn.disabled = false;
       setTimeout(() => {
         exportBtn.innerHTML = originalHTML;
@@ -450,7 +450,7 @@ async function handleBatchExport(url, exportBtn, originalHTML, { dateFrom, limit
   if (exportBtn) {
     const fallbackHTML = originalHTML || exportBtn.innerHTML || '<span>Export</span>';
     exportBtn.innerHTML = '<span> Exported!</span>';
-    exportBtn.style.color = '#10b981';
+    exportBtn.style.color = '#474747';
     setTimeout(() => {
       exportBtn.innerHTML = fallbackHTML;
       exportBtn.disabled = false;

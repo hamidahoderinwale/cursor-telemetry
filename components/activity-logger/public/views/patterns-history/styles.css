@@ -38,7 +38,7 @@
   gap: var(--space-xs);
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border-radius: 0;
   padding: var(--space-xs);
 }
 
@@ -46,7 +46,7 @@
   padding: var(--space-sm) var(--space-md);
   background: transparent;
   border: none;
-  border-radius: var(--radius-sm);
+  border-radius: 0;
   font-size: var(--text-sm);
   font-weight: 500;
   color: var(--color-text-muted);
@@ -73,7 +73,7 @@
 .pattern-commit-item {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border-radius: 0;
   padding: var(--space-lg);
   transition: all var(--transition-base);
 }
@@ -96,7 +96,7 @@
 .pattern-avatar-icon {
   width: 40px;
   height: 40px;
-  border-radius: 50%;
+  border-radius: 0;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -151,7 +151,7 @@
 .pattern-commit-type-badge,
 .pattern-commit-intent-badge {
   padding: 2px 8px;
-  border-radius: var(--radius-sm);
+  border-radius: 0;
   font-size: var(--text-xs);
   font-weight: 600;
   text-transform: uppercase;
@@ -180,7 +180,7 @@
   padding: 4px 8px;
   background: var(--color-bg);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: 0;
   font-size: var(--text-xs);
   font-family: var(--font-mono);
   color: var(--color-text);
@@ -206,7 +206,7 @@
   padding: var(--space-xs) var(--space-md);
   background: var(--color-bg);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: 0;
   font-size: var(--text-sm);
   color: var(--color-text);
   cursor: pointer;

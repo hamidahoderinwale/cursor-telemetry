@@ -17,17 +17,13 @@
   <link href="https://fonts.googleapis.com/css2?family=Geist+Sans:wght@100..900&family=Geist+Mono:wght@100..900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
   <noscript><link href="https://fonts.googleapis.com/css2?family=Geist+Sans:wght@100..900&family=Geist+Mono:wght@100..900&display=swap" rel="stylesheet"></noscript>
   
-  <!-- Preload critical resources -->
+  <!-- Preload optimized bundles - Critical path -->
   <link rel="preload" href="dashboard.css" as="style">
-  <link rel="preload" href="core/config.js" as="script">
-  <link rel="preload" href="core/state.js" as="script">
-  <link rel="preload" href="core/view-helpers.js" as="script">
-  <link rel="preload" href="core/api-client.js" as="script">
-  
-  <!-- Performance utilities -->
-  <link rel="preload" href="utils/performance/debounce-throttle.js" as="script">
-  <link rel="preload" href="utils/performance/request-coalescer.js" as="script">
-  <!-- dashboard.js is loaded with script tag, no need to preload -->
+  <link rel="preload" href="dist/critical.bundle.js" as="script">
+  <link rel="preload" href="dist/performance.bundle.js" as="script">
+  <link rel="preload" href="dist/data-services.bundle.js" as="script">
+  <link rel="preload" href="lib/vendor/chart.min.js" as="script">
+  <link rel="preload" href="lib/vendor/d3.min.js" as="script">
   
   <!-- Prefetch likely next resources -->
   <link rel="prefetch" href="views/activity/index.js">
@@ -38,7 +34,7 @@
   <link rel="dns-prefetch" href="https://fonts.gstatic.com">
   <link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
   <link rel="dns-prefetch" href="https://cdn.socket.io">
-  <link rel="dns-prefetch" href="https://d3js.org">
+  <!-- D3.js now self-hosted -->
   <link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
   
   <!-- Critical CSS (inline or load immediately) -->
@@ -80,7 +76,7 @@
   <script>
     // Option to disable ServiceWorker if causing CORS issues
     // Set to true to disable (useful for debugging OpaqueResponseBlocking errors)
-    const DISABLE_SERVICE_WORKER = false;
+    const DISABLE_SERVICE_WORKER = true;
     
     // Prevent multiple registrations
     if (!window._serviceWorkerRegistered && !DISABLE_SERVICE_WORKER && 'serviceWorker' in navigator) {
@@ -781,9 +777,10 @@
   
   <!-- External Libraries (async for non-blocking load) -->
   <script src="https://cdn.socket.io/4.5.4/socket.io.min.js" defer></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js" defer></script>
-  <!-- D3.js must load before file graph scripts -->
-  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <!-- Self-hosted Chart.js for offline support and faster loading -->
+  <script src="lib/vendor/chart.min.js" defer></script>
+  <!-- Self-hosted D3.js for offline support -->
+  <script src="lib/vendor/d3.min.js"></script>
   <!-- Three.js ES Module (replaces deprecated build/three.min.js) -->
   <script type="module">
     (async function() {
@@ -807,21 +804,16 @@
     })();
   </script>
   <!-- OrbitControls loaded dynamically in navigator-3d-renderer.js if needed -->
-  <script src="https://unpkg.com/lunr/lunr.js" defer></script>
+  <!-- Self-hosted Lunr.js for offline support -->
+  <script src="lib/vendor/lunr.min.js" defer></script>
   <script src="https://unpkg.com/lucide@latest" defer></script>
   
-  <!-- Performance Utilities (load early for optimization) -->
-  <script src="utils/performance/debounce-throttle.js"></script>
-  <script src="utils/performance/request-coalescer.js"></script>
-  <script src="utils/performance/performance-monitor.js"></script>
-  <script src="utils/performance/lazy-loader.js"></script>
-  <script src="utils/performance/virtual-scroller.js"></script>
+  <!-- Optimized Bundles - Load critical path first -->
+  <script src="dist/loader.js"></script>
   
   <!-- Core Modules -->
-  <script src="core/config.js"></script>
-  <script src="core/state.js"></script>
+  <!-- config.js, state.js, api-client.js already in critical.bundle.js (loaded by loader.js) -->
   <script src="core/view-helpers.js"></script>
-  <script src="core/api-client.js"></script>
   <script src="utils/performance/optimized-api-client.js"></script>
   <script src="core/websocket-manager.js"></script>
   
@@ -859,7 +851,7 @@
   <script src="utils/diff-viewer.js"></script>
   <script src="utils/modals/export-options-modal.js" defer></script>
   <script src="utils/validation/schema-validator.js" defer></script>
-  <script src="utils/storage/lazy-loader.js" defer></script>
+  <!-- lazy-loader.js already in critical.bundle.js -->
   <script src="utils/ui/lucide-icons.js" defer></script>
   
   <!-- Views (must load before view-router, defer non-critical) -->
@@ -988,12 +980,12 @@
   <script src="components/db-preview.js" defer></script>
   <script src="components/split-pane-resizer.js" defer></script>
   
-  <!-- Services: Data (defer - loaded after initial render) -->
-  <script src="services/data/persistent-storage.js" defer></script>
+  <!-- Services: Data (defer - loaded after initial render) - Optimized -->
+  <!-- persistent-storage.js, data-access-service.js, progressive-data-loader.js, optimized-initializer.js already in data-services.bundle.js -->
   <script src="services/data/companion-db-reader.js" defer></script>
-  <script src="services/data/data-access-service.js" defer></script>
   <script src="services/data/refresh-manager.js" defer></script>
   <script src="services/data/data-synchronizer.js" defer></script>
+  <script src="utils/rendering/virtual-scroller.js" defer></script>
   
   <!-- Services: Account (defer - loaded after initial render) -->
   <script src="services/account/account-client.js" defer></script>

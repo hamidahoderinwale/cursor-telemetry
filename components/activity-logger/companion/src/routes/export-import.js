@@ -760,9 +760,15 @@ function createExportImportRoutes(deps) {
         promises.push(Promise.resolve([]));
       }
 
+      if (!excludeMotifs && motifService) {
+        promises.push(motifService.getMotifs({}));
+      } else {
+        promises.push(Promise.resolve([]));
+      }
+
       promises.push(persistentDB.getContextAnalytics());
 
-      const [entries, prompts, events, terminalCommands, contextSnapshots, contextAnalytics] =
+      const [entries, prompts, events, terminalCommands, contextSnapshots, motifs, contextAnalytics] =
         await Promise.all(promises);
 
       // Apply date range filtering
@@ -771,6 +777,7 @@ function createExportImportRoutes(deps) {
       let filteredEvents = filterByDateRange(events);
       let filteredTerminalCommands = filterByDateRange(terminalCommands);
       let filteredContextSnapshots = filterByDateRange(contextSnapshots);
+      let filteredMotifs = filterByDateRange(motifs);
 
       // Apply workspace and data source filtering if access control is enabled
       const workspace = req.query.workspace || req.query.workspace_path || null;

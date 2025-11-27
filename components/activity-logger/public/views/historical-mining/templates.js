@@ -232,3 +232,14 @@ function renderHistoricalMiningTemplate() {
 window.renderHistoricalMiningTemplate = renderHistoricalMiningTemplate;
 
 
+
+
+
+
+
+
+
+
+
+
+

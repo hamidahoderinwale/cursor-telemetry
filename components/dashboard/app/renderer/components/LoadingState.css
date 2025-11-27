@@ -43,7 +43,7 @@
 
 .skeleton-header {
   height: 20px;
-  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background: var(--gray-700);
   background-size: 200% 100%;
   animation: loading 1.5s infinite;
   border-radius: 0;
@@ -52,7 +52,7 @@
 
 .skeleton-item {
   height: 16px;
-  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background: var(--gray-700);
   background-size: 200% 100%;
   animation: loading 1.5s infinite;
   border-radius: 0;
@@ -88,7 +88,7 @@
 @media (prefers-color-scheme: dark) {
   .skeleton-header,
   .skeleton-item {
-    background: linear-gradient(90deg, #404040 25%, #2a2a2a 50%, #404040 75%);
+    background: var(--gray-700);
     background-size: 200% 100%;
   }
 }

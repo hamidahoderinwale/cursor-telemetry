@@ -7,13 +7,13 @@
   --taupe: #4c443c;
   --white: #ffffff;
   --iron-grey: #474747;
-  --crayola-blue: #2176ff;
-  --golden-chestnut: #be7c4d;
+  --crayola-blue: #2a2a2a;
+  --golden-chestnut: #666666;
   
   /* Colors - Primary */
   --color-primary: var(--crayola-blue);
-  --color-primary-light: #4a8fff;
-  --color-primary-dark: #1a5acc;
+  --color-primary-light: #474747;
+  --color-primary-dark: #1a1a1a;
   
   /* Colors - Secondary */
   --color-secondary: var(--golden-chestnut);

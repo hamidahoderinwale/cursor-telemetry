@@ -102,7 +102,7 @@ function showViewLoading(container, message = 'Loading...') {
   
   container.innerHTML = `
     <div class="empty-state" style="text-align: center; padding: var(--space-xl);">
-      <div class="loading-spinner" style="width: 40px; height: 40px; border: 4px solid var(--color-border); border-top-color: var(--color-primary); border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto var(--space-md);"></div>
+      <div class="loading-spinner" style="width: 40px; height: 40px; border: 4px solid var(--color-border); border-top-color: var(--color-primary); border-radius: 0; animation: spin 1s linear infinite; margin: 0 auto var(--space-md);"></div>
       <p style="color: var(--color-text-muted);">${message}</p>
     </div>
     <style>

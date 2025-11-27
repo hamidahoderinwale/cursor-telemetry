@@ -819,8 +819,7 @@ async function renderAnalyticsView(container) {
             </div>
           `;
         }
-      });
-    };
+      };
     
       // Render immediately (removed excessive retries)
       renderAdvancedVisualizations();

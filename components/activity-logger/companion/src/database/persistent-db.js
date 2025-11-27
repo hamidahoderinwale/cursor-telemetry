@@ -1162,6 +1162,24 @@ class PersistentDB {
           this.db.run(
             `CREATE INDEX IF NOT EXISTS idx_events_type_timestamp ON events(type, timestamp DESC)`
           );
+          
+          // NEW: Additional indexes for faster common queries
+          this.db.run(
+            `CREATE INDEX IF NOT EXISTS idx_entries_timestamp ON entries(timestamp DESC)`
+          );
+          this.db.run(
+            `CREATE INDEX IF NOT EXISTS idx_prompts_timestamp ON prompts(timestamp DESC)`
+          );
+          this.db.run(
+            `CREATE INDEX IF NOT EXISTS idx_events_timestamp ON events(timestamp DESC)`
+          );
+          this.db.run(
+            `CREATE INDEX IF NOT EXISTS idx_entries_id ON entries(id DESC)`
+          );
+          this.db.run(
+            `CREATE INDEX IF NOT EXISTS idx_prompts_id ON prompts(id DESC)`
+          );
+          
           console.log('[DB] Composite indexes created for optimized queries');
 
           // Wait for all tables to be created
@@ -1649,13 +1667,14 @@ class PersistentDB {
       let query, params;
 
       if (entryId !== null) {
-        // Fetch specific entry by ID (used for TODO events)
+        // Fetch specific entry by ID (used for TODO events) - OPTIMIZED with indexed lookup
         query = `
           SELECT 
             id, session_id, workspace_path, file_path, source, 
             notes, timestamp, tags, prompt_id, modelInfo, type
           FROM entries 
           WHERE id = ?
+          LIMIT 1
         `;
         params = [entryId];
       } else {
@@ -1834,15 +1853,26 @@ class PersistentDB {
     }
 
     return new Promise((resolve, reject) => {
-      let query = `SELECT * FROM prompts`;
+      // OPTIMIZED: Use indexed columns only for faster query
+      // Select only essential columns for initial load (avoid loading huge TEXT fields)
+      let query = `SELECT 
+        id, timestamp, status, linked_entry_id, source, 
+        workspace_id, workspace_path, workspace_name, composer_id,
+        subtitle, lines_added, lines_removed, context_usage, 
+        mode, model_type, model_name, force_mode, is_auto, type, confidence,
+        added_from_database, conversation_id, conversation_index, 
+        conversation_title, message_role, parent_conversation_id,
+        SUBSTR(text, 1, 500) as text
+      FROM prompts`;
       const params = [];
       
-      // Add workspace filter if provided
+      // Add workspace filter if provided (uses indexed column)
       if (workspace) {
         query += ` WHERE workspace_path = ?`;
         params.push(workspace);
       }
       
+      // OPTIMIZED: Use indexed timestamp DESC for fast recent items
       query += ` ORDER BY timestamp DESC LIMIT ? OFFSET ?`;
       params.push(limit, offset);
       

@@ -2,7 +2,7 @@
 
 .lda-topic-visualization {
     background: var(--background-card);
-    border-radius: 12px;
+    border-radius: 0;
     padding: var(--space-4);
     border: 1px solid var(--border-color);
     box-shadow: var(--shadow-md);
@@ -73,7 +73,7 @@
 
 .topic-card {
     background: var(--background-secondary);
-    border-radius: 8px;
+    border-radius: 0;
     padding: var(--space-3);
     border: 1px solid var(--border-color);
     cursor: pointer;
@@ -119,13 +119,13 @@
 .topic-bar {
     height: 4px;
     background: var(--background-tertiary);
-    border-radius: 2px;
+    border-radius: 0;
     overflow: hidden;
 }
 
 .topic-bar-fill {
     height: 100%;
-    background: linear-gradient(90deg, var(--primary-color), var(--accent-color));
+    background: var(--gray-700);
     transition: width 0.3s ease-in-out;
 }
 
@@ -157,13 +157,13 @@
     width: 12px;
     height: 12px;
     background: var(--primary-color);
-    border-radius: 50%;
+    border-radius: 0;
     border: 2px solid var(--background-card);
 }
 
 .evolution-content {
     background: var(--background-secondary);
-    border-radius: 8px;
+    border-radius: 0;
     padding: var(--space-3);
     border: 1px solid var(--border-color);
 }
@@ -192,7 +192,7 @@
     background: var(--background-tertiary);
     color: var(--text-secondary);
     padding: 2px var(--space-2);
-    border-radius: 12px;
+    border-radius: 0;
     font-size: var(--font-size-xs);
     font-weight: var(--font-weight-medium);
     transition: all 0.2s ease-in-out;
@@ -216,7 +216,7 @@
     gap: var(--space-3);
     padding: var(--space-3);
     background: var(--background-secondary);
-    border-radius: 8px;
+    border-radius: 0;
     border: 1px solid var(--border-color);
     cursor: pointer;
     transition: all 0.2s ease-in-out;
@@ -257,7 +257,7 @@
     font-size: var(--font-size-sm);
     padding: var(--space-4);
     background: var(--background-secondary);
-    border-radius: 8px;
+    border-radius: 0;
     border: 1px dashed var(--border-color);
 }
 
@@ -307,7 +307,7 @@
     height: 120px;
     padding: var(--space-3);
     background: var(--background-secondary);
-    border-radius: 8px;
+    border-radius: 0;
 }
 
 .chart-bar {
@@ -320,8 +320,8 @@
 
 .bar-fill {
     width: 100%;
-    background: linear-gradient(to top, var(--primary-color), var(--accent-color));
-    border-radius: 2px 2px 0 0;
+    background: var(--gray-700);
+    border-radius: 0 2px 0 0;
     transition: height 0.3s ease-in-out;
     min-height: 4px;
 }
@@ -335,7 +335,7 @@
 .insight-detail {
     padding: var(--space-3);
     background: var(--background-secondary);
-    border-radius: 8px;
+    border-radius: 0;
     margin-bottom: var(--space-2);
 }
 
@@ -354,7 +354,7 @@
     color: var(--text-secondary);
     background: var(--background-tertiary);
     padding: 2px var(--space-2);
-    border-radius: 12px;
+    border-radius: 0;
 }
 
 /* Responsive Design */

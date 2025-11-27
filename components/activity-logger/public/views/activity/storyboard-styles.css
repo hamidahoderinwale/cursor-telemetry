@@ -106,7 +106,7 @@
   top: 0;
   bottom: 0;
   width: 2px;
-  background: linear-gradient(
+  background: var(--color-bg-alt);
     to bottom,
     var(--color-primary),
     var(--color-primary-alpha-50),
@@ -120,7 +120,7 @@
   position: relative;
   z-index: 1;
   background: var(--color-bg);
-  border-radius: var(--radius-lg);
+  border-radius: 0;
   border: 1px solid var(--color-border);
   overflow: hidden;
   transition: all 0.3s ease;
@@ -136,7 +136,7 @@
   align-items: center;
   gap: var(--space-md);
   padding: var(--space-lg);
-  background: linear-gradient(135deg, var(--color-bg-alt), var(--color-bg));
+  background: var(--color-bg-alt);
   border-bottom: 1px solid var(--color-border);
   cursor: pointer;
   user-select: none;
@@ -146,8 +146,8 @@
   flex-shrink: 0;
   width: 48px;
   height: 48px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark, #2563eb));
+  border-radius: 0;
+  background: var(--color-bg-alt);
   color: white;
   display: flex;
   align-items: center;
@@ -209,7 +209,7 @@
   flex-shrink: 0;
   width: 32px;
   height: 32px;
-  border-radius: var(--radius-md);
+  border-radius: 0;
   border: 1px solid var(--color-border);
   background: var(--color-bg);
   color: var(--color-text);
@@ -255,7 +255,7 @@
   top: 20px;
   width: 10px;
   height: 10px;
-  border-radius: 50%;
+  border-radius: 0;
   background: var(--color-primary);
   border: 2px solid var(--color-bg);
   box-shadow: 0 0 0 2px var(--color-primary-alpha-30);
@@ -295,7 +295,7 @@
   margin-bottom: var(--space-md);
   padding: var(--space-sm) var(--space-md);
   background: var(--color-bg-alt);
-  border-radius: var(--radius-md);
+  border-radius: 0;
 }
 
 .scene-icon {
@@ -338,7 +338,7 @@
 
 .scene-type {
   padding: 4px 10px;
-  border-radius: var(--radius-md);
+  border-radius: 0;
   background: var(--color-primary-alpha-10);
   color: var(--color-primary);
   font-weight: 600;
@@ -369,7 +369,7 @@
   gap: var(--space-md);
   padding: var(--space-md);
   background: var(--color-bg);
-  border-radius: var(--radius-md);
+  border-radius: 0;
   border: 1px solid var(--color-border);
   transition: all 0.2s ease;
   cursor: pointer;
@@ -384,22 +384,22 @@
 
 .storyboard-item-prompt {
   border-left: 3px solid var(--color-accent);
-  background: linear-gradient(to right, var(--color-accent-alpha-05), var(--color-bg));
+  background: var(--color-bg-alt);
 }
 
 .storyboard-item-prompt:hover {
   border-left-color: var(--color-accent);
-  background: linear-gradient(to right, var(--color-accent-alpha-10), var(--color-bg-alt));
+  background: var(--color-bg-alt);
 }
 
 .storyboard-item-terminal {
   border-left: 3px solid var(--color-warning);
-  background: linear-gradient(to right, var(--color-warning-alpha-05), var(--color-bg));
+  background: var(--color-bg-alt);
 }
 
 .storyboard-item-event {
   border-left: 3px solid var(--color-success);
-  background: linear-gradient(to right, var(--color-success-alpha-05), var(--color-bg));
+  background: var(--color-bg-alt);
 }
 
 .item-connector {
@@ -423,7 +423,7 @@
   flex-shrink: 0;
   width: 36px;
   height: 36px;
-  border-radius: var(--radius-md);
+  border-radius: 0;
   background: var(--color-bg-alt);
   display: flex;
   align-items: center;
@@ -511,7 +511,7 @@
 
 .item-badge {
   padding: 2px 6px;
-  border-radius: var(--radius-sm);
+  border-radius: 0;
   font-size: 10px;
   font-weight: 600;
   text-transform: uppercase;
@@ -532,7 +532,7 @@
   flex-shrink: 0;
   width: 28px;
   height: 28px;
-  border-radius: var(--radius-sm);
+  border-radius: 0;
   border: 1px solid var(--color-border);
   background: var(--color-bg);
   color: var(--color-text-muted);

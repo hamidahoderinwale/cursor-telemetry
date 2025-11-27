@@ -144,7 +144,7 @@ function renderIntegratedChunk(chunk, timelineItems = null) {
       </div>
     </div>
   `;
-
+}
 
 function renderFileChangeGroup(group, side = 'left', timelineItems = null) {
   if (!group.items || group.items.length === 0) return '';
@@ -283,7 +283,7 @@ function renderFileChangeGroup(group, side = 'left', timelineItems = null) {
       </div>
     </div>
   `;
-
+}
 
 function renderConversationThread(conversation, side = 'right') {
   // Support multiple formats:
@@ -779,7 +779,7 @@ function renderConversationThread(conversation, side = 'right') {
       </div>
     </div>
   `;
-
+}
 
 function renderTemporalThread(thread, timelineItems = null) {
   // Recalculate start/end times from actual items to ensure accuracy
@@ -1939,8 +1939,4 @@ if (typeof window !== 'undefined') {
   window.renderTemporalThread = renderTemporalThread;
   window.renderCommitGroup = renderCommitGroup;
   window.renderPromptGroup = renderPromptGroup;
-}
-}
-}
-}
 }

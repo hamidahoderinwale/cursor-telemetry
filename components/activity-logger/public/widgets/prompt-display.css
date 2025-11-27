@@ -31,7 +31,7 @@
   max-height: 90vh;
   display: flex;
   flex-direction: column;
-  border-radius: 8px;
+  border-radius: 0;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
   transform: translateY(-20px);
   transition: transform 0.3s ease;
@@ -49,7 +49,7 @@
   padding: var(--space-md);
   background-color: var(--color-surface);
   border-bottom: 1px solid var(--color-border);
-  border-radius: 8px 8px 0 0;
+  border-radius: 0 8px 0 0;
 }
 
 .prompt-modal-header h2 {
@@ -70,7 +70,7 @@
   font-family: var(--font-mono);
   background-color: var(--color-surface);
   padding: 2px 6px;
-  border-radius: 4px;
+  border-radius: 0;
 }
 
 .prompt-timestamp {
@@ -84,7 +84,7 @@
   cursor: pointer;
   color: var(--color-muted);
   padding: 4px 8px;
-  border-radius: 4px;
+  border-radius: 0;
   transition: all 0.2s ease;
 }
 
@@ -114,7 +114,7 @@
 .prompt-content {
   background-color: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: 6px;
+  border-radius: 0;
   padding: var(--space-md);
 }
 
@@ -163,7 +163,7 @@
 .source-badge {
   display: inline-block;
   padding: 4px 8px;
-  border-radius: 4px;
+  border-radius: 0;
   font-size: 11px;
   font-weight: 500;
   text-transform: uppercase;
@@ -244,7 +244,7 @@
   padding: 2px 6px;
   background-color: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: 12px;
+  border-radius: 0;
   font-size: 11px;
   color: var(--color-text);
 }
@@ -268,7 +268,7 @@
   padding: 2px 6px;
   background-color: #e8e8e8;
   color: #000000;
-  border-radius: 4px;
+  border-radius: 0;
   font-size: 11px;
   font-weight: 500;
 }
@@ -284,7 +284,7 @@
 .thread-info {
   background-color: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: 6px;
+  border-radius: 0;
   padding: var(--space-md);
 }
 
@@ -322,7 +322,7 @@
   padding: var(--space-sm);
   background-color: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: 6px;
+  border-radius: 0;
 }
 
 .event-type {
@@ -360,7 +360,7 @@
   padding: var(--space-sm);
   background-color: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: 6px;
+  border-radius: 0;
 }
 
 .file-path {
@@ -380,7 +380,7 @@
 .context-info {
   background-color: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: 6px;
+  border-radius: 0;
   padding: var(--space-md);
 }
 
@@ -415,7 +415,7 @@
   max-height: 90vh;
   display: flex;
   flex-direction: column;
-  border-radius: 8px;
+  border-radius: 0;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
 }
 
@@ -426,7 +426,7 @@
   padding: var(--space-md);
   background-color: var(--color-surface);
   border-bottom: 1px solid var(--color-border);
-  border-radius: 8px 8px 0 0;
+  border-radius: 0 8px 0 0;
 }
 
 .thread-modal-body {
@@ -458,7 +458,7 @@
   padding: var(--space-md);
   background-color: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: 6px;
+  border-radius: 0;
 }
 
 .prompt-preview {
@@ -502,7 +502,7 @@
   max-height: 80vh;
   display: flex;
   flex-direction: column;
-  border-radius: 8px;
+  border-radius: 0;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
 }
 
@@ -513,7 +513,7 @@
   padding: var(--space-md);
   background-color: var(--color-surface);
   border-bottom: 1px solid var(--color-border);
-  border-radius: 8px 8px 0 0;
+  border-radius: 0 8px 0 0;
 }
 
 .search-body {
@@ -533,7 +533,7 @@
   flex: 1;
   padding: var(--space-sm);
   border: 1px solid var(--color-border);
-  border-radius: 4px;
+  border-radius: 0;
   font-size: 14px;
 }
 
@@ -545,7 +545,7 @@
 .search-filters select {
   padding: var(--space-sm);
   border: 1px solid var(--color-border);
-  border-radius: 4px;
+  border-radius: 0;
   font-size: 12px;
 }
 
@@ -562,7 +562,7 @@
   padding: var(--space-md);
   background-color: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: 6px;
+  border-radius: 0;
   margin-bottom: var(--space-sm);
 }
 
@@ -599,7 +599,7 @@
 .btn {
   padding: var(--space-sm) var(--space-md);
   border: 1px solid var(--color-border);
-  border-radius: 4px;
+  border-radius: 0;
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;

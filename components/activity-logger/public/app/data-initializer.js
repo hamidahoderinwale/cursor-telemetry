@@ -346,12 +346,12 @@ async function loadFromCache(progressCallback = null) {
     // Update progress: Starting data load
     if (progressCallback) progressCallback(50);
     
-    // Load only most recent events (limit to 20 for ultra-fast load)
+    // Load only most recent events (limit to 10 for ultra-fast load)
     // Add timeout to prevent hanging
     if (window.persistentStorage.getAllEvents) {
-      const eventsPromise = window.persistentStorage.getAllEvents(20);
+      const eventsPromise = window.persistentStorage.getAllEvents(10);
       const eventsTimeout = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('getAllEvents timeout')), 2000)
+        setTimeout(() => reject(new Error('getAllEvents timeout')), 1000)
       );
       
       try {
@@ -377,12 +377,12 @@ async function loadFromCache(progressCallback = null) {
       if (progressCallback) progressCallback(65);
     }
     
-    // Load only most recent prompts (limit to 20 for ultra-fast load)
-    // Add timeout to prevent hanging - increased timeout for large databases
+    // Load only most recent prompts (limit to 10 for ultra-fast load)
+    // Add timeout to prevent hanging - reduced timeout for faster failure
     if (window.persistentStorage.getAllPrompts) {
-      const promptsPromise = window.persistentStorage.getAllPrompts(20);
+      const promptsPromise = window.persistentStorage.getAllPrompts(10);
       const promptsTimeout = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('getAllPrompts timeout')), 5000)
+        setTimeout(() => reject(new Error('getAllPrompts timeout')), 2000)
       );
       
       try {
@@ -422,11 +422,11 @@ async function loadFromCache(progressCallback = null) {
     // Load more data in background (non-blocking) - limit to 100 total for faster loading
     const loadMoreData = async () => {
       try {
-        // Only load up to 100 more events/prompts (reduced from 200)
+        // Only load up to 50 more events/prompts (reduced for faster loading)
         const currentEventCount = (window.state.data.events || []).length;
         const currentPromptCount = (window.state.data.prompts || []).length;
-        const neededEvents = Math.max(0, 100 - currentEventCount);
-        const neededPrompts = Math.max(0, 100 - currentPromptCount);
+        const neededEvents = Math.max(0, 50 - currentEventCount);
+        const neededPrompts = Math.max(0, 50 - currentPromptCount);
         
         if (neededEvents > 0 || neededPrompts > 0) {
           const [allEvents, allPrompts] = await Promise.all([
@@ -526,7 +526,7 @@ async function fetchRecentData() {
     // console.log(`[SYNC] Fetching recent data (${windowLabel} window)...`);
   }
   
-  const pageSize = 20; // Ultra-minimal initial load for fastest startup (load more in background)
+  const pageSize = 10; // OPTIMIZED: Minimal initial load for ultra-fast startup (load more in background)
   
   // Use DataAccessService if available (hybrid architecture)
   if (window.dataAccessService) {

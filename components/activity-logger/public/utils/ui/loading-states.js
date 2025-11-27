@@ -234,7 +234,7 @@ style.textContent = `
   .skeleton-card,
   .skeleton-list-item,
   .skeleton-table-cell {
-    background: linear-gradient(90deg, 
+    background: var(--color-bg-alt); 
       var(--color-surface, #f9f9f9) 25%, 
       var(--color-border, #e5e5e5) 50%, 
       var(--color-surface, #f9f9f9) 75%);

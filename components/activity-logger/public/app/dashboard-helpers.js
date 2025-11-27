@@ -18,16 +18,16 @@ function getWorkspaceColor(workspacePath) {
   
   // Color palette for workspaces (distinct colors)
   const colors = [
-    '#8B5CF6', // Purple
+    '#666666', // Purple
     '#EC4899', // Pink
-    '#3B82F6', // Blue
-    '#10B981', // Green
-    '#F59E0B', // Orange
-    '#EF4444', // Red
-    '#6366F1', // Indigo
+    '#2a2a2a', // Blue
+    '#474747', // Green
+    '#666666', // Orange
+    '#2a2a2a', // Red
+    '#666666', // Indigo
     '#14B8A6', // Teal
     '#F97316', // Orange-red
-    '#A855F7', // Purple-violet
+    '#666666', // Purple-violet
   ];
   
   return colors[Math.abs(hash) % colors.length];
@@ -93,7 +93,7 @@ function createWorkspaceBadge(workspacePath, size = 'sm') {
   return `
     <span class="workspace-badge" 
           style="background: ${color}20; color: ${color}; border: 1px solid ${color}40; 
-                 padding: ${padding}; border-radius: var(--radius-sm); font-size: ${fontSize}; 
+                 padding: ${padding}; border-radius: 0(--radius-sm); font-size: ${fontSize}; 
                  font-weight: 500; font-family: var(--font-mono);"
           title="${window.escapeHtml ? window.escapeHtml(workspacePath) : workspacePath}">
       ${window.escapeHtml ? window.escapeHtml(workspaceName) : workspaceName}

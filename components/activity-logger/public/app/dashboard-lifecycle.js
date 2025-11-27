@@ -221,28 +221,6 @@ async function initializePersistence() {
   // Classes not available after waiting
   console.warn('Persistence system not available - required classes not found after waiting');
   return null;
-  
-  try {
-    const storage = new PersistentStorage();
-    const aggregator = new AnalyticsAggregator(storage);
-    const synchronizer = new DataSynchronizer(storage, aggregator);
-    
-    console.log('Persistence system enabled');
-    
-    // Initialize persistent storage
-    const stats = await synchronizer.initialize();
-    console.log('[DATA] Persistent storage ready:', stats);
-    
-    // Store globally for access
-    window.persistentStorage = storage;
-    window.analyticsAggregator = aggregator;
-    window.dataSynchronizer = synchronizer;
-    
-    return { storage, aggregator, synchronizer };
-  } catch (error) {
-    console.warn('Persistence system not available:', error);
-    return null;
-  }
 }
 
 /**

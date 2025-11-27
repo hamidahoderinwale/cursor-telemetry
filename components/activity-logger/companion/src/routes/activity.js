@@ -21,24 +21,26 @@ function createActivityRoutes(deps) {
   // API endpoint for activity data (used by dashboard) with pagination - OPTIMIZED with caching
   app.get('/api/activity', async (req, res) => {
     try {
-      const limit = Math.min(parseInt(req.query.limit) || 100, 500); // Max 500 at a time
+      const limit = Math.min(parseInt(req.query.limit) || 50, 500); // Default 50 for faster load
       const offset = parseInt(req.query.offset) || 0;
       const workspace = req.query.workspace || req.query.workspace_path || null; // Optional workspace filter
 
       // Enhanced cache control headers for cloud/CDN optimization
       // Use stale-while-revalidate pattern for better performance
-      res.set('Cache-Control', 'public, max-age=30, s-maxage=60, stale-while-revalidate=300');
+      res.set('Cache-Control', 'public, max-age=60, s-maxage=120, stale-while-revalidate=600');
       res.set('Vary', 'Accept-Encoding'); // Cache different versions for different encodings
 
       // Cache key based on params
       const cacheKey = `activity_${limit}_${offset}_${workspace || 'all'}_${sequence}`;
 
-      // Try to get from cache first
-      const cached = await withCache(cacheKey, 30, async () => {
-        // OPTIMIZATION: Use database-level pagination instead of in-memory slicing
-        const totalCount = await persistentDB.getTotalEntriesCount();
-        const paginatedEntries = await persistentDB.getRecentEntries(limit, null, offset, workspace);
-        const allPrompts = await persistentDB.getRecentPrompts(limit, 0, workspace);
+      // Try to get from cache first - INCREASED TTL for better performance
+      const cached = await withCache(cacheKey, 120, async () => {
+        // OPTIMIZATION: Parallel queries for faster loading
+        const [totalCount, paginatedEntries, allPrompts] = await Promise.all([
+          persistentDB.getTotalEntriesCount(),
+          persistentDB.getRecentEntries(limit, null, offset, workspace),
+          persistentDB.getRecentPrompts(limit, 0, workspace)
+        ]);
 
         return { totalCount, paginatedEntries, allPrompts };
       });
@@ -220,6 +222,7 @@ function createActivityRoutes(deps) {
     try {
       // Use pagination - don't load everything
       const limit = Math.min(parseInt(req.query.limit) || 200, 500);
+      const workspace = req.query.workspace || req.query.workspace_path || null;
       const allPrompts = await persistentDB.getRecentPrompts(limit, 0, workspace);
 
       // Also get prompts from Cursor database

@@ -16,7 +16,7 @@
 .stat-card {
   background: var(--card-bg, #fff);
   border: 1px solid var(--border-color, #e0e0e0);
-  border-radius: 8px;
+  border-radius: 0;
   padding: 20px;
   text-align: center;
   transition: transform 0.2s, box-shadow 0.2s;
@@ -55,8 +55,8 @@
   gap: 15px;
   align-items: center;
   padding: 15px;
-  background: var(--bg-secondary, #f8f9fa);
-  border-radius: 8px;
+  background: var(--bg-secondary, #f5f5f5);
+  border-radius: 0;
   margin-bottom: 20px;
   flex-wrap: wrap;
 }
@@ -76,7 +76,7 @@
 .filter-group select {
   padding: 6px 12px;
   border: 1px solid var(--border-color, #ddd);
-  border-radius: 4px;
+  border-radius: 0;
   font-size: 14px;
   background: white;
   cursor: pointer;
@@ -91,7 +91,7 @@
   background: var(--primary-color, #2563eb);
   color: white;
   border: none;
-  border-radius: 4px;
+  border-radius: 0;
   font-size: 14px;
   cursor: pointer;
   transition: background 0.2s;
@@ -117,14 +117,14 @@
 .terminal-sidebar {
   background: var(--card-bg, #fff);
   border: 1px solid var(--border-color, #e0e0e0);
-  border-radius: 8px;
+  border-radius: 0;
   padding: 20px;
 }
 
 .terminal-main {
   background: var(--card-bg, #fff);
   border: 1px solid var(--border-color, #e0e0e0);
-  border-radius: 8px;
+  border-radius: 0;
   padding: 20px;
 }
 
@@ -153,8 +153,8 @@
   align-items: center;
   gap: 10px;
   padding: 10px;
-  background: var(--bg-secondary, #f8f9fa);
-  border-radius: 6px;
+  background: var(--bg-secondary, #f5f5f5);
+  border-radius: 0;
   font-size: 14px;
 }
 
@@ -168,7 +168,7 @@
   flex: 1;
   background: rgba(0,0,0,0.05);
   padding: 4px 8px;
-  border-radius: 4px;
+  border-radius: 0;
   font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
   font-size: 13px;
 }
@@ -187,9 +187,9 @@
 }
 
 .terminal-command {
-  background: var(--bg-secondary, #f8f9fa);
+  background: var(--bg-secondary, #f5f5f5);
   border: 1px solid var(--border-color, #e0e0e0);
-  border-radius: 8px;
+  border-radius: 0;
   padding: 15px;
   transition: border-color 0.2s;
 }
@@ -220,7 +220,7 @@
 .badge {
   display: inline-block;
   padding: 3px 8px;
-  border-radius: 4px;
+  border-radius: 0;
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
@@ -229,7 +229,7 @@
 
 .command-source {
   background: #e0f2fe;
-  color: #0369a1;
+  color: #2a2a2a;
 }
 
 .command-shell {
@@ -239,7 +239,7 @@
 
 .command-status.error {
   background: #fee2e2;
-  color: #dc2626;
+  color: #1a1a1a;
 }
 
 .command-body {
@@ -251,7 +251,7 @@
   background: #1e1e1e;
   color: #d4d4d4;
   padding: 12px;
-  border-radius: 6px;
+  border-radius: 0;
   font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
   font-size: 13px;
   line-height: 1.5;
@@ -266,7 +266,7 @@
   margin-top: 8px;
   padding: 6px;
   background: rgba(0,0,0,0.03);
-  border-radius: 4px;
+  border-radius: 0;
   font-family: monospace;
 }
 
@@ -281,7 +281,7 @@
   color: var(--primary-color, #2563eb);
   padding: 6px;
   background: rgba(37, 99, 235, 0.1);
-  border-radius: 4px;
+  border-radius: 0;
   user-select: none;
 }
 
@@ -294,7 +294,7 @@
   padding: 12px;
   background: #1e1e1e;
   color: #d4d4d4;
-  border-radius: 6px;
+  border-radius: 0;
   font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
   font-size: 12px;
   line-height: 1.5;
@@ -307,8 +307,8 @@
   margin-top: 8px;
   padding: 10px;
   background: #fee2e2;
-  color: #dc2626;
-  border-radius: 6px;
+  color: #1a1a1a;
+  border-radius: 0;
   font-size: 13px;
   font-weight: 500;
 }
@@ -326,13 +326,13 @@
 }
 
 .command-history::-webkit-scrollbar-track {
-  background: var(--bg-secondary, #f8f9fa);
-  border-radius: 4px;
+  background: var(--bg-secondary, #f5f5f5);
+  border-radius: 0;
 }
 
 .command-history::-webkit-scrollbar-thumb {
   background: var(--border-color, #ddd);
-  border-radius: 4px;
+  border-radius: 0;
 }
 
 .command-history::-webkit-scrollbar-thumb:hover {

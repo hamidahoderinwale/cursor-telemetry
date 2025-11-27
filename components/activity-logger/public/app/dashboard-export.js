@@ -154,7 +154,7 @@ async function exportDatabaseWithFilters({ dateFrom, dateTo, limit = 1000, types
       } else {
         exportBtn.innerHTML = '<span>Exported!</span>';
       }
-      exportBtn.style.color = '#10b981';
+      exportBtn.style.color = '#474747';
       setTimeout(() => {
         if (window.safeSetHTML) {
           window.safeSetHTML(exportBtn, originalHTML);
@@ -177,7 +177,7 @@ async function exportDatabaseWithFilters({ dateFrom, dateTo, limit = 1000, types
       } else {
         exportBtn.innerHTML = errorMsg;
       }
-      exportBtn.style.color = '#ef4444';
+      exportBtn.style.color = '#2a2a2a';
       setTimeout(() => {
         if (window.safeSetHTML) {
           window.safeSetHTML(exportBtn, originalHTML);
@@ -306,7 +306,7 @@ async function exportDatabase(limit = 1000, includeAllFields = false) {
       } else {
         exportBtn.innerHTML = '<span>Exported!</span>';
       }
-      exportBtn.style.color = '#10b981';
+      exportBtn.style.color = '#474747';
       setTimeout(() => {
         if (window.safeSetHTML) {
           window.safeSetHTML(exportBtn, originalHTML);
@@ -329,7 +329,7 @@ async function exportDatabase(limit = 1000, includeAllFields = false) {
       } else {
         exportBtn.innerHTML = errorMsg;
       }
-      exportBtn.style.color = '#ef4444';
+      exportBtn.style.color = '#2a2a2a';
       setTimeout(() => {
         if (window.safeSetHTML) {
           window.safeSetHTML(exportBtn, originalHTML);

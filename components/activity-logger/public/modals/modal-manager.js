@@ -1114,7 +1114,7 @@ class ModalManager {
     const displayText = promptText.length > 200 ? promptText.substring(0, 200) + '...' : promptText;
     
     return `
-      <div style="padding: var(--space-lg); background: linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(59, 130, 246, 0.1) 100%); border-left: 4px solid var(--color-primary); border-radius: var(--radius-md);">
+      <div style="padding: var(--space-lg); background: var(--color-bg-alt); border-left: 4px solid var(--color-primary); border-radius: 0;">
         <div style="display: flex; align-items: center; gap: var(--space-sm); margin-bottom: var(--space-md);">
           <span style="font-size: var(--text-lg);">[AI]</span>
           <h4 style="margin: 0; color: var(--color-text);">Linked Prompt</h4>

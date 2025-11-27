@@ -287,7 +287,7 @@ function renderKanbanBoard(items, groupingMode = 'intent') {
         
         return `
           <div class="kanban-column" data-column="${columnKey}">
-            <div class="kanban-column-header" style="border-left: 4px solid ${column.color}; background: linear-gradient(135deg, ${column.color}15 0%, ${column.color}05 100%);">
+            <div class="kanban-column-header" style="border-left: 4px solid ${column.color}; background: var(--color-bg-alt);">
               <div class="kanban-column-title">
                 <span class="kanban-column-icon" style="color: ${column.color};">${column.icon}</span>
                 <div style="flex: 1; min-width: 0;">

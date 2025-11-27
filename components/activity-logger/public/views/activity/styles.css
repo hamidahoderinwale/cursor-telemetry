@@ -20,7 +20,7 @@
   padding: 4px 8px;
   background: var(--color-primary-alpha-10);
   border: 1px solid var(--color-primary-alpha-20);
-  border-radius: var(--radius-sm);
+  border-radius: 0;
   font-size: var(--text-xs);
   font-weight: 600;
   color: var(--color-primary);
@@ -37,13 +37,13 @@
 .pattern-badge.edit-script {
   background: rgba(59, 130, 246, 0.1);
   border-color: rgba(59, 130, 246, 0.2);
-  color: #3b82f6;
+  color: #2a2a2a;
 }
 
 .pattern-badge.motif {
-  background: rgba(139, 92, 246, 0.1);
-  border-color: rgba(139, 92, 246, 0.2);
-  color: #8b5cf6;
+  background: rgba(0, 0, 0, 0.1);
+  border-color: rgba(0, 0, 0, 0.2);
+  color: #666666;
 }
 
 /* Visual Density Controls */
@@ -159,7 +159,7 @@
   top: 12px;
   width: 12px;
   height: 12px;
-  border-radius: 50%;
+  border-radius: 0;
   background: var(--color-primary);
   border: 2px solid var(--color-surface);
   box-shadow: 0 0 0 2px var(--color-bg);
@@ -169,7 +169,7 @@
 .timeline-simple-content {
   background: var(--color-bg);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border-radius: 0;
   padding: var(--space-md) var(--space-lg);
   transition: all var(--transition-base);
 }
@@ -325,7 +325,7 @@
   padding: var(--space-sm) var(--space-md);
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border-radius: 0;
   margin-bottom: var(--space-sm);
   transition: all 0.2s ease;
   margin-left: 0;
@@ -372,7 +372,7 @@
   top: 0;
   width: 2px;
   height: 100%;
-  background: linear-gradient(to bottom, var(--color-primary), transparent);
+  background: var(--color-bg-alt);
   opacity: 0.2;
 }
 
@@ -417,7 +417,7 @@
 .commit-group {
   margin-bottom: var(--space-sm);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md, 8px);
+  border-radius: 0;
   background: var(--color-surface);
   overflow: hidden;
 }
@@ -470,7 +470,7 @@
   font-family: var(--font-mono, 'Monaco', 'Menlo', 'Courier New', monospace);
   background: var(--color-bg);
   padding: 2px 6px;
-  border-radius: var(--radius-sm, 4px);
+  border-radius: 0;
   color: var(--color-accent);
 }
 
@@ -502,7 +502,7 @@
   border-left: 2px solid var(--color-primary);
   padding: var(--space-xs, 0.5rem) var(--space-sm, 0.75rem);
   background: var(--color-surface);
-  border-radius: var(--radius-sm, 4px);
+  border-radius: 0;
 }
 
 .commit-group-items .timeline-item:last-child {
@@ -619,7 +619,7 @@
 .conversation-message {
   padding: var(--space-sm);
   margin-bottom: var(--space-xs);
-  border-radius: var(--radius-sm);
+  border-radius: 0;
   border-left: 3px solid;
 }
 
@@ -680,7 +680,7 @@
 .prompt-timeline-item {
   /* Distinct visual style for prompts */
   border-left: 4px solid var(--color-accent) !important;
-  background: linear-gradient(to right, var(--gradient-accent-start), var(--color-bg));
+  background: var(--color-bg-alt);
 }
 
 .prompt-timeline-item .prompt-content {
@@ -689,7 +689,7 @@
 }
 
 .prompt-timeline-item:hover {
-  background: linear-gradient(to right, var(--gradient-accent-end), var(--color-bg-alt));
+  background: var(--color-bg-alt);
   border-left-color: var(--color-accent);
   box-shadow: 0 4px 12px var(--gradient-accent-shadow);
 }
@@ -734,29 +734,29 @@
 .terminal-timeline-item {
   /* Inherits from .timeline-item */
   border-left-color: var(--color-success) !important;
-  background: linear-gradient(to right, var(--gradient-success-start), var(--color-bg));
+  background: var(--color-bg-alt);
 }
 
 .terminal-timeline-item:hover {
-  background: linear-gradient(to right, var(--gradient-success-end), var(--color-bg-alt));
+  background: var(--color-bg-alt);
   border-left-color: var(--color-success);
   box-shadow: 0 4px 12px var(--gradient-success-shadow);
 }
 
 .terminal-timeline-item.error {
   border-left-color: var(--color-error) !important;
-  background: linear-gradient(to right, var(--gradient-error-start), var(--color-bg));
+  background: var(--color-bg-alt);
 }
 
 .terminal-timeline-item.error:hover {
-  background: linear-gradient(to right, var(--gradient-error-end), var(--color-bg-alt));
+  background: var(--color-bg-alt);
   box-shadow: 0 4px 12px var(--gradient-error-shadow);
 }
 
 .terminal-command-code {
   background: var(--code-bg-dark);
   padding: 2px 6px;
-  border-radius: 3px;
+  border-radius: 0;
   font-size: 13px;
   font-family: var(--font-mono);
 }
@@ -769,7 +769,7 @@
   font-size: 10px;
   font-weight: 600;
   padding: 2px 6px;
-  border-radius: 10px;
+  border-radius: 0;
   margin-left: 4px;
 }
 
@@ -839,7 +839,7 @@
 .prompt-item {
   padding: var(--space-md);
   background: var(--color-bg);
-  border-radius: var(--radius-md);
+  border-radius: 0;
   cursor: pointer;
   border-left: 3px solid var(--color-accent);
   transition: all 0.2s;
@@ -873,7 +873,7 @@
   color: var(--color-text-muted);
   padding: 2px var(--space-xs);
   background: var(--color-surface);
-  border-radius: var(--radius-sm);
+  border-radius: 0;
 }
 
 /* Threads View */
@@ -891,7 +891,7 @@
 .thread-badge {
   padding: var(--space-xs) var(--space-sm);
   background: var(--color-bg-alt);
-  border-radius: var(--radius-sm);
+  border-radius: 0;
   font-size: var(--text-xs);
   font-weight: 600;
   color: var(--color-text);
@@ -905,7 +905,7 @@
 .thread-card {
   padding: var(--space-lg);
   background: var(--color-bg);
-  border-radius: var(--radius-md);
+  border-radius: 0;
   border: 1px solid var(--color-border);
   cursor: pointer;
   transition: all 0.2s;
@@ -943,7 +943,7 @@
   padding: var(--space-xs) var(--space-sm);
   background: var(--color-primary);
   color: var(--badge-text-on-primary);
-  border-radius: var(--radius-sm);
+  border-radius: 0;
   font-size: var(--text-xs);
   font-weight: 600;
   font-family: var(--font-mono);
@@ -991,7 +991,7 @@
   top: 0;
   bottom: 0;
   width: 2px;
-  background: linear-gradient(to bottom,
+  background: var(--color-bg);
     transparent 0%,
     var(--color-border) 2%,
     var(--color-border) 98%,
@@ -1005,7 +1005,7 @@
 .timeline-card {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border-radius: 0;
   padding: var(--space-md);
   margin-bottom: var(--space-md);
   cursor: pointer;
@@ -1204,7 +1204,7 @@
   white-space: nowrap;
   padding: 2px 6px;
   background: var(--color-bg);
-  border-radius: var(--radius-sm);
+  border-radius: 0;
   font-weight: 500;
   font-family: inherit;
   line-height: 1.2;
@@ -1273,7 +1273,7 @@
   gap: 4px;
   padding: var(--space-xs);
   background: var(--gradient-accent-mid);
-  border-radius: var(--radius-sm);
+  border-radius: 0;
   border-left: 2px solid var(--color-accent);
 }
 
@@ -1386,7 +1386,7 @@
 /* Prompt cards styling */
 .prompt-timeline-item {
   border-left: 3px solid var(--color-accent) !important;
-  background: linear-gradient(to right, var(--gradient-accent-mid), var(--color-bg)) !important;
+  background: var(--color-bg-alt) !important;
   margin-bottom: var(--space-sm);
 }
 
@@ -1407,7 +1407,7 @@
   align-items: center;
   gap: 4px;
   padding: 3px 8px;
-  border-radius: 12px;
+  border-radius: 0;
   font-size: 11px;
   font-weight: 600;
   line-height: 1.2;
@@ -1503,7 +1503,7 @@
   margin-top: var(--space-xs);
   padding: var(--space-xs) var(--space-sm);
   background: var(--color-surface);
-  border-radius: var(--radius-sm);
+  border-radius: 0;
   font-size: var(--text-xs);
   font-family: var(--font-mono, monospace);
 }
@@ -1533,7 +1533,7 @@
   font-size: 10px;
   font-weight: 600;
   padding: 3px 7px;
-  border-radius: 12px;
+  border-radius: 0;
   margin-left: 4px;
   transition: all 0.2s;
   cursor: help;
@@ -1580,7 +1580,7 @@
 .workspace-column-header {
   padding: var(--space-md);
   background: var(--color-bg-alt);
-  border-radius: var(--radius-md);
+  border-radius: 0;
   border-left: 4px solid var(--color-primary);
   position: sticky;
   top: 0;
@@ -1662,7 +1662,7 @@
 .git-diff-viewer {
   margin-top: var(--space-md);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border-radius: 0;
   overflow: hidden;
   background: var(--color-surface);
   font-family: var(--font-mono, 'Monaco', 'Menlo', 'Courier New', monospace);
@@ -1820,12 +1820,12 @@
 
 .kanban-board::-webkit-scrollbar-track {
   background: transparent;
-  border-radius: 4px;
+  border-radius: 0;
 }
 
 .kanban-board::-webkit-scrollbar-thumb {
   background: var(--color-border);
-  border-radius: 4px;
+  border-radius: 0;
 }
 
 .kanban-board::-webkit-scrollbar-thumb:hover {
@@ -1839,7 +1839,7 @@
   display: flex;
   flex-direction: column;
   background: var(--color-surface);
-  border-radius: var(--radius-lg);
+  border-radius: 0;
   border: 1px solid var(--color-border);
   overflow: hidden;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
@@ -1876,7 +1876,7 @@
   justify-content: center;
   width: 28px;
   height: 28px;
-  border-radius: 6px;
+  border-radius: 0;
   background: rgba(255, 255, 255, 0.5);
 }
 
@@ -1888,7 +1888,7 @@
 
 .kanban-column-count {
   padding: 4px 10px;
-  border-radius: 12px;
+  border-radius: 0;
   font-size: var(--text-xs);
   font-weight: 600;
   min-width: 28px;
@@ -1918,7 +1918,7 @@
 
 .kanban-column-body::-webkit-scrollbar-thumb {
   background: var(--color-border);
-  border-radius: 3px;
+  border-radius: 0;
 }
 
 .kanban-column-body::-webkit-scrollbar-thumb:hover {
@@ -1946,7 +1946,7 @@
 .kanban-card {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border-radius: 0;
   padding: var(--space-md);
   cursor: pointer;
   transition: all 0.2s ease;
@@ -2006,7 +2006,7 @@
   gap: 4px;
   font-size: 10px;
   padding: 3px 8px;
-  border-radius: 4px;
+  border-radius: 0;
   font-weight: 500;
   white-space: nowrap;
 }
@@ -2049,7 +2049,7 @@
   gap: var(--space-xs);
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border-radius: 0;
   padding: 2px;
 }
 
@@ -2058,7 +2058,7 @@
   border: none;
   background: transparent;
   color: var(--color-text-muted);
-  border-radius: var(--radius-sm);
+  border-radius: 0;
   cursor: pointer;
   font-size: var(--text-sm);
   transition: all 0.2s ease;

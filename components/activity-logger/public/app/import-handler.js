@@ -291,7 +291,7 @@ async function validateImportFile(file) {
         const escapedWs = window.escapeHtml ? window.escapeHtml(importWs) : importWs;
         const escapedDisplay = window.escapeHtml ? window.escapeHtml(displayName) : displayName;
         return `
-          <div style="display: flex; gap: var(--space-xs); align-items: center; margin-bottom: var(--space-xs); padding: var(--space-xs); background: var(--color-bg-alt); border-radius: var(--radius-sm);">
+          <div style="display: flex; gap: var(--space-xs); align-items: center; margin-bottom: var(--space-xs); padding: var(--space-xs); background: var(--color-bg-alt); border-radius: 0(--radius-sm);">
             <div style="flex: 1; min-width: 0;">
               <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-bottom: 2px;">${escapedDisplay}</div>
               <div style="font-size: var(--text-xs); color: var(--color-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapedWs}">${escapedWs}</div>
@@ -508,7 +508,7 @@ async function handleImport() {
           ${schemaInfo.importVersion ? `
             <div class="import-schema-info" style="margin-top: var(--space-sm); padding-top: var(--space-sm); border-top: 1px solid rgba(16, 185, 129, 0.3); font-size: var(--text-xs);">
               <strong>Schema:</strong> Import v${schemaInfo.importVersion} → Current v${schemaInfo.currentVersion || '1.0.0'}
-              ${schemaInfo.compatible === false ? ' <span style="color: #f59e0b;">(normalized during import)</span>' : ''}
+              ${schemaInfo.compatible === false ? ' <span style="color: #666666;">(normalized during import)</span>' : ''}
             </div>
           ` : ''}
           ${summary.mergeStrategy ? `

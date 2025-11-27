@@ -1,20 +1,24 @@
 {
   "name": "public",
   "version": "1.0.0",
-  "description": "",
-  "main": "app/app.js",
+  "description": "Cursor Telemetry Dashboard Frontend",
+  "main": "dashboard.js",
   "directories": {
     "lib": "lib"
   },
   "scripts": {
+    "build": "node build-simple.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": ["cursor", "telemetry", "dashboard"],
+  "author": "Cursor Activity Logger",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
     "ml-kmeans": "^4.0.0",
     "ml-matrix": "^6.10.4"
+  },
+  "devDependencies": {
+    "esbuild": "^0.20.0"
   }
 }

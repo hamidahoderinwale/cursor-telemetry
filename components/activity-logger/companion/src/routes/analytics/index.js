@@ -1,6 +1,6 @@
 /**
  * Analytics Routes
- * Routes for analytics and abstraction services: Rung1-3, Module Graph, Motifs, etc.
+ * Routes for analytics and abstraction services: Rung1-3, Module Graph, Motifs, Clio, etc.
  */
 
 const createAnalyticsRoutes = require('../analytics');
@@ -9,6 +9,7 @@ const createRung2Routes = require('../rung2');
 const createRung3Routes = require('../rung3');
 const createModuleGraphRoutes = require('../module-graph');
 const createMotifRoutes = require('../motifs');
+const createClioRoutes = require('../clio');
 
 /**
  * Register all analytics-related routes
@@ -37,7 +38,14 @@ function registerAnalyticsRoutes(app, deps) {
     createMotifRoutes({ app, motifService: deps.motifService });
   }
   
-  console.log('[ROUTES] Registered analytics routes: analytics, rung1-3, module-graph, motifs');
+  // Clio routes (privacy-preserving workflow patterns)
+  if (deps.clioService) {
+    const clioRouter = createClioRoutes(deps);
+    app.use('/api/clio', clioRouter);
+    console.log('[ROUTES] Registered Clio routes at /api/clio');
+  }
+  
+  console.log('[ROUTES] Registered analytics routes: analytics, rung1-3, module-graph, motifs, clio');
 }
 
 module.exports = registerAnalyticsRoutes;

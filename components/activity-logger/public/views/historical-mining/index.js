@@ -522,3 +522,14 @@ function waitForTemplate(templateName, maxWait = 5000) {
 window.renderHistoricalMiningView = renderHistoricalMiningView;
 
 
+
+
+
+
+
+
+
+
+
+
+

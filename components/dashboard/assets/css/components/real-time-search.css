@@ -19,7 +19,7 @@
     align-items: center;
     background: var(--background-primary);
     border: 2px solid var(--border-color);
-    border-radius: var(--border-radius-lg);
+    border-radius: 0;
     transition: all 0.3s ease;
     box-shadow: var(--shadow-elevation-1);
 }
@@ -37,7 +37,7 @@
     color: var(--text-primary);
     font-size: var(--font-size-base);
     outline: none;
-    border-radius: var(--border-radius-lg);
+    border-radius: 0;
 }
 
 .search-input::placeholder {
@@ -67,7 +67,7 @@
     height: 16px;
     border: 2px solid var(--border-color);
     border-top: 2px solid var(--accent-color);
-    border-radius: var(--radius-full);
+    border-radius: 0;
     animation: spin 1s linear infinite;
 }
 
@@ -84,7 +84,7 @@
     color: var(--text-tertiary);
     cursor: pointer;
     padding: 4px;
-    border-radius: var(--border-radius-sm);
+    border-radius: 0;
     transition: all 0.2s ease;
 }
 
@@ -163,7 +163,7 @@
     margin-top: 16px;
     background: var(--background-primary);
     border: 1px solid var(--border-color);
-    border-radius: var(--border-radius-lg);
+    border-radius: 0;
     box-shadow: var(--shadow-elevation-1);
     overflow: hidden;
 }
@@ -194,7 +194,7 @@
     color: var(--text-tertiary);
     background: var(--background-tertiary);
     padding: 2px 6px;
-    border-radius: var(--border-radius-sm);
+    border-radius: 0;
 }
 
 .results-controls {
@@ -211,7 +211,7 @@
     font-size: 18px;
     line-height: 1;
     padding: 4px;
-    border-radius: var(--border-radius-sm);
+    border-radius: 0;
     transition: all 0.2s ease;
 }
 
@@ -261,7 +261,7 @@
     font-size: var(--font-size-xs);
     font-weight: var(--font-weight-bold);
     padding: 2px 6px;
-    border-radius: var(--border-radius-sm);
+    border-radius: 0;
     min-width: 20px;
     text-align: center;
 }
@@ -277,7 +277,7 @@
     color: var(--text-secondary);
     background: var(--background-tertiary);
     padding: 2px 6px;
-    border-radius: var(--border-radius-sm);
+    border-radius: 0;
 }
 
 .result-score {
@@ -290,7 +290,7 @@
     width: 100px;
     height: 4px;
     background: var(--background-tertiary);
-    border-radius: var(--radius-sm);
+    border-radius: 0;
     overflow: hidden;
 }
 
@@ -316,7 +316,7 @@
 
 .search-type {
     padding: 2px 6px;
-    border-radius: var(--border-radius-sm);
+    border-radius: 0;
     font-weight: var(--font-weight-medium);
     text-transform: uppercase;
     font-size: 10px;
@@ -347,7 +347,7 @@
     border: 1px solid var(--border-color);
     color: var(--text-secondary);
     padding: 4px 8px;
-    border-radius: var(--border-radius-sm);
+    border-radius: 0;
     font-size: var(--font-size-xs);
     cursor: pointer;
     transition: all 0.2s ease;
@@ -481,7 +481,7 @@
 
 @media (max-width: 480px) {
     .search-input-wrapper {
-        border-radius: var(--border-radius);
+        border-radius: 0;
     }
     
     .search-suggestions {
@@ -489,7 +489,7 @@
     }
     
     .search-results {
-        border-radius: var(--border-radius);
+        border-radius: 0;
     }
     
     .result-item {

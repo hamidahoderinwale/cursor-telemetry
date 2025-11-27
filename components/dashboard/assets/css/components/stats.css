@@ -7,7 +7,7 @@
   margin-bottom: var(--space-6);
   padding: var(--space-4);
   background: var(--background-primary);
-  border-radius: var(--border-radius);
+  border-radius: 0;
   box-shadow: var(--shadow-sm);
   border: 1px solid var(--border-color);
 }
@@ -15,7 +15,7 @@
 .stat-card {
   background: var(--background-secondary);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
+  border-radius: 0;
   padding: var(--space-6);
   text-align: center;
   box-shadow: var(--shadow-sm);

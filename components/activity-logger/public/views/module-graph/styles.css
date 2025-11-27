@@ -51,7 +51,7 @@
   padding: var(--space-md, 1rem);
   background: var(--color-bg-secondary, #f9fafb);
   border: 1px solid var(--color-border, #e5e7eb);
-  border-radius: var(--radius-sm, 0.125rem);
+  border-radius: 0;
 }
 
 .control-group {
@@ -70,7 +70,7 @@
 .control-select {
   padding: var(--space-xs, 0.5rem);
   border: 1px solid var(--color-border, #e5e7eb);
-  border-radius: var(--radius-sm, 0.125rem);
+  border-radius: 0;
   font-size: var(--text-sm, 0.875rem);
   background: var(--color-bg, #ffffff);
   color: var(--color-text, #111827);
@@ -120,7 +120,7 @@
   flex-direction: column;
   background: var(--color-bg, #ffffff);
   border: 1px solid var(--color-border, #e5e7eb);
-  border-radius: var(--radius-sm, 0.125rem);
+  border-radius: 0;
   overflow: hidden;
 }
 
@@ -192,7 +192,7 @@
   flex-direction: column;
   background: var(--color-bg, #ffffff);
   border: 1px solid var(--color-border, #e5e7eb);
-  border-radius: var(--radius-sm, 0.125rem);
+  border-radius: 0;
   overflow: hidden;
 }
 
@@ -284,40 +284,40 @@
   align-items: center;
   padding: var(--space-xs, 0.5rem);
   background: var(--color-bg-secondary, #f9fafb);
-  border-radius: var(--radius-sm, 0.125rem);
+  border-radius: 0;
   font-size: var(--text-sm, 0.875rem);
 }
 
 .module-graph-edge-type-badge {
   padding: 2px 6px;
-  border-radius: var(--radius-sm, 0.125rem);
+  border-radius: 0;
   font-size: var(--text-xs, 0.75rem);
   font-weight: 500;
 }
 
 .module-graph-edge-type-badge.import {
   background: rgba(59, 130, 246, 0.1);
-  color: #3b82f6;
+  color: #2a2a2a;
 }
 
 .module-graph-edge-type-badge.call {
   background: rgba(16, 185, 129, 0.1);
-  color: #10b981;
+  color: #474747;
 }
 
 .module-graph-edge-type-badge.context {
-  background: rgba(139, 92, 246, 0.1);
-  color: #8b5cf6;
+  background: rgba(0, 0, 0, 0.1);
+  color: #666666;
 }
 
 .module-graph-edge-type-badge.navigate {
   background: rgba(245, 158, 11, 0.1);
-  color: #f59e0b;
+  color: #666666;
 }
 
 .module-graph-edge-type-badge.tool {
   background: rgba(239, 68, 68, 0.1);
-  color: #ef4444;
+  color: #2a2a2a;
 }
 
 /* Timeline */
@@ -326,7 +326,7 @@
   flex-direction: column;
   background: var(--color-bg, #ffffff);
   border: 1px solid var(--color-border, #e5e7eb);
-  border-radius: var(--radius-sm, 0.125rem);
+  border-radius: 0;
   max-height: 300px;
   overflow: hidden;
 }
@@ -372,7 +372,7 @@
 
 .module-graph-event-item:hover {
   background: var(--color-bg-secondary, #f9fafb);
-  border-left-color: var(--color-primary, #3b82f6);
+  border-left-color: var(--color-primary, #2a2a2a);
 }
 
 .module-graph-event-time {

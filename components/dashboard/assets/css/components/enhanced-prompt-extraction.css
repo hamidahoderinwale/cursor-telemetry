@@ -12,9 +12,9 @@
   --prompt-muted: var(--text-tertiary);
   
   /* Prompt type colors */
-  --prompt-direct: #3b82f6;
-  --prompt-cursor: #8b5cf6;
-  --prompt-ai: #10b981;
+  --prompt-direct: #2a2a2a;
+  --prompt-cursor: #666666;
+  --prompt-ai: #474747;
   --prompt-task: #f59e0b;
   --prompt-comment: #6b7280;
 }
@@ -25,7 +25,7 @@
   padding: var(--space-4);
   background: var(--prompt-bg);
   border: 1px solid var(--prompt-border);
-  border-radius: var(--border-radius);
+  border-radius: 0;
   box-shadow: var(--shadow-sm);
 }
 
@@ -63,7 +63,7 @@
   padding: var(--space-3);
   background: var(--background-primary);
   border: 1px solid var(--prompt-border);
-  border-radius: var(--border-radius);
+  border-radius: 0;
   transition: all var(--transition-fast);
   position: relative;
 }
@@ -112,7 +112,7 @@
   content: "";
   width: 8px;
   height: 8px;
-  border-radius: 50%;
+  border-radius: 0;
   background: currentColor;
 }
 
@@ -145,7 +145,7 @@
   margin-bottom: var(--space-3);
   padding: var(--space-2);
   background: var(--background-secondary);
-  border-radius: var(--border-radius-sm);
+  border-radius: 0;
   border: 1px solid var(--border-color);
   font-family: var(--font-mono);
   white-space: pre-wrap;
@@ -162,7 +162,7 @@
 .prompt-actions .btn {
   font-size: var(--font-size-xs);
   padding: var(--space-1) var(--space-2);
-  border-radius: var(--border-radius-sm);
+  border-radius: 0;
   transition: all var(--transition-fast);
 }
 
@@ -191,7 +191,7 @@
   right: var(--space-2);
   width: 8px;
   height: 8px;
-  border-radius: 50%;
+  border-radius: 0;
   background: var(--success-color);
   animation: pulse 2s infinite;
 }
@@ -214,7 +214,7 @@
   gap: var(--space-1);
   font-size: var(--font-size-xs);
   padding: var(--space-1) var(--space-2);
-  border-radius: var(--border-radius-sm);
+  border-radius: 0;
   background: var(--background-secondary);
   border: 1px solid var(--border-color);
 }
@@ -242,7 +242,7 @@
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-medium);
   padding: var(--space-1) var(--space-2);
-  border-radius: var(--border-radius-sm);
+  border-radius: 0;
   background: var(--background-secondary);
   border: 1px solid var(--border-color);
   color: var(--text-primary);
@@ -261,7 +261,7 @@
 }
 
 .intent-badge.code_implementation {
-  background: rgba(139, 92, 246, 0.1);
+  background: rgba(0, 0, 0, 0.1);
   border-color: var(--prompt-cursor);
   color: var(--prompt-cursor);
 }
@@ -366,7 +366,7 @@
   height: 16px;
   border: 2px solid var(--prompt-border);
   border-top-color: var(--prompt-accent);
-  border-radius: 50%;
+  border-radius: 0;
   animation: spin 1s linear infinite;
   margin-right: var(--space-2);
 }
@@ -393,7 +393,7 @@
   background: var(--primary-color);
   color: white;
   padding: 2px 6px;
-  border-radius: 3px;
+  border-radius: 0;
   font-size: 10px;
   font-weight: bold;
   display: inline-flex;
@@ -403,7 +403,7 @@
 
 .intent-badge {
   padding: 2px 6px;
-  border-radius: 3px;
+  border-radius: 0;
   font-size: 10px;
   font-weight: 500;
   text-transform: uppercase;
@@ -423,9 +423,9 @@
 }
 
 .intent-badge.intent-code_implementation {
-  background: rgba(139, 92, 246, 0.1);
+  background: rgba(0, 0, 0, 0.1);
   color: var(--prompt-cursor);
-  border: 1px solid rgba(139, 92, 246, 0.2);
+  border: 1px solid rgba(0, 0, 0, 0.2);
 }
 
 .intent-badge.intent-debugging {
@@ -470,7 +470,7 @@
   padding: var(--space-2);
   background: var(--background-secondary);
   border: 1px solid var(--border-color);
-  border-radius: var(--border-radius-sm);
+  border-radius: 0;
 }
 
 .extracted-prompts-preview strong {
@@ -483,7 +483,7 @@
 .prompt-tag {
   display: inline-block;
   padding: 2px 6px;
-  border-radius: 3px;
+  border-radius: 0;
   font-size: 10px;
   font-weight: 500;
   margin-right: var(--space-1);
@@ -500,9 +500,9 @@
 }
 
 .prompt-tag.prompt-cursor_directive {
-  background: rgba(139, 92, 246, 0.1);
+  background: rgba(0, 0, 0, 0.1);
   color: var(--prompt-cursor);
-  border-color: rgba(139, 92, 246, 0.2);
+  border-color: rgba(0, 0, 0, 0.2);
 }
 
 .prompt-tag.prompt-ai_directive {
@@ -551,7 +551,7 @@
   content: "";
   width: 4px;
   height: 4px;
-  border-radius: 50%;
+  border-radius: 0;
   background: var(--text-secondary);
 }
 
@@ -567,7 +567,7 @@
 .conversation-actions .btn {
   font-size: var(--font-size-xs);
   padding: var(--space-1) var(--space-2);
-  border-radius: var(--border-radius-sm);
+  border-radius: 0;
   transition: all var(--transition-fast);
 }
 
@@ -582,7 +582,7 @@
   padding: var(--space-6);
   color: var(--text-secondary);
   border: 2px dashed var(--border-color);
-  border-radius: var(--border-radius);
+  border-radius: 0;
   background: var(--background-secondary);
 }
 

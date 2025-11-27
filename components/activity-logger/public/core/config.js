@@ -21,12 +21,12 @@ const DASHBOARD_CONFIG = {
   ENABLE_SEMANTIC_SEARCH: false, // Disable semantic analysis by default - MUST be false
   MAX_SEARCH_RESULTS: 50, // Limit search results to prevent memory issues
   CHART_COLORS: {
-    primary: '#8B5CF6',
-    secondary: '#6366F1',
+    primary: '#666666',
+    secondary: '#666666',
     accent: '#EC4899',
-    success: '#10B981',
-    warning: '#F59E0B',
-    error: '#EF4444',
+    success: '#474747',
+    warning: '#666666',
+    error: '#2a2a2a',
   }
 };
 

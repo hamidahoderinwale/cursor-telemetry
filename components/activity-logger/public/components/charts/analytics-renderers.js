@@ -102,7 +102,7 @@ export class AnalyticsRenderers {
                     </div>
                   </div>
                   <div style="width: 100px; height: 8px; background: var(--color-bg); border-radius: 4px; overflow: hidden;">
-                    <div style="width: ${percentage}%; height: 100%; background: linear-gradient(90deg, #6366f1, #8b5cf6); border-radius: 4px;"></div>
+                    <div style="width: ${percentage}%; height: 100%; background: var(--color-primary); border-radius: 0;"></div>
                   </div>
                 </div>
               `;

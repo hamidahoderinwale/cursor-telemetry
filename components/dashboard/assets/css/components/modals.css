@@ -25,7 +25,7 @@
 
 .modal-content {
   background: var(--background-primary);
-  border-radius: var(--radius-lg);
+  border-radius: 0;
   box-shadow: var(--shadow-xl);
   max-width: 1200px;
   width: 95%;
@@ -79,7 +79,7 @@
   color: var(--text-secondary);
   cursor: pointer;
   padding: var(--space-2);
-  border-radius: var(--border-radius-sm);
+  border-radius: 0;
   transition: var(--transition-fast);
   width: 2.5rem;
   height: 2.5rem;
@@ -126,7 +126,7 @@
 
 .modal-body::-webkit-scrollbar-thumb {
   background: var(--border-color);
-  border-radius: 4px;
+  border-radius: 0;
 }
 
 .modal-body::-webkit-scrollbar-thumb:hover {
@@ -152,7 +152,7 @@
 
 .detail-section {
   background: var(--background-secondary);
-  border-radius: var(--radius-md);
+  border-radius: 0;
   padding: var(--space-5);
   border: 1px solid var(--border-color);
 }

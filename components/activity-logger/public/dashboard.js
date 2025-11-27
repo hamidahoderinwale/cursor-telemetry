@@ -77,6 +77,7 @@
 let statsCalculationTimeout = null;
 let statsCalculationPending = false;
 let lastStatsDataHash = null;
+let statsCache = new Map(); // OPTIMIZATION: Cache computed stats
 
 function getDataHash() {
   const events = state.data.events || [];
@@ -98,15 +99,24 @@ async function calculateStats() {
     return; // Data hasn't changed, skip recalculation
   }
   
+  // OPTIMIZATION: Check cache first
+  if (statsCache.has(dataHash)) {
+    const cachedStats = statsCache.get(dataHash);
+    state.stats = { ...state.stats, ...cachedStats };
+    lastStatsDataHash = dataHash;
+    updateStatsDisplay();
+    return;
+  }
+  
   // Clear any pending timeout
   if (statsCalculationTimeout) {
     clearTimeout(statsCalculationTimeout);
   }
   
-  // Debounce: wait 500ms before calculating (batch multiple calls, more aggressive)
-    statsCalculationTimeout = setTimeout(() => {
+  // Debounce: wait 1000ms before calculating (more aggressive batching)
+  statsCalculationTimeout = setTimeout(() => {
     _calculateStatsInternal();
-  }, 500); // Increased debounce for better batching
+  }, 1000); // Increased debounce for better batching
 }
 
 async function _calculateStatsInternal() {
@@ -139,10 +149,12 @@ async function _calculateStatsInternal() {
     const entries = state.data.entries || [];
     const terminalCommands = state.data.terminalCommands || [];
 
+    // OPTIMIZATION: Process only essential data for faster calculation (limit to 100 most recent)
+    const SAMPLE_SIZE = 100;
+    
     // Count sessions (optimized with Set) - limit processing for speed
     const sessions = new Set();
-    // Process only recent items for faster calculation (limit to 200 most recent)
-    const recentItems = [...events.slice(0, 200), ...entries.slice(0, 200)];
+    const recentItems = [...events.slice(0, SAMPLE_SIZE), ...entries.slice(0, SAMPLE_SIZE)];
     recentItems.forEach(item => {
       if (item.session_id) sessions.add(item.session_id);
     });
@@ -156,20 +168,16 @@ async function _calculateStatsInternal() {
     state.stats = state.stats || {};
     state.stats.terminalCommands = terminalCommands.length;
 
-    // Count AI interactions - prompts with meaningful content
-    // Uses helper function to check all possible text field names
-    const aiInteractions = (state.data.prompts || []).filter(p => {
-      return window.hasPromptContent ? window.hasPromptContent(p, 5) : 
-             (() => {
-               const text = p.text || p.prompt || p.preview || p.content || '';
-               return text && text.length > 5;
-             })();
+    // Count AI interactions - prompts with meaningful content (optimized)
+    const aiInteractions = (state.data.prompts || []).slice(0, SAMPLE_SIZE).filter(p => {
+      const text = p.text || p.prompt || p.preview || p.content || '';
+      return text && text.length > 5;
     }).length;
 
     // Calculate code changed (approximate) - limit to recent events for speed
     let totalChars = 0;
-    // Only process most recent 200 events for faster calculation
-    const recentEvents = events.slice(0, 200);
+    // Only process most recent items for faster calculation
+    const recentEvents = events.slice(0, SAMPLE_SIZE);
     recentEvents.forEach(e => {
       try {
         const details = typeof e.details === 'string' ? JSON.parse(e.details) : e.details;
@@ -182,16 +190,16 @@ async function _calculateStatsInternal() {
     });
     
     // Scale up estimate if we have more events (rough approximation)
-    if (events.length > 200) {
-      totalChars = Math.round(totalChars * (events.length / 200));
+    if (events.length > SAMPLE_SIZE) {
+      totalChars = Math.round(totalChars * (events.length / SAMPLE_SIZE));
     }
 
     // Calculate average context usage (optimized - limit to recent prompts)
     let totalContextUsage = 0;
     let contextUsageCount = 0;
     const prompts = state.data.prompts || [];
-    // Only process most recent 200 prompts for faster calculation
-    const recentPrompts = prompts.slice(0, 200);
+    // Only process most recent prompts for faster calculation
+    const recentPrompts = prompts.slice(0, SAMPLE_SIZE);
     recentPrompts.forEach(p => {
       if (p.contextUsage && p.contextUsage > 0) {
         totalContextUsage += p.contextUsage;

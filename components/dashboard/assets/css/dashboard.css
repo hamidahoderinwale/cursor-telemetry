@@ -42,7 +42,7 @@ body {
 .status-dot {
     width: 8px;
     height: 8px;
-    border-radius: var(--radius-full);
+    border-radius: 0;
     display: inline-block;
     transition: background-color var(--transition-fast);
 }
@@ -76,7 +76,7 @@ body {
 .card {
     background: var(--background-secondary);
     border: 1px solid var(--border-color);
-    border-radius: var(--radius-md);
+    border-radius: 0;
     padding: var(--space-6);
     box-shadow: var(--shadow-sm);
     transition: box-shadow var(--transition-fast);
@@ -105,7 +105,7 @@ body {
     gap: var(--space-2);
     padding: var(--space-2) var(--space-4);
     border: 1px solid var(--border-color);
-    border-radius: var(--radius-md);
+    border-radius: 0;
     font-size: var(--text-sm);
     font-weight: var(--font-medium);
     text-decoration: none;
@@ -161,7 +161,7 @@ body {
 .session-card {
     background: var(--background-secondary);
     border: 1px solid var(--border-color);
-    border-radius: var(--radius-md);
+    border-radius: 0;
     padding: var(--space-4);
     margin-bottom: var(--space-4);
     transition: transform var(--transition-fast), box-shadow var(--transition-fast);
@@ -185,7 +185,7 @@ body {
     color: var(--text-secondary);
     background: var(--background-primary);
     padding: var(--space-1) var(--space-2);
-    border-radius: var(--radius-sm);
+    border-radius: 0;
 }
 
 .session-timestamp {
@@ -230,7 +230,7 @@ body {
 .enhanced-session-actions {
     background: var(--background-primary);
     border: 1px solid var(--border-color);
-    border-radius: var(--radius-md);
+    border-radius: 0;
     padding: var(--space-4);
     margin: var(--space-2) 0;
 }
@@ -288,7 +288,7 @@ body {
 .memory-panel {
     background: var(--surface-color);
     border: 1px solid var(--border-color);
-    border-radius: var(--radius-md);
+    border-radius: 0;
     box-shadow: var(--shadow-lg);
 }
 
@@ -299,7 +299,7 @@ body {
     padding: 0.75rem 1rem;
     border-bottom: 1px solid var(--border-color);
     background: var(--background-color);
-    border-radius: 0.5rem 0.5rem 0 0;
+    border-radius: 0 0.5rem 0 0;
 }
 
 .panel-header h3 {
@@ -325,7 +325,7 @@ body {
     align-items: center;
     padding: 0.75rem;
     background: var(--background-color);
-    border-radius: var(--radius-sm);
+    border-radius: 0;
 }
 
 .stat-label {
@@ -361,7 +361,7 @@ body {
 .memory-item {
     background: var(--background-color);
     border: 1px solid var(--border-color);
-    border-radius: var(--radius-sm);
+    border-radius: 0;
     padding: 0.75rem;
     margin-bottom: 0.5rem;
 }
@@ -384,7 +384,7 @@ body {
     color: var(--text-secondary);
     background: var(--border-color);
     padding: 0.125rem 0.25rem;
-    border-radius: var(--radius-xs);
+    border-radius: 0;
 }
 
 .memory-content p {
@@ -424,7 +424,7 @@ body {
 .modal-content {
     position: relative;
     background: var(--surface-color);
-    border-radius: var(--radius-md);
+    border-radius: 0;
     box-shadow: var(--shadow-lg);
     max-width: 1200px;
     width: 95%;
@@ -440,7 +440,7 @@ body {
     padding: 1rem 1.25rem;
     border-bottom: 1px solid var(--border-color);
     background: var(--background-color);
-    border-radius: 0.5rem 0.5rem 0 0;
+    border-radius: 0 0.5rem 0 0;
 }
 
 .modal-header h3 {
@@ -507,7 +507,7 @@ body {
     height: 40px;
     border: 4px solid var(--border-color);
     border-top: 4px solid var(--primary-color);
-    border-radius: var(--radius-full);
+    border-radius: 0;
     animation: spin 1s linear infinite;
 }
 
@@ -554,7 +554,7 @@ body {
 .project-card {
     background: var(--background-secondary);
     border: 1px solid var(--border-color);
-    border-radius: var(--radius-md);
+    border-radius: 0;
     margin-bottom: 1rem;
     overflow: hidden;
     transition: all 0.2s ease;
@@ -612,7 +612,7 @@ body {
 .session-card {
     background: var(--background-primary);
     border: 1px solid var(--border-color);
-    border-radius: var(--radius-sm);
+    border-radius: 0;
     padding: 0.75rem;
     margin-bottom: 0.5rem;
     cursor: pointer;
@@ -647,7 +647,7 @@ body {
 
 .session-status {
     padding: 0.25rem 0.5rem;
-    border-radius: var(--radius-sm);
+    border-radius: 0;
     font-size: 0.8rem;
     font-weight: 600;
     text-transform: uppercase;
@@ -698,7 +698,7 @@ body {
     padding: 1.5rem;
     background: var(--background-secondary);
     border: 1px solid var(--border-color);
-    border-radius: var(--radius-lg);
+    border-radius: 0;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
@@ -743,7 +743,7 @@ body {
 .legend-color {
     width: 12px;
     height: 12px;
-    border-radius: var(--radius-full);
+    border-radius: 0;
     display: inline-block;
 }
 
@@ -765,7 +765,7 @@ body {
     position: absolute;
     background: var(--background-secondary);
     border: 1px solid var(--border-color);
-    border-radius: var(--radius-sm);
+    border-radius: 0;
     padding: 8px;
     font-size: 12px;
     color: var(--text-primary);

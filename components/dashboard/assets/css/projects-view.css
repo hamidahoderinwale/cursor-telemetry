@@ -39,7 +39,7 @@
     font-weight: 500;
     padding: 6px 16px;
     background: var(--gray-100, #f3f4f6);
-    border-radius: 6px;
+    border-radius: 0;
     letter-spacing: -0.01em;
 }
 
@@ -47,7 +47,7 @@
 .enhanced-project-card {
     background: #ffffff;
     border: 1px solid var(--gray-200, #e5e7eb);
-    border-radius: 8px;
+    border-radius: 0;
     margin-bottom: 16px;
     overflow: hidden;
     transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
@@ -85,7 +85,7 @@
     width: 48px;
     height: 48px;
     background: var(--gray-100, #f3f4f6);
-    border-radius: 8px;
+    border-radius: 0;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -219,7 +219,7 @@
     padding: 16px;
     background: var(--gray-50, #f9fafb);
     border: 1px solid var(--gray-200, #e5e7eb);
-    border-radius: 6px;
+    border-radius: 0;
     margin-bottom: 12px;
     transition: all 0.15s ease;
 }
@@ -246,7 +246,7 @@
 .session-status {
     font-size: 0.6875rem;
     padding: 3px 10px;
-    border-radius: 4px;
+    border-radius: 0;
     font-weight: 500;
     letter-spacing: 0.025em;
     text-transform: uppercase;
@@ -297,7 +297,7 @@
     font-weight: 500;
     background: var(--gray-50, #f9fafb);
     border: 1px dashed var(--gray-300, #d1d5db);
-    border-radius: 6px;
+    border-radius: 0;
     cursor: pointer;
     transition: all 0.15s ease;
 }
@@ -320,7 +320,7 @@
     padding: 3px 10px;
     background: var(--gray-100, #f3f4f6);
     color: var(--gray-700, #374151);
-    border-radius: 4px;
+    border-radius: 0;
     font-weight: 500;
     font-family: 'Geist Mono', 'SF Mono', 'Monaco', monospace;
     letter-spacing: 0.025em;

@@ -5,7 +5,7 @@
 .language-distribution-card {
     background: var(--background-primary);
     border: 1px solid var(--border-color);
-    border-radius: 12px;
+    border-radius: 0;
     padding: 20px;
     box-shadow: var(--shadow-sm);
     transition: all 0.3s ease;
@@ -51,7 +51,7 @@
     align-items: center;
     padding: 8px 12px;
     background: var(--background-secondary);
-    border-radius: 8px;
+    border-radius: 0;
     border-left: 3px solid var(--primary-color);
     transition: all 0.2s ease;
 }
@@ -73,7 +73,7 @@
     font-size: 0.9rem;
     background: var(--primary-color-light);
     padding: 2px 8px;
-    border-radius: 12px;
+    border-radius: 0;
     min-width: 50px;
     text-align: center;
 }
@@ -136,7 +136,7 @@
     font-style: italic;
     padding: 20px;
     background: var(--background-secondary);
-    border-radius: 8px;
+    border-radius: 0;
     border: 1px dashed var(--border-color);
 }
 

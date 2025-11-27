@@ -64,7 +64,7 @@ a:hover {
   font-weight: var(--font-medium);
   line-height: 1;
   border: 1px solid transparent;
-  border-radius: var(--radius-none);
+  border-radius: 0;
   cursor: pointer;
   transition: all var(--transition-fast);
   text-decoration: none;
@@ -124,7 +124,7 @@ a:hover {
   color: var(--text-primary);
   background-color: var(--background-secondary);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
+  border-radius: 0;
   transition: border-color var(--transition-fast);
 }
 
@@ -144,7 +144,7 @@ a:hover {
   color: var(--text-primary);
   background-color: var(--background-secondary);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
+  border-radius: 0;
   transition: border-color var(--transition-fast);
 }
 
@@ -158,7 +158,7 @@ a:hover {
 .card {
   background-color: var(--background-secondary);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
+  border-radius: 0;
   box-shadow: var(--shadow-sm);
   transition: box-shadow var(--transition);
 }
@@ -249,11 +249,11 @@ a:hover {
 .shadow-lg { box-shadow: var(--shadow-lg); }
 .shadow-xl { box-shadow: var(--shadow-xl); }
 
-.rounded-none { border-radius: var(--radius-none); }
-.rounded-sm { border-radius: var(--radius-sm); }
-.rounded-md { border-radius: var(--radius-md); }
-.rounded-lg { border-radius: var(--radius-lg); }
-.rounded-full { border-radius: var(--radius-full); }
+.rounded-none { border-radius: 0; }
+.rounded-sm { border-radius: 0; }
+.rounded-md { border-radius: 0; }
+.rounded-lg { border-radius: 0; }
+.rounded-full { border-radius: 0; }
 
 /* Spacing Utilities */
 .p-1 { padding: var(--space-1); }

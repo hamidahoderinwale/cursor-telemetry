@@ -9,7 +9,7 @@
 .visualization-card {
   background: var(--background-primary);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
+  border-radius: 0;
   padding: var(--space-4);
   transition: var(--transition-fast);
   box-shadow: var(--shadow-sm);
@@ -40,7 +40,7 @@
   padding: var(--space-1) var(--space-2);
   background: var(--primary-color-bg);
   color: var(--primary-color);
-  border-radius: var(--radius-md);
+  border-radius: 0;
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-medium);
   white-space: nowrap;

@@ -1673,7 +1673,7 @@ function renderConversationTurnTimelineItem(turn, side = 'left', timelineItems =
     const thinkingTimeDisplay = thinkingTime > 1 ? `${thinkingTime.toFixed(1)}s` : `${(thinkingTimeMs).toFixed(0)}ms`;
     // Create a visual gap indicator before the response
     thinkingTimeIndicator = `
-      <div class="thinking-time-gap" style="margin-bottom: var(--space-sm); padding: var(--space-xs) var(--space-sm); background: linear-gradient(90deg, transparent, var(--color-warning), transparent); opacity: 0.3; border-radius: var(--radius-sm); position: relative;">
+      <div class="thinking-time-gap" style="margin-bottom: var(--space-sm); padding: var(--space-xs) var(--space-sm); background: var(--color-bg-alt); opacity: 0.3; border-radius: 0; position: relative;">
         <div class="thinking-time-indicator" style="position: absolute; left: 50%; transform: translateX(-50%); padding: 0.25rem 0.5rem; background: var(--color-warning); color: var(--color-text); border-radius: var(--radius-sm); font-size: var(--text-xs); display: inline-flex; align-items: center; gap: var(--space-xs); white-space: nowrap; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
           <span></span>
           <span>Thinking: ${thinkingTimeDisplay}</span>
@@ -1705,7 +1705,7 @@ function renderConversationTurnTimelineItem(turn, side = 'left', timelineItems =
         </div>
         ${requestDuration ? `
           <div style="margin-top: var(--space-xs); height: 4px; background: var(--color-border); border-radius: 2px; overflow: hidden; position: relative;">
-            <div style="height: 100%; width: 100%; background: linear-gradient(90deg, var(--color-primary) 0%, var(--color-primary-light) 100%); border-radius: 2px;"></div>
+            <div style="height: 100%; width: 100%; background: var(--color-primary); border-radius: 0;"></div>
             ${timeToFirstToken ? `
               <div style="position: absolute; left: ${(timeToFirstToken / requestDuration) * 100}%; top: 0; bottom: 0; width: 2px; background: var(--color-warning);"></div>
             ` : ''}

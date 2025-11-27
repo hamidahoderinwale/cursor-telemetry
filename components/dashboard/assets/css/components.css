@@ -31,7 +31,7 @@
 .stat-card {
   background: var(--background-secondary);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
+  border-radius: 0;
   padding: var(--space-6);
   text-align: center;
   box-shadow: var(--shadow-sm);
@@ -62,7 +62,7 @@
 .controls {
   background: var(--background-secondary);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
+  border-radius: 0;
   padding: var(--space-4);
   margin-bottom: var(--space-6);
   box-shadow: var(--shadow-sm);
@@ -132,13 +132,13 @@
   padding: var(--space-2) var(--space-3);
   background: var(--background-tertiary);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
+  border-radius: 0;
 }
 
 .status-dot {
   width: 8px;
   height: 8px;
-  border-radius: var(--radius-full);
+  border-radius: 0;
   display: inline-block;
   transition: background-color var(--transition-fast);
 }
@@ -163,7 +163,7 @@
 .table-container {
   background: var(--background-secondary);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
+  border-radius: 0;
   overflow: hidden;
   box-shadow: var(--shadow-sm);
 }
@@ -239,7 +239,7 @@
 .viz-container {
   background: var(--background-secondary);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
+  border-radius: 0;
   padding: var(--space-6);
   box-shadow: var(--shadow-sm);
   transition: box-shadow var(--transition);
@@ -282,7 +282,7 @@
 .sessions-list {
   background: var(--background-secondary);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
+  border-radius: 0;
   overflow: hidden;
   box-shadow: var(--shadow-sm);
 }
@@ -303,7 +303,7 @@
   height: 16px;
   border: 2px solid var(--border-color);
   border-top: 2px solid var(--primary-color);
-  border-radius: var(--radius-full);
+  border-radius: 0;
   animation: spin 1s linear infinite;
   margin-right: var(--space-2);
 }
@@ -331,7 +331,7 @@
   margin: 3% auto;
   padding: 0;
   border: none;
-  border-radius: var(--radius-none);
+  border-radius: 0;
   width: 95%;
   max-width: 1200px;
   max-height: 85vh;
