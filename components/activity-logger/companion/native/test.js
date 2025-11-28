@@ -31,13 +31,13 @@ function test(name, fn) {
 // Test 1: calculateDiff
 test('calculateDiff - basic diff', () => {
   const result = native.calculateDiff('hello', 'hello world');
-  return result.diff_size === 6 && result.lines_added >= 0;
+  return result.diffSize === 6 && result.linesAdded >= 0;
 });
 
 // Test 2: calculateDiff - with threshold
 test('calculateDiff - threshold check', () => {
   const result = native.calculateDiff('a', 'b', 10);
-  return result.is_significant === false;
+  return result.isSignificant === false;
 });
 
 // Test 3: getLineChanges
