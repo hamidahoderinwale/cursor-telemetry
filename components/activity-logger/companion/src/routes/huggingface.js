@@ -14,7 +14,7 @@ function createHuggingFaceRoutes(deps) {
    * GET /api/huggingface/export
    * 
    * Query parameters:
-   * - privacy_level: 'raw', 'rung1', 'rung2', 'rung3', 'module_graph', 'clio' (default: 'clio')
+   * - privacy_level: 'raw', 'tokens', 'semantic_edits', 'functions', 'module_graph', 'clio' (default: 'clio')
    * - include_code: 'true' or 'false' (default: true for raw/rung1/rung2/rung3, false for clio/module_graph)
    * - include_prompts: 'true' or 'false' (default: true)
    * - anonymize: 'true' or 'false' (default: true)
@@ -34,7 +34,7 @@ function createHuggingFaceRoutes(deps) {
         path.join(__dirname, '../../data', `hf-export-${Date.now()}`);
 
       // Validate privacy level
-      const validPrivacyLevels = ['raw', 'rung1', 'rung2', 'rung3', 'module_graph', 'clio'];
+      const validPrivacyLevels = ['raw', 'tokens', 'semantic_edits', 'functions', 'module_graph', 'clio'];
       if (!validPrivacyLevels.includes(privacyLevel)) {
         return res.status(400).json({
           success: false,
@@ -109,14 +109,14 @@ function createHuggingFaceRoutes(deps) {
       description: 'Hugging Face Dataset Export Service',
       privacyLevels: {
         raw: 'Full data including all code and prompts (lowest privacy)',
-        rung1: 'Token-level with PII redaction',
-        rung2: 'Semantic edit operations',
-        rung3: 'Function-level changes',
+        tokens: 'Token-level with PII redaction',
+        semantic_edits: 'Semantic edit operations',
+        functions: 'Function-level changes',
         module_graph: 'File dependencies only',
         clio: 'Workflow patterns only (highest privacy)'
       },
       options: {
-        privacy_level: 'Privacy level for export (raw, rung1, rung2, rung3, module_graph, clio)',
+        privacy_level: 'Privacy level for export (raw, tokens, semantic_edits, functions, module_graph, clio)',
         include_code: 'Include code diffs in export (true/false)',
         include_prompts: 'Include AI prompts in export (true/false)',
         anonymize: 'Anonymize file paths and remove PII (true/false)',
@@ -129,7 +129,7 @@ function createHuggingFaceRoutes(deps) {
       },
       examples: [
         '/api/huggingface/export?privacy_level=clio&anonymize=true',
-        '/api/huggingface/export?privacy_level=rung3&max_samples=5000',
+        '/api/huggingface/export?privacy_level=functions&max_samples=5000',
         '/api/huggingface/export?privacy_level=raw&include_code=true&anonymize=false'
       ],
       resources: {

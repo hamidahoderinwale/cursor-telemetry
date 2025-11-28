@@ -30,7 +30,7 @@
 
 **Size:** ~50MB (Node.js dependencies)
 
-👉 **[Go to Companion Service Setup](#companion-service-setup)**
+**[Go to Companion Service Setup](#companion-service-setup)**
 
 ---
 
@@ -53,7 +53,7 @@
 
 **Size:** ~60MB (includes frontend assets)
 
-👉 **[Go to Full Dashboard Setup](#full-dashboard-setup)**
+**[Go to Full Dashboard Setup](#full-dashboard-setup)**
 
 ---
 
@@ -99,8 +99,8 @@ cursor-telemetry/
 ### Prerequisites
 - Node.js 16+
 - Cursor IDE (for prompt mining)
-- Optional: Rust & Cargo (for native performance module - 5-10x faster diffs)
-- Optional: Redis (for caching - 20-50x faster API responses)
+- Optional: Rust & Cargo (for native module)
+- Optional: Redis (for caching)
 - Optional: PostgreSQL (recommended for production)
 - Optional: OpenRouter API key (for AI features)
 
@@ -163,11 +163,11 @@ cursor-telemetry examples
 ```
 
 **Privacy Levels for Export:**
-- `clio` ⭐⭐⭐⭐⭐ - Workflow patterns only (safest for public sharing)
-- `module_graph` ⭐⭐⭐⭐ - File dependencies
-- `rung3` ⭐⭐⭐ - Function-level changes
-- `rung2` ⭐⭐ - Semantic edit operations
-- `rung1` ⭐ - Tokens with PII redaction
+- `clio` - Workflow patterns only (safest for public sharing)
+- `module_graph` - File dependencies
+- `functions` - Function-level changes
+- `semantic_edits` - Semantic edit operations
+- `tokens` - Tokens with PII redaction
 
 ### Configuration
 
@@ -183,60 +183,6 @@ Edit `config.json`:
 }
 ```
 
-### Optional: High-Performance Setup
-
-#### 1. Build Native Module (5-10x faster diffs)
-
-```bash
-cd native
-npm install
-npm run build
-```
-
-The native Rust module provides:
-- **5-10x faster** diff generation using the 'similar' crate
-- **Parallel processing** for batch operations
-- **Fast text analysis** (stats, language detection, function extraction)
-- **Automatic fallback** to JavaScript if not built
-
-#### 2. Configure Redis (20-50x faster API)
-
-```bash
-# Install Redis
-brew install redis  # macOS
-# or
-sudo apt install redis  # Linux
-
-# Start Redis
-redis-server
-
-# Configure in .env
-echo "REDIS_URL=redis://localhost:6379" >> .env
-```
-
-Benefits:
-- API responses: 200ms → 10ms (cached)
-- Dashboard load: 2s → 0.3s
-- Handles 10x more concurrent users
-
-#### 3. Use PostgreSQL (recommended for production)
-
-```bash
-# Set environment variables
-export DATABASE_TYPE=postgres
-export DATABASE_URL="postgresql://user:pass@localhost:5432/telemetry"
-
-# Or add to .env
-echo "DATABASE_TYPE=postgres" >> .env
-echo "DATABASE_URL=postgresql://user:pass@localhost:5432/telemetry" >> .env
-```
-
-Benefits over SQLite:
-- Better concurrent access
-- Connection pooling (5-10x faster under load)
-- Full-text search
-- Scales to millions of rows
-- Built-in replication
 
 ### Run
 
@@ -350,14 +296,14 @@ curl "http://localhost:43917/api/export/data?rung=clio" > clio.json
 # Module Graph - File dependencies (high privacy)
 curl "http://localhost:43917/api/export/data?rung=module_graph" > modules.json
 
-# Rung 3 - Function-level changes (medium privacy)
-curl "http://localhost:43917/api/export/data?rung=rung3" > functions.json
+# Functions - Function-level changes (medium privacy)
+curl "http://localhost:43917/api/export/data?rung=functions" > functions.json
 
-# Rung 2 - Edit scripts (low privacy)
-curl "http://localhost:43917/api/export/data?rung=rung2" > edits.json
+# Semantic Edits - Edit scripts (low privacy)
+curl "http://localhost:43917/api/export/data?rung=semantic_edits" > edits.json
 
-# Rung 1 - Tokens (lowest privacy, PII redacted)
-curl "http://localhost:43917/api/export/data?rung=rung1" > tokens.json
+# Tokens - Tokens (lowest privacy, PII redacted)
+curl "http://localhost:43917/api/export/data?rung=tokens" > tokens.json
 ```
 
 ### Key API Endpoints
@@ -423,55 +369,18 @@ http://localhost:43917/dashboard.html
 
 ### Dashboard Features
 
-#### 📊 Views
-- **Overview** - Real-time stats and recent activity
-- **Activity** - Complete timeline with AI annotations
-- **Analytics** - Productivity metrics, context usage, error tracking
-- **File Graph** - Interactive dependency visualization
-- **Module Graph** - High-level architectural view
-- **States** - Visual state management (fork/merge workflows)
-- **Navigator** - Workspace file explorer
-- **System** - Resource usage and IDE monitoring
-- **Historical Mining** - Mine git/shell/log history
-- **Rungs** - Privacy-preserving abstractions (5 levels)
-- **API Docs** - Complete API reference
+#### Views
+- Overview, Activity, Analytics, File Graph, Module Graph
+- States, Navigator, System, Historical Mining
+- Privacy-preserving abstractions (5 levels), API Docs
 
-#### 🤖 AI Features
-- **Event Annotations** - AI-generated descriptions of code changes
-- **Intent Classification** - Automatic tagging (feature, bug-fix, refactor)
-- **Natural Language Interface** - Control with commands like "Fork a state for authentication"
-- **Semantic Search** - Find events and states by meaning
-- **State Recommendations** - Smart suggestions for workflow management
+#### AI Features
+- Event annotations, intent classification
+- Semantic search, natural language interface
 
-#### 🔐 Sharing & Export
-- **Shareable Links** - Create time-limited links with privacy controls
-- **Privacy Levels** - 4 abstraction levels (raw → workflow patterns)
-- **Date Filtering** - Share specific time ranges
-- **Rung Export** - Export at 5 privacy tiers
-
-### Production Deployment
-
-**Using PM2:**
-```bash
-cd components/activity-logger/companion
-pm2 start src/index.js --name cursor-telemetry
-pm2 save
-pm2 startup  # Enable auto-start
-```
-
-**Using Docker:**
-```bash
-docker build -f infra/docker/Dockerfile.companion -t cursor-companion .
-docker run -d -p 43917:43917 -v $(pwd)/data:/app/data cursor-companion
-```
-
-**Using systemd:**
-```bash
-# See infra/systemd/cursor-companion.service
-sudo cp infra/systemd/cursor-companion.service /etc/systemd/system/
-sudo systemctl enable cursor-companion
-sudo systemctl start cursor-companion
-```
+#### Sharing & Export
+- Shareable links with privacy controls
+- Export at 5 privacy levels
 
 ---
 
@@ -483,7 +392,7 @@ DATABASE_TYPE=sqlite              # Default, good for local use
 DATABASE_TYPE=postgres            # Recommended for production
 DATABASE_URL=postgresql://...     # Required if using PostgreSQL
 
-# Redis Cache (optional, 20-50x performance boost)
+# Redis Cache (optional)
 REDIS_URL=redis://localhost:6379
 
 # OpenRouter API (required for AI features)
@@ -527,9 +436,9 @@ LOG_LEVEL=info
 **Rungs System** - 5 levels of privacy-preserving abstraction:
 1. **Clio (Motifs)** - Workflow patterns only (highest privacy)
 2. **Module Graph** - File-level dependencies
-3. **Rung 3** - Function signatures and changes
-4. **Rung 2** - Semantic edit operations
-5. **Rung 1** - Token-level with PII redaction
+3. **Functions** - Function signatures and changes
+4. **Semantic Edits** - Semantic edit operations
+5. **Tokens** - Token-level with PII redaction
 
 **Shareable Links:**
 - Time-limited expiration (1 day to 1 year)
@@ -548,39 +457,11 @@ LOG_LEVEL=info
 
 ## Use Cases
 
-### For Individual Developers
-- Track personal productivity with real-time stats
-- Understand coding patterns and time allocation
-- Debug development workflow bottlenecks
-- **Export for AI training datasets** (Hugging Face integration)
-- Share progress with privacy controls
-
-### For Teams
-- Collaborate with automatic privacy abstractions
-- Share workflow insights at different detail levels
-- Track project velocity and sprint progress
-- Generate development reports
-- Onboard new team members with context
-
-### For Researchers
-- **Study software development processes** with privacy-safe data
-- **Analyze AI-assisted coding patterns** (Cursor/Copilot usage)
-- **Build training datasets** for code models via HF
-- Examine developer behavior across languages/frameworks
-- **Export at 5 privacy levels** for different research needs
-
-### For Data Scientists
-- **Export to Hugging Face** as ready-to-use datasets
-- Train code generation models on real developer workflows
-- Analyze productivity metrics and patterns
-- Study context window usage in AI-assisted coding
-- Build workflow recommendation systems
-
-### For Managers/Stakeholders
-- View high-level progress (Clio workflow patterns)
-- Track sprint velocity without seeing code
-- Understand technical debt and refactoring needs
-- Get insights using privacy abstractions
+- Track productivity and coding patterns
+- Export data for AI training datasets (Hugging Face integration)
+- Share workflow insights with privacy controls
+- Analyze development processes and patterns
+- Build training datasets for code models
 
 ---
 
@@ -591,126 +472,28 @@ LOG_LEVEL=info
 ```
 Port 43917
 ├── HTTP REST API (Express)
-│   ├── Compression (Gzip/Brotli)
-│   ├── ETag Support
-│   └── CORS Enabled
 ├── WebSocket Server (Socket.IO)
-├── Database Layer
-│   ├── SQLite (default)
-│   ├── PostgreSQL (with connection pooling)
-│   └── Denormalized stats table
-├── Cache Layer (Optional)
-│   ├── Redis (20-50x faster)
-│   └── NodeCache (fallback)
-├── Native Performance (Optional)
-│   ├── Rust diff engine (5-10x faster)
-│   └── Parallel batch processing
-├── Data Capture
-│   ├── File Watcher (Chokidar)
-│   ├── Cursor DB Miner (polls every 10s)
-│   ├── Terminal Monitor
-│   ├── System Metrics
-│   └── IDE State (AppleScript)
-├── Historical Mining
-│   ├── Git History
-│   ├── Shell History
-│   └── Log Parsing
+├── Database Layer (SQLite/PostgreSQL)
+├── Cache Layer (Optional Redis)
+├── Native Module (Optional Rust)
+├── Data Capture (File watcher, Cursor miner, Terminal)
+├── Historical Mining (Git, Shell history, Logs)
 ├── Analytics Engine
-│   ├── Productivity Tracking
-│   ├── Context Usage Analysis
-│   └── Error Tracking
-├── Privacy Engine
-│   ├── 5-Level Rung System
-│   ├── PII Redaction
-│   └── Shareable Links
-├── Export System
-│   ├── JSON/CSV/SQLite
-│   └── Hugging Face Format
+├── Privacy Engine (5-Level abstraction system)
+├── Export System (JSON/CSV/SQLite/Hugging Face)
 └── AI Services (OpenRouter)
-    ├── Event Annotation
-    ├── Intent Classification
-    └── Semantic Search
 ```
 
 ### Dashboard (Frontend)
 
 ```
 Static Files served by Companion
-├── Vanilla JavaScript (no framework)
+├── Vanilla JavaScript
 ├── D3.js (visualizations)
 ├── Chart.js (analytics)
-├── Lunr.js (full-text search)
 ├── Socket.IO Client (real-time)
 └── Views (20+ pages)
 ```
-
----
-
-## Performance
-
-### Resource Usage
-
-**Companion Service:**
-- CPU: 1-5% (idle), 10-20% (active mining)
-- Memory: 100-300 MB (SQLite) or 150-400 MB (PostgreSQL)
-- Disk I/O: Minimal with write caching
-- Network: Minimal (API requests only)
-
-**Dashboard:**
-- Runs in browser
-- No additional server overhead
-- Heavy visualizations use web workers
-
-### Optimization Features
-
-#### 🚀 Redis Caching (Optional)
-- **20-50x faster** API responses
-- 10-60 second TTL with smart invalidation
-- Automatic fallback to in-memory cache
-- Dashboard load: 2s → 0.3s
-
-#### ⚡ Native Rust Module (Optional)
-- **5-10x faster** diff generation
-- Parallel batch processing with Rayon
-- Fast file statistics and language detection
-- Automatic fallback to JavaScript
-
-#### 💾 Database Optimizations
-- Connection pooling (5-10x faster queries with PostgreSQL)
-- Composite indexes on workspace + timestamp
-- Denormalized stats table (200x faster dashboard stats)
-- Automatic stats updates every 5 minutes
-
-#### 🎯 API Optimizations
-- Server-side caching with ETag support
-- Response compression (Gzip/Brotli)
-- Incremental data loading (10-20 items at a time)
-- Progressive rendering for large datasets
-
-#### 📊 Frontend Optimizations
-- Debounced stats calculation (500ms)
-- Memoization of expensive computations
-- IndexedDB persistent cache
-- Web workers for CPU-intensive tasks
-- `requestIdleCallback` for deferred loading
-
-### Performance Tips
-
-1. **Enable Redis** for production deployments
-2. **Build native module** with `cd native && npm run build`
-3. **Use PostgreSQL** for datasets > 100K rows
-4. **Enable compression** (automatic with Express)
-5. **Limit query results** to 50-100 items per page
-
-### Benchmarks
-
-| Operation | SQLite | PostgreSQL + Pool | With Redis |
-|-----------|--------|-------------------|------------|
-| List 100 entries | 50ms | 20ms | 5ms |
-| Complex query | 200ms | 50ms | 10ms |
-| Stats calculation | 800ms | 400ms | 5ms (cached) |
-| Diff generation (JS) | 15ms | 15ms | 15ms |
-| Diff generation (Rust) | **2ms** | **2ms** | **2ms** |
 
 ---
 
@@ -747,22 +530,6 @@ rm -f *.db-wal *.db-shm
 npm start
 ```
 
-### Performance Issues
-
-```bash
-# Check if Redis is running
-redis-cli ping
-
-# Check if native module is built
-cd native && npm run build
-
-# Check database type
-curl http://localhost:43917/health | grep -i database
-
-# Enable query caching
-export REDIS_URL=redis://localhost:6379
-npm start
-```
 
 ### CLI Not Working
 

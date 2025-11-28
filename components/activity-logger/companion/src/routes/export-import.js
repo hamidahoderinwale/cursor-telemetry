@@ -399,11 +399,11 @@ function createExportImportRoutes(deps) {
         writeChunk('    "moduleGraph": { "note": "Module graph excluded from export" },\n');
       }
 
-      // Rung 3: Function-level representation (Medium Privacy)
+      // Functions: Function-level representation (Medium Privacy)
       if (!excludeRung3 && rung3Service) {
-        writeChunk('    "rung3": {\n');
+        writeChunk('    "functions": {\n');
         writeChunk('      "version": "1.0",\n');
-        writeChunk('      "rung": 3,\n');
+        writeChunk('      "level": "functions",\n');
         writeChunk('      "description": "Function-level changes and callgraph updates",\n');
         try {
           const workspace = req.query.workspace || req.query.workspace_path || null;
@@ -422,14 +422,14 @@ function createExportImportRoutes(deps) {
         }
         writeChunk('    },\n');
       } else {
-        writeChunk('    "rung3": { "note": "Rung 3 excluded from export" },\n');
+        writeChunk('    "functions": { "note": "Functions excluded from export" },\n');
       }
 
-      // Rung 2: Statement-level (semantic edit scripts) (Low Privacy)
+      // Semantic Edits: Statement-level (semantic edit scripts) (Low Privacy)
       if (!excludeRung2 && rung2Service) {
-        writeChunk('    "rung2": {\n');
+        writeChunk('    "semantic_edits": {\n');
         writeChunk('      "version": "1.0",\n');
-        writeChunk('      "rung": 2,\n');
+        writeChunk('      "level": "semantic_edits",\n');
         writeChunk('      "description": "Semantic edit scripts from AST differencing",\n');
         try {
           const workspace = req.query.workspace || req.query.workspace_path || null;
@@ -444,14 +444,14 @@ function createExportImportRoutes(deps) {
         }
         writeChunk('    },\n');
       } else {
-        writeChunk('    "rung2": { "note": "Rung 2 excluded from export" },\n');
+        writeChunk('    "semantic_edits": { "note": "Semantic edits excluded from export" },\n');
       }
 
-      // Rung 1: Token-level abstraction (Lowest Privacy)
+      // Tokens: Token-level abstraction (Lowest Privacy)
       if (!excludeRung1 && rung1Service) {
-        writeChunk('    "rung1": {\n');
+        writeChunk('    "tokens": {\n');
         writeChunk('      "version": "1.0",\n');
-        writeChunk('      "rung": 1,\n');
+        writeChunk('      "level": "tokens",\n');
         writeChunk('      "description": "Token-level abstraction with canonicalized identifiers",\n');
         try {
           const workspace = req.query.workspace || req.query.workspace_path || null;
@@ -498,7 +498,7 @@ function createExportImportRoutes(deps) {
         }
         writeChunk('    },\n');
       } else {
-        writeChunk('    "rung1": { "note": "Rung 1 excluded from export" },\n');
+        writeChunk('    "tokens": { "note": "Tokens excluded from export" },\n');
       }
 
       // Workspaces (small)
@@ -1179,7 +1179,7 @@ function createExportImportRoutes(deps) {
         moduleGraphData = { note: 'Module graph service not available' };
       }
 
-      // Get Rung 3 data (Function-level representation) - Medium Privacy
+      // Get Functions data (Function-level representation) - Medium Privacy
       let rung3Data = null;
       if (!excludeRung3 && rung3Service) {
         try {
@@ -1190,7 +1190,7 @@ function createExportImportRoutes(deps) {
           const stats = await rung3Service.getFunctionStats(workspace);
           rung3Data = {
             version: '1.0',
-            rung: 3,
+            level: 'functions',
             description: 'Function-level changes and callgraph updates',
             functionChanges: changes || [],
             functions: functions || [],
@@ -1198,16 +1198,16 @@ function createExportImportRoutes(deps) {
             stats: stats || {}
           };
         } catch (error) {
-          console.warn('[EXPORT] Failed to export Rung 3:', error.message);
+          console.warn('[EXPORT] Failed to export Functions:', error.message);
           rung3Data = { error: error.message };
         }
       } else if (excludeRung3) {
-        rung3Data = { note: 'Rung 3 excluded from export' };
+        rung3Data = { note: 'Functions excluded from export' };
       } else {
-        rung3Data = { note: 'Rung 3 service not available' };
+        rung3Data = { note: 'Functions service not available' };
       }
 
-      // Get Rung 2 data (Statement-level semantic edit scripts) - Low Privacy
+      // Get Semantic Edits data (Statement-level semantic edit scripts) - Low Privacy
       let rung2Data = null;
       if (!excludeRung2 && rung2Service) {
         try {
@@ -1216,22 +1216,22 @@ function createExportImportRoutes(deps) {
           const operations = await rung2Service.getOperationTypes(workspace);
           rung2Data = {
             version: '1.0',
-            rung: 2,
+            level: 'semantic_edits',
             description: 'Semantic edit scripts from AST differencing',
             editScripts: scripts || [],
             operations: operations || {}
           };
         } catch (error) {
-          console.warn('[EXPORT] Failed to export Rung 2:', error.message);
+          console.warn('[EXPORT] Failed to export Semantic Edits:', error.message);
           rung2Data = { error: error.message };
         }
       } else if (excludeRung2) {
-        rung2Data = { note: 'Rung 2 excluded from export' };
+        rung2Data = { note: 'Semantic edits excluded from export' };
       } else {
-        rung2Data = { note: 'Rung 2 service not available' };
+        rung2Data = { note: 'Semantic edits service not available' };
       }
 
-      // Get Rung 1 data (Token-level abstraction) - Lowest Privacy
+      // Get Tokens data (Token-level abstraction) - Lowest Privacy
       let rung1Data = null;
       if (!excludeRung1 && rung1Service) {
         try {
@@ -1255,7 +1255,7 @@ function createExportImportRoutes(deps) {
             ? rung1FuzzSemanticExpressiveness 
             : req.query.rung1_fuzz_semantic_expressiveness === 'true';
           
-          // Temporarily update Rung 1 service with options
+          // Temporarily update Tokens service with options
           const originalPIIOptions = { ...rung1Service.piiOptions };
           const originalFuzzOption = rung1Service.fuzzSemanticExpressiveness;
           rung1Service.updatePIIOptions(piiOptions);
@@ -1271,7 +1271,7 @@ function createExportImportRoutes(deps) {
           
           rung1Data = {
             version: '1.0',
-            rung: 1,
+            level: 'tokens',
             description: 'Token-level abstraction with canonicalized identifiers',
             tokens: tokens || [],
             stats: stats || {},
@@ -1279,13 +1279,13 @@ function createExportImportRoutes(deps) {
             fuzzSemanticExpressiveness: fuzzSemanticExpressiveness // Include fuzzing option in export
           };
         } catch (error) {
-          console.warn('[EXPORT] Failed to export Rung 1:', error.message);
+          console.warn('[EXPORT] Failed to export Tokens:', error.message);
           rung1Data = { error: error.message };
         }
       } else if (excludeRung1) {
-        rung1Data = { note: 'Rung 1 excluded from export' };
+        rung1Data = { note: 'Tokens excluded from export' };
       } else {
-        rung1Data = { note: 'Rung 1 service not available' };
+        rung1Data = { note: 'Tokens service not available' };
       }
 
       // Get in-memory data with improved, organized structure
@@ -1469,14 +1469,14 @@ function createExportImportRoutes(deps) {
           // Module Graph (Rung 4 - File-level abstraction)
           moduleGraph: moduleGraphData,
 
-          // Rung 3: Function-level representation (Medium Privacy)
-          rung3: rung3Data,
+          // Functions: Function-level representation (Medium Privacy)
+          functions: rung3Data,
 
-          // Rung 2: Statement-level (semantic edit scripts) (Low Privacy)
-          rung2: rung2Data,
+          // Semantic Edits: Statement-level (semantic edit scripts) (Low Privacy)
+          semantic_edits: rung2Data,
 
-          // Rung 1: Token-level abstraction (Lowest Privacy)
-          rung1: rung1Data,
+          // Tokens: Token-level abstraction (Lowest Privacy)
+          tokens: rung1Data,
         },
 
         // ============================================

@@ -4,11 +4,11 @@ High-performance Rust implementations for CPU-intensive operations in the Cursor
 
 ## Features
 
-- ⚡ **5-10x faster** diff generation using the `similar` crate (Myers' diff algorithm)
-- 🔄 **Parallel processing** for batch operations using Rayon
-- 📊 **Fast text analysis** (stats, language detection, function extraction)
-- 🎯 **Optimized builds** with LTO and maximum optimization flags
-- 🔌 **Seamless Node.js integration** via NAPI-RS
+- **5-10x faster** diff generation using the `similar` crate (Myers' diff algorithm)
+- **Parallel processing** for batch operations using Rayon
+- **Fast text analysis** (stats, language detection, function extraction)
+- **Optimized builds** with LTO and maximum optimization flags
+- **Seamless Node.js integration** via NAPI-RS
 
 ## Prerequisites
 
@@ -244,7 +244,7 @@ The JavaScript code automatically falls back to JavaScript implementation if the
 
 2. Check build mode: Use `npm run build` (release mode) for best performance
 
-3. Verify in logs: Look for `[DIFF] ⚡ Using Rust native module` message
+3. Verify in logs: Look for `[DIFF] Using Rust native module` message
 
 ## Development
 

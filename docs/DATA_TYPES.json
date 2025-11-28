@@ -114,21 +114,21 @@
     "values": [
       "clio",
       "module_graph",
-      "rung3",
-      "rung2",
-      "rung1"
+      "functions",
+      "semantic_edits",
+      "tokens"
     ],
     "descriptions": {
       "clio": "Motifs - High-level workflow patterns (highest privacy, highest abstraction)",
       "module_graph": "File-Level Abstraction - File relationships and dependencies (high privacy)",
-      "rung3": "Function-Level Abstraction - Function-level changes and callgraph updates (medium privacy)",
-      "rung2": "Statement-Level Abstraction - Semantic edit scripts from AST differencing (low privacy)",
-      "rung1": "Token-Level Abstraction - Token sequences with canonicalized identifiers (lowest privacy)"
+      "functions": "Function-Level Abstraction - Function-level changes and callgraph updates (medium privacy)",
+      "semantic_edits": "Statement-Level Abstraction - Semantic edit scripts from AST differencing (low privacy)",
+      "tokens": "Token-Level Abstraction - Token sequences with canonicalized identifiers (lowest privacy)"
     }
   },
   
   "piiRedactionOptions": {
-    "description": "PII redaction options for Rung 1",
+      "description": "PII redaction options for tokens",
     "options": {
       "redactEmails": "Redact email addresses",
       "redactNames": "Redact person names",

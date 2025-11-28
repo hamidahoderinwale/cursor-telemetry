@@ -118,13 +118,13 @@ curl "http://localhost:43917/api/export/data?rung=clio" > clio.json
 curl "http://localhost:43917/api/export/data?rung=module_graph" > modules.json
 
 # Rung 3 - Function-level changes (medium privacy)
-curl "http://localhost:43917/api/export/data?rung=rung3" > functions.json
+curl "http://localhost:43917/api/export/data?rung=functions" > functions.json
 
-# Rung 2 - Edit scripts (low privacy)
-curl "http://localhost:43917/api/export/data?rung=rung2" > edits.json
+# Semantic Edits - Edit scripts (low privacy)
+curl "http://localhost:43917/api/export/data?rung=semantic_edits" > edits.json
 
-# Rung 1 - Tokens (lowest privacy, PII redacted)
-curl "http://localhost:43917/api/export/data?rung=rung1" > tokens.json
+# Tokens - Tokens (lowest privacy, PII redacted)
+curl "http://localhost:43917/api/export/data?rung=tokens" > tokens.json
 ```
 
 ### Query Real-Time Data

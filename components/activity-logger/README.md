@@ -345,9 +345,9 @@ Dashboard (Frontend)
 │   ├── navigator/
 │   ├── system/
 │   ├── historical-mining/
-│   ├── rung1-tokens/
-│   ├── rung2-edit-scripts/
-│   ├── rung3-functions/
+│   ├── tokens/
+│   ├── semantic-edits/
+│   ├── functions/
 │   └── clio/
 ├── Components
 │   ├── charts/ (Chart.js wrappers)
@@ -543,11 +543,11 @@ cat companion/config.json
 
 | Browser | Version | Support |
 |---------|---------|---------|
-| Chrome | 90+ | ✅ Full |
-| Firefox | 88+ | ✅ Full |
-| Safari | 14+ | ✅ Full |
-| Edge | 90+ | ✅ Full |
-| Opera | 76+ | ✅ Full |
+| Chrome | 90+ | Full |
+| Firefox | 88+ | Full |
+| Safari | 14+ | Full |
+| Edge | 90+ | Full |
+| Opera | 76+ | Full |
 
 **Requirements:**
 - ES6+ support

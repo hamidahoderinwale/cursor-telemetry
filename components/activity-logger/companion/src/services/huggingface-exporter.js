@@ -17,7 +17,7 @@ class HuggingFaceExporter {
   constructor(persistentDB, options = {}) {
     this.db = persistentDB;
     this.options = {
-      privacyLevel: options.privacyLevel || 'clio', // 'raw', 'rung1', 'rung2', 'rung3', 'module_graph', 'clio'
+      privacyLevel: options.privacyLevel || 'clio', // 'raw', 'tokens', 'semantic_edits', 'functions', 'module_graph', 'clio'
       includeCode: options.includeCode !== false, // Include code diffs (disable for high privacy)
       includePrompts: options.includePrompts !== false,
       anonymize: options.anonymize !== false, // Anonymize file paths and workspace names
@@ -117,7 +117,7 @@ class HuggingFaceExporter {
       
       // Add code based on privacy level
       if (this.options.includeCode && this.options.privacyLevel !== 'clio') {
-        if (this.options.privacyLevel === 'raw' || this.options.privacyLevel === 'rung1') {
+        if (this.options.privacyLevel === 'raw' || this.options.privacyLevel === 'tokens') {
           sample.before_code = entry.before_code || '';
           sample.after_code = entry.after_code || '';
         }

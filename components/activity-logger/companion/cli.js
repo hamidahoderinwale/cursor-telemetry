@@ -153,7 +153,7 @@ const hfCmd = program
 hfCmd
   .command('export')
   .description('Export data in Hugging Face dataset format')
-  .option('-p, --privacy <level>', 'Privacy level (raw|rung1|rung2|rung3|module_graph|clio)', 'clio')
+  .option('-p, --privacy <level>', 'Privacy level (raw|tokens|semantic_edits|functions|module_graph|clio)', 'clio')
   .option('-o, --output <dir>', 'Output directory', `./hf-export-${Date.now()}`)
   .option('-m, --max <number>', 'Maximum samples', '10000')
   .option('--no-anonymize', 'Disable anonymization')
@@ -460,11 +460,11 @@ const rungsCmd = program
 rungsCmd
   .command('export')
   .description('Export data at specified privacy rung')
-  .argument('<level>', 'Privacy level (clio|module_graph|rung3|rung2|rung1)')
+  .argument('<level>', 'Privacy level (clio|module_graph|functions|semantic_edits|tokens)')
   .option('-o, --output <file>', 'Output file')
   .option('-l, --limit <number>', 'Number of items', '5000')
   .action(async (level, options) => {
-    const validLevels = ['clio', 'module_graph', 'rung3', 'rung2', 'rung1'];
+    const validLevels = ['clio', 'module_graph', 'functions', 'semantic_edits', 'tokens'];
     if (!validLevels.includes(level)) {
       error(`Invalid level. Must be one of: ${validLevels.join(', ')}`);
       process.exit(1);
@@ -491,9 +491,9 @@ rungsCmd
       const privacyInfo = {
         clio: 'Workflow patterns only (highest privacy)',
         module_graph: 'File dependencies',
-        rung3: 'Function-level changes',
-        rung2: 'Semantic edit operations',
-        rung1: 'Tokens with PII redaction'
+        functions: 'Function-level changes',
+        semantic_edits: 'Semantic edit operations',
+        tokens: 'Tokens with PII redaction'
       };
       info(`Description: ${privacyInfo[level]}`);
       
@@ -512,9 +512,9 @@ rungsCmd
     const levels = [
       { name: 'clio', privacy: '⭐⭐⭐⭐⭐', desc: 'Workflow patterns only (safest to share)' },
       { name: 'module_graph', privacy: '⭐⭐⭐⭐', desc: 'File dependencies' },
-      { name: 'rung3', privacy: '⭐⭐⭐', desc: 'Function-level changes' },
-      { name: 'rung2', privacy: '⭐⭐', desc: 'Semantic edit operations' },
-      { name: 'rung1', privacy: '⭐', desc: 'Tokens with PII redaction' }
+      { name: 'functions', privacy: '⭐⭐⭐', desc: 'Function-level changes' },
+      { name: 'semantic_edits', privacy: '⭐⭐', desc: 'Semantic edit operations' },
+      { name: 'tokens', privacy: '⭐', desc: 'Tokens with PII redaction' }
     ];
     
     levels.forEach(level => {
@@ -658,7 +658,7 @@ program
       },
       {
         title: 'Export specific privacy rung',
-        cmd: 'cursor-telemetry rungs export rung3 -o functions.json'
+        cmd: 'cursor-telemetry rungs export functions -o functions.json'
       },
       {
         title: 'List privacy levels',

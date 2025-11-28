@@ -47,7 +47,7 @@ function createSchemaRoutes(deps) {
             values: ['file_change', 'code_change', 'file_create', 'file_delete', 'file_rename', 'state_create', 'state_fork', 'state_switch', 'state_merge']
           },
           databaseTables: {
-            tables: ['entries', 'prompts', 'events', 'terminal_commands', 'conversations', 'conversation_turns', 'rung1_tokens', 'rung2_edit_scripts', 'rung3_function_changes']
+            tables: ['entries', 'prompts', 'events', 'terminal_commands', 'conversations', 'conversation_turns', 'tokens', 'semantic_edit_scripts', 'function_changes']
           },
           note: 'Full data types available in docs/DATA_TYPES.json'
         };
