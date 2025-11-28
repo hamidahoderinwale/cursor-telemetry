@@ -70,6 +70,16 @@ const queryCache = new NodeCache({
   useClones: false, // Better performance, less memory
 });
 
+// Initialize Redis cache for high-performance caching (falls back to NodeCache if Redis unavailable)
+const RedisCache = require('./utils/redis-cache.js');
+const redisCache = new RedisCache({
+  ttl: 60,               // Default 60 seconds
+  prefix: 'cursor:',     // Namespace prefix
+});
+
+// Initialize stats table for denormalized statistics
+const StatsTable = require('./database/stats-table.js');
+
 // Enhanced raw data capture modules
 const os = require('os');
 const { exec, execSync } = require('child_process');
@@ -198,6 +208,9 @@ const automaticMiningScheduler = new AutomaticMiningScheduler(
     weeklyBackfillHour: 2  // 2 AM
   }
 );
+
+// Initialize stats table (initialized later after persistentDB is ready)
+let statsTable = null;
 
 // Initialize combined timeline service
 const combinedTimelineService = new CombinedTimelineService(persistentDB);
@@ -1553,6 +1566,7 @@ createActivityRoutes({
   persistentDB,
   sequence,
   queryCache,
+  redisCache,           // Add Redis cache for performance
   calculateDiff,
   cursorDbParser,
   dataAccessControl,
@@ -1786,11 +1800,14 @@ createStateRoutes({
 });
 
 // Health check
-app.get('/health', (req, res) => {
+app.get('/health', async (req, res) => {
   const queueStats = queueSystem.getStats();
   const clipboardStats = clipboardMonitor.getStats();
   const cacheStats = queryCache.getStats();
   const perfMetrics = performanceMonitor.getMetrics();
+
+  // Get Redis cache stats
+  const redisStats = await redisCache.getStats();
 
   // No caching for health check
   res.set('Cache-Control', 'no-cache');
@@ -1816,6 +1833,7 @@ app.get('/health', (req, res) => {
       hits: cacheStats.hits,
       misses: cacheStats.misses,
       hitRate: cacheStats.hits / (cacheStats.hits + cacheStats.misses) || 0,
+      redis: redisStats,
     },
     performance: {
       requests: perfMetrics.requests,
@@ -2144,20 +2162,9 @@ app.post('/debug/enqueue', (req, res) => {
 
 // MCP routes are now handled by mcp routes module (see route initialization above)
 
-// Debug endpoint to force enqueue test data
-// File watching functions
-// calculateDiff and processFileChange are now in fileWatcherService
-// Keeping calculateDiff here for backward compatibility with other code
-function calculateDiff(text1, text2) {
-  return fileWatcherService.calculateDiff(text1, text2);
-}
+// calculateDiff is now in fileWatcherService - use fileWatcherService.calculateDiff() directly
 
 // File watching functions are now in fileWatcherService
-// Legacy wrapper functions for backward compatibility
-async function processFileChange(filePath) {
-  // This function is now handled by fileWatcherService internally
-  // Keeping as a stub for any external references
-}
 
 function startFileWatcher() {
   fileWatcherService.start();

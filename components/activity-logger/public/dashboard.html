@@ -19,11 +19,12 @@
   
   <!-- Preload optimized bundles - Critical path -->
   <link rel="preload" href="dashboard.css" as="style">
-  <link rel="preload" href="dist/critical.bundle.js" as="script">
-  <link rel="preload" href="dist/performance.bundle.js" as="script">
-  <link rel="preload" href="dist/data-services.bundle.js" as="script">
-  <link rel="preload" href="lib/vendor/chart.min.js" as="script">
-  <link rel="preload" href="lib/vendor/d3.min.js" as="script">
+  <!-- Remove preload for scripts that are loaded with defer as they won't be used immediately -->
+  <!-- <link rel="preload" href="dist/critical.bundle.js" as="script"> -->
+  <!-- <link rel="preload" href="dist/performance.bundle.js" as="script"> -->
+  <!-- <link rel="preload" href="dist/data-services.bundle.js" as="script"> -->
+  <!-- <link rel="preload" href="lib/vendor/chart.min.js" as="script"> -->
+  <!-- <link rel="preload" href="lib/vendor/d3.min.js" as="script"> -->
   
   <!-- Prefetch likely next resources -->
   <link rel="prefetch" href="views/activity/index.js">
@@ -45,11 +46,11 @@
   <link rel="stylesheet" href="styles/utilities/components.css">
   
   <!-- View-specific Styles (load asynchronously) -->
-  <link rel="preload" href="views/activity/styles.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
+  <link rel="stylesheet" href="views/activity/styles.css" media="print" onload="this.media='all'">
   <noscript>
     <link rel="stylesheet" href="views/activity/styles.css">
   </noscript>
-  <link rel="preload" href="views/activity/storyboard-styles.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
+  <link rel="stylesheet" href="views/activity/storyboard-styles.css" media="print" onload="this.media='all'">
   <noscript>
     <link rel="stylesheet" href="views/activity/storyboard-styles.css">
   </noscript>

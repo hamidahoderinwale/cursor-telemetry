@@ -2,6 +2,9 @@
  * Startup service - handles application initialization
  */
 
+const cron = require('node-cron');
+const StatsTable = require('../database/stats-table.js');
+
 function createStartupService(deps) {
   const {
     persistentDB,
@@ -250,6 +253,29 @@ function createStartupService(deps) {
                   }
                 }
               }
+            });
+
+            // Initialize stats table and schedule periodic updates
+            const statsTable = new StatsTable(persistentDB);
+            statsTable.init().then(() => {
+              // Update stats immediately on startup
+              statsTable.updateDailyStats().catch(err => {
+                console.warn('[STATS] Initial stats update failed:', err.message);
+              });
+
+              // Schedule stats updates every 5 minutes
+              cron.schedule('*/5 * * * *', async () => {
+                try {
+                  await statsTable.updateDailyStats();
+                  console.log('[STATS] Stats updated successfully');
+                } catch (error) {
+                  console.warn('[STATS] Scheduled stats update failed:', error.message);
+                }
+              });
+
+              console.log('[STATS] ⚡ Stats table initialized (updates every 5 minutes)');
+            }).catch(err => {
+              console.warn('[STATS] Stats table initialization failed:', err.message);
             });
 
             resolve();

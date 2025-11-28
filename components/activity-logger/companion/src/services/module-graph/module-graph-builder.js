@@ -3,6 +3,7 @@
  * Builds the complete module graph structure from extracted data
  */
 
+const path = require('path');
 const { nanoid } = require('nanoid');
 
 class ModuleGraphBuilder {

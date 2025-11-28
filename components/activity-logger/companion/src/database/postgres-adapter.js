@@ -1,9 +1,10 @@
 /**
  * PostgreSQL Adapter for PersistentDB
  * Provides PostgreSQL support for cloud deployments
+ * OPTIMIZED: Uses connection pooling for better performance
  */
 
-const { Pool } = require('pg');
+const ConnectionPool = require('./connection-pool');
 
 class PostgresAdapter {
   constructor(connectionString) {
@@ -28,33 +29,17 @@ class PostgresAdapter {
         ? { rejectUnauthorized: false }
         : false;
 
-      this.pool = new Pool({
-        connectionString: this.connectionString,
-        ssl: sslConfig,
-        max: 20, // Maximum pool size
-        idleTimeoutMillis: 30000,
+      // Use optimized connection pool
+      this.pool = new ConnectionPool(this.connectionString, {
+        max: 20,                    // Maximum pool size - handles more concurrent requests
+        min: 2,                     // Keep 2 connections warm
+        idleTimeoutMillis: 30000,   // Close idle connections after 30s
         connectionTimeoutMillis: 2000,
-        // Retry configuration for reliability
-        retry: {
-          max: 3,
-          timeout: 5000,
-        },
+        ssl: sslConfig
       });
 
-      // Handle connection errors and reconnect
-      this.pool.on('error', (err) => {
-        console.error('[DB] PostgreSQL pool error:', err);
-        // Pool will automatically retry connections
-      });
-
-      // Test connection
-      try {
-        await this.pool.query('SELECT NOW()');
-        console.log('[DB] Connected to PostgreSQL database');
-      } catch (error) {
-        console.error('[DB] Failed to connect to PostgreSQL:', error.message);
-        throw error;
-      }
+      // Initialize pool
+      await this.pool.init();
 
       // Create tables if they don't exist
       await this.createTables();

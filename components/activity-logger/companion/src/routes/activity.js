@@ -5,21 +5,33 @@
 const { generateETagFromValues, checkETag } = require('../utils/etag.js');
 
 function createActivityRoutes(deps) {
-  const { app, persistentDB, sequence, queryCache, calculateDiff, cursorDbParser, dataAccessControl } = deps;
+  const { app, persistentDB, sequence, queryCache, redisCache, calculateDiff, cursorDbParser, dataAccessControl } = deps;
+
+  // Use Redis cache if available, fallback to NodeCache
+  const cache = redisCache || queryCache;
 
   async function withCache(key, ttl, asyncFn) {
-    const cached = queryCache.get(key);
+    const cached = await cache.get(key);
     if (cached !== undefined) {
       return cached;
     }
 
     const result = await asyncFn();
-    queryCache.set(key, result, ttl || 30);
+    await cache.set(key, result, ttl || 30);
     return result;
   }
 
   // API endpoint for activity data (used by dashboard) with pagination - OPTIMIZED with caching
   app.get('/api/activity', async (req, res) => {
+    const timeout = setTimeout(() => {
+      if (!res.headersSent) {
+        res.status(504).json({
+          success: false,
+          error: 'Request timeout - database query taking too long'
+        });
+      }
+    }, 15000); // 15 second timeout
+
     try {
       const limit = Math.min(parseInt(req.query.limit) || 50, 500); // Default 50 for faster load
       const offset = parseInt(req.query.offset) || 0;
@@ -35,15 +47,31 @@ function createActivityRoutes(deps) {
 
       // Try to get from cache first - INCREASED TTL for better performance
       const cached = await withCache(cacheKey, 120, async () => {
-        // OPTIMIZATION: Parallel queries for faster loading
-        const [totalCount, paginatedEntries, allPrompts] = await Promise.all([
-          persistentDB.getTotalEntriesCount(),
-          persistentDB.getRecentEntries(limit, null, offset, workspace),
-          persistentDB.getRecentPrompts(limit, 0, workspace)
+        // OPTIMIZATION: Parallel queries for faster loading with timeout protection
+        const queryPromise = Promise.all([
+          persistentDB.getTotalEntriesCount().catch(err => {
+            console.warn('[API] Error getting total count:', err.message);
+            return 0;
+          }),
+          persistentDB.getRecentEntries(limit, null, offset, workspace).catch(err => {
+            console.warn('[API] Error getting entries:', err.message);
+            return [];
+          }),
+          persistentDB.getRecentPrompts(limit, 0, workspace).catch(err => {
+            console.warn('[API] Error getting prompts:', err.message);
+            return [];
+          })
         ]);
 
-        return { totalCount, paginatedEntries, allPrompts };
+        // 10 second timeout for database queries
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error('Database query timeout')), 10000);
+        });
+
+        return Promise.race([queryPromise, timeoutPromise]);
       });
+
+      clearTimeout(timeout);
 
       const { totalCount, paginatedEntries, allPrompts } = cached;
 

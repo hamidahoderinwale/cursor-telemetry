@@ -18,8 +18,18 @@ function createModuleGraphRoutes(deps) {
    * Get complete module graph
    */
   app.get('/api/module-graph/graph', async (req, res) => {
+    const timeout = setTimeout(() => {
+      if (!res.headersSent) {
+        res.status(504).json({
+          success: false,
+          error: 'Request timeout - module graph extraction is taking too long. Try a specific workspace or use /api/module-graph/nodes for faster results.'
+        });
+      }
+    }, 30000); // 30 second timeout
+
     try {
       if (!moduleGraphService) {
+        clearTimeout(timeout);
         return res.status(503).json({
           success: false,
           error: 'Module graph service not available'
@@ -27,20 +37,24 @@ function createModuleGraphRoutes(deps) {
       }
 
       const workspace = req.query.workspace || req.query.workspace_path || null;
+      // Normalize "all" to null for global extraction
+      const normalizedWorkspace = workspace === 'all' ? null : workspace;
       const forceRefresh = req.query.force_refresh === 'true';
 
-      const graph = await moduleGraphService.getModuleGraph(workspace, { forceRefresh });
+      const graph = await moduleGraphService.getModuleGraph(normalizedWorkspace, { forceRefresh });
 
+      clearTimeout(timeout);
       res.json({
         success: true,
         graph,
         metadata: graph.metadata
       });
     } catch (error) {
+      clearTimeout(timeout);
       console.error('[MODULE-GRAPH] Error getting module graph:', error);
       res.status(500).json({
         success: false,
-        error: error.message
+        error: error.message || 'Unknown error occurred'
       });
     }
   });
@@ -110,8 +124,18 @@ function createModuleGraphRoutes(deps) {
    * Get structural events with filters
    */
   app.get('/api/module-graph/events', async (req, res) => {
+    const timeout = setTimeout(() => {
+      if (!res.headersSent) {
+        res.status(504).json({
+          success: false,
+          error: 'Request timeout'
+        });
+      }
+    }, 30000);
+
     try {
       if (!moduleGraphService) {
+        clearTimeout(timeout);
         return res.status(503).json({
           success: false,
           error: 'Module graph service not available'
@@ -119,6 +143,7 @@ function createModuleGraphRoutes(deps) {
       }
 
       const workspace = req.query.workspace || req.query.workspace_path || null;
+      const normalizedWorkspace = workspace === 'all' ? null : workspace;
       const filters = {
         timeRange: null,
         eventType: req.query.event_type || null,
@@ -132,18 +157,20 @@ function createModuleGraphRoutes(deps) {
         };
       }
 
-      const events = await moduleGraphService.getEvents(workspace, filters);
+      const events = await moduleGraphService.getEvents(normalizedWorkspace, filters);
 
+      clearTimeout(timeout);
       res.json({
         success: true,
         events,
         count: events.length
       });
     } catch (error) {
+      clearTimeout(timeout);
       console.error('[MODULE-GRAPH] Error getting events:', error);
       res.status(500).json({
         success: false,
-        error: error.message
+        error: error.message || 'Unknown error occurred'
       });
     }
   });

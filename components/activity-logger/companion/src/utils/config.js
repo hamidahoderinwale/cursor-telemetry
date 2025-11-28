@@ -1,7 +1,6 @@
 const { readFileSync, writeFileSync, existsSync } = require('fs');
-const { join, dirname } = require('path');
+const { join } = require('path');
 
-const __dirname = __dirname;
 const CONFIG_FILE = join(__dirname, '..', 'config.json');
 
 const DEFAULT_CONFIG = {
@@ -27,7 +26,7 @@ if (existsSync(CONFIG_FILE)) {
   }
 }
 
-export const config = {
+const config = {
   get() {
     return { ...currentConfig };
   },
@@ -39,7 +38,7 @@ export const config = {
     try {
       writeFileSync(CONFIG_FILE, JSON.stringify(currentConfig, null, 2));
     } catch (error) {
-      console.error(' Failed to save config:', error.message);
+      console.error('Failed to save config:', error.message);
     }
 
     return currentConfig;
@@ -50,11 +49,10 @@ export const config = {
     try {
       writeFileSync(CONFIG_FILE, JSON.stringify(currentConfig, null, 2));
     } catch (error) {
-      console.error(' Failed to reset config:', error.message);
+      console.error('Failed to reset config:', error.message);
     }
     return currentConfig;
   },
 };
 
-const config = new Config();
 module.exports = { config };

@@ -384,8 +384,6 @@ class CursorDatabaseParser {
     }
   }
 
-  // REMOVED: Old extraction methods (extractComposerData, extractWorkspacePrompts, parsePersistentComposerData)
-  // Now using extractAIServiceData which gets the actual message content from aiService.prompts + aiService.generations
 
   /**
    * Extract terminal blocks from text (code blocks with terminal output)

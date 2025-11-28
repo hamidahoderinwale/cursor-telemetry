@@ -654,6 +654,7 @@ function renderTerminalTimelineItem(cmd, side = 'left', timelineItems = null) {
       </div>
     </div>
   `;
+}
 
 
 function renderTimelineItem(event, side = 'left', timelineItems = null) {

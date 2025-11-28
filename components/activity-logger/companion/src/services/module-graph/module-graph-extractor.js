@@ -308,19 +308,52 @@ class ModuleGraphExtractor {
   async extractAll(workspacePath = null) {
     console.log('[MODULE-GRAPH] Extracting file-level data...');
 
-    const [fileData, modelContext, toolInteractions] = await Promise.all([
-      this.extractFilePaths(workspacePath),
-      this.extractModelContextFiles(workspacePath),
-      this.extractToolInteractions(workspacePath)
-    ]);
+    try {
+      // Add timeout to prevent hanging on large extractions
+      const extractionPromise = Promise.all([
+        this.extractFilePaths(workspacePath).catch(err => {
+          console.warn('[MODULE-GRAPH] Error extracting file paths:', err.message);
+          return { filePaths: [], fileMetadata: {} };
+        }),
+        this.extractModelContextFiles(workspacePath).catch(err => {
+          console.warn('[MODULE-GRAPH] Error extracting model context:', err.message);
+          return {};
+        }),
+        this.extractToolInteractions(workspacePath).catch(err => {
+          console.warn('[MODULE-GRAPH] Error extracting tool interactions:', err.message);
+          return [];
+        })
+      ]);
 
-    return {
-      filePaths: fileData.filePaths,
-      fileMetadata: fileData.fileMetadata,
-      modelContext,
-      toolInteractions,
-      extractedAt: new Date().toISOString()
-    };
+      // 20 second timeout for extraction
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Extraction timeout - database queries taking too long')), 20000);
+      });
+
+      const [fileData, modelContext, toolInteractions] = await Promise.race([
+        extractionPromise,
+        timeoutPromise
+      ]);
+
+      return {
+        filePaths: fileData.filePaths,
+        fileMetadata: fileData.fileMetadata,
+        modelContext,
+        toolInteractions,
+        extractedAt: new Date().toISOString()
+      };
+    } catch (error) {
+      console.error('[MODULE-GRAPH] Extraction failed:', error.message);
+      // Return empty structure on error to prevent complete failure
+      return {
+        filePaths: [],
+        fileMetadata: {},
+        modelContext: {},
+        toolInteractions: [],
+        extractedAt: new Date().toISOString(),
+        error: error.message
+      };
+    }
   }
 }
 

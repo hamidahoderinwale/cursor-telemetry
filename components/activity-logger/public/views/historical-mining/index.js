@@ -533,3 +533,5 @@ window.renderHistoricalMiningView = renderHistoricalMiningView;
 
 
 
+
+
