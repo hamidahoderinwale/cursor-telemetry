@@ -5,7 +5,7 @@
 
 const state = {
   connected: false,
-  currentView: 'overview',
+  currentView: 'dashboard-home',
   currentWorkspace: 'all',
   data: {
     events: [],

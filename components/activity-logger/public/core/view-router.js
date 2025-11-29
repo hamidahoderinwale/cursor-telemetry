@@ -15,8 +15,12 @@ let previousView = null;
 
 // View render function names (for script tag loading)
 const viewFunctionNames = {
+  'dashboard-home': 'renderDashboardHome',
   'overview': 'renderOverviewView',
   'patterns-history': 'renderPatternsHistoryView',
+  'patterns': 'renderPatternsView',
+  'context-precision': 'renderContextPrecisionView',
+  'model-comparison': 'renderModelComparisonView',
   'activity': 'renderActivityView',
   'threads': 'renderThreadsView',
   'analytics': 'renderAnalyticsView',
